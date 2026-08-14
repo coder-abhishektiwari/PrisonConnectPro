@@ -1,0 +1,227 @@
+{
+  "total": 44,
+  "passed": 27,
+  "failed": 17,
+  "results": [
+    {
+      "name": "SERVER_BOOT",
+      "status": "PASS",
+      "detail": "server up via /health"
+    },
+    {
+      "name": "GET /health",
+      "status": "PASS",
+      "detail": "status=200"
+    },
+    {
+      "name": "GET /admin (no token) exposes admin list",
+      "status": "FAIL",
+      "detail": "status=200, count=5"
+    },
+    {
+      "name": "POST /admin (no token) creates admin",
+      "status": "FAIL",
+      "detail": "status=201"
+    },
+    {
+      "name": "POST /auth/warden/login (valid)",
+      "status": "PASS",
+      "detail": "status=200"
+    },
+    {
+      "name": "WARDEN_TOKEN_OBTAINED",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "POST /auth/warden/login (bad pw)",
+      "status": "PASS",
+      "detail": "status=401"
+    },
+    {
+      "name": "POST /auth/login (kiosk pin)",
+      "status": "PASS",
+      "detail": "status=200"
+    },
+    {
+      "name": "GET /inmates without token -> 401",
+      "status": "PASS",
+      "detail": "status=401"
+    },
+    {
+      "name": "IDOR: kiosk token reads ALL inmates",
+      "status": "FAIL",
+      "detail": "status=200, count=30"
+    },
+    {
+      "name": "IDOR: kiosk token reads ALL wallets",
+      "status": "FAIL",
+      "detail": "status=200, count=30"
+    },
+    {
+      "name": "AUTHZ: kiosk token can PATCH global settings",
+      "status": "FAIL",
+      "detail": "status=200"
+    },
+    {
+      "name": "AUTHZ: setup PIN readable by any authed user",
+      "status": "FAIL",
+      "detail": "pin=123456"
+    },
+    {
+      "name": "POST /kiosks/validate-setup-pin correct",
+      "status": "PASS",
+      "detail": "status=200"
+    },
+    {
+      "name": "POST /kiosks/validate-setup-pin wrong",
+      "status": "PASS",
+      "detail": "status=401"
+    },
+    {
+      "name": "POST /auth/register warden",
+      "status": "PASS",
+      "detail": "status=201"
+    },
+    {
+      "name": "PLAINTEXT: registered warden password not hashed",
+      "status": "PASS",
+      "detail": "record not found"
+    },
+    {
+      "name": "PLAINTEXT: registered warden can log in with plaintext pw",
+      "status": "FAIL",
+      "detail": "status=200"
+    },
+    {
+      "name": "POST /calls create",
+      "status": "PASS",
+      "detail": "status=201"
+    },
+    {
+      "name": "CALL STATE: scheduled->completed rejected",
+      "status": "PASS",
+      "detail": "status=409, code=INVALID_TRANSITION"
+    },
+    {
+      "name": "CALL STATE: scheduled->ringing allowed",
+      "status": "PASS",
+      "detail": "status=200"
+    },
+    {
+      "name": "CALL STATE: duplicate active call blocked",
+      "status": "PASS",
+      "detail": "status=409, code=CALL_IN_PROGRESS"
+    },
+    {
+      "name": "POST /calls/:id/control (mediasoupManager undefined)",
+      "status": "FAIL",
+      "detail": "status=500, error=INTERNAL_ERROR"
+    },
+    {
+      "name": "POST /recordings/:id/start",
+      "status": "PASS",
+      "detail": "status=200"
+    },
+    {
+      "name": "POST /recordings/:id/stop (outputPaths undefined)",
+      "status": "FAIL",
+      "detail": "status=500, error=INTERNAL_ERROR"
+    },
+    {
+      "name": "POST /auth/refresh returns user object",
+      "status": "FAIL",
+      "detail": "has data.user=false, has user=false"
+    },
+    {
+      "name": "FAMILY: GET /calls/link/:token exists",
+      "status": "FAIL",
+      "detail": "status=404"
+    },
+    {
+      "name": "FAMILY: POST /calls/:t/otp-verification exists",
+      "status": "FAIL",
+      "detail": "status=404"
+    },
+    {
+      "name": "FAMILY: POST /calls/:t/device-verification exists",
+      "status": "FAIL",
+      "detail": "status=404"
+    },
+    {
+      "name": "FAMILY: POST /rooms/leave exists",
+      "status": "FAIL",
+      "detail": "status=404"
+    },
+    {
+      "name": "VENDOR: /auth/login accepts email+password",
+      "status": "PASS",
+      "detail": "status=400, code=INVALID_REQUEST"
+    },
+    {
+      "name": "SOCKET: connect without token rejected",
+      "status": "PASS",
+      "detail": "AUTH_REQUIRED"
+    },
+    {
+      "name": "SOCKET: roomId-as-token rejected (family-web contract)",
+      "status": "PASS",
+      "detail": "INVALID_TOKEN"
+    },
+    {
+      "name": "SOCKET: valid warden token accepted",
+      "status": "PASS",
+      "detail": "socket connected"
+    },
+    {
+      "name": "SOCKET: join-room functional (mediasoup on)",
+      "status": "PASS",
+      "detail": "resp={\"success\":false,\"error\":\"Mediasoup disabled on this deployment\"}"
+    },
+    {
+      "name": "AUTHZ: warden blocked from admin-only /prisons",
+      "status": "PASS",
+      "detail": "status=403"
+    },
+    {
+      "name": "AUTHZ: warden blocked from admin-only /kiosks",
+      "status": "PASS",
+      "detail": "status=403"
+    },
+    {
+      "name": "Warden /calls scoped to own prison(s)",
+      "status": "PASS",
+      "detail": "status=200, count=1"
+    },
+    {
+      "name": "PLAINTEXT: wardens.json stores registered pw in clear",
+      "status": "FAIL",
+      "detail": "stored=secret..."
+    },
+    {
+      "name": "PLAINTEXT: seeded warden passwords in clear",
+      "status": "FAIL",
+      "detail": "stored=Warden..."
+    },
+    {
+      "name": "PLAINTEXT: kiosk user PINs in clear",
+      "status": "FAIL",
+      "detail": "stored=pin123..."
+    },
+    {
+      "name": "POST /auth/face-identify without image -> 400",
+      "status": "PASS",
+      "detail": "status=400, code=INVALID_REQUEST"
+    },
+    {
+      "name": "POST /kiosks/verify (unknown serial) graceful",
+      "status": "PASS",
+      "detail": "status=200, authorized=false"
+    },
+    {
+      "name": "RATE LIMIT: /auth/warden/login returns 429 after limits",
+      "status": "PASS",
+      "detail": "limited=true"
+    }
+  ]
+}

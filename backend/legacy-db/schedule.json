@@ -1,0 +1,24 @@
+[
+  {
+    "scheduleId": "SCH-001",
+    "inmateId": "INM-001",
+    "contactId": "CONT-001",
+    "kioskId": "KIOSK-001",
+    "date": "2026-08-10",
+    "timeSlot": "10:00-11:00",
+    "callType": "video",
+    "status": "scheduled",
+    "createdAt": "2026-08-09T16:15:31.630Z"
+  },
+  {
+    "scheduleId": "SCH-002",
+    "inmateId": "INM-002",
+    "contactId": "CONT-003",
+    "kioskId": "KIOSK-002",
+    "date": "2026-08-12",
+    "timeSlot": "14:00-15:00",
+    "callType": "audio",
+    "status": "scheduled",
+    "createdAt": "2026-08-09T16:15:31.631Z"
+  }
+]

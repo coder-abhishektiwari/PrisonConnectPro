@@ -1,0 +1,28 @@
+{
+  "callSettings": {
+    "defaultCallType": "video",
+    "maxCallDurationMinutes": 15,
+    "autoEndCallMinutes": 15,
+    "enableRecording": true,
+    "recordingQuality": "high",
+    "encryptionRequired": true
+  },
+  "systemSettings": {
+    "maintenanceMode": false,
+    "maxConcurrentCalls": 50,
+    "sessionTimeoutSeconds": 300,
+    "heartbeatIntervalSeconds": 30,
+    "logLevel": "info",
+    "version": "1.0.0"
+  },
+  "securitySettings": {
+    "requireOtp": true,
+    "requireDeviceVerification": true,
+    "enableRfid": true,
+    "enableBiometric": true,
+    "enableFaceRecognition": true,
+    "allowedBrowsers": ["Chrome", "Firefox", "Safari", "Edge"],
+    "blockScreenshots": true,
+    "forceHttps": true
+  }
+}

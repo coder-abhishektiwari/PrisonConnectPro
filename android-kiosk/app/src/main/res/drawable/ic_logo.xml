@@ -1,0 +1,26 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="512dp"
+    android:height="512dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+
+    <!-- Soft Off-White Background -->
+    <path
+        android:pathData="M 128 32 H 384 A 96 96 0 0 1 480 128 V 384 A 96 96 0 0 1 384 480 H 128 A 96 96 0 0 1 32 384 V 128 A 96 96 0 0 1 128 32 Z"
+        android:fillColor="#F9FAFB"/>
+
+    <!-- Shield Primary Outline -->
+    <path
+        android:pathData="M256 100 L380 150 V260 C380 340 256 410 256 410 C256 410 132 340 132 260 V150 L256 100 Z"
+        android:fillColor="#1A56DB"/>
+
+    <!-- Inner Wave Nodes (White) -->
+    <path
+        android:pathData="M210 220 L256 180 L302 220 V290 L256 330 L210 290 Z"
+        android:fillColor="#FFFFFF"/>
+
+    <!-- Center Cyan Call Core -->
+    <path
+        android:pathData="M256 230 A 25 25 0 1 1 256 280 A 25 25 0 1 1 256 230 Z"
+        android:fillColor="#06B6D4"/>
+</vector>

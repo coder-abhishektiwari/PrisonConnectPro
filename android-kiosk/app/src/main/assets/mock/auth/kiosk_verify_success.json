@@ -1,0 +1,18 @@
+{
+  "success": true,
+  "data": {
+    "success": true,
+    "authorized": true,
+    "kiosk": {
+      "kioskId": "KIOSK-001",
+      "deviceSerialNumber": "PC-KSK-2024-0001",
+      "prisonId": "PRISON-001",
+      "prisonName": "Central Prison Mumbai",
+      "status": "online",
+      "authorized": true,
+      "location": "Block A - Wing 1",
+      "ipAddress": "192.168.1.101"
+    }
+  },
+  "timestamp": 1723123456789
+}

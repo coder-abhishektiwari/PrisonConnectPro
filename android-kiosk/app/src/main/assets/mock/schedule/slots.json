@@ -1,0 +1,26 @@
+{
+  "success": true,
+  "data": [
+    {
+      "slotId": "slot_1",
+      "date": "2026-08-05",
+      "startTime": "10:00",
+      "endTime": "10:30",
+      "isAvailable": true
+    },
+    {
+      "slotId": "slot_2",
+      "date": "2026-08-05",
+      "startTime": "11:00",
+      "endTime": "11:30",
+      "isAvailable": true
+    },
+    {
+      "slotId": "slot_3",
+      "date": "2026-08-05",
+      "startTime": "14:00",
+      "endTime": "14:30",
+      "isAvailable": false
+    }
+  ]
+}

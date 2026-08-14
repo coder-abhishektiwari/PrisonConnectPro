@@ -1,0 +1,83 @@
+[
+  {
+    "adminId": "ADMIN-001",
+    "employeeId": "empsa001",
+    "name": "Amit Patel",
+    "email": "amit.patel@prisonconnect.io",
+    "role": "super_admin",
+    "permissions": [
+      "full_access",
+      "manage_prisons",
+      "manage_kiosks",
+      "manage_wardens",
+      "manage_subscriptions",
+      "view_all_data",
+      "manage_billing",
+      "manage_inmates"
+    ],
+    "status": "active",
+    "password": "admin123",
+    "pin": "3747",
+    "kioskId": "KIOSK-001",
+    "prisonId": "PRISON-001",
+    "biometricData": {
+      "faceRegistered": true,
+      "fingerprintRegistered": false,
+      "rfidRegistered": true,
+      "lastBiometricUpdate": "2026-01-01T00:00:00Z"
+    },
+    "createdAt": "2024-01-01T00:00:00Z"
+  },
+  {
+    "adminId": "ADMIN-002",
+    "employeeId": "empsa002",
+    "name": "Neha Gupta",
+    "email": "neha.gupta@prisonconnect.io",
+    "role": "super_admin",
+    "permissions": [
+      "full_access",
+      "manage_prisons",
+      "manage_kiosks",
+      "view_all_data",
+      "manage_billing",
+      "manage_inmates"
+    ],
+    "status": "active",
+    "password": "admin123",
+    "pin": "8685",
+    "kioskId": "KIOSK-002",
+    "prisonId": "PRISON-001",
+    "biometricData": {
+      "faceRegistered": true,
+      "fingerprintRegistered": true,
+      "rfidRegistered": false,
+      "lastBiometricUpdate": "2026-01-01T00:00:00Z"
+    },
+    "createdAt": "2024-02-15T00:00:00Z"
+  },
+  {
+    "adminId": "ADMIN-003",
+    "employeeId": "empsa003",
+    "name": "Sanjay Malhotra",
+    "email": "sanjay.malhotra@prisonconnect.io",
+    "role": "super_admin",
+    "permissions": [
+      "view_all_data",
+      "manage_reports",
+      "manage_alerts",
+      "manage_inmates"
+    ],
+    "status": "active",
+    "password": "admin123",
+    "pin": "6446",
+    "kioskId": "KIOSK-003",
+    "prisonId": "PRISON-001",
+    "biometricData": {
+      "faceRegistered": false,
+      "fingerprintRegistered": true,
+      "rfidRegistered": true,
+      "lastBiometricUpdate": "2026-01-01T00:00:00Z"
+    },
+    "createdAt": "2024-05-01T00:00:00Z"
+  }
+]

@@ -1,0 +1,20 @@
+{
+  "name": "prisonconnect-signaling-server",
+  "version": "1.0.0",
+  "description": "Socket.IO / WebRTC signaling hub for PrisonConnect (no mediasoup, no business logic)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test.js"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "socket.io": "^4.8.3"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.3"
+  }
+}

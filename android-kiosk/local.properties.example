@@ -1,0 +1,4 @@
+# Example local configuration for PrisonConnect Kiosk
+sdk.dir=/path/to/android/sdk
+KIOSK_ID=KIOSK-JAIL-001
+KIOSK_TRUST_API_HOST=https://trust-api.prisonconnect.internal

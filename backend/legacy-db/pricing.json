@@ -1,0 +1,25 @@
+{
+  "audio": {
+    "ratePerMinute": 1.00,
+    "currency": "INR",
+    "description": "Audio call per minute rate"
+  },
+  "video": {
+    "ratePerMinute": 2.50,
+    "currency": "INR",
+    "description": "Video call per minute rate"
+  },
+  "tax": {
+    "gstPercentage": 18,
+    "cgstPercentage": 9,
+    "sgstPercentage": 9,
+    "description": "GST breakdown (9% CGST + 9% SGST)"
+  },
+  "billingRules": {
+    "minimumCharge": 5.00,
+    "freeMinutesBeforeCharge": 0,
+    "maxDailyCharge": 100.00,
+    "billingIntervalSeconds": 30,
+    "description": "Billing rules for call charges"
+  }
+}

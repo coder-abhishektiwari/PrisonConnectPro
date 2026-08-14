@@ -1,0 +1,7 @@
+node_modules
+dist
+build
+.gradle
+android-kiosk/build
+android-kiosk/app/build
+package-lock.json

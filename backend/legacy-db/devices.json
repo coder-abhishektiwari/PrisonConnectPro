@@ -1,0 +1,38 @@
+[
+  {
+    "deviceId": "DEV-001",
+    "type": "kiosk",
+    "name": "KIOSK-001",
+    "location": "Cell Block A - Bay 1",
+    "status": "online",
+    "ipAddress": "192.168.10.21",
+    "lastSeen": "2024-01-15T10:30:00Z",
+    "firmwareVersion": "2.1.4",
+    "batteryLevel": 100,
+    "signalStrength": 87,
+    "cpu": 45,
+    "ram": 62,
+    "network": "ethernet",
+    "camera": true,
+    "microphone": true,
+    "printer": true
+  },
+  {
+    "deviceId": "DEV-002",
+    "type": "kiosk",
+    "name": "KIOSK-002",
+    "location": "Cell Block B - Bay 4",
+    "status": "offline",
+    "ipAddress": "192.168.20.15",
+    "lastSeen": "2024-01-15T09:15:00Z",
+    "firmwareVersion": "2.0.1",
+    "batteryLevel": 0,
+    "signalStrength": 0,
+    "cpu": 0,
+    "ram": 0,
+    "network": "unknown",
+    "camera": false,
+    "microphone": false,
+    "printer": false
+  }
+]

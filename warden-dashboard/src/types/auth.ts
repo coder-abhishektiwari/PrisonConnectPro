@@ -1,0 +1,59 @@
+/**
+ * Authentication types for the Warden & SaaS Admin Dashboard.
+ */
+
+export interface AuthUser {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  permissions: string[];
+  kioskId?: string | null;
+  prisonId?: string | null;
+}
+
+export interface AuthTokens {
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number;
+}
+
+export interface LoginResponse extends AuthTokens {
+  user: AuthUser;
+}
+
+export interface RegisterRequest {
+  name: string;
+  email: string;
+  password: string;
+  employeeId?: string;
+}
+
+export interface RegisterResponse extends AuthTokens {
+  user: AuthUser;
+}
+
+export interface ForgotPasswordResponse {
+  message: string;
+  resetToken?: string; // Mock only - remove in production
+}
+
+export interface ResetPasswordRequest {
+  token: string;
+  newPassword: string;
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface AuthState {
+  user: AuthUser | null;
+  tokens: AuthTokens | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  error: string | null;
+}
+
+export type AuthStatus = 'idle' | 'loading' | 'authenticated' | 'unauthenticated';

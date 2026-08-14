@@ -1,0 +1,9 @@
+{
+  "success": true,
+  "data": {
+    "accessToken": "mock_access_token_jwt",
+    "refreshToken": "mock_refresh_token_jwt",
+    "expiresIn": 3600
+  },
+  "timestamp": 1722765600000
+}

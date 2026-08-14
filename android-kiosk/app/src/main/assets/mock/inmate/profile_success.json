@@ -1,0 +1,16 @@
+{
+  "success": true,
+  "data": {
+    "inmateId": "INM123456",
+    "firstName": "RAHUL",
+    "lastName": "KUMAR",
+    "prisonId": "PRISON-001",
+    "facility": "Central Jail No. 4",
+    "cellBlock": "B-12 / 04",
+    "status": "active",
+    "photoUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Rahul",
+    "securityLevel": "Medium Security",
+    "sentenceDetails": "5 Years RI - Sec 307 IPC"
+  },
+  "timestamp": 1722765600000
+}

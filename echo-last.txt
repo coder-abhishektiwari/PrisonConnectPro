@@ -1,0 +1,8 @@
+﻿REPLY SUCCESS to 46638
+RECV from 172.19.0.1:46638 user= abcdef:abcdef mi= false
+REPLY SUCCESS to 46638
+RECV from 172.19.0.1:46638 user= abcdef:abcdef mi= false
+REPLY SUCCESS to 46638
+stun-echo listening on 0.0.0.0:18999
+stun-echo listening on 0.0.0.0:18999
+stun-echo listening on 0.0.0.0:18999

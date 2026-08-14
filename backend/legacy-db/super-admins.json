@@ -1,0 +1,32 @@
+[
+  {
+    "adminId": "ADMIN-001",
+    "employeeId": "EMP-SA-001",
+    "name": "Amit Patel",
+    "email": "amit.patel@prisonconnect.io",
+    "role": "super_admin",
+    "permissions": ["full_access", "manage_prisons", "manage_kiosks", "manage_wardens", "manage_subscriptions", "view_all_data", "manage_billing"],
+    "status": "active",
+    "createdAt": "2024-01-01T00:00:00Z"
+  },
+  {
+    "adminId": "ADMIN-002",
+    "employeeId": "EMP-SA-002",
+    "name": "Neha Gupta",
+    "email": "neha.gupta@prisonconnect.io",
+    "role": "super_admin",
+    "permissions": ["full_access", "manage_prisons", "manage_kiosks", "view_all_data", "manage_billing"],
+    "status": "active",
+    "createdAt": "2024-02-15T00:00:00Z"
+  },
+  {
+    "adminId": "ADMIN-003",
+    "employeeId": "EMP-SA-003",
+    "name": "Sanjay Malhotra",
+    "email": "sanjay.malhotra@prisonconnect.io",
+    "role": "super_admin",
+    "permissions": ["view_all_data", "manage_reports", "manage_alerts"],
+    "status": "active",
+    "createdAt": "2024-05-01T00:00:00Z"
+  }
+]

@@ -1,0 +1,19 @@
+{
+  "success": true,
+  "data": [
+    {
+      "id": "call_101",
+      "contactName": "Sarah Connor",
+      "date": "2026-08-05",
+      "timeSlot": "10:00 - 10:30",
+      "type": "video"
+    },
+    {
+      "id": "call_102",
+      "contactName": "John Doe",
+      "date": "2026-08-06",
+      "timeSlot": "14:00 - 14:30",
+      "type": "audio"
+    }
+  ]
+}

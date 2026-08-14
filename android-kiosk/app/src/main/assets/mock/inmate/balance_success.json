@@ -1,0 +1,12 @@
+{
+  "success": true,
+  "data": {
+    "credits": 500.0,
+    "currency": "INR",
+    "lastRechargeAmount": 200.0,
+    "lastRechargeDate": "01 Aug 2026",
+    "totalSpent": 1250.0,
+    "remainingMinutes": 120
+  },
+  "timestamp": 1722765600000
+}

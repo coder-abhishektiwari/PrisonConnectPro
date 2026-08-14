@@ -1,0 +1,21 @@
+# Warden Dashboard Gitignore
+node_modules
+dist
+dist-ssr
+*.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor directories
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvsopt
+*.njsproj
+*.sln
+*.sw?

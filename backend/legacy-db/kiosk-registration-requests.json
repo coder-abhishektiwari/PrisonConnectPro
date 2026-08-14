@@ -1,0 +1,18 @@
+[
+  {
+    "requestId": "REG-001",
+    "prisonId": "PRISON-001",
+    "deviceSerialNumber": "RZ8R90R1G3J",
+    "deviceModel": "Samsung Galaxy Tab A8",
+    "deviceBrand": "Samsung",
+    "ipAddress": "192.168.1.150",
+    "location": "Block A - Wing 1",
+    "androidVersion": "13",
+    "appVersion": "1.0.0",
+    "registrationTimestamp": "2026-08-12T10:00:00Z",
+    "deviceFingerprint": "abc1234567890def",
+    "status": "approved",
+    "reviewedBy": "WARDEN-001",
+    "reviewedAt": "2026-08-12T10:05:00Z"
+  }
+]

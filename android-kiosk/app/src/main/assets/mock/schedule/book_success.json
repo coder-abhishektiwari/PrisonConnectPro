@@ -1,0 +1,11 @@
+{
+  "success": true,
+  "data": {
+    "sessionId": "session_999",
+    "contactId": "contact_1",
+    "contactName": "Sarah Connor",
+    "type": "video",
+    "durationMinutes": 30,
+    "startTime": 1722855600000
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "total": 1099511627776,
+  "used": 536870912000,
+  "available": 562661715776,
+  "retentionDays": 365,
+  "encryption": "AES-256-GCM"
+}

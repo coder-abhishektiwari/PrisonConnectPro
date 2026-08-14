@@ -1,0 +1,9 @@
+{
+  "success": true,
+  "data": {
+    "success": true,
+    "authorized": false,
+    "kiosk": null
+  },
+  "timestamp": 1723123456789
+}

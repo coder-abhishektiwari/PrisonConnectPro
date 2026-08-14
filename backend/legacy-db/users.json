@@ -1,0 +1,22 @@
+[
+  {
+    "userId": "USER-001",
+    "username": "kiosk001",
+    "password": "pin1234",
+    "role": "kiosk",
+    "kioskId": "KIOSK-001",
+    "prisonId": "PRISON-001",
+    "status": "active",
+    "createdAt": "2026-08-09T16:15:31.633Z"
+  },
+  {
+    "userId": "USER-002",
+    "username": "kiosk002",
+    "password": "pin1234",
+    "role": "kiosk",
+    "kioskId": "KIOSK-002",
+    "prisonId": "PRISON-001",
+    "status": "active",
+    "createdAt": "2026-08-09T16:15:31.633Z"
+  }
+]

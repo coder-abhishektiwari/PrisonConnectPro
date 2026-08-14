@@ -1,0 +1,172 @@
+package com.prisonconnect.kiosk.api
+
+import com.prisonconnect.kiosk.models.admin.*
+import com.prisonconnect.kiosk.models.auth.*
+import com.prisonconnect.kiosk.models.common.ApiResponse
+import com.prisonconnect.kiosk.models.contacts.Contact
+import com.prisonconnect.kiosk.models.inmate.InmateBalance
+import com.prisonconnect.kiosk.models.inmate.InmateProfile
+import com.prisonconnect.kiosk.models.call.ScheduledCall
+import com.prisonconnect.kiosk.models.call.CallSession
+import com.prisonconnect.kiosk.models.schedule.AvailableSlot
+import com.prisonconnect.kiosk.models.schedule.ScheduleRequest
+import okhttp3.MultipartBody
+import okhttp3.RequestBody
+import retrofit2.http.*
+
+/**
+ * Main API service for the Prison Trust Gateway.
+ * All responses are wrapped in [ApiResponse].
+ */
+interface TrustApiService {
+
+    @POST("auth/login")
+    suspend fun login(@Body request: LoginRequest): ApiResponse<AuthToken>
+
+    @POST("auth/refresh")
+    suspend fun refreshToken(@Body request: RefreshTokenRequest): ApiResponse<AuthToken>
+
+    @POST("auth/logout")
+    suspend fun logout(@Header("Authorization") authorization: String): ApiResponse<Unit>
+
+    @POST("auth/admin/identify")
+    suspend fun adminIdentify(@Body request: LoginRequest): ApiResponse<AdminProfile>
+
+    @POST("auth/admin/verify-pin")
+    suspend fun adminVerifyPassword(@Body request: AdminVerifyPasswordRequest): ApiResponse<AuthToken>
+
+    @GET("admin/profile")
+    suspend fun getAdminProfile(): ApiResponse<AdminProfile>
+
+    @Multipart
+    @POST("auth/face-identify")
+    suspend fun identifyFace(
+        @Part("kioskId") kioskId: RequestBody,
+        @Part image: MultipartBody.Part
+    ): ApiResponse<InmateProfile>
+
+    @Multipart
+    @POST("auth/fingerprint-identify")
+    suspend fun identifyFingerprint(
+        @Part("kioskId") kioskId: RequestBody,
+        @Part capture: MultipartBody.Part
+    ): ApiResponse<InmateProfile>
+
+    @POST("auth/rfid-identify")
+    suspend fun identifyRfid(@Body request: LoginRequest): ApiResponse<InmateProfile>
+
+    @POST("auth/prisoner/identify")
+    suspend fun identifyPrisoner(
+        @Body request: LoginRequest
+    ): ApiResponse<InmateProfile>
+
+    @POST("auth/verify-pin")
+    suspend fun verifyPin(@Body request: PinVerifyRequest): ApiResponse<AuthToken>
+
+    @POST("kiosks/verify")
+    suspend fun verifyKiosk(@Body request: KioskVerifyRequest): ApiResponse<KioskVerifyResponse>
+
+    @GET("prisons/list")
+    suspend fun getPrisonList(): ApiResponse<List<Prison>>
+
+    @POST("kiosks/validate-setup-pin")
+    suspend fun validateSetupPin(@Body request: ValidateSetupPinRequest): ApiResponse<ValidateSetupPinResponse>
+
+    @POST("kiosks/register")
+    suspend fun registerKiosk(@Body request: KioskRegistrationRequest): ApiResponse<KioskRegistrationResponse>
+
+    @GET("kiosks/registration-status/{serialNumber}")
+    suspend fun getRegistrationStatus(@Path("serialNumber") serialNumber: String): ApiResponse<RegistrationStatusResponse>
+
+
+    @GET("inmate/profile/{id}")
+    suspend fun getInmateProfile(@Path("id") id: String): ApiResponse<InmateProfile>
+
+    @GET("inmate/balance/{id}")
+    suspend fun getInmateBalance(@Path("id") id: String): ApiResponse<InmateBalance>
+
+    @GET("contacts/{id}")
+    suspend fun getContacts(@Path("id") id: String): ApiResponse<List<Contact>>
+
+    @GET("calls/scheduled/{id}")
+    suspend fun getScheduledCalls(@Path("id") id: String): ApiResponse<List<ScheduledCall>>
+
+    @GET("schedule/slots/{contactId}")
+    suspend fun getAvailableSlots(@Path("contactId") contactId: String): ApiResponse<List<AvailableSlot>>
+
+    @POST("schedule/book")
+    suspend fun bookCall(@Body request: ScheduleRequest): ApiResponse<CallSession>
+
+    @DELETE("schedule/cancel/{bookingId}")
+    suspend fun cancelBooking(@Path("bookingId") bookingId: String): ApiResponse<Unit>
+
+    // ==================== ADMIN ENDPOINTS ====================
+
+    // Prisoners
+    @GET("admin/prisoners")
+    suspend fun getAdminPrisoners(): ApiResponse<List<Prisoner>>
+
+    @GET("admin/prisoners/{prisonerId}")
+    suspend fun getAdminPrisoner(@Path("prisonerId") prisonerId: String): ApiResponse<Prisoner>
+
+    @POST("admin/prisoners")
+    suspend fun createPrisoner(@Body request: CreatePrisonerRequest): ApiResponse<Prisoner>
+
+    @PUT("admin/prisoners/{prisonerId}")
+    @JvmSuppressWildcards
+    suspend fun editPrisoner(
+        @Path("prisonerId") prisonerId: String,
+        @Body request: EditPrisonerRequest
+    ): ApiResponse<Prisoner>
+
+    @PUT("admin/prisoners/{prisonerId}")
+    suspend fun updatePrisoner(@Path("prisonerId") prisonerId: String, @Body prisoner: Prisoner): ApiResponse<Prisoner>
+
+    @PATCH("admin/prisoners/{prisonerId}/status")
+    suspend fun updatePrisonerStatus(
+        @Path("prisonerId") prisonerId: String,
+        @Body request: UpdatePrisonerStatusRequest
+    ): ApiResponse<Prisoner>
+
+    // Contacts
+    @GET("admin/prisoners/{prisonerId}/contacts")
+    suspend fun getPrisonerContacts(@Path("prisonerId") prisonerId: String): ApiResponse<List<VerifiedContact>>
+
+    @POST("admin/prisoners/{prisonerId}/contacts")
+    suspend fun createContact(
+        @Path("prisonerId") prisonerId: String,
+        @Body request: CreateContactRequest
+    ): ApiResponse<VerifiedContact>
+
+    @PUT("admin/contacts/{contactId}")
+    suspend fun updateContact(
+        @Path("contactId") contactId: String,
+        @Body request: UpdateContactRequest
+    ): ApiResponse<VerifiedContact>
+
+    @PATCH("admin/contacts/{contactId}/status")
+    suspend fun updateContactStatus(
+        @Path("contactId") contactId: String,
+        @Body request: UpdateContactStatusRequest
+    ): ApiResponse<VerifiedContact>
+
+    // Biometrics
+    @GET("admin/prisoners/{prisonerId}/biometrics")
+    suspend fun getPrisonerBiometrics(@Path("prisonerId") prisonerId: String): ApiResponse<List<BiometricRegistration>>
+
+    @POST("admin/prisoners/{prisonerId}/biometrics")
+    suspend fun registerBiometric(
+        @Path("prisonerId") prisonerId: String,
+        @Body request: RegisterBiometricRequest
+    ): ApiResponse<BiometricRegistration>
+
+    @DELETE("admin/biometrics/{biometricId}")
+    suspend fun deleteBiometric(@Path("biometricId") biometricId: String): ApiResponse<Unit>
+
+    // Devices
+    @GET("admin/devices")
+    suspend fun getAdminDevices(): ApiResponse<List<KioskDevice>>
+
+    @GET("admin/devices/{deviceId}")
+    suspend fun getAdminDevice(@Path("deviceId") deviceId: String): ApiResponse<KioskDevice>
+}

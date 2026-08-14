@@ -1,0 +1,22 @@
+[
+  {
+    "id": "SUB-001",
+    "prisonId": "PRISON-001",
+    "customer": "Central Prison Authority",
+    "plan": "Enterprise",
+    "expiry": "2025-12-31T23:59:59Z",
+    "license": "ENT-2024-CP-001",
+    "renewalDate": "2024-12-31T23:59:59Z",
+    "status": "active"
+  },
+  {
+    "id": "SUB-002",
+    "prisonId": "PRISON-002",
+    "customer": "District Jail Authority",
+    "plan": "Standard",
+    "expiry": "2025-06-30T23:59:59Z",
+    "license": "STD-2024-DJ-002",
+    "renewalDate": "2024-06-30T23:59:59Z",
+    "status": "active"
+  }
+]

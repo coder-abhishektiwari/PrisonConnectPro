@@ -1,0 +1,39 @@
+{
+  "name": "prisonconnect-root",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Prison Video Calling & Monitoring System Workspace",
+  "workspaces": [
+    "family-web",
+    "warden-dashboard"
+  ],
+  "scripts": {
+    "lint": "npm run lint --workspace=family-web && npm run lint --workspace=warden-dashboard",
+    "format:check": "prettier --check \"**/*.{ts,tsx,json,md}\"",
+    "format:write": "prettier --write \"**/*.{ts,tsx,json,md}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.2.5"
+  },
+  "dependencies": {
+    "@tensorflow/tfjs-backend-wasm": "^4.22.0",
+    "@tensorflow/tfjs-converter": "^4.22.0",
+    "@tensorflow/tfjs-core": "^4.22.0",
+    "@vladmandic/human": "^3.3.6",
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.6.2",
+    "jpeg-js": "^0.4.4",
+    "jsonwebtoken": "^9.0.3",
+    "mediasoup": "^3.24.2",
+    "mediasoup-client": "^3.21.0",
+    "pg": "^8.23.0",
+    "pngjs": "^7.0.0",
+    "proper-lockfile": "^4.1.2",
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3",
+    "uuid": "^14.0.1"
+  }
+}

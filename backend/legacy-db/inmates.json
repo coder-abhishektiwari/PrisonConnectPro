@@ -1,0 +1,902 @@
+[
+  {
+    "inmateId": "100101",
+    "prisonId": "PRISON-001",
+    "firstName": "John",
+    "lastName": "Doe",
+    "facility": "PRISON-001",
+    "cellBlock": "A-Block",
+    "status": "active",
+    "photoUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=John",
+    "securityLevel": "medium",
+    "sentenceDetails": "5 years - Property offense (Theft)",
+    "walletId": "WALLET-001",
+    "approvedContactIds": ["CONT-001", "CONT-002"],
+    "assignedKioskId": "KIOSK-001",
+    "lastCall": "2026-08-08T10:05:00Z",
+    "nextScheduledCall": "2026-08-10T10:00:00Z",
+    "pin": "123456",
+    "biometricData": {
+      "faceRegistered": true,
+      "fingerprintRegistered": true,
+      "lastBiometricUpdate": "2026-01-01T00:00:00Z"
+    },
+    "mobileNumber": "+91-9876543212345",
+    "deviceInfo": {
+      "fingerprintRegistered": true,
+      "ipAddress": null,
+      "lastFingerprintVerify": null
+    },
+    "active": true
+  },
+  {
+    "inmateId": "100202",
+    "prisonId": "PRISON-001",
+    "firstName": "Jane",
+    "lastName": "Smith",
+    "facility": "PRISON-001",
+    "cellBlock": "B-Block",
+    "status": "active",
+    "photoUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Jane",
+    "securityLevel": "low",
+    "sentenceDetails": "2 years - Non-violent offense (Forgery)",
+    "walletId": "WALLET-002",
+    "approvedContactIds": ["CONT-003"],
+    "assignedKioskId": "KIOSK-002",
+    "lastCall": "2026-08-08T10:35:00Z",
+    "nextScheduledCall": "2026-08-12T14:00:00Z",
+    "pin": "123456",
+    "biometricData": {
+      "faceRegistered": true,
+      "fingerprintRegistered": true,
+      "lastBiometricUpdate": "2026-01-01T00:00:00Z"
+    },
+    "mobileNumber": "+91-9876543212346",
+    "deviceInfo": {
+      "fingerprintRegistered": true,
+      "ipAddress": null,
+      "lastFingerprintVerify": null
+    },
+    "active": true
+  },
+  {
+    "inmateId": "100303",
+    "prisonId": "PRISON-001",
+    "firstName": "Bob",
+    "lastName": "Johnson",
+    "facility": "PRISON-001",
+    "cellBlock": "A-Block",
+    "status": "active",
+    "photoUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Bob",
+    "securityLevel": "high",
+    "sentenceDetails": "10 years - Fraud (Financial scam)",
+    "walletId": "WALLET-003",
+    "approvedContactIds": ["CONT-004", "CONT-005"],
+    "assignedKioskId": "KIOSK-003",
+    "lastCall": "2026-08-08T10:40:00Z",
+    "nextScheduledCall": "2026-08-09T09:00:00Z",
+    "pin": "123456",
+    "biometricData": {
+      "faceRegistered": true,
+      "fingerprintRegistered": true,
+      "lastBiometricUpdate": "2026-01-01T00:00:00Z"
+    },
+    "mobileNumber": "+91-9876543212347",
+    "deviceInfo": {
+      "fingerprintRegistered": true,
+      "ipAddress": null,
+      "lastFingerprintVerify": null
+    },
+    "active": true
+  },
+  {
+    "inmateId": "100404",
+    "prisonId": "PRISON-001",
+    "firstName": "Michael",
+    "lastName": "Brown",
+    "facility": "PRISON-001",
+    "cellBlock": "C-Block",
+    "status": "active",
+    "photoUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Michael",
+    "securityLevel": "medium",
+    "sentenceDetails": "4 years - Assault",
+    "walletId": "WALLET-004",
+    "approvedContactIds": ["CONT-006"],
+    "assignedKioskId": "KIOSK-005",
+    "lastCall": "2026-08-07T16:20:00Z",
+    "nextScheduledCall": "2026-08-11T11:00:00Z",
+    "pin": "123456",
+    "biometricData": {
+      "faceRegistered": true,
+      "fingerprintRegistered": true,
+      "lastBiometricUpdate": "2026-01-01T00:00:00Z"
+    },
+    "mobileNumber": "+91-9876543212348",
+    "deviceInfo": {
+      "fingerprintRegistered": true,
+      "ipAddress": null,
+      "lastFingerprintVerify": null
+    },
+    "active": true
+  },
+  {
+    "inmateId": "100505",
+    "prisonId": "PRISON-001",
+    "firstName": "David",
+    "lastName": "Wilson",
+    "facility": "PRISON-001",
+    "cellBlock": "A-Block",
+    "status": "active",
+    "photoUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=David",
+    "securityLevel": "high",
+    "sentenceDetails": "10 years - Drug trafficking",
+    "walletId": "WALLET-005",
+    "approvedContactIds": ["CONT-007"],
+    "assignedKioskId": "KIOSK-001",
+    "lastCall": "2026-08-06T15:45:00Z",
+    "nextScheduledCall": "2026-08-13T10:00:00Z",
+    "pin": "123456",
+    "biometricData": {
+      "faceRegistered": true,
+      "fingerprintRegistered": true,
+      "lastBiometricUpdate": "2026-01-01T00:00:00Z"
+    },
+    "mobileNumber": "+91-9876543212349",
+    "deviceInfo": {
+      "fingerprintRegistered": true,
+      "ipAddress": null,
+      "lastFingerprintVerify": null
+    },
+    "active": true
+  },
+  {
+    "inmateId": "100606",
+    "prisonId": "PRISON-001",
+    "firstName": "James",
+    "lastName": "Taylor",
+    "facility": "PRISON-001",
+    "cellBlock": "B-Block",
+    "status": "active",
+    "photoUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=James",
+    "securityLevel": "low",
+    "sentenceDetails": "2 years - Cyber crime",
+    "walletId": "WALLET-006",
+    "approvedContactIds": ["CONT-008"],
+    "assignedKioskId": "KIOSK-002",
+    "lastCall": "2026-08-05T11:30:00Z",
+    "nextScheduledCall": "2026-08-14T14:00:00Z",
+    "pin": "123456",
+    "biometricData": {
+      "faceRegistered": true,
+      "fingerprintRegistered": true,
+      "lastBiometricUpdate": "2026-01-01T00:00:00Z"
+    },
+    "mobileNumber": "+91-9876543212350",
+    "deviceInfo": {
+      "fingerprintRegistered": true,
+      "ipAddress": null,
+      "lastFingerprintVerify": null
+    },
+    "active": true
+  },
+  {
+    "inmateId": "100707",
+    "prisonId": "PRISON-001",
+    "firstName": "Robert",
+    "lastName": "Anderson",
+    "facility": "PRISON-001",
+    "cellBlock": "C-Block",
+    "status": "active",
+    "photoUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Robert",
+    "securityLevel": "medium",
+    "sentenceDetails": "5 years - Embezzlement",
+    "walletId": "WALLET-007",
+    "approvedContactIds": ["CONT-009"],
+    "assignedKioskId": "KIOSK-005",
+    "lastCall": "2026-08-04T09:15:00Z",
+    "nextScheduledCall": "2026-08-15T11:00:00Z",
+    "pin": "123456",
+    "biometricData": {
+      "faceRegistered": true,
+      "fingerprintRegistered": true,
+      "lastBiometricUpdate": "2026-01-01T00:00:00Z"
+    },
+    "mobileNumber": "+91-9876543212351",
+    "deviceInfo": {
+      "fingerprintRegistered": true,
+      "ipAddress": null,
+      "lastFingerprintVerify": null
+    },
+    "active": true
+  },
+  {
+    "inmateId": "100808",
+    "prisonId": "PRISON-001",
+    "firstName": "William",
+    "lastName": "Thomas",
+    "facility": "PRISON-001",
+    "cellBlock": "A-Block",
+    "status": "active",
+    "photoUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=William",
+    "securityLevel": "high",
+    "sentenceDetails": "10 years - Armed robbery",
+    "walletId": "WALLET-008",
+    "approvedContactIds": ["CONT-010"],
+    "assignedKioskId": "KIOSK-003",
+    "lastCall": "2026-08-03T16:00:00Z",
+    "nextScheduledCall": "2026-08-16T09:00:00Z",
+    "pin": "123456",
+    "biometricData": {
+      "faceRegistered": true,
+      "fingerprintRegistered": true,
+      "lastBiometricUpdate": "2026-01-01T00:00:00Z"
+    },
+    "mobileNumber": "+91-9876543212352",
+    "deviceInfo": {
+      "fingerprintRegistered": true,
+      "ipAddress": null,
+      "lastFingerprintVerify": null
+    },
+    "active": true
+  },
+  {
+    "inmateId": "100909",
+    "prisonId": "PRISON-002",
+    "firstName": "Ravi",
+    "lastName": "Kumar",
+    "facility": "PRISON-002",
+    "cellBlock": "Main Block",
+    "status": "active",
+    "photoUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Ravi",
+    "securityLevel": "medium",
+    "sentenceDetails": "4 years - Burglary",
+    "walletId": "WALLET-009",
+    "approvedContactIds": ["CONT-011"],
+    "assignedKioskId": "KIOSK-006",
+    "lastCall": "2026-08-08T09:30:00Z",
+    "nextScheduledCall": "2026-08-10T10:00:00Z",
+    "pin": "123456",
+    "biometricData": {
+      "faceRegistered": true,
+      "fingerprintRegistered": true,
+      "lastBiometricUpdate": "2026-01-01T00:00:00Z"
+    },
+    "mobileNumber": "+91-9876543212353",
+    "deviceInfo": {
+      "fingerprintRegistered": true,
+      "ipAddress": null,
+      "lastFingerprintVerify": null
+    },
+    "active": true
+  },
+  {
+    "inmateId": "101010",
+    "prisonId": "PRISON-002",
+    "firstName": "Anil",
+    "lastName": "Sharma",
+    "facility": "PRISON-002",
+    "cellBlock": "Main Block",
+    "status": "active",
+    "photoUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Anil",
+    "securityLevel": "high",
+    "sentenceDetails": "10 years - Murder",
+    "walletId": "WALLET-010",
+    "approvedContactIds": ["CONT-012"],
+    "assignedKioskId": "KIOSK-007",
+    "lastCall": "2026-08-07T14:20:00Z",
+    "nextScheduledCall": "2026-08-11T14:00:00Z",
+    "pin": "123456",
+    "biometricData": {
+      "faceRegistered": true,
+      "fingerprintRegistered": true,
+      "lastBiometricUpdate": "2026-01-01T00:00:00Z"
+    },
+    "mobileNumber": "+91-9876543212354",
+    "deviceInfo": {
+      "fingerprintRegistered": true,
+      "ipAddress": null,
+      "lastFingerprintVerify": null
+    },
+    "active": true
+  },
+  {
+    "inmateId": "101111",
+    "prisonId": "PRISON-002",
+    "firstName": "Kiran",
+    "lastName": "Reddy",
+    "facility": "PRISON-002",
+    "cellBlock": "Block B",
+    "status": "active",
+    "photoUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Kiran",
+    "securityLevel": "low",
+    "sentenceDetails": "2 years - Theft",
+    "walletId": "WALLET-011",
+    "approvedContactIds": ["CONT-013"],
+    "assignedKioskId": "KIOSK-009",
+    "lastCall": "2026-08-06T10:45:00Z",
+    "nextScheduledCall": "2026-08-12T10:00:00Z",
+    "pin": "123456",
+    "biometricData": {
+      "faceRegistered": true,
+      "fingerprintRegistered": true,
+      "lastBiometricUpdate": "2026-01-01T00:00:00Z"
+    },
+    "mobileNumber": "+91-9876543212355",
+    "deviceInfo": {
+      "fingerprintRegistered": true,
+      "ipAddress": null,
+      "lastFingerprintVerify": null
+    },
+    "active": true
+  },
+  {
+    "inmateId": "101212",
+    "prisonId": "PRISON-002",
+    "firstName": "Mohan",
+    "lastName": "Das",
+    "facility": "PRISON-002",
+    "cellBlock": "Block C",
+    "status": "active",
+    "photoUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Mohan",
+    "securityLevel": "medium",
+    "sentenceDetails": "5 years - Fraud",
+    "walletId": "WALLET-012",
+    "approvedContactIds": ["CONT-014"],
+    "assignedKioskId": "KIOSK-006",
+    "lastCall": "2026-08-05T15:10:00Z",
+    "nextScheduledCall": "2026-08-13T11:00:00Z",
+    "pin": "123456",
+    "biometricData": {
+      "faceRegistered": true,
+      "fingerprintRegistered": true,
+      "lastBiometricUpdate": "2026-01-01T00:00:00Z"
+    },
+    "mobileNumber": "+91-9876543212356",
+    "deviceInfo": {
+      "fingerprintRegistered": true,
+      "ipAddress": null,
+      "lastFingerprintVerify": null
+    },
+    "active": true
+  },
+  {
+    "inmateId": "101313",
+    "prisonId": "PRISON-002",
+    "firstName": "Suresh",
+    "lastName": "Nair",
+    "facility": "PRISON-002",
+    "cellBlock": "Main Block",
+    "status": "active",
+    "photoUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Suresh",
+    "securityLevel": "high",
+    "sentenceDetails": "10 years - Drug trafficking",
+    "walletId": "WALLET-013",
+    "approvedContactIds": ["CONT-015"],
+    "assignedKioskId": "KIOSK-007",
+    "lastCall": "2026-08-04T09:00:00Z",
+    "nextScheduledCall": "2026-08-14T14:00:00Z",
+    "pin": "123456",
+    "biometricData": {
+      "faceRegistered": true,
+      "fingerprintRegistered": true,
+      "lastBiometricUpdate": "2026-01-01T00:00:00Z"
+    },
+    "mobileNumber": "+91-9876543212357",
+    "deviceInfo": {
+      "fingerprintRegistered": true,
+      "ipAddress": null,
+      "lastFingerprintVerify": null
+    },
+    "active": true
+  },
+  {
+    "inmateId": "101414",
+    "prisonId": "PRISON-002",
+    "firstName": "Vijay",
+    "lastName": "Patel",
+    "facility": "PRISON-002",
+    "cellBlock": "Block B",
+    "status": "active",
+    "photoUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Vijay",
+    "securityLevel": "low",
+    "sentenceDetails": "2 years - Vandalism",
+    "walletId": "WALLET-014",
+    "approvedContactIds": ["CONT-016"],
+    "assignedKioskId": "KIOSK-009",
+    "lastCall": "2026-08-03T12:30:00Z",
+    "nextScheduledCall": "2026-08-15T10:00:00Z",
+    "pin": "123456",
+    "biometricData": {
+      "faceRegistered": true,
+      "fingerprintRegistered": true,
+      "lastBiometricUpdate": "2026-01-01T00:00:00Z"
+    },
+    "mobileNumber": "+91-9876543212358",
+    "deviceInfo": {
+      "fingerprintRegistered": true,
+      "ipAddress": null,
+      "lastFingerprintVerify": null
+    },
+    "active": true
+  },
+  {
+    "inmateId": "101515",
+    "prisonId": "PRISON-003",
+    "firstName": "Arjun",
+    "lastName": "Singh",
+    "facility": "PRISON-003",
+    "cellBlock": "HS Block",
+    "status": "active",
+    "photoUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Arjun",
+    "securityLevel": "maximum",
+    "sentenceDetails": "20 years - Terrorism",
+    "walletId": "WALLET-015",
+    "approvedContactIds": ["CONT-017"],
+    "assignedKioskId": "KIOSK-010",
+    "lastCall": "2026-08-08T10:00:00Z",
+    "nextScheduledCall": "2026-08-10T09:00:00Z",
+    "pin": "123456",
+    "biometricData": {
+      "faceRegistered": true,
+      "fingerprintRegistered": true,
+      "lastBiometricUpdate": "2026-01-01T00:00:00Z"
+    },
+    "mobileNumber": "+91-9876543212359",
+    "deviceInfo": {
+      "fingerprintRegistered": true,
+      "ipAddress": null,
+      "lastFingerprintVerify": null
+    },
+    "active": true
+  },
+  {
+    "inmateId": "101616",
+    "prisonId": "PRISON-003",
+    "firstName": "Karan",
+    "lastName": "Malhotra",
+    "facility": "PRISON-003",
+    "cellBlock": "HS Block",
+    "status": "active",
+    "photoUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Karan",
+    "securityLevel": "maximum",
+    "sentenceDetails": "20 years - Espionage",
+    "walletId": "WALLET-016",
+    "approvedContactIds": ["CONT-018"],
+    "assignedKioskId": "KIOSK-011",
+    "lastCall": "2026-08-07T11:15:00Z",
+    "nextScheduledCall": "2026-08-11T10:00:00Z",
+    "pin": "123456",
+    "biometricData": {
+      "faceRegistered": true,
+      "fingerprintRegistered": true,
+      "lastBiometricUpdate": "2026-01-01T00:00:00Z"
+    },
+    "mobileNumber": "+91-9876543212360",
+    "deviceInfo": {
+      "fingerprintRegistered": true,
+      "ipAddress": null,
+      "lastFingerprintVerify": null
+    },
+    "active": true
+  },
+  {
+    "inmateId": "101717",
+    "prisonId": "PRISON-003",
+    "firstName": "Deepak",
+    "lastName": "Chopra",
+    "facility": "PRISON-003",
+    "cellBlock": "HS Block",
+    "status": "active",
+    "photoUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Deepak",
+    "securityLevel": "maximum",
+    "sentenceDetails": "20 years - Serial offenses",
+    "walletId": "WALLET-017",
+    "approvedContactIds": ["CONT-019"],
+    "assignedKioskId": "KIOSK-010",
+    "lastCall": "2026-08-06T14:30:00Z",
+    "nextScheduledCall": "2026-08-12T09:00:00Z",
+    "pin": "123456",
+    "biometricData": {
+      "faceRegistered": true,
+      "fingerprintRegistered": true,
+      "lastBiometricUpdate": "2026-01-01T00:00:00Z"
+    },
+    "mobileNumber": "+91-9876543212361",
+    "deviceInfo": {
+      "fingerprintRegistered": true,
+      "ipAddress": null,
+      "lastFingerprintVerify": null
+    },
+    "active": true
+  },
+  {
+    "inmateId": "101818",
+    "prisonId": "PRISON-003",
+    "firstName": "Rohit",
+    "lastName": "Verma",
+    "facility": "PRISON-003",
+    "cellBlock": "ISO Block",
+    "status": "active",
+    "photoUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Rohit",
+    "securityLevel": "high",
+    "sentenceDetails": "10 years - Kidnapping",
+    "walletId": "WALLET-018",
+    "approvedContactIds": ["CONT-020"],
+    "assignedKioskId": "KIOSK-012",
+    "lastCall": "2026-08-05T10:20:00Z",
+    "nextScheduledCall": "2026-08-13T10:00:00Z",
+    "pin": "123456",
+    "biometricData": {
+      "faceRegistered": true,
+      "fingerprintRegistered": true,
+      "lastBiometricUpdate": "2026-01-01T00:00:00Z"
+    },
+    "mobileNumber": "+91-9876543212362",
+    "deviceInfo": {
+      "fingerprintRegistered": true,
+      "ipAddress": null,
+      "lastFingerprintVerify": null
+    },
+    "active": true
+  },
+  {
+    "inmateId": "101919",
+    "prisonId": "PRISON-003",
+    "firstName": "Nikhil",
+    "lastName": "Gupta",
+    "facility": "PRISON-003",
+    "cellBlock": "ISO Block",
+    "status": "active",
+    "photoUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Nikhil",
+    "securityLevel": "high",
+    "sentenceDetails": "10 years - Arms trafficking",
+    "walletId": "WALLET-019",
+    "approvedContactIds": ["CONT-021"],
+    "assignedKioskId": "KIOSK-012",
+    "lastCall": "2026-08-04T16:45:00Z",
+    "nextScheduledCall": "2026-08-14T09:00:00Z",
+    "pin": "123456",
+    "biometricData": {
+      "faceRegistered": true,
+      "fingerprintRegistered": true,
+      "lastBiometricUpdate": "2026-01-01T00:00:00Z"
+    },
+    "mobileNumber": "+91-9876543212363",
+    "deviceInfo": {
+      "fingerprintRegistered": true,
+      "ipAddress": null,
+      "lastFingerprintVerify": null
+    },
+    "active": true
+  },
+  {
+    "inmateId": "102020",
+    "prisonId": "PRISON-003",
+    "firstName": "Aditya",
+    "lastName": "Rao",
+    "facility": "PRISON-003",
+    "cellBlock": "HS Block",
+    "status": "active",
+    "photoUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Aditya",
+    "securityLevel": "maximum",
+    "sentenceDetails": "20 years - Organized crime",
+    "walletId": "WALLET-020",
+    "approvedContactIds": ["CONT-022"],
+    "assignedKioskId": "KIOSK-011",
+    "lastCall": "2026-08-03T09:30:00Z",
+    "nextScheduledCall": "2026-08-15T10:00:00Z",
+    "pin": "123456",
+    "biometricData": {
+      "faceRegistered": true,
+      "fingerprintRegistered": true,
+      "lastBiometricUpdate": "2026-01-01T00:00:00Z"
+    },
+    "mobileNumber": "+91-9876543212364",
+    "deviceInfo": {
+      "fingerprintRegistered": true,
+      "ipAddress": null,
+      "lastFingerprintVerify": null
+    },
+    "active": true
+  },
+  {
+    "inmateId": "102121",
+    "prisonId": "PRISON-004",
+    "firstName": "Karthik",
+    "lastName": "Rajan",
+    "facility": "PRISON-004",
+    "cellBlock": "Block A",
+    "status": "active",
+    "photoUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Karthik",
+    "securityLevel": "medium",
+    "sentenceDetails": "4 years - Fraud",
+    "walletId": "WALLET-021",
+    "approvedContactIds": ["CONT-023"],
+    "assignedKioskId": "KIOSK-014",
+    "lastCall": "2026-08-08T09:45:00Z",
+    "nextScheduledCall": "2026-08-10T11:00:00Z",
+    "pin": "123456",
+    "biometricData": {
+      "faceRegistered": true,
+      "fingerprintRegistered": true,
+      "lastBiometricUpdate": "2026-01-01T00:00:00Z"
+    },
+    "mobileNumber": "+91-9876543212365",
+    "deviceInfo": {
+      "fingerprintRegistered": true,
+      "ipAddress": null,
+      "lastFingerprintVerify": null
+    },
+    "active": true
+  },
+  {
+    "inmateId": "102222",
+    "prisonId": "PRISON-004",
+    "firstName": "Senthil",
+    "lastName": "Kumar",
+    "facility": "PRISON-004",
+    "cellBlock": "Block C",
+    "status": "active",
+    "photoUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Senthil",
+    "securityLevel": "high",
+    "sentenceDetails": "10 years - Assault",
+    "walletId": "WALLET-022",
+    "approvedContactIds": ["CONT-024"],
+    "assignedKioskId": "KIOSK-016",
+    "lastCall": "2026-08-07T13:00:00Z",
+    "nextScheduledCall": "2026-08-11T10:00:00Z",
+    "pin": "123456",
+    "biometricData": {
+      "faceRegistered": true,
+      "fingerprintRegistered": true,
+      "lastBiometricUpdate": "2026-01-01T00:00:00Z"
+    },
+    "mobileNumber": "+91-9876543212366",
+    "deviceInfo": {
+      "fingerprintRegistered": true,
+      "ipAddress": null,
+      "lastFingerprintVerify": null
+    },
+    "active": true
+  },
+  {
+    "inmateId": "102323",
+    "prisonId": "PRISON-004",
+    "firstName": "Prakash",
+    "lastName": "Iyer",
+    "facility": "PRISON-004",
+    "cellBlock": "Block A",
+    "status": "active",
+    "photoUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Prakash",
+    "securityLevel": "low",
+    "sentenceDetails": "2 years - Theft",
+    "walletId": "WALLET-023",
+    "approvedContactIds": ["CONT-025"],
+    "assignedKioskId": "KIOSK-014",
+    "lastCall": "2026-08-06T10:15:00Z",
+    "nextScheduledCall": "2026-08-12T11:00:00Z",
+    "pin": "123456",
+    "biometricData": {
+      "faceRegistered": true,
+      "fingerprintRegistered": true,
+      "lastBiometricUpdate": "2026-01-01T00:00:00Z"
+    },
+    "mobileNumber": "+91-9876543212367",
+    "deviceInfo": {
+      "fingerprintRegistered": true,
+      "ipAddress": null,
+      "lastFingerprintVerify": null
+    },
+    "active": true
+  },
+  {
+    "inmateId": "102424",
+    "prisonId": "PRISON-004",
+    "firstName": "Ganesh",
+    "lastName": "Moorthy",
+    "facility": "PRISON-004",
+    "cellBlock": "Block C",
+    "status": "active",
+    "photoUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Ganesh",
+    "securityLevel": "medium",
+    "sentenceDetails": "5 years - Embezzlement",
+    "walletId": "WALLET-024",
+    "approvedContactIds": ["CONT-026"],
+    "assignedKioskId": "KIOSK-016",
+    "lastCall": "2026-08-05T15:30:00Z",
+    "nextScheduledCall": "2026-08-13T10:00:00Z",
+    "pin": "123456",
+    "biometricData": {
+      "faceRegistered": true,
+      "fingerprintRegistered": true,
+      "lastBiometricUpdate": "2026-01-01T00:00:00Z"
+    },
+    "mobileNumber": "+91-9876543212368",
+    "deviceInfo": {
+      "fingerprintRegistered": true,
+      "ipAddress": null,
+      "lastFingerprintVerify": null
+    },
+    "active": true
+  },
+  {
+    "inmateId": "102525",
+    "prisonId": "PRISON-004",
+    "firstName": "Ramesh",
+    "lastName": "Babu",
+    "facility": "PRISON-004",
+    "cellBlock": "Block A",
+    "status": "active",
+    "photoUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Ramesh",
+    "securityLevel": "high",
+    "sentenceDetails": "10 years - Drug trafficking",
+    "walletId": "WALLET-025",
+    "approvedContactIds": ["CONT-027"],
+    "assignedKioskId": "KIOSK-014",
+    "lastCall": "2026-08-04T09:00:00Z",
+    "nextScheduledCall": "2026-08-14T11:00:00Z",
+    "pin": "123456",
+    "biometricData": {
+      "faceRegistered": true,
+      "fingerprintRegistered": true,
+      "lastBiometricUpdate": "2026-01-01T00:00:00Z"
+    },
+    "mobileNumber": "+91-9876543212369",
+    "deviceInfo": {
+      "fingerprintRegistered": true,
+      "ipAddress": null,
+      "lastFingerprintVerify": null
+    },
+    "active": true
+  },
+  {
+    "inmateId": "102626",
+    "prisonId": "PRISON-005",
+    "firstName": "Priya",
+    "lastName": "Deshmukh",
+    "facility": "PRISON-005",
+    "cellBlock": "Block A",
+    "status": "active",
+    "photoUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Priya",
+    "securityLevel": "medium",
+    "sentenceDetails": "4 years - Fraud",
+    "walletId": "WALLET-026",
+    "approvedContactIds": ["CONT-028"],
+    "assignedKioskId": "KIOSK-017",
+    "lastCall": "2026-08-08T10:10:00Z",
+    "nextScheduledCall": "2026-08-10T10:00:00Z",
+    "pin": "123456",
+    "biometricData": {
+      "faceRegistered": true,
+      "fingerprintRegistered": true,
+      "lastBiometricUpdate": "2026-01-01T00:00:00Z"
+    },
+    "mobileNumber": "+91-9876543212370",
+    "deviceInfo": {
+      "fingerprintRegistered": true,
+      "ipAddress": null,
+      "lastFingerprintVerify": null
+    },
+    "active": true
+  },
+  {
+    "inmateId": "102727",
+    "prisonId": "PRISON-005",
+    "firstName": "Kavita",
+    "lastName": "Joshi",
+    "facility": "PRISON-005",
+    "cellBlock": "Block C",
+    "status": "active",
+    "photoUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Kavita",
+    "securityLevel": "high",
+    "sentenceDetails": "10 years - Drug trafficking",
+    "walletId": "WALLET-027",
+    "approvedContactIds": ["CONT-029"],
+    "assignedKioskId": "KIOSK-019",
+    "lastCall": "2026-08-07T14:00:00Z",
+    "nextScheduledCall": "2026-08-11T10:00:00Z",
+    "pin": "123456",
+    "biometricData": {
+      "faceRegistered": true,
+      "fingerprintRegistered": true,
+      "lastBiometricUpdate": "2026-01-01T00:00:00Z"
+    },
+    "mobileNumber": "+91-9876543212371",
+    "deviceInfo": {
+      "fingerprintRegistered": true,
+      "ipAddress": null,
+      "lastFingerprintVerify": null
+    },
+    "active": true
+  },
+  {
+    "inmateId": "102828",
+    "prisonId": "PRISON-005",
+    "firstName": "Shalini",
+    "lastName": "Patil",
+    "facility": "PRISON-005",
+    "cellBlock": "Block A",
+    "status": "active",
+    "photoUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Shalini",
+    "securityLevel": "low",
+    "sentenceDetails": "2 years - Theft",
+    "walletId": "WALLET-028",
+    "approvedContactIds": ["CONT-030"],
+    "assignedKioskId": "KIOSK-017",
+    "lastCall": "2026-08-06T11:30:00Z",
+    "nextScheduledCall": "2026-08-12T10:00:00Z",
+    "pin": "123456",
+    "biometricData": {
+      "faceRegistered": true,
+      "fingerprintRegistered": true,
+      "lastBiometricUpdate": "2026-01-01T00:00:00Z"
+    },
+    "mobileNumber": "+91-9876543212372",
+    "deviceInfo": {
+      "fingerprintRegistered": true,
+      "ipAddress": null,
+      "lastFingerprintVerify": null
+    },
+    "active": true
+  },
+  {
+    "inmateId": "102929",
+    "prisonId": "PRISON-005",
+    "firstName": "Anita",
+    "lastName": "Sharma",
+    "facility": "PRISON-005",
+    "cellBlock": "Block C",
+    "status": "active",
+    "photoUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Anita",
+    "securityLevel": "medium",
+    "sentenceDetails": "5 years - Embezzlement",
+    "walletId": "WALLET-029",
+    "approvedContactIds": ["CONT-031"],
+    "assignedKioskId": "KIOSK-019",
+    "lastCall": "2026-08-05T09:45:00Z",
+    "nextScheduledCall": "2026-08-13T10:00:00Z",
+    "pin": "123456",
+    "biometricData": {
+      "faceRegistered": true,
+      "fingerprintRegistered": true,
+      "lastBiometricUpdate": "2026-01-01T00:00:00Z"
+    },
+    "mobileNumber": "+91-9876543212373",
+    "deviceInfo": {
+      "fingerprintRegistered": true,
+      "ipAddress": null,
+      "lastFingerprintVerify": null
+    },
+    "active": true
+  },
+  {
+    "inmateId": "103030",
+    "prisonId": "PRISON-005",
+    "firstName": "Rekha",
+    "lastName": "Nair",
+    "facility": "PRISON-005",
+    "cellBlock": "Block A",
+    "status": "active",
+    "photoUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Rekha",
+    "securityLevel": "high",
+    "sentenceDetails": "10 years - Murder",
+    "walletId": "WALLET-030",
+    "approvedContactIds": ["CONT-032"],
+    "assignedKioskId": "KIOSK-017",
+    "lastCall": "2026-08-04T15:15:00Z",
+    "nextScheduledCall": "2026-08-14T10:00:00Z",
+    "pin": "123456",
+    "biometricData": {
+      "faceRegistered": true,
+      "fingerprintRegistered": true,
+      "lastBiometricUpdate": "2026-01-01T00:00:00Z"
+    },
+    "mobileNumber": "+91-9876543212374",
+    "deviceInfo": {
+      "fingerprintRegistered": true,
+      "ipAddress": null,
+      "lastFingerprintVerify": null
+    },
+    "active": true
+  }
+]

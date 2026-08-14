@@ -1,0 +1,7 @@
+[
+  { "prisonId": "PRISON-001", "pin": "123456", "updatedBy": "WARDEN-001", "updatedAt": "2026-08-01T00:00:00Z" },
+  { "prisonId": "PRISON-002", "pin": "654321", "updatedBy": "WARDEN-004", "updatedAt": "2026-08-01T00:00:00Z" },
+  { "prisonId": "PRISON-003", "pin": "111222", "updatedBy": "WARDEN-006", "updatedAt": "2026-08-01T00:00:00Z" },
+  { "prisonId": "PRISON-004", "pin": "333444", "updatedBy": "WARDEN-009", "updatedAt": "2026-08-01T00:00:00Z" },
+  { "prisonId": "PRISON-005", "pin": "555666", "updatedBy": "WARDEN-011", "updatedAt": "2026-08-01T00:00:00Z" }
+]

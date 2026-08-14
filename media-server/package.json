@@ -1,0 +1,16 @@
+{
+  "name": "prisonconnect-media-server",
+  "version": "1.0.0",
+  "description": "mediasoup media plane for PrisonConnect (no business logic)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test.js"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "mediasoup": "^3.15.3"
+  }
+}

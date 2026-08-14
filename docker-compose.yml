@@ -1,0 +1,103 @@
+services:
+  # Production-ish PostgreSQL backing the Express API/business layer (backend).
+  postgres:
+    image: postgres:16-alpine
+    container_name: prisonconnect-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: prisonconnect
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: prisonconnect
+    ports:
+      - "55432:5432"
+    volumes:
+      - prisonconnect-pgdata:/var/lib/postgresql/data
+      - ./db-setup/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U prisonconnect -d prisonconnect"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [prisonconnect]
+
+  # STUN/TURN for WebRTC NAT traversal (family-web + kiosks behind NAT/firewalls).
+  coturn:
+    image: coturn/coturn:latest
+    container_name: prisonconnect-coturn
+    restart: unless-stopped
+    depends_on: []
+    ports:
+      - "3478:3478/udp"
+      - "3478:3478/tcp"
+      - "5349:5349/tcp"
+      - "5349:5349/udp"
+      # coturn relays on 49160-49200 inside the container; publish on host 41000-41040
+      # (kept out of Windows' excluded UDP ranges and disjoint from media's 40000-40999).
+      - "41000-41040:49160-49200/udp"
+    volumes:
+      - ./coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+      - ./coturn/certs:/etc/coturn/certs:ro
+    networks: [prisonconnect]
+
+  # Media server (mediasoup) — separate process, no business logic.
+  media-server:
+    build: ./media-server
+    container_name: prisonconnect-media
+    restart: unless-stopped
+    environment:
+      PORT: 3003
+      MEDIA_API_KEY: ${MEDIA_API_KEY:?set MEDIA_API_KEY in .env}
+      RTC_MIN_PORT: 40000
+      RTC_MAX_PORT: 40999
+      RTC_ANNOUNCED_IP: ${RTC_ANNOUNCED_IP:-127.0.0.1}
+      RTC_LISTEN_IP: 0.0.0.0
+    ports:
+      - "3003:3003"
+      - "40000-40999:40000-40999/udp"
+    networks: [prisonconnect]
+
+  # Signaling server (Socket.IO + WebRTC signaling) — no mediasoup, no business logic.
+  signaling-server:
+    build: ./signaling-server
+    container_name: prisonconnect-signaling
+    restart: unless-stopped
+    environment:
+      PORT: 3002
+      JWT_SECRET: ${JWT_SECRET:-dev-only-change-me}
+      MEDIA_SERVER_URL: http://media-server:3003
+      MEDIA_API_KEY: ${MEDIA_API_KEY:?set MEDIA_API_KEY in .env}
+      CORS_ORIGIN: "*"
+    ports:
+      - "3002:3002"
+    depends_on:
+      - media-server
+    networks: [prisonconnect]
+
+  # API / business layer.
+  backend:
+    build: ./backend
+    container_name: prisonconnect-backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgres://prisonconnect:${POSTGRES_PASSWORD}@postgres:5432/prisonconnect
+      JWT_SECRET: ${JWT_SECRET:-dev-only-change-me}
+      SIGNALING_URL: http://signaling-server:3002
+      MEDIA_SERVER_URL: http://media-server:3003
+      MEDIA_API_KEY: ${MEDIA_API_KEY:?set MEDIA_API_KEY in .env}
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      signaling-server:
+        condition: service_started
+    networks: [prisonconnect]
+
+volumes:
+  prisonconnect-pgdata:
+
+networks:
+  prisonconnect:
+    driver: bridge

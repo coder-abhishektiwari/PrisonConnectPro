@@ -1,0 +1,302 @@
+[
+  {
+    "roomId": "ROOM-001",
+    "kioskId": "KIOSK-001",
+    "inmateId": "INM-001",
+    "contactId": "CONT-001",
+    "status": "active",
+    "participantCount": 2,
+    "createdAt": "2026-08-08T10:00:00Z",
+    "expiresAt": "2026-08-08T11:00:00Z"
+  },
+  {
+    "roomId": "ROOM-002",
+    "kioskId": "KIOSK-002",
+    "inmateId": "INM-002",
+    "contactId": "CONT-003",
+    "status": "active",
+    "participantCount": 2,
+    "createdAt": "2026-08-08T10:30:00Z",
+    "expiresAt": "2026-08-08T11:30:00Z"
+  },
+  {
+    "roomId": "ROOM-003",
+    "kioskId": "KIOSK-003",
+    "inmateId": "INM-003",
+    "contactId": "CONT-004",
+    "status": "active",
+    "participantCount": 2,
+    "createdAt": "2026-08-08T10:35:00Z",
+    "expiresAt": "2026-08-08T11:35:00Z"
+  },
+  {
+    "roomId": "ROOM-004",
+    "kioskId": "KIOSK-006",
+    "inmateId": "INM-009",
+    "contactId": "CONT-011",
+    "status": "active",
+    "participantCount": 2,
+    "createdAt": "2026-08-08T09:25:00Z",
+    "expiresAt": "2026-08-08T10:25:00Z"
+  },
+  {
+    "roomId": "ROOM-005",
+    "kioskId": "KIOSK-010",
+    "inmateId": "INM-015",
+    "contactId": "CONT-017",
+    "status": "active",
+    "participantCount": 2,
+    "createdAt": "2026-08-08T09:55:00Z",
+    "expiresAt": "2026-08-08T10:55:00Z"
+  },
+  {
+    "roomId": "ROOM-006",
+    "kioskId": "KIOSK-014",
+    "inmateId": "INM-021",
+    "contactId": "CONT-023",
+    "status": "active",
+    "participantCount": 2,
+    "createdAt": "2026-08-08T09:40:00Z",
+    "expiresAt": "2026-08-08T10:40:00Z"
+  },
+  {
+    "roomId": "ROOM-007",
+    "kioskId": "KIOSK-017",
+    "inmateId": "INM-026",
+    "contactId": "CONT-028",
+    "status": "active",
+    "participantCount": 2,
+    "createdAt": "2026-08-08T10:05:00Z",
+    "expiresAt": "2026-08-08T11:05:00Z"
+  },
+  {
+    "roomId": "ROOM-008",
+    "kioskId": "KIOSK-005",
+    "inmateId": "INM-004",
+    "contactId": "CONT-006",
+    "status": "ready",
+    "participantCount": 1,
+    "createdAt": "2026-08-08T10:10:00Z",
+    "expiresAt": "2026-08-08T11:10:00Z"
+  },
+  {
+    "roomId": "ROOM-009",
+    "kioskId": "KIOSK-007",
+    "inmateId": "INM-010",
+    "contactId": "CONT-012",
+    "status": "waiting",
+    "participantCount": 1,
+    "createdAt": "2026-08-08T10:15:00Z",
+    "expiresAt": "2026-08-08T11:15:00Z"
+  },
+  {
+    "roomId": "ROOM-010",
+    "kioskId": "KIOSK-011",
+    "inmateId": "INM-016",
+    "contactId": "CONT-018",
+    "status": "waiting",
+    "participantCount": 1,
+    "createdAt": "2026-08-08T10:20:00Z",
+    "expiresAt": "2026-08-08T11:20:00Z"
+  },
+  {
+    "roomId": "ROOM-011",
+    "kioskId": "KIOSK-016",
+    "inmateId": "INM-022",
+    "contactId": "CONT-024",
+    "status": "ready",
+    "participantCount": 1,
+    "createdAt": "2026-08-08T10:22:00Z",
+    "expiresAt": "2026-08-08T11:22:00Z"
+  },
+  {
+    "roomId": "ROOM-012",
+    "kioskId": "KIOSK-019",
+    "inmateId": "INM-027",
+    "contactId": "CONT-029",
+    "status": "ready",
+    "participantCount": 1,
+    "createdAt": "2026-08-08T10:25:00Z",
+    "expiresAt": "2026-08-08T11:25:00Z"
+  },
+  {
+    "roomId": "ROOM-013",
+    "kioskId": "KIOSK-001",
+    "inmateId": "INM-005",
+    "contactId": "CONT-007",
+    "status": "idle",
+    "participantCount": 0,
+    "createdAt": "2026-08-08T08:00:00Z",
+    "expiresAt": "2026-08-08T09:00:00Z"
+  },
+  {
+    "roomId": "ROOM-014",
+    "kioskId": "KIOSK-002",
+    "inmateId": "INM-006",
+    "contactId": "CONT-008",
+    "status": "closed",
+    "participantCount": 0,
+    "createdAt": "2026-08-08T07:30:00Z",
+    "expiresAt": "2026-08-08T08:30:00Z"
+  },
+  {
+    "roomId": "ROOM-015",
+    "kioskId": "KIOSK-003",
+    "inmateId": "INM-008",
+    "contactId": "CONT-010",
+    "status": "closed",
+    "participantCount": 0,
+    "createdAt": "2026-08-08T07:00:00Z",
+    "expiresAt": "2026-08-08T08:00:00Z"
+  },
+  {
+    "roomId": "ROOM-016",
+    "kioskId": "KIOSK-006",
+    "inmateId": "INM-012",
+    "contactId": "CONT-014",
+    "status": "closed",
+    "participantCount": 0,
+    "createdAt": "2026-08-08T06:30:00Z",
+    "expiresAt": "2026-08-08T07:30:00Z"
+  },
+  {
+    "roomId": "ROOM-017",
+    "kioskId": "KIOSK-007",
+    "inmateId": "INM-013",
+    "contactId": "CONT-015",
+    "status": "closed",
+    "participantCount": 0,
+    "createdAt": "2026-08-08T06:00:00Z",
+    "expiresAt": "2026-08-08T07:00:00Z"
+  },
+  {
+    "roomId": "ROOM-018",
+    "kioskId": "KIOSK-009",
+    "inmateId": "INM-014",
+    "contactId": "CONT-016",
+    "status": "closed",
+    "participantCount": 0,
+    "createdAt": "2026-08-08T05:30:00Z",
+    "expiresAt": "2026-08-08T06:30:00Z"
+  },
+  {
+    "roomId": "ROOM-019",
+    "kioskId": "KIOSK-010",
+    "inmateId": "INM-017",
+    "contactId": "CONT-019",
+    "status": "closed",
+    "participantCount": 0,
+    "createdAt": "2026-08-08T05:00:00Z",
+    "expiresAt": "2026-08-08T06:00:00Z"
+  },
+  {
+    "roomId": "ROOM-020",
+    "kioskId": "KIOSK-012",
+    "inmateId": "INM-018",
+    "contactId": "CONT-020",
+    "status": "closed",
+    "participantCount": 0,
+    "createdAt": "2026-08-08T04:30:00Z",
+    "expiresAt": "2026-08-08T05:30:00Z"
+  },
+  {
+    "roomId": "ROOM-021",
+    "kioskId": "KIOSK-012",
+    "inmateId": "INM-019",
+    "contactId": "CONT-021",
+    "status": "closed",
+    "participantCount": 0,
+    "createdAt": "2026-08-08T04:00:00Z",
+    "expiresAt": "2026-08-08T05:00:00Z"
+  },
+  {
+    "roomId": "ROOM-022",
+    "kioskId": "KIOSK-011",
+    "inmateId": "INM-020",
+    "contactId": "CONT-022",
+    "status": "closed",
+    "participantCount": 0,
+    "createdAt": "2026-08-08T03:30:00Z",
+    "expiresAt": "2026-08-08T04:30:00Z"
+  },
+  {
+    "roomId": "ROOM-023",
+    "kioskId": "KIOSK-014",
+    "inmateId": "INM-023",
+    "contactId": "CONT-025",
+    "status": "closed",
+    "participantCount": 0,
+    "createdAt": "2026-08-08T03:00:00Z",
+    "expiresAt": "2026-08-08T04:00:00Z"
+  },
+  {
+    "roomId": "ROOM-024",
+    "kioskId": "KIOSK-016",
+    "inmateId": "INM-024",
+    "contactId": "CONT-026",
+    "status": "closed",
+    "participantCount": 0,
+    "createdAt": "2026-08-08T02:30:00Z",
+    "expiresAt": "2026-08-08T03:30:00Z"
+  },
+  {
+    "roomId": "ROOM-025",
+    "kioskId": "KIOSK-014",
+    "inmateId": "INM-025",
+    "contactId": "CONT-027",
+    "status": "closed",
+    "participantCount": 0,
+    "createdAt": "2026-08-08T02:00:00Z",
+    "expiresAt": "2026-08-08T03:00:00Z"
+  },
+  {
+    "roomId": "ROOM-026",
+    "kioskId": "KIOSK-017",
+    "inmateId": "INM-028",
+    "contactId": "CONT-030",
+    "status": "closed",
+    "participantCount": 0,
+    "createdAt": "2026-08-08T01:30:00Z",
+    "expiresAt": "2026-08-08T02:30:00Z"
+  },
+  {
+    "roomId": "ROOM-027",
+    "kioskId": "KIOSK-019",
+    "inmateId": "INM-029",
+    "contactId": "CONT-031",
+    "status": "closed",
+    "participantCount": 0,
+    "createdAt": "2026-08-08T01:00:00Z",
+    "expiresAt": "2026-08-08T02:00:00Z"
+  },
+  {
+    "roomId": "ROOM-028",
+    "kioskId": "KIOSK-017",
+    "inmateId": "INM-030",
+    "contactId": "CONT-032",
+    "status": "closed",
+    "participantCount": 0,
+    "createdAt": "2026-08-08T00:30:00Z",
+    "expiresAt": "2026-08-08T01:30:00Z"
+  },
+  {
+    "roomId": "ROOM-029",
+    "kioskId": "KIOSK-001",
+    "inmateId": "INM-001",
+    "contactId": "CONT-002",
+    "status": "expired",
+    "participantCount": 0,
+    "createdAt": "2026-08-07T16:00:00Z",
+    "expiresAt": "2026-08-07T17:00:00Z"
+  },
+  {
+    "roomId": "ROOM-030",
+    "kioskId": "KIOSK-005",
+    "inmateId": "INM-007",
+    "contactId": "CONT-009",
+    "status": "expired",
+    "participantCount": 0,
+    "createdAt": "2026-08-07T15:00:00Z",
+    "expiresAt": "2026-08-07T16:00:00Z"
+  }
+]

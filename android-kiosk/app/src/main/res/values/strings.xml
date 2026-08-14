@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PrisonConnect Kiosk</string>
+    <string name="secure_prison_kiosk">SECURE PRISON KIOSK</string>
+    <string name="secure_communication_kiosk">Secure Communication Kiosk</string>
+    <string name="secure_encrypted_verified">Secure • Encrypted • Verified</string>
+
+    <!-- Auth -->
+    <string name="please_authenticate">Please Authenticate</string>
+    <string name="rfid_card">RFID Card</string>
+    <string name="fingerprint">Fingerprint</string>
+    <string name="face_id">Face ID</string>
+    <string name="tap_card_desc">Tap your card\non the reader</string>
+    <string name="place_finger_desc">Place your finger\non the scanner</string>
+    <string name="look_camera_desc">Look at the camera\nfor face recognition</string>
+
+    <!-- Dashboard -->
+    <string name="verified_contacts">VERIFIED CONTACTS</string>
+    <string name="add_contact">Add Contact</string>
+    <string name="jail_bank_balance">JAIL BANK BALANCE</string>
+    <string name="view_history">View History</string>
+    <string name="active_status">Active</string>
+
+    <!-- Schedule -->
+    <string name="schedule_call">SCHEDULE CALL</string>
+    <string name="available_slots">AVAILABLE SLOTS</string>
+    <string name="select_slot_for">Selecting slot for %1$s</string>
+    <string name="schedule_audio_call">Schedule Audio Call</string>
+    <string name="schedule_video_call">Schedule Video Call</string>
+    <string name="rate_audio">₹1 / Min</string>
+    <string name="rate_video">₹2 / Min</string>
+
+    <!-- Lobby -->
+    <string name="slot_balance_validation">SLOT &amp; BALANCE VALIDATION</string>
+    <string name="sufficient_balance">Sufficient Balance</string>
+    <string name="call_rules">CALL RULES</string>
+    <string name="rule_max_duration">Max Duration: 5 Minutes</string>
+    <string name="rule_monitored">Calls are monitored &amp; recorded</string>
+    <string name="rule_prohibited">No abusive/illegal content allowed</string>
+    <string name="rule_billing">Per-minute billing (₹2 / min video)</string>
+    <string name="confirm_proceed">Confirm &amp; Proceed</string>
+
+    <!-- Call -->
+    <string name="secure_call_with">SECURE CALL With: %1$s</string>
+    <string name="live_billing">Live Billing: ₹%1$s</string>
+    <string name="recording_status">REC ● MONITORING ACTIVE</string>
+    <string name="inmate_details">Inmate: %1$s (%2$s)</string>
+    <string name="family_details">Family: %1$s</string>
+    <string name="connection_stable">Connection: Stable</string>
+
+    <!-- Incoming Call -->
+    <string name="incoming_video_call">Incoming Video Call</string>
+    <string name="incoming_audio_call">Incoming Audio Call</string>
+    <string name="accept">Accept</string>
+    <string name="decline">Decline</string>
+
+    <!-- Summary -->
+    <string name="call_ended_successfully">Call Ended Successfully</string>
+    <string name="max_duration_reached">Reached Max Duration: 5 Minutes</string>
+    <string name="receipt">RECEIPT</string>
+    <string name="total_charged">Total Charged</string>
+    <string name="remaining_balance">Remaining Balance</string>
+    <string name="back_to_home">Back to Home</string>
+    <string name="print_receipt">Print Receipt</string>
+</resources>

@@ -1,0 +1,41 @@
+{
+  "success": true,
+  "data": [
+    {
+      "id": "C001",
+      "fullName": "Suresh Kumar",
+      "relationship": "Brother",
+      "phoneNumber": "+91 98765 00001",
+      "isApproved": true,
+      "photoUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Suresh",
+      "lastCallDate": "02 Aug 2026",
+      "nextScheduledCallDate": "05 Aug 2026"
+    },
+    {
+      "id": "C002",
+      "fullName": "Sunita Devi",
+      "relationship": "Mother",
+      "phoneNumber": "+91 98765 00002",
+      "isApproved": true,
+      "photoUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Sunita",
+      "lastCallDate": "01 Aug 2026",
+      "nextScheduledCallDate": "06 Aug 2026"
+    },
+    {
+      "id": "C003",
+      "fullName": "Ramesh Prasad",
+      "relationship": "Father",
+      "phoneNumber": "+91 98765 00003",
+      "isApproved": true,
+      "photoUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Ramesh"
+    },
+    {
+      "id": "C004",
+      "fullName": "Anjali Kumari",
+      "relationship": "Sister",
+      "phoneNumber": "+91 98765 00004",
+      "isApproved": false
+    }
+  ],
+  "timestamp": 1722765600000
+}
