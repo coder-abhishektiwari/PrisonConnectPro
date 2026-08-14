@@ -95,6 +95,60 @@ services:
         condition: service_started
     networks: [prisonconnect]
 
+  # Family web portal (Vite build served by Nginx).
+  family-web:
+    build:
+      context: ./family-web
+      args:
+        VITE_API_GATEWAY_URL: ${VITE_API_GATEWAY_URL:-http://127.0.0.1:3001}
+        VITE_SIGNALING_URL: ${VITE_SIGNALING_URL:-http://127.0.0.1:3002}
+        VITE_WEBRTC_ICE_SERVERS: ${VITE_WEBRTC_ICE_SERVERS:-[{"urls":"turn:127.0.0.1:3478"}]}
+    container_name: prisonconnect-family-web
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+      - signaling-server
+      - media-server
+    networks: [prisonconnect]
+
+  # Warden & SaaS admin monitoring dashboard.
+  warden-dashboard:
+    build:
+      context: ./warden-dashboard
+      args:
+        VITE_API_GATEWAY_URL: ${VITE_API_GATEWAY_URL:-http://127.0.0.1:3001}
+        VITE_SIGNALING_URL: ${VITE_SIGNALING_URL:-http://127.0.0.1:3002}
+        VITE_MEDIASOUP_MONITOR_URL: ${VITE_MEDIASOUP_MONITOR_URL:-http://127.0.0.1:3003}
+    container_name: prisonconnect-warden-dashboard
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    depends_on:
+      - backend
+      - signaling-server
+      - media-server
+    networks: [prisonconnect]
+
+  # Vendor dashboard.
+  vendor-dashboard:
+    build:
+      context: ./vendor-dashboard
+      args:
+        VITE_API_GATEWAY_URL: ${VITE_API_GATEWAY_URL:-http://127.0.0.1:3001}
+        VITE_SIGNALING_URL: ${VITE_SIGNALING_URL:-http://127.0.0.1:3002}
+        VITE_DEFAULT_USERNAME: ${VITE_DEFAULT_USERNAME:-admin}
+        VITE_DEFAULT_PASSWORD: ${VITE_DEFAULT_PASSWORD:-admin}
+    container_name: prisonconnect-vendor-dashboard
+    restart: unless-stopped
+    ports:
+      - "8082:80"
+    depends_on:
+      - backend
+      - signaling-server
+    networks: [prisonconnect]
+
 volumes:
   prisonconnect-pgdata:
 
