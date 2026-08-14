@@ -3,6 +3,5 @@ dist
 .env
 .env.example
 Dockerfile
-nginx.conf
 .dockerignore
 *.log
