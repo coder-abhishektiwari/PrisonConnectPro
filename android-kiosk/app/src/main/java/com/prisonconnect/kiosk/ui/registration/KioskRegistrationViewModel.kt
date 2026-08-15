@@ -387,7 +387,7 @@ class KioskRegistrationViewModel @Inject constructor(
         }
         _uiState.update {
             it.copy(
-                currentStep = RegistrationStep.SUBMIT_DEVICE_INFO,
+                currentStep = RegistrationStep.SELECT_JAIL,
                 approvalStatus = "pending",
                 isApproved = false,
                 isLoading = false,

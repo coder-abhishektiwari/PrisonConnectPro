@@ -623,10 +623,15 @@ app.post('/auth/face-register', requireAuth, asyncRoute(async (req, res) => {
   const { inmateId, kioskId } = req.body;
   if (!inmateId || !kioskId) return sendError(res, 'INVALID_REQUEST', 'inmateId and kioskId are required', 400);
 
-  const inmates = await readDb('inmates.json');
+  const [inmates, kiosks] = await Promise.all([readDb('inmates.json'), readDb('kiosks.json')]);
   const inmate = inmates.find((i) => i.inmateId === inmateId);
   if (!inmate) return sendError(res, 'NOT_FOUND', 'Inmate not found', 404);
-  if (inmate.assignedKioskId && inmate.assignedKioskId !== kioskId) {
+
+  const kiosk = kiosks.find((k) => k.kioskId === kioskId);
+  if (kiosk && kiosk.prisonId && inmate.prisonId && kiosk.prisonId !== inmate.prisonId) {
+    return sendError(res, 'KIOSK_MISMATCH', 'Inmate is not assigned to this prison', 403);
+  }
+  if (!kiosk && inmate.assignedKioskId && inmate.assignedKioskId !== kioskId) {
     return sendError(res, 'KIOSK_MISMATCH', 'Inmate not assigned to this kiosk', 403);
   }
 
@@ -697,10 +702,15 @@ app.post('/auth/prisoner/identify', asyncRoute(async (req, res) => {
   const prisonerId = req.query.prisonerId || req.body.prisonerId;
   const kioskId = req.query.kioskId || req.body.kioskId;
 
-  const inmates = await readDb('inmates.json');
+  const [inmates, kiosks] = await Promise.all([readDb('inmates.json'), readDb('kiosks.json')]);
   const inmate = inmates.find((i) => i.inmateId === prisonerId);
   if (!inmate) return sendError(res, 'PRISONER_NOT_FOUND', 'Prisoner ID not found', 404);
-  if (inmate.assignedKioskId && inmate.assignedKioskId !== kioskId) {
+
+  const kiosk = kiosks.find((k) => k.kioskId === kioskId);
+  if (kiosk && kiosk.prisonId && inmate.prisonId && kiosk.prisonId !== inmate.prisonId) {
+    return sendError(res, 'KIOSK_MISMATCH', 'Inmate is not assigned to this prison', 403);
+  }
+  if (!kiosk && inmate.assignedKioskId && inmate.assignedKioskId !== kioskId) {
     return sendError(res, 'KIOSK_MISMATCH', 'Inmate not assigned to this kiosk', 403);
   }
 
@@ -716,10 +726,15 @@ app.post('/auth/verify-pin', authLimiter, asyncRoute(async (req, res) => {
   const { inmateId, pin, kioskId } = req.body;
   if (!inmateId || !pin) return sendError(res, 'INVALID_REQUEST', 'inmateId and pin are required', 400);
 
-  const inmates = await readDb('inmates.json');
+  const [inmates, kiosks] = await Promise.all([readDb('inmates.json'), readDb('kiosks.json')]);
   const inmate = inmates.find((i) => i.inmateId === inmateId);
   if (!inmate) return sendError(res, 'NOT_FOUND', 'Inmate not found', 404);
-  if (inmate.assignedKioskId && inmate.assignedKioskId !== kioskId) {
+
+  const kiosk = kiosks.find((k) => k.kioskId === kioskId);
+  if (kiosk && kiosk.prisonId && inmate.prisonId && kiosk.prisonId !== inmate.prisonId) {
+    return sendError(res, 'KIOSK_MISMATCH', 'Inmate is not assigned to this prison', 403);
+  }
+  if (!kiosk && inmate.assignedKioskId && inmate.assignedKioskId !== kioskId) {
     return sendError(res, 'KIOSK_MISMATCH', 'Inmate not assigned to this kiosk', 403);
   }
 
