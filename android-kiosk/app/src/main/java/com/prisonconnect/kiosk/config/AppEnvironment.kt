@@ -11,5 +11,5 @@ object AppConfig {
     /** Master switch for device authorization flow.
      *  true  -> full registration/authorization/serial verification
      *  false -> bypass device authorization checks (dev/testing)  */
-    var deviceAuthorizationEnabled: Boolean = true
+    var deviceAuthorizationEnabled: Boolean = false
 }

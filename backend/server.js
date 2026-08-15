@@ -756,11 +756,13 @@ app.post('/auth/verify-pin', authLimiter, asyncRoute(async (req, res) => {
 
 app.get('/inmates', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => sendSuccess(res, await readDb('inmates.json'))));
 
-app.get('/inmate/profile/:kioskId', requireAuth, asyncRoute(async (req, res) => {
-  const { kioskId } = req.params;
+app.get('/inmate/profile/:id', requireAuth, asyncRoute(async (req, res) => {
+  const { id } = req.params;
   const inmates = await readDb('inmates.json');
-  const inmate = inmates.find((i) => i.assignedKioskId === kioskId);
-  if (!inmate) return sendError(res, 'NOT_FOUND', 'Inmate not found for this kiosk', 404);
+  const inmate = inmates.find((i) => i.inmateId === id) ||
+                 inmates.find((i) => i.assignedKioskId === id) ||
+                 inmates.find((i) => i.prisonerNumber === id);
+  if (!inmate) return sendError(res, 'NOT_FOUND', 'Inmate not found', 404);
   return sendSuccess(res, inmate);
 }));
 
@@ -920,11 +922,13 @@ app.patch('/admin/prisoners/:prisonerId/status', requireAuth, requireRole('admin
   return sendSuccess(res, updated);
 }));
 
-app.get('/inmate/balance/:kioskId', requireAuth, asyncRoute(async (req, res) => {
-  const { kioskId } = req.params;
+app.get('/inmate/balance/:id', requireAuth, asyncRoute(async (req, res) => {
+  const { id } = req.params;
   const inmates = await readDb('inmates.json');
-  const inmate = inmates.find((i) => i.assignedKioskId === kioskId);
-  if (!inmate) return sendError(res, 'NOT_FOUND', 'No inmate assigned to this kiosk', 404);
+  const inmate = inmates.find((i) => i.inmateId === id) ||
+                 inmates.find((i) => i.assignedKioskId === id) ||
+                 inmates.find((i) => i.prisonerNumber === id);
+  if (!inmate) return sendError(res, 'NOT_FOUND', 'No inmate found', 404);
 
   const wallets = await readDb('wallets.json');
   const wallet = wallets.find((w) => w.inmateId === inmate.inmateId);
@@ -957,7 +961,9 @@ app.get('/contacts/:id', requireAuth, asyncRoute(async (req, res) => {
   if (contact) return sendSuccess(res, contact);
 
   const inmates = await readDb('inmates.json');
-  const inmate = inmates.find((i) => i.assignedKioskId === id);
+  const inmate = inmates.find((i) => i.inmateId === id) ||
+                 inmates.find((i) => i.assignedKioskId === id) ||
+                 inmates.find((i) => i.prisonerNumber === id);
   const scoped = inmate ? contacts.filter((c) => c.inmateId === inmate.inmateId) : [];
   return sendSuccess(res, scoped);
 }));
@@ -1289,9 +1295,17 @@ app.patch('/calls/:callId', requireAuth, asyncRoute(async (req, res) => {
   }
 }));
 
-app.get('/calls/scheduled/:kioskId', requireAuth, asyncRoute(async (req, res) => {
+app.get('/calls/scheduled/:id', requireAuth, asyncRoute(async (req, res) => {
+  const { id } = req.params;
   const schedules = await readDb('schedule.json');
-  return sendSuccess(res, schedules.filter((s) => s.kioskId === req.params.kioskId));
+  const inmates = await readDb('inmates.json');
+  const inmate = inmates.find((i) => i.inmateId === id) ||
+                 inmates.find((i) => i.assignedKioskId === id) ||
+                 inmates.find((i) => i.prisonerNumber === id);
+  const matches = inmate
+    ? schedules.filter((s) => s.inmateId === inmate.inmateId || s.kioskId === inmate.assignedKioskId)
+    : schedules.filter((s) => s.kioskId === id || s.inmateId === id);
+  return sendSuccess(res, matches);
 }));
 
 app.post('/calls/:callId/end', requireAuth, asyncRoute(async (req, res) => {
