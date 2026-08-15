@@ -71,6 +71,7 @@ fun DashboardScreen(
     onViewAllContacts: () -> Unit,
     onViewHistory: () -> Unit,
     onProfileClick: () -> Unit,
+    onWalletClick: () -> Unit,
     onLogoutClick: () -> Unit,
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
@@ -119,6 +120,7 @@ fun DashboardScreen(
                             onContactDetailClick = onContactDetailClick,
                             onScheduledCallClick = onScheduledCallClick,
                             onProfileClick = onProfileClick,
+                            onWalletClick = onWalletClick,
                             onViewAllContacts = onViewAllContacts
                         )
                         1 -> ScheduleTabContent(
@@ -233,6 +235,7 @@ fun DashboardContent(
     onContactDetailClick: (String) -> Unit,
     onScheduledCallClick: (ScheduledCall) -> Unit,
     onProfileClick: () -> Unit,
+    onWalletClick: () -> Unit,
     onViewAllContacts: () -> Unit
 ) {
     LazyColumn(
@@ -250,10 +253,13 @@ fun DashboardContent(
             )
         }
 
-        //   2. Wallet Card (Extended)
-//        item {
-//            WalletDetailCard(balance = data.balance)
-//        }
+        // 2. Wallet Card (tap to open wallet screen)
+        item {
+            WalletDetailCard(
+                balance = data.balance,
+                onClick = onWalletClick
+            )
+        }
 
         // 3. Section Header
         item {
@@ -305,8 +311,9 @@ fun DashboardContent(
 }
 
 @Composable
-fun WalletDetailCard(balance: InmateBalance) {
+fun WalletDetailCard(balance: InmateBalance, onClick: () -> Unit) {
     Card(
+        onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -318,20 +325,15 @@ fun WalletDetailCard(balance: InmateBalance) {
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column(modifier = Modifier.weight(1f)) {
+                Text("BALANCE", style = MaterialTheme.typography.labelSmall, color = TextGray)
+                Text("₹${balance.totalSpent}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = HeaderBlue)
+            }
+            VerticalDivider(modifier = Modifier.height(40.dp).padding(horizontal = 24.dp))
+            Column(modifier = Modifier.weight(1f)) {
                 Text("TOTAL SPENT", style = MaterialTheme.typography.labelSmall, color = TextGray)
                 Text("₹${balance.totalSpent}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             }
-            VerticalDivider(modifier = Modifier.height(40.dp).padding(horizontal = 24.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text("LAST RECHARGE", style = MaterialTheme.typography.labelSmall, color = TextGray)
-                Text("₹${balance.lastRechargeAmount}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text(balance.lastRechargeDate ?: "", style = MaterialTheme.typography.labelSmall, color = TextGray)
-            }
-            VerticalDivider(modifier = Modifier.height(40.dp).padding(horizontal = 24.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text("REMAINING MINS", style = MaterialTheme.typography.labelSmall, color = TextGray)
-                Text("${balance.remainingMinutes} MINS", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = HeaderBlue)
-            }
+            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Open wallet", tint = HeaderBlue)
         }
     }
 }
@@ -774,6 +776,7 @@ fun PreviewDashboardMobile() {
                 onContactDetailClick = {},
                 onScheduledCallClick = {},
                 onProfileClick = {},
+                onWalletClick = {},
                 onViewAllContacts = {}
             )
         }

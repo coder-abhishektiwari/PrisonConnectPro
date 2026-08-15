@@ -10,6 +10,7 @@ import com.prisonconnect.kiosk.models.call.ScheduledCall
 import com.prisonconnect.kiosk.models.call.CallSession
 import com.prisonconnect.kiosk.models.schedule.AvailableSlot
 import com.prisonconnect.kiosk.models.schedule.ScheduleRequest
+import com.prisonconnect.kiosk.models.wallet.WalletStatement
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import retrofit2.http.*
@@ -84,6 +85,9 @@ interface TrustApiService {
 
     @GET("inmate/balance/{id}")
     suspend fun getInmateBalance(@Path("id") id: String): ApiResponse<InmateBalance>
+
+    @GET("inmate/wallet/{id}")
+    suspend fun getWalletStatement(@Path("id") id: String): ApiResponse<WalletStatement>
 
     @GET("contacts/{id}")
     suspend fun getContacts(@Path("id") id: String): ApiResponse<List<Contact>>

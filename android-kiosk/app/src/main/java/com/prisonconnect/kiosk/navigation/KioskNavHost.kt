@@ -45,6 +45,7 @@ object KioskRoutes {
     const val CONTACT_LIST = "contact_list"
     const val CONTACT_DETAILS = "contact_details/{contactId}"
     const val PROFILE = "profile"
+    const val WALLET = "wallet"
     const val SCHEDULE = "schedule/{contactName}/{callType}"
     const val LOBBY = "lobby/{contactName}/{time}/{callType}/{isSlotBooked}"
     const val VIDEO_CALL = "video_call/{contactName}/{roomId}"
@@ -155,6 +156,9 @@ fun KioskNavHost(
                 onProfileClick = {
                     navController.navigate(KioskRoutes.PROFILE)
                 },
+                onWalletClick = {
+                    navController.navigate(KioskRoutes.WALLET)
+                },
                 onLogoutClick = {
                     navController.navigate(KioskRoutes.LOGIN) {
                         popUpTo(KioskRoutes.DASHBOARD) { inclusive = true }
@@ -252,6 +256,12 @@ fun KioskNavHost(
         composable(KioskRoutes.PROFILE) {
             InmateProfileScreen(
                 onBack = { navController.popBackStack() }
+            )
+        }
+        composable(KioskRoutes.WALLET) {
+            com.prisonconnect.kiosk.ui.wallet.WalletScreen(
+                windowSizeClass = windowSizeClass,
+                onBackClick = { navController.popBackStack() }
             )
         }
         composable(KioskRoutes.SCHEDULE) { backStackEntry ->

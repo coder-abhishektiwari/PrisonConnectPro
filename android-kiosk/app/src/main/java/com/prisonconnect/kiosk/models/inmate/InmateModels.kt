@@ -22,10 +22,10 @@ enum class InmateStatus {
 }
 
 data class InmateBalance(
-    @SerializedName("credits") val credits: Double,
+    @SerializedName("balance") val credits: Double = 0.0,
     @SerializedName("currency") val currency: String = "INR",
-    @SerializedName("lastRechargeAmount") val lastRechargeAmount: Double? = null,
-    @SerializedName("lastRechargeDate") val lastRechargeDate: String? = null,
+    @SerializedName("lastRecharge") val lastRechargeDate: String? = null,
     @SerializedName("totalSpent") val totalSpent: Double? = null,
-    @SerializedName("remainingMinutes") val remainingMinutes: Int? = null
+    @SerializedName("remainingMinutes") val remainingMinutes: Int? = null,
+    val lastRechargeAmount: Double? = null
 )

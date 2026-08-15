@@ -10,6 +10,7 @@ const { v4: uuidv4 } = require('uuid');
 const { readDb, updateDb } = require('./lib/db');
 const { signAccessToken, verifyToken, hashSecret, verifySecret } = require('./lib/auth');
 const { createSession } = require('./lib/sessions');
+const { getStatement } = require('./lib/jail-account');
 const { requireAuth, requireRole, requirePermission } = require('./middleware/auth');
 // NOTE: Mediasoup manager and recorder have been intentionally commented out by developer
 // as they were causing failures on Render deployment. This is a known limitation - 
@@ -934,6 +935,15 @@ app.get('/inmate/balance/:id', requireAuth, asyncRoute(async (req, res) => {
   const wallet = wallets.find((w) => w.inmateId === inmate.inmateId);
   if (!wallet) return sendError(res, 'NOT_FOUND', 'Wallet not found', 404);
   return sendSuccess(res, wallet);
+}));
+
+// Wallet statement (balance + deductions) for the kiosk wallet screen.
+// Resolves the inmate via the jail-account layer and returns the live balance
+// with the transaction/deduction history.
+app.get('/inmate/wallet/:id', requireAuth, asyncRoute(async (req, res) => {
+  const statement = await getStatement(req.params.id);
+  if (!statement) return sendError(res, 'NOT_FOUND', 'Inmate wallet not found', 404);
+  return sendSuccess(res, statement);
 }));
 
 // ==================== WALLET ROUTES ====================
