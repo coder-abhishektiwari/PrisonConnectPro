@@ -149,18 +149,18 @@ fun ProfileContent(details: InmateProfileViewModel.InmateFullDetails) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Column {
                         Text("Balance", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("₹${balance.credits}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Text("₹${balance?.credits ?: 0.0}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                     }
                     Column(horizontalAlignment = Alignment.End) {
                         Text("Remaining", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("${balance.remainingMinutes} Mins", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        Text("${balance?.remainingMinutes ?: 0} Mins", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                     }
                 }
                 Spacer(modifier = Modifier.height(16.dp))
                 HorizontalDivider()
                 Spacer(modifier = Modifier.height(16.dp))
-                DetailRow("Last Recharge", "₹${balance.lastRechargeAmount ?: 0.0} on ${balance.lastRechargeDate.orEmpty()}")
-                DetailRow("Total Spent", "₹${balance.totalSpent ?: 0.0}")
+                DetailRow("Last Recharge", "₹${balance?.lastRechargeAmount ?: 0.0} on ${balance?.lastRechargeDate.orEmpty()}")
+                DetailRow("Total Spent", "₹${balance?.totalSpent ?: 0.0}")
             }
         }
     }

@@ -277,7 +277,7 @@ fun PreviewContactDetailMobile() {
                     fullName = "Suresh Kumar",
                     relationship = "Brother",
                     phoneNumber = "9876543210",
-                    isApproved = true,
+                    approvalStatus = "approved",
                     lastCallDate = "2025-05-20",
                     nextScheduledCallDate = "2025-05-28"
                 ),

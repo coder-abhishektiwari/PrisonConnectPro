@@ -239,7 +239,7 @@ fun PreviewContactListMobile() {
                         fullName = "Suresh Kumar",
                         relationship = "Brother",
                         phoneNumber = "9876543210",
-                        isApproved = true
+                        approvalStatus = "approved"
                     )
                 ),
                 onContactClick = {},

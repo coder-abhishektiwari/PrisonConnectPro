@@ -74,14 +74,30 @@ class DashboardViewModel @Inject constructor(
                 val c = (contacts as? NetworkResult.Success)?.data?.filter { it.isApproved } ?: emptyList()
                 val s = (calls as? NetworkResult.Success)?.data ?: emptyList()
 
-                if (p != null && b != null) {
+                if (p != null) {
+                    // Partial data is fine: profile loaded, the rest is best-effort.
                     _inmateProfile.value = p
                     _inmateBalance.value = b
                     _contacts.value = c.take(5) // Show top 5 on dashboard
                     _scheduledCalls.value = s
                     UiState.Success(DashboardData(p, b, c, s))
                 } else {
-                    UiState.Error("Failed to load dashboard data")
+                    // Still waiting on pending reads -> keep loading, don't flicker Error.
+                    val anyLoading = profile is NetworkResult.Loading ||
+                        balance is NetworkResult.Loading ||
+                        contacts is NetworkResult.Loading ||
+                        calls is NetworkResult.Loading
+                    val profileFailed = profile is NetworkResult.Failure
+                    when {
+                        profileFailed -> {
+                            val msg = (profile as NetworkResult.Failure).error?.message
+                                ?: (balance as? NetworkResult.Failure)?.error?.message
+                                ?: "Failed to load dashboard data"
+                            UiState.Error(msg)
+                        }
+                        anyLoading -> UiState.Loading
+                        else -> UiState.Error("Failed to load dashboard data")
+                    }
                 }
             }.collect {
                 _dashboardState.value = it
@@ -105,7 +121,7 @@ class DashboardViewModel @Inject constructor(
 
     data class DashboardData(
         val profile: InmateProfile,
-        val balance: InmateBalance,
+        val balance: InmateBalance?,
         val contacts: List<Contact>,
         val scheduledCalls: List<ScheduledCall>
     )

@@ -17,11 +17,13 @@ enum class CallType {
 }
 
 data class ScheduledCall(
-    @SerializedName("id") val id: String,
-    @SerializedName("contactName") val contactName: String,
-    @SerializedName("date") val date: String,
-    @SerializedName("timeSlot") val timeSlot: String,
-    @SerializedName("callType") val type: CallType?
+    @SerializedName("scheduleId") val id: String,
+    @SerializedName("date") val date: String = "",
+    @SerializedName("timeSlot") val timeSlot: String = "",
+    @SerializedName("callType") val type: CallType? = null,
+    @SerializedName("contactId") val contactId: String? = null,
+    @SerializedName("status") val status: String? = null,
+    val contactName: String? = null
 )
 
 enum class SocketStatus {

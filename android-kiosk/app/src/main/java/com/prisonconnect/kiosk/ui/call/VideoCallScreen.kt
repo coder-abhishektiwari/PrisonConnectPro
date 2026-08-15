@@ -1,4 +1,4 @@
-package com.prisonconnect.kiosk.ui.call
+﻿package com.prisonconnect.kiosk.ui.call
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -513,7 +513,7 @@ fun VideoCallContent(
                     shape = RoundedCornerShape(50)
                 ) {
                     Text(
-                        text = "Live Billing: ₹${String.format("%.2f", currentCost)}",
+                        text = "Live Billing: â‚¹${String.format("%.2f", currentCost)}",
                         color = Color.White,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
@@ -739,7 +739,7 @@ fun VideoCallContentMobilePreview() {
                 fullName = "Suresh Kumar",
                 phoneNumber = "+919876543210",
                 relationship = "Father",
-                isApproved = true
+                approvalStatus = "approved"
             ),
             localTrack = null,
             remoteTrack = null,
@@ -789,7 +789,7 @@ fun VideoCallContentTabletPreview() {
                 fullName = "Suresh Kumar",
                 phoneNumber = "+919876543210",
                 relationship = "Father",
-                isApproved = true
+                approvalStatus = "approved"
             ),
             localTrack = null,
             remoteTrack = null,

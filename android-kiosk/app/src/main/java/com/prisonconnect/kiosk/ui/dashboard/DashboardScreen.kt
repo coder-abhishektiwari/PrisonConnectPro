@@ -311,7 +311,7 @@ fun DashboardContent(
 }
 
 @Composable
-fun WalletDetailCard(balance: InmateBalance, onClick: () -> Unit) {
+fun WalletDetailCard(balance: InmateBalance?, onClick: () -> Unit) {
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
@@ -326,12 +326,12 @@ fun WalletDetailCard(balance: InmateBalance, onClick: () -> Unit) {
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text("BALANCE", style = MaterialTheme.typography.labelSmall, color = TextGray)
-                Text("₹${balance.totalSpent}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = HeaderBlue)
+                Text("₹${String.format("%.2f", balance?.credits ?: 0.0)}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = HeaderBlue)
             }
             VerticalDivider(modifier = Modifier.height(40.dp).padding(horizontal = 24.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text("TOTAL SPENT", style = MaterialTheme.typography.labelSmall, color = TextGray)
-                Text("₹${balance.totalSpent}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("₹${String.format("%.2f", balance?.totalSpent ?: 0.0)}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             }
             Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Open wallet", tint = HeaderBlue)
         }
@@ -752,21 +752,21 @@ fun PreviewDashboardMobile() {
                             fullName = "Suresh Kumar",
                             relationship = "Brother",
                             phoneNumber = "9876543210",
-                            isApproved = true
+                            approvalStatus = "approved"
                         ),
                         Contact(
                             id = "2",
                             fullName = "Mohan Sharma",
                             relationship = "Brother",
                             phoneNumber = "9876787678",
-                            isApproved = true
+                            approvalStatus = "approved"
                         ),
                         Contact(
                             id = "3",
                             fullName = "Rohit Verma",
                             relationship = "Father",
                             phoneNumber = "9999675678",
-                            isApproved = true
+                            approvalStatus = "approved"
                         ),
 
                         ),

@@ -39,14 +39,27 @@ class InmateProfileViewModel @Inject constructor(
             ) { profileResult, balanceResult ->
                 val profile = (profileResult as? com.prisonconnect.kiosk.network.NetworkResult.Success)?.data
                 val balance = (balanceResult as? com.prisonconnect.kiosk.network.NetworkResult.Success)?.data
+                val profileFailed = profileResult is com.prisonconnect.kiosk.network.NetworkResult.Failure
 
-                if (profile != null && balance != null) {
+                if (profile != null) {
+                    // Profile is the core; balance is best-effort.
                     UiState.Success(InmateFullDetails(profile, balance))
                 } else {
-                    val error = (profileResult as? com.prisonconnect.kiosk.network.NetworkResult.Failure)?.error?.message
-                        ?: (balanceResult as? com.prisonconnect.kiosk.network.NetworkResult.Failure)?.error?.message
-                        ?: "Failed to load profile details"
-                    UiState.Error(error)
+                    val anyLoading = profileResult is com.prisonconnect.kiosk.network.NetworkResult.Loading ||
+                        balanceResult is com.prisonconnect.kiosk.network.NetworkResult.Loading
+                    when {
+                        profileFailed -> {
+                            val error = (profileResult as com.prisonconnect.kiosk.network.NetworkResult.Failure).error?.message
+                                ?: "Failed to load profile details"
+                            UiState.Error(error)
+                        }
+                        anyLoading -> UiState.Loading
+                        else -> {
+                            val error = (balanceResult as? com.prisonconnect.kiosk.network.NetworkResult.Failure)?.error?.message
+                                ?: "Failed to load profile details"
+                            UiState.Error(error)
+                        }
+                    }
                 }
             }.collect {
                 _profileState.value = it
@@ -56,6 +69,6 @@ class InmateProfileViewModel @Inject constructor(
 
     data class InmateFullDetails(
         val profile: InmateProfile,
-        val balance: InmateBalance
+        val balance: InmateBalance?
     )
 }
