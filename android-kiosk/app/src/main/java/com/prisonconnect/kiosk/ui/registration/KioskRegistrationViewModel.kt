@@ -264,13 +264,14 @@ class KioskRegistrationViewModel @Inject constructor(
                                 val kioskId = _uiState.value.kioskId.ifBlank { _uiState.value.deviceSerial }
                                 sessionManager.saveRegistrationState("approved", requestId = kioskId)
                                 shouldStop = true
-                            } else if (status == "rejected") {
+                            } else if (status == "rejected" || status == "unauthorized") {
                                 _uiState.update {
                                     it.copy(
                                         approvalStatus = "rejected",
                                         errorMessage = "Registration was rejected by the Warden. Please contact administration."
                                     )
                                 }
+                                shouldStop = true
                             }
                         }
                         is NetworkResult.Failure -> {
@@ -363,6 +364,10 @@ class KioskRegistrationViewModel @Inject constructor(
             else -> RegistrationStep.SELECT_JAIL
         }
         _uiState.update { it.copy(currentStep = previousStep, errorMessage = null) }
+    }
+
+    fun reRegister() {
+        resetForReRegistration("")
     }
 
     override fun onCleared() {

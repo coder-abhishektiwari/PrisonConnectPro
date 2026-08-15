@@ -214,6 +214,11 @@ app.post('/kiosks/register', asyncRoute(async (req, res) => {
   // Check if kiosk already exists
   const existingKiosk = kiosks.find((k) => k.deviceSerialNumber === deviceSerialNumber);
   if (existingKiosk) {
+    // Re-registering a previously rejected/disabled device queues a fresh approval
+    const needsReapproval =
+      existingKiosk.authorizationStatus !== 'authorized' ||
+      existingKiosk.status === 'disabled' ||
+      existingKiosk.status === 'unauthorized';
     // Update existing kiosk
     const updated = await updateDb('kiosks.json', (kiosks) => {
       const idx = kiosks.findIndex((k) => k.deviceSerialNumber === deviceSerialNumber);
@@ -221,6 +226,9 @@ app.post('/kiosks/register', asyncRoute(async (req, res) => {
       
       kiosks[idx] = {
         ...kiosks[idx],
+        ...(needsReapproval
+          ? { status: 'pending', authorizationStatus: 'pending', reviewedBy: null, reviewedAt: null }
+          : {}),
         ipAddress: ipAddress || kiosks[idx].ipAddress,
         location: location || kiosks[idx].location,
         firmwareVersion: appVersion || kiosks[idx].firmwareVersion,
@@ -236,8 +244,8 @@ app.post('/kiosks/register', asyncRoute(async (req, res) => {
       kiosk: updated,
       requestId: updated.kioskId,
       kioskId: updated.kioskId,
-      status: updated.status || updated.authorizationStatus || 'pending',
-      message: 'Kiosk updated successfully'
+      status: needsReapproval ? 'pending' : (updated.status || updated.authorizationStatus || 'pending'),
+      message: needsReapproval ? 'Kiosk re-registered for approval' : 'Kiosk updated successfully'
     });
   }
   
@@ -1777,8 +1785,13 @@ app.get('/kiosks/registration-status/:serialNumber', asyncRoute(async (req, res)
   const kiosks = await readDb('kiosks.json');
   const kiosk = kiosks.find((k) => k.deviceSerialNumber === serial || k.kioskId === serial);
   if (kiosk) {
+    const mappedStatus = kiosk.authorizationStatus === 'authorized'
+      ? 'approved'
+      : kiosk.authorizationStatus === 'unauthorized'
+        ? 'rejected'
+        : (kiosk.authorizationStatus || 'pending');
     return sendSuccess(res, {
-      status: kiosk.authorizationStatus === 'authorized' ? 'approved' : kiosk.authorizationStatus || 'unknown',
+      status: mappedStatus,
       requestId: kiosk.kioskId,
       prisonId: kiosk.prisonId || null,
       authorized: kiosk.authorizationStatus === 'authorized'

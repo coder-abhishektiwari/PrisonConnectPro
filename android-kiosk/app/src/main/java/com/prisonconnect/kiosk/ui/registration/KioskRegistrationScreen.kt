@@ -150,7 +150,8 @@ fun KioskRegistrationScreen(
 
                             RegistrationStep.PENDING_APPROVAL -> StepPendingApproval(
                                 uiState = uiState,
-                                onCheckStatus = { viewModel.checkStatusManually() }
+                                onCheckStatus = { viewModel.checkStatusManually() },
+                                onReRegister = { viewModel.reRegister() }
                             )
                         }
                     }
@@ -551,7 +552,8 @@ private fun StepSubmitDeviceInfo(
 @Composable
 private fun StepPendingApproval(
     uiState: RegistrationUiState,
-    onCheckStatus: () -> Unit
+    onCheckStatus: () -> Unit,
+    onReRegister: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -621,6 +623,20 @@ private fun StepPendingApproval(
                 Icon(imageVector = Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(6.dp))
                 Text("Check Status Now", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+
+        if (uiState.approvalStatus == "rejected") {
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedButton(
+                onClick = onReRegister,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, Color(0xFF10B981))
+            ) {
+                Text("Retry Registration", color = Color(0xFF34D399), fontSize = 15.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
