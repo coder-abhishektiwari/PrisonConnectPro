@@ -925,16 +925,18 @@ app.patch('/admin/prisoners/:prisonerId/status', requireAuth, requireRole('admin
 
 app.get('/inmate/balance/:id', requireAuth, asyncRoute(async (req, res) => {
   const { id } = req.params;
-  const inmates = await readDb('inmates.json');
-  const inmate = inmates.find((i) => i.inmateId === id) ||
-                 inmates.find((i) => i.assignedKioskId === id) ||
-                 inmates.find((i) => i.prisonerNumber === id);
-  if (!inmate) return sendError(res, 'NOT_FOUND', 'No inmate found', 404);
-
-  const wallets = await readDb('wallets.json');
-  const wallet = wallets.find((w) => w.inmateId === inmate.inmateId);
-  if (!wallet) return sendError(res, 'NOT_FOUND', 'Wallet not found', 404);
-  return sendSuccess(res, wallet);
+  // Single source of truth: the wallet statement (ledger-derived balance + totals).
+  const statement = await getStatement(id);
+  if (!statement) return sendError(res, 'NOT_FOUND', 'No inmate or wallet found', 404);
+  const { wallet } = statement;
+  return sendSuccess(res, {
+    balance: wallet.balance,
+    currency: wallet.currency,
+    totalSpent: wallet.totalSpent,
+    lastRecharge: wallet.lastRecharge,
+    lastRechargeAmount: wallet.lastRechargeAmount,
+    remainingMinutes: wallet.remainingMinutes
+  });
 }));
 
 // Wallet statement (balance + deductions) for the kiosk wallet screen.

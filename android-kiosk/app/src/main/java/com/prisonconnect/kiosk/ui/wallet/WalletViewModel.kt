@@ -42,14 +42,16 @@ class WalletViewModel @Inject constructor(
                     is com.prisonconnect.kiosk.network.NetworkResult.Success -> {
                         val statement = result.data
                         val transactions = statement.transactions
-                            .filter { it.status.equals("success", ignoreCase = true) || it.status.equals("completed", ignoreCase = true) }
+                            .filter { it.isSettled }
                             .sortedByDescending { it.timestamp }
                         jailBalanceSync.push(statement.wallet.balance)
                         _walletState.value = UiState.Success(
                             WalletUiData(
                                 balance = statement.wallet.balance,
                                 currency = statement.wallet.currency,
-                                totalDeducted = transactions.filter { it.isDebit }.sumOf { it.amount },
+                                totalDeducted = statement.wallet.totalSpent,
+                                lastRecharge = statement.wallet.lastRecharge,
+                                lastRechargeAmount = statement.wallet.lastRechargeAmount,
                                 transactions = transactions
                             )
                         )
@@ -67,6 +69,8 @@ class WalletViewModel @Inject constructor(
         val balance: Double,
         val currency: String,
         val totalDeducted: Double,
+        val lastRecharge: String? = null,
+        val lastRechargeAmount: Double? = null,
         val transactions: List<WalletTransaction>
     )
 }

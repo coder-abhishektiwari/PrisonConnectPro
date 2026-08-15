@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -58,7 +59,7 @@ fun WalletScreen(
                     Column {
                         Text("My Wallet", fontWeight = FontWeight.Bold)
                         Text(
-                            "Aapka Jail Account Balance",
+                            "Jail account balance",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -122,7 +123,7 @@ fun WalletScreen(
                             item { MoneySummaryCard(data = s.data) }
                             item {
                                 Text(
-                                    "Paise kyaane ka kharcha (Transactions)",
+                                    "Transactions",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = PrimaryDark
@@ -136,7 +137,7 @@ fun WalletScreen(
                                         colors = CardDefaults.cardColors(containerColor = Color.White)
                                     ) {
                                         Text(
-                                            "Abhi tak koi kharcha nahi hua. Iski value ko wallet me jama karwaya gaya hai.",
+                                            "No transactions yet.",
                                             style = MaterialTheme.typography.bodyLarge,
                                             textAlign = TextAlign.Center,
                                             modifier = Modifier.padding(24.dp),
@@ -186,12 +187,14 @@ private fun WalletBalanceCard(data: WalletViewModel.WalletUiData) {
                 fontWeight = FontWeight.Black,
                 color = Color.White
             )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                "Aapke account me itne paise hain",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFFB0BFCE)
-            )
+            if (data.lastRecharge != null && data.lastRechargeAmount != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "Last recharge ₹${String.format("%.2f", data.lastRechargeAmount)} on ${formatRechargeDate(data.lastRecharge)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFFB0BFCE)
+                )
+            }
         }
     }
 }
@@ -211,7 +214,7 @@ private fun MoneySummaryCard(data: WalletViewModel.WalletUiData) {
         ) {
             SummaryItem(
                 icon = Icons.Default.RemoveCircle,
-                title = "Calls par kharcha",
+                title = "Total Spent",
                 value = "₹${String.format("%.2f", data.totalDeducted)}",
                 valueColor = MoneyRed,
                 bg = MoneyRedBg
@@ -262,7 +265,7 @@ private fun WalletTransactionList(
 ) {
     Column(modifier = modifier) {
         Text(
-            "Paise kyaane ka kharcha (Transactions)",
+            "Transactions",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = PrimaryDark
@@ -275,7 +278,7 @@ private fun WalletTransactionList(
                 colors = CardDefaults.cardColors(containerColor = Color.White)
             ) {
                 Text(
-                    "Abhi tak koi kharcha nahi hua.",
+                    "No transactions yet.",
                     style = MaterialTheme.typography.bodyLarge,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(24.dp),
@@ -285,7 +288,7 @@ private fun WalletTransactionList(
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(data.transactions) { tx ->
                     TransactionRow(tx)
@@ -306,13 +309,13 @@ private fun TransactionRow(tx: WalletTransaction) {
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
@@ -320,19 +323,20 @@ private fun TransactionRow(tx: WalletTransaction) {
                 contentDescription = null,
                 tint = iconTint,
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(28.dp)
                     .background(iconBg, CircleShape)
-                    .padding(10.dp)
+                    .padding(5.dp)
             )
-            Spacer(modifier = Modifier.width(14.dp))
+            Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = tx.displayDescription,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = PrimaryDark
+                    color = PrimaryDark,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = formatTransactionTime(tx.timestamp),
                     style = MaterialTheme.typography.bodySmall,
@@ -341,7 +345,7 @@ private fun TransactionRow(tx: WalletTransaction) {
             }
             Text(
                 text = amountText,
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = amountColor
             )
@@ -354,6 +358,16 @@ private fun formatTransactionTime(timestamp: String?): String {
     return try {
         val parsed = java.time.OffsetDateTime.parse(timestamp).toZonedDateTime()
         SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault()).format(Date(parsed.toInstant().toEpochMilli()))
+    } catch (e: Exception) {
+        timestamp
+    }
+}
+
+private fun formatRechargeDate(timestamp: String?): String {
+    if (timestamp.isNullOrBlank()) return ""
+    return try {
+        val parsed = java.time.OffsetDateTime.parse(timestamp).toZonedDateTime()
+        SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date(parsed.toInstant().toEpochMilli()))
     } catch (e: Exception) {
         timestamp
     }
