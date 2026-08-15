@@ -176,6 +176,15 @@ function updateDb(filename, mutator) {
       currentDocs = await readAll(reg);
     }
 
+    // Snapshot the pre-mutation ids BEFORE running the mutator: the mutator
+    // commonly pushes new records into the same array it was handed, so a
+    // post-mutation snapshot would mistake new records for pre-existing ones
+    // and silently turn their INSERT into a no-op UPDATE.
+    const oldIds = reg.singleton ? null : new Map(currentDocs.map((d) => {
+      const id = entityId(reg, d);
+      return [id, true];
+    }));
+
     const { data: nextData, result } = mutator(currentDocs);
 
     const client = await pool.connect();
@@ -189,10 +198,6 @@ function updateDb(filename, mutator) {
           [singletonId, payload]
         );
       } else {
-        const oldIds = new Map(currentDocs.map((d) => {
-          const id = entityId(reg, d);
-          return [id, true];
-        }));
         const seen = new Map();
         for (const doc of nextData) {
           const id = entityId(reg, doc);
@@ -253,6 +258,9 @@ async function transact(specs) {
       } else {
         current = await readAll(reg);
       }
+      // Snapshot pre-mutation ids BEFORE the mutator runs (see updateDb).
+      const oldIds = reg.singleton ? null : new Set(current.map((d) => entityId(reg, d)));
+
       const { data: nextData, result } = mutator(current);
       results.push(result);
       if (reg.singleton) {
@@ -262,7 +270,6 @@ async function transact(specs) {
           [filename.replace('.json', ''), JSON.stringify(nextData || {})]
         );
       } else {
-        const oldIds = new Set(current.map((d) => entityId(reg, d)));
         const seen = new Set();
         for (const doc of nextData) {
           const id = entityId(reg, doc);
