@@ -1,7 +1,6 @@
 package com.prisonconnect.kiosk.ui
 
 import com.prisonconnect.kiosk.config.AppConfig
-import com.prisonconnect.kiosk.config.Environment
 import com.prisonconnect.kiosk.core.BaseViewModel
 import com.prisonconnect.kiosk.core.Logger
 import com.prisonconnect.kiosk.network.NetworkResult
@@ -69,11 +68,11 @@ class SplashViewModel @Inject constructor(
             return
         }
 
-        val deviceSerial = deviceInfoProvider.getDeviceSerialNumber()
-        Logger.d("SplashViewModel: Strict Serial Verification: $deviceSerial")
+        val deviceSerial = deviceInfoProvider.getRegistrationDeviceId()
+        Logger.d("SplashViewModel: Registration Device Identity: $deviceSerial")
 
         if (deviceSerial.isNullOrBlank()) {
-            Logger.e("SplashViewModel: Device Serial UNAVAILABLE.")
+            Logger.e("SplashViewModel: Device Identity UNAVAILABLE.")
             _verificationState.value = KioskVerificationState.Unauthorized
             _navigationEvent.emit(SplashNavigation.NavigateToUnauthorized)
             return

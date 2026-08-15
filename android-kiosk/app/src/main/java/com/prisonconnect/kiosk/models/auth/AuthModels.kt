@@ -87,6 +87,7 @@ data class KioskRegistrationRequest(
 
 data class KioskRegistrationResponse(
     @SerializedName("success") val success: Boolean = false,
+    @SerializedName("kioskId") val kioskId: String? = null,
     @SerializedName("requestId") val requestId: String? = null, // 💡 Make Nullable
     @SerializedName("status") val status: String? = "pending",  // 💡 Make Nullable
     @SerializedName("message") val message: String? = null

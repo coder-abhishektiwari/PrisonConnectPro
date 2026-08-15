@@ -1,30 +1,10 @@
 package com.prisonconnect.kiosk.config
 
-enum class Environment {
-    MOCK,
-    DEV,
-    STAGING,
-    PRODUCTION
-}
-
 object AppConfig {
-    var environment: Environment = Environment.PRODUCTION
 
-    val baseUrl: String
-        get() = when (environment) {
-            Environment.MOCK -> "https://prisonconnect-mockbackend.onrender.com/"
-            Environment.DEV -> "https://dev-api.prisonconnect.internal/"
-            Environment.STAGING -> "https://staging-api.prisonconnect.internal/"
-            Environment.PRODUCTION -> "https://prisonconnect-mockbackend.onrender.com/"
-        }
+    val baseUrl: String get() = "https://prisonconnect-backend.onrender.com"
 
-    val signalingUrl: String
-        get() = when (environment) {
-            Environment.MOCK -> "https://prisonconnect-mockbackend.onrender.com/"
-            Environment.DEV -> "wss://dev-signaling.prisonconnect.internal"
-            Environment.STAGING -> "wss://staging-signaling.prisonconnect.internal"
-            Environment.PRODUCTION -> "wss://signaling.prisonconnect.gov.in"
-        }
+    val signalingUrl: String get() =  "https://prisonconnect-signaling.onrender.com"
 
     const val NETWORK_TIMEOUT = 30L // Seconds
 

@@ -261,9 +261,21 @@ async function main() {
   }
 
   // ---- write in dependency order ----
+  // Seeding is NON-destructive: collections that already contain data are left
+  // untouched so runtime-created records (e.g. kiosks registered by a device)
+  // survive restarts and redeploys. Set FORCE_SEED=1 to wipe and re-seed.
+  const forceSeed = ['1', 'true'].includes(String(process.env.FORCE_SEED || '').toLowerCase());
   const write = async (file) => {
     const rows = raw[file];
     if (rows == null) { console.log(`[seed] ${file}: skipped (missing)`); return; }
+    if (!forceSeed) {
+      const existing = await readDb(file);
+      const count = Array.isArray(existing) ? existing.length : 0;
+      if (count > 0) {
+        console.log(`[seed] ${file}: skipped (${count} existing rows)`);
+        return;
+      }
+    }
     await updateDb(file, () => ({ data: rows, result: null }));
     const count = Array.isArray(rows) ? rows.length : 1;
     console.log(`[seed] ${file}: ${count} row(s)`);

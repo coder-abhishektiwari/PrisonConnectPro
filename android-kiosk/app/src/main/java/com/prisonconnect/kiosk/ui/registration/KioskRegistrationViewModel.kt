@@ -51,6 +51,7 @@ data class RegistrationUiState(
     val deviceFingerprint: String = "",
 
     // Step 4: Pending state
+    val kioskId: String = "",
     val requestId: String = "",
     val approvalStatus: String = "pending",
     val isApproved: Boolean = false
@@ -83,6 +84,7 @@ class KioskRegistrationViewModel @Inject constructor(
                     it.copy(
                         currentStep = RegistrationStep.PENDING_APPROVAL,
                         requestId = reqId,
+                        kioskId = reqId,
                         approvalStatus = "pending"
                     )
                 }
@@ -207,16 +209,24 @@ class KioskRegistrationViewModel @Inject constructor(
                     is NetworkResult.Idle -> {}
                     is NetworkResult.Loading -> _uiState.update { it.copy(isLoading = true) }
                     is NetworkResult.Success -> {
+                        val kioskId = result.data.kioskId.orEmpty().ifEmpty { result.data.requestId.orEmpty() }
+                        val requestId = result.data.requestId.orEmpty().ifEmpty { kioskId }
                         _uiState.update {
                             it.copy(
                                 isLoading = false,
                                 currentStep = RegistrationStep.PENDING_APPROVAL,
                                 // 💡 .orEmpty() se String? convert ho ke safe non-null String ban jayega
-                                requestId = result.data.requestId.orEmpty(),
+                                kioskId = kioskId,
+                                requestId = requestId,
                                 approvalStatus = result.data.status.orEmpty().ifEmpty { "pending" },
                                 errorMessage = null
                             )
                         }
+                        sessionManager.saveRegistrationState(
+                            status = "pending",
+                            prisonId = currentState.prisonIdInput,
+                            requestId = requestId
+                        )
                         startPollingStatus()
                     }
                     is NetworkResult.Failure -> {
@@ -236,42 +246,78 @@ class KioskRegistrationViewModel @Inject constructor(
     fun startPollingStatus() {
         pollingJob?.cancel()
         pollingJob = viewModelScope.launch {
-            val serial = _uiState.value.deviceSerial
+            val id = _uiState.value.kioskId.ifBlank { _uiState.value.deviceSerial }
             while (true) {
-                authRepository.getRegistrationStatus(serial).collect { result ->
-                    if (result is NetworkResult.Success) {
-                        val status = result.data.status
-                        if (status == "approved") {
-                            _uiState.update {
-                                it.copy(
-                                    approvalStatus = "approved",
-                                    isApproved = true,
-                                    isLoading = false
-                                )
-                            }
-                            sessionManager.saveRegistrationState("approved")
-                            pollingJob?.cancel()
-                            return@collect
-                        } else if (status == "rejected") {
-                            _uiState.update {
-                                it.copy(
-                                    approvalStatus = "rejected",
-                                    errorMessage = "Registration was rejected by the Warden. Please contact administration."
-                                )
+                var shouldStop = false
+                authRepository.getRegistrationStatus(id).collect { result ->
+                    when (result) {
+                        is NetworkResult.Success -> {
+                            val status = result.data.status
+                            if (status == "approved") {
+                                _uiState.update {
+                                    it.copy(
+                                        approvalStatus = "approved",
+                                        isApproved = true,
+                                        isLoading = false
+                                    )
+                                }
+                                val kioskId = _uiState.value.kioskId.ifBlank { _uiState.value.deviceSerial }
+                                sessionManager.saveRegistrationState("approved", requestId = kioskId)
+                                shouldStop = true
+                            } else if (status == "rejected") {
+                                _uiState.update {
+                                    it.copy(
+                                        approvalStatus = "rejected",
+                                        errorMessage = "Registration was rejected by the Warden. Please contact administration."
+                                    )
+                                }
                             }
                         }
+                        is NetworkResult.Failure -> {
+                            if (result.statusCode == 404) {
+                                resetForReRegistration(
+                                    "Registration record not found on server. Please register this kiosk again."
+                                )
+                                shouldStop = true
+                            }
+                        }
+                        else -> { /* Loading / Idle: keep polling */ }
                     }
                 }
+                if (shouldStop) break
                 delay(15_000) // Poll every 15 seconds
             }
+        }
+    }
+
+    /**
+     * Resets the flow back to the Jail ID step when the registration record no
+     * longer exists (e.g. the backend was re-seeded and wiped it). Lets the
+     * operator register the device again.
+     */
+    private fun resetForReRegistration(errorMessage: String) {
+        pollingJob?.cancel()
+        viewModelScope.launch {
+            sessionManager.clearRegistrationState()
+        }
+        _uiState.update {
+            it.copy(
+                currentStep = RegistrationStep.SELECT_JAIL,
+                isLoading = false,
+                requestId = "",
+                kioskId = "",
+                approvalStatus = "pending",
+                isApproved = false,
+                errorMessage = errorMessage
+            )
         }
     }
 
     fun checkStatusManually() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            val serial = _uiState.value.deviceSerial
-            authRepository.getRegistrationStatus(serial).collect { result ->
+            val id = _uiState.value.kioskId.ifBlank { _uiState.value.deviceSerial }
+            authRepository.getRegistrationStatus(id).collect { result ->
                 when (result) {
                     is NetworkResult.Idle -> {}
                     is NetworkResult.Loading -> _uiState.update { it.copy(isLoading = true) }
@@ -285,7 +331,8 @@ class KioskRegistrationViewModel @Inject constructor(
                                     isApproved = true
                                 )
                             }
-                            sessionManager.saveRegistrationState("approved")
+                            val kioskId = _uiState.value.kioskId.ifBlank { _uiState.value.deviceSerial }
+                            sessionManager.saveRegistrationState("approved", requestId = kioskId)
                         } else {
                             _uiState.update {
                                 it.copy(

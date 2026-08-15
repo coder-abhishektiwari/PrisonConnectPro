@@ -421,7 +421,8 @@ class AuthRepositoryImpl @Inject constructor(
                 emit(NetworkResult.Failure(ApiError("STATUS_CHECK_FAILED", response.error?.message ?: "Failed to check status")))
             }
         } catch (e: Exception) {
-            emit(NetworkResult.Failure(ApiError("EXCEPTION", e.message ?: "Network error checking status")))
+            val statusCode = if (e is HttpException) e.code() else null
+            emit(NetworkResult.Failure(ApiError("STATUS_CHECK_FAILED", "Network error checking status"), statusCode = statusCode))
         }
     }
 }

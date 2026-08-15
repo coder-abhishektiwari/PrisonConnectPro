@@ -152,7 +152,11 @@ app.post('/kiosks/verify', asyncRoute(async (req, res) => {
   if (!deviceSerialNumber) return sendError(res, 'INVALID_REQUEST', 'Device serial number is required', 400);
 
   const kiosks = await readDb('kiosks.json');
-  const kiosk = kiosks.find((k) => k.deviceSerialNumber === deviceSerialNumber);
+  const kiosk = kiosks.find((k) =>
+    k.deviceSerialNumber === deviceSerialNumber ||
+    k.kioskId === deviceSerialNumber ||
+    k.deviceFingerprint === deviceSerialNumber
+  );
   if (!kiosk) return sendSuccess(res, { success: true, authorized: false, kiosk: null });
 
   const prisons = await readDb('prisons.json');
@@ -230,6 +234,9 @@ app.post('/kiosks/register', asyncRoute(async (req, res) => {
     return sendSuccess(res, {
       success: true,
       kiosk: updated,
+      requestId: updated.kioskId,
+      kioskId: updated.kioskId,
+      status: updated.status || updated.authorizationStatus || 'pending',
       message: 'Kiosk updated successfully'
     });
   }
@@ -277,6 +284,9 @@ app.post('/kiosks/register', asyncRoute(async (req, res) => {
   return sendSuccess(res, {
     success: true,
     kiosk: newKiosk,
+    requestId: newKiosk.kioskId,
+    kioskId: newKiosk.kioskId,
+    status: newKiosk.status,
     message: 'Kiosk registration request submitted successfully'
   }, 201);
 }));

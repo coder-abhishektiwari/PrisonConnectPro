@@ -70,6 +70,25 @@ class DeviceInfoProvider @Inject constructor(
     }
 
     /**
+     * Returns a stable registration identity for the device: the strict hardware
+     * serial when available, otherwise the same "KIOSK-DEV-*" fallback derived
+     * during kiosk registration. This keeps every flow (registration, status
+     * polling, splash verification) using one consistent device identity, even
+     * when the app is not Device Owner and Build.getSerial() is restricted.
+     */
+    fun getRegistrationDeviceId(): String {
+        val strict = getDeviceSerialNumber()
+        if (!strict.isNullOrBlank()) return strict
+        val fallback = try {
+            "KIOSK-DEV-${Build.SERIAL?.take(8) ?: "UNKNOWN"}"
+        } catch (e: Exception) {
+            "KIOSK-DEV-UNKNOWN"
+        }
+        Logger.w("Registration Device ID fallback: $fallback (app not Device Owner)")
+        return fallback
+    }
+
+    /**
      * Generates a stable device fingerprint using hardware parameters.
      */
     fun getDeviceFingerprint(): String {
