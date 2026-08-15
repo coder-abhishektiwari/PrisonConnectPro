@@ -65,7 +65,7 @@ private val HomeNavGreen = Color(0xFFA8F5A2)
 @Composable
 fun DashboardScreen(
     windowSizeClass: WindowSizeClass,
-    onContactClick: (String, String) -> Unit,
+    onContactClick: (contactId: String, name: String, type: String) -> Unit,
     onContactDetailClick: (String) -> Unit,
     onScheduledCallClick: (ScheduledCall) -> Unit,
     onViewAllContacts: () -> Unit,
@@ -231,7 +231,7 @@ fun ScheduledCallCard(call: ScheduledCall, onClick: () -> Unit) {
 fun DashboardContent(
     windowWidthSizeClass: WindowWidthSizeClass,
     data: DashboardViewModel.DashboardData,
-    onContactClick: (String, String) -> Unit,
+    onContactClick: (contactId: String, name: String, type: String) -> Unit,
     onContactDetailClick: (String) -> Unit,
     onScheduledCallClick: (ScheduledCall) -> Unit,
     onProfileClick: () -> Unit,
@@ -302,8 +302,8 @@ fun DashboardContent(
                 ContactCardItem(
                     contact = contact,
                     onClick = { onContactDetailClick(contact.id) },
-                    onCallClick = { onContactClick(contact.fullName, "Audio") },
-                    onVideoClick = { onContactClick(contact.fullName, "Video") }
+                    onCallClick = { onContactClick(contact.id, contact.fullName, "Audio") },
+                    onVideoClick = { onContactClick(contact.id, contact.fullName, "Video") }
                 )
             }
         }
@@ -772,7 +772,7 @@ fun PreviewDashboardMobile() {
                         ),
                     scheduledCalls = emptyList()
                 ),
-                onContactClick = { _, _ -> },
+                onContactClick = { _, _, _ -> },
                 onContactDetailClick = {},
                 onScheduledCallClick = {},
                 onProfileClick = {},

@@ -46,8 +46,8 @@ object KioskRoutes {
     const val CONTACT_DETAILS = "contact_details/{contactId}"
     const val PROFILE = "profile"
     const val WALLET = "wallet"
-    const val SCHEDULE = "schedule/{contactName}/{callType}"
-    const val LOBBY = "lobby/{contactName}/{time}/{callType}/{isSlotBooked}"
+    const val SCHEDULE = "schedule/{contactId}/{contactName}/{callType}"
+    const val LOBBY = "lobby/{contactId}/{contactName}/{time}/{callType}/{isSlotBooked}"
     const val VIDEO_CALL = "video_call/{contactName}/{roomId}"
     const val AUDIO_CALL = "audio_call/{contactName}/{roomId}"
     const val CALL_SUMMARY = "call_summary/{contactName}/{total}"
@@ -140,14 +140,14 @@ fun KioskNavHost(
         composable(KioskRoutes.DASHBOARD) {
             DashboardScreen(
                 windowSizeClass = windowSizeClass,
-                onContactClick = { name: String, type: String ->
-                    navController.navigate("lobby/$name/Now/$type/false")
+                onContactClick = { contactId: String, name: String, type: String ->
+                    navController.navigate("lobby/$contactId/$name/Now/$type/false")
                 },
                 onContactDetailClick = { id: String ->
                     navController.navigate("contact_details/$id")
                 },
                 onScheduledCallClick = { call: ScheduledCall ->
-                    navController.navigate("lobby/${call.contactName}/${call.timeSlot}/${call.type}/true")
+                    navController.navigate("lobby/${call.contactId ?: ""}/${call.contactName}/${call.timeSlot}/${call.type}/true")
                 },
                 onViewAllContacts = {
                     navController.navigate(KioskRoutes.CONTACT_LIST)
@@ -231,8 +231,8 @@ fun KioskNavHost(
         }
         composable(KioskRoutes.CONTACT_LIST) {
             ContactListScreen(
-                onContactClick = { name: String, type: String ->
-                    navController.navigate("lobby/$name/Now/$type/false")
+                onContactClick = { contactId: String, name: String, type: String ->
+                    navController.navigate("lobby/$contactId/$name/Now/$type/false")
                 },
                 onContactDetailClick = { id: String ->
                     navController.navigate("contact_details/$id")
@@ -245,11 +245,11 @@ fun KioskNavHost(
             ContactDetailScreen(
                 contactId = contactId,
                 onBack = { navController.popBackStack() },
-                onScheduleCall = { name: String, type: String ->
-                    navController.navigate("schedule/$name/$type")
+                onScheduleCall = { id: String, name: String, type: String ->
+                    navController.navigate("schedule/$id/$name/$type")
                 },
-                onInstantCall = { name: String, type: String ->
-                    navController.navigate("lobby/$name/Now/$type/false")
+                onInstantCall = { id: String, name: String, type: String ->
+                    navController.navigate("lobby/$id/$name/Now/$type/false")
                 }
             )
         }
@@ -265,9 +265,11 @@ fun KioskNavHost(
             )
         }
         composable(KioskRoutes.SCHEDULE) { backStackEntry ->
+            val contactId = backStackEntry.arguments?.getString("contactId") ?: ""
             val contactName = backStackEntry.arguments?.getString("contactName") ?: ""
             val callType = backStackEntry.arguments?.getString("callType") ?: "Video"
             ScheduleCallScreen(
+                contactId = contactId,
                 contactName = contactName,
                 initialCallType = callType,
                 windowSizeClass = windowSizeClass,
@@ -283,11 +285,13 @@ fun KioskNavHost(
             )
         }
         composable(KioskRoutes.LOBBY) { backStackEntry ->
+            val contactId = backStackEntry.arguments?.getString("contactId") ?: ""
             val contactName = backStackEntry.arguments?.getString("contactName") ?: ""
             val time = backStackEntry.arguments?.getString("time") ?: ""
             val type = backStackEntry.arguments?.getString("callType") ?: ""
             val isSlotBooked = backStackEntry.arguments?.getString("isSlotBooked")?.toBoolean() ?: false
             LobbyScreen(
+                contactId = contactId,
                 contactName = contactName,
                 time = time,
                 callType = type,
@@ -301,7 +305,7 @@ fun KioskNavHost(
                     }
                 },
                 onScheduleCall = {
-                    navController.navigate("schedule/$contactName/$type")
+                    navController.navigate("schedule/$contactId/$contactName/$type")
                 },
                 onBack = { navController.popBackStack() }
             )

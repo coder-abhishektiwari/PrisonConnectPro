@@ -39,6 +39,7 @@ private val BorderColor = Color(0xFFE2E8F0)
 
 @Composable
 fun ScheduleCallScreen(
+    contactId: String,
     contactName: String,
     initialCallType: String, // "Video" or "Audio"
     @Suppress("UNUSED_PARAMETER") windowSizeClass: WindowSizeClass,
@@ -50,26 +51,28 @@ fun ScheduleCallScreen(
     val scheduleState by viewModel.scheduleState.collectAsState()
     val slotsState by viewModel.slotsState.collectAsState()
 
-    LaunchedEffect(contactName) {
-        viewModel.loadSlots(contactName)
+    LaunchedEffect(contactId) {
+        viewModel.loadSlots(contactId)
     }
 
     ScheduleCallContent(
+        contactId = contactId,
         contactName = contactName,
         initialCallType = initialCallType,
         scheduleState = scheduleState,
         slotsState = slotsState,
-        onConfirmBooking = { name, slot, type ->
-            viewModel.scheduleCall(name, slot, type)
+        onConfirmBooking = { date, time, type ->
+            viewModel.scheduleCall(contactId, date, time, type)
         },
         onBackToHome = onBackToHome,
         onBack = onBack,
-        onRetrySlots = { viewModel.loadSlots(contactName) }
+        onRetrySlots = { viewModel.loadSlots(contactId) }
     )
 }
 
 @Composable
 fun ScheduleCallContent(
+    contactId: String,
     contactName: String,
     initialCallType: String,
     scheduleState: UiState<Unit>,
@@ -94,7 +97,7 @@ fun ScheduleCallContent(
     LaunchedEffect(slotsState) {
         if (slotsState is UiState.Success && slotsState.data.isNotEmpty()) {
             selectedDate = slotsState.data.first().date
-            selectedTimeSlot = "${slotsState.data.first().startTime} - ${slotsState.data.first().endTime}"
+            selectedTimeSlot = "${slotsState.data.first().startTime}-${slotsState.data.first().endTime}"
         }
     }
 
@@ -199,7 +202,7 @@ fun ScheduleCallContent(
                             Spacer(modifier = Modifier.height(10.dp))
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 slots.filter { it.date == selectedDate }.forEach { slot ->
-                                    val slotText = "${slot.startTime} - ${slot.endTime}"
+                                    val slotText = "${slot.startTime}-${slot.endTime}"
                                     val isSelected = slotText == selectedTimeSlot
                                     val isAvailable = slot.isAvailable
 
@@ -268,7 +271,7 @@ fun ScheduleCallContent(
 
                     Button(
                         onClick = {
-                            onConfirmBooking(contactName, selectedTimeSlot, selectedCallType)
+                            onConfirmBooking(selectedDate, selectedTimeSlot, selectedCallType)
                         },
                         enabled = scheduleState !is UiState.Loading && selectedTimeSlot.isNotEmpty(),
                         modifier = Modifier
@@ -506,6 +509,7 @@ private fun TypeSelectionCard(
 fun PreviewScheduleCallMobile() {
     PrisonKioskTheme {
         ScheduleCallContent(
+            contactId = "C-1001",
             contactName = "Suresh Kumar",
             initialCallType = "Video",
             scheduleState = UiState.Idle,

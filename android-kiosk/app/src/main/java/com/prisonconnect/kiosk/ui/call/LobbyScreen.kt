@@ -47,6 +47,7 @@ private val AccentGreenBg = Color(0xFFE8F5E9)
 
 @Composable
 fun LobbyScreen(
+    contactId: String,
     contactName: String,
     time: String,
     callType: String,
@@ -65,8 +66,8 @@ fun LobbyScreen(
     val remainingTime by viewModel.remainingTime.collectAsState()
     val cancelState by viewModel.cancelState.collectAsState()
 
-    LaunchedEffect(contactName) {
-        viewModel.checkSlot(contactName)
+    LaunchedEffect(contactId) {
+        viewModel.checkSlot(contactId)
         viewModel.loadBalance()
         if (isSlotBookedForCurrentTime) {
             // Simulate start of lobby timer for scheduled call
@@ -100,20 +101,20 @@ fun LobbyScreen(
         cancelState = cancelState,
         onRetry = {
             viewModel.createRoom(
-                contactId = contactName,
+                contactId = contactId,
                 callType = if (isVideo) "Video" else "Audio"
             )
         },
         onConfirm = {
             viewModel.createRoom(
-                contactId = contactName,
+                contactId = contactId,
                 callType = if (isVideo) "Video" else "Audio"
             )
         },
         onScheduleCall = onScheduleCall,
         onCallNow = {
             viewModel.createRoom(
-                contactId = contactName,
+                contactId = contactId,
                 callType = if (isVideo) "Video" else "Audio"
             )
         },

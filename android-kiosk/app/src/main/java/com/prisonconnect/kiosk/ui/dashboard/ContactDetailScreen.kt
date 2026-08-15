@@ -40,8 +40,8 @@ import com.prisonconnect.kiosk.ui.theme.PrisonKioskTheme
 fun ContactDetailScreen(
     contactId: String,
     onBack: () -> Unit,
-    onScheduleCall: (String, String) -> Unit,
-    onInstantCall: (String, String) -> Unit,
+    onScheduleCall: (contactId: String, name: String, type: String) -> Unit,
+    onInstantCall: (contactId: String, name: String, type: String) -> Unit,
     viewModel: ContactDetailViewModel = hiltViewModel()
 ) {
     val contactState by viewModel.contactState.collectAsState()
@@ -74,8 +74,8 @@ fun ContactDetailScreen(
 @Composable
 fun ContactDetailContent(
     contact: Contact,
-    onScheduleCall: (String, String) -> Unit,
-    onInstantCall: (String, String) -> Unit
+    onScheduleCall: (contactId: String, name: String, type: String) -> Unit,
+    onInstantCall: (contactId: String, name: String, type: String) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -166,13 +166,13 @@ fun ContactDetailContent(
             ActionButton(
                 icon = Icons.Default.Videocam,
                 label = "Video Call",
-                onClick = { onInstantCall(contact.fullName.orEmpty(), "Video") },
+                onClick = { onInstantCall(contact.id, contact.fullName.orEmpty(), "Video") },
                 modifier = Modifier.weight(1f)
             )
             ActionButton(
                 icon = Icons.Default.Call,
                 label = "Audio Call",
-                onClick = { onInstantCall(contact.fullName.orEmpty(), "Audio") },
+                onClick = { onInstantCall(contact.id, contact.fullName.orEmpty(), "Audio") },
                 modifier = Modifier.weight(1f),
                 containerColor = MaterialTheme.colorScheme.secondaryContainer,
                 contentColor = MaterialTheme.colorScheme.onSecondaryContainer
@@ -182,7 +182,7 @@ fun ContactDetailContent(
         Spacer(modifier = Modifier.height(16.dp))
 
         Button(
-            onClick = { onScheduleCall(contact.fullName.orEmpty(), "Video") },
+            onClick = { onScheduleCall(contact.id, contact.fullName.orEmpty(), "Video") },
             modifier = Modifier.fillMaxWidth().height(64.dp),
             shape = RoundedCornerShape(16.dp),
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
@@ -281,8 +281,8 @@ fun PreviewContactDetailMobile() {
                     lastCallDate = "2025-05-20",
                     nextScheduledCallDate = "2025-05-28"
                 ),
-                onScheduleCall = { _, _ -> },
-                onInstantCall = { _, _ -> }
+                onScheduleCall = { _, _, _ -> },
+                onInstantCall = { _, _, _ -> }
             )
         }
     }

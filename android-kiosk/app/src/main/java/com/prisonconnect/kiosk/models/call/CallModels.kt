@@ -3,12 +3,20 @@ package com.prisonconnect.kiosk.models.call
 import com.google.gson.annotations.SerializedName
 
 data class CallSession(
-    @SerializedName("sessionId") val sessionId: String,
+    @SerializedName("roomId") val sessionId: String,
+    @SerializedName("callId") val callId: String? = null,
+    @SerializedName("contactId") val contactId: String = "",
+    @SerializedName("contactName") val contactName: String? = null,
+    @SerializedName("type") val type: CallType? = null,
+    @SerializedName("durationMinutes") val durationMinutes: Int? = null,
+    @SerializedName("startTime") val startTime: String? = null
+)
+
+data class CreateCallRequest(
+    @SerializedName("inmateId") val inmateId: String,
     @SerializedName("contactId") val contactId: String,
-    @SerializedName("contactName") val contactName: String,
-    @SerializedName("type") val type: CallType,
-    @SerializedName("durationMinutes") val durationMinutes: Int,
-    @SerializedName("startTime") val startTime: Long
+    @SerializedName("kioskId") val kioskId: String,
+    @SerializedName("type") val type: String = "video"
 )
 
 enum class CallType {

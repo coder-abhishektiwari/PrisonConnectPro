@@ -11,7 +11,10 @@ data class AvailableSlot(
 )
 
 data class ScheduleRequest(
+    @SerializedName("inmateId") val inmateId: String,
+    @SerializedName("kioskId") val kioskId: String,
     @SerializedName("contactId") val contactId: String,
-    @SerializedName("slotId") val slotId: String,
+    @SerializedName("date") val date: String,
+    @SerializedName("timeSlot") val timeSlot: String,
     @SerializedName("callType") val callType: String
 )

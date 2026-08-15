@@ -2,10 +2,12 @@ package com.prisonconnect.kiosk.ui.call
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.prisonconnect.kiosk.core.Constants
 import com.prisonconnect.kiosk.core.UiState
 import com.prisonconnect.kiosk.models.schedule.AvailableSlot
 import com.prisonconnect.kiosk.models.schedule.ScheduleRequest
 import com.prisonconnect.kiosk.network.NetworkResult
+import com.prisonconnect.kiosk.repository.AuthRepository
 import com.prisonconnect.kiosk.repository.CallRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,7 +17,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class ScheduleViewModel @Inject constructor(
-    private val repository: CallRepository
+    private val repository: CallRepository,
+    private val authRepository: AuthRepository
 ) : ViewModel() {
 
     private val _slotsState = MutableStateFlow<UiState<List<AvailableSlot>>>(UiState.Idle)
@@ -38,14 +41,19 @@ class ScheduleViewModel @Inject constructor(
         }
     }
 
-    fun scheduleCall(contactId: String, slotId: String, callType: String) {
+    fun scheduleCall(contactId: String, date: String, timeSlot: String, callType: String) {
         _scheduleState.value = UiState.Loading
         viewModelScope.launch {
+            val inmateId = authRepository.getInmateId() ?: Constants.KIOSK_ID
+            val kioskId = authRepository.getVerifiedKiosk()?.kioskId ?: Constants.KIOSK_ID
             repository.bookCall(
                 ScheduleRequest(
+                    inmateId = inmateId,
+                    kioskId = kioskId,
                     contactId = contactId,
-                    slotId = slotId,
-                    callType = callType
+                    date = date,
+                    timeSlot = timeSlot,
+                    callType = if (callType.equals("Audio", ignoreCase = true)) "audio" else "video"
                 )
             ).collect { result ->
                 when (result) {

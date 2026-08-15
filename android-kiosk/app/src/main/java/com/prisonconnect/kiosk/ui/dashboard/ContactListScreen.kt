@@ -42,7 +42,7 @@ import com.prisonconnect.kiosk.ui.theme.PrisonKioskTheme
 
 @Composable
 fun ContactListScreen(
-    onContactClick: (String, String) -> Unit,
+    onContactClick: (contactId: String, name: String, type: String) -> Unit,
     onContactDetailClick: (String) -> Unit,
     onBack: () -> Unit,
     viewModel: ContactListViewModel = hiltViewModel()
@@ -101,8 +101,8 @@ fun ContactListScreen(
                             ContactGrid(
                                 contacts = state.data,
                                 onContactClick = onContactDetailClick,
-                                onCallClick = { name -> onContactClick(name, "Audio") },
-                                onVideoClick = { name -> onContactClick(name, "Video") }
+                                onCallClick = { id, name -> onContactClick(id, name, "Audio") },
+                                onVideoClick = { id, name -> onContactClick(id, name, "Video") }
                             )
                         }
                     }
@@ -117,8 +117,8 @@ fun ContactListScreen(
 fun ContactGrid(
     contacts: List<Contact>,
     onContactClick: (String) -> Unit,
-    onCallClick: (String) -> Unit,
-    onVideoClick: (String) -> Unit
+    onCallClick: (contactId: String, name: String) -> Unit,
+    onVideoClick: (contactId: String, name: String) -> Unit
 ) {
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 300.dp),
@@ -130,8 +130,8 @@ fun ContactGrid(
             ApprovedContactCard(
                 contact = contact,
                 onClick = { onContactClick(contact.id.orEmpty()) },
-                onCallClick = { onCallClick(contact.fullName.orEmpty()) },
-                onVideoClick = { onVideoClick(contact.fullName.orEmpty()) }
+                onCallClick = { onCallClick(contact.id.orEmpty(), contact.fullName.orEmpty()) },
+                onVideoClick = { onVideoClick(contact.id.orEmpty(), contact.fullName.orEmpty()) }
             )
         }
     }
@@ -243,8 +243,8 @@ fun PreviewContactListMobile() {
                     )
                 ),
                 onContactClick = {},
-                onCallClick = {},
-                onVideoClick = {}
+                onCallClick = { _, _ -> },
+                onVideoClick = { _, _ -> }
             )
         }
     }

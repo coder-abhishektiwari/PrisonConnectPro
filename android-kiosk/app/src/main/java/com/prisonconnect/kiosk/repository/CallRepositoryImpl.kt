@@ -201,7 +201,7 @@ class CallRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun bookCall(request: ScheduleRequest): Flow<NetworkResult<CallSession>> = flow {
+    override fun bookCall(request: ScheduleRequest): Flow<NetworkResult<ScheduledCall>> = flow {
         emit(NetworkResult.Loading)
         try {
             val response = apiService.bookCall(request)
@@ -229,16 +229,39 @@ class CallRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun createRoom(contactId: String, callType: String): Flow<NetworkResult<CallSession>> = flow {
+    override fun createRoom(inmateId: String, contactId: String, kioskId: String, callType: String): Flow<NetworkResult<CallSession>> = flow {
         emit(NetworkResult.Loading)
-        // Mocking for now since API might not have it yet in the new format
-        delay(1000)
-        emit(NetworkResult.Success(CallSession("mock-session", contactId, "Contact Name", CallType.VIDEO, 5, System.currentTimeMillis())))
+        try {
+            val response = apiService.createCall(
+                CreateCallRequest(
+                    inmateId = inmateId,
+                    contactId = contactId,
+                    kioskId = kioskId,
+                    type = if (callType.equals("Audio", ignoreCase = true)) "audio" else "video"
+                )
+            )
+            if (response.success && response.data != null) {
+                emit(NetworkResult.Success(response.data))
+            } else {
+                emit(NetworkResult.Failure(response.error ?: ApiError("ROOM_FAILED", "Failed to setup room")))
+            }
+        } catch (e: Exception) {
+            emit(NetworkResult.Failure(ApiError("EXCEPTION", e.message ?: "Network exception")))
+        }
     }
 
-    override fun checkSlotAvailability(contactName: String): Flow<NetworkResult<Boolean>> = flow {
+    override fun checkSlotAvailability(contactId: String): Flow<NetworkResult<Boolean>> = flow {
         emit(NetworkResult.Loading)
-        delay(500)
-        emit(NetworkResult.Success(true))
+        try {
+            val slotsResponse = apiService.getAvailableSlots(contactId)
+            if (slotsResponse.success && slotsResponse.data != null) {
+                val available = slotsResponse.data.any { it.isAvailable }
+                emit(NetworkResult.Success(available))
+            } else {
+                emit(NetworkResult.Failure(slotsResponse.error ?: ApiError("SLOT_FAILED", "Failed to check slot availability")))
+            }
+        } catch (e: Exception) {
+            emit(NetworkResult.Failure(ApiError("EXCEPTION", e.message ?: "Network exception")))
+        }
     }
 }

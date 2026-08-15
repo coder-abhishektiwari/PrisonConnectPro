@@ -77,9 +77,9 @@ class RoomViewModel @Inject constructor(
         }
     }
 
-    fun checkSlot(contactName: String) {
+    fun checkSlot(contactId: String) {
         viewModelScope.launch {
-            callRepository.checkSlotAvailability(contactName).collect { result ->
+            callRepository.checkSlotAvailability(contactId).collect { result ->
                 if (result is NetworkResult.Success) {
                     _isSlotAvailable.value = result.data
                 }
@@ -101,7 +101,9 @@ class RoomViewModel @Inject constructor(
     fun createRoom(contactId: String, callType: String) {
         _createRoomState.value = UiState.Loading
         viewModelScope.launch {
-            callRepository.createRoom(contactId, callType).collect { result ->
+            val inmateId = authRepository.getInmateId() ?: Constants.KIOSK_ID
+            val kioskId = authRepository.getVerifiedKiosk()?.kioskId ?: Constants.KIOSK_ID
+            callRepository.createRoom(inmateId, contactId, kioskId, callType).collect { result ->
                 when (result) {
                     is NetworkResult.Loading -> _createRoomState.value = UiState.Loading
                     is NetworkResult.Success -> {

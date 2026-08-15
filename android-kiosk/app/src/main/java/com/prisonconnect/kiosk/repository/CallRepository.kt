@@ -14,10 +14,10 @@ interface CallRepository {
 
     fun getScheduledCalls(id: String): Flow<NetworkResult<List<ScheduledCall>>>
     fun getAvailableSlots(contactId: String): Flow<NetworkResult<List<AvailableSlot>>>
-    fun bookCall(request: ScheduleRequest): Flow<NetworkResult<CallSession>>
+    fun bookCall(request: ScheduleRequest): Flow<NetworkResult<ScheduledCall>>
     fun cancelBooking(bookingId: String): Flow<NetworkResult<Unit>>
-    fun createRoom(contactId: String, callType: String): Flow<NetworkResult<CallSession>>
-    fun checkSlotAvailability(contactName: String): Flow<NetworkResult<Boolean>>
+    fun createRoom(inmateId: String, contactId: String, kioskId: String, callType: String): Flow<NetworkResult<CallSession>>
+    fun checkSlotAvailability(contactId: String): Flow<NetworkResult<Boolean>>
 
     // Signaling
     fun initSignaling()

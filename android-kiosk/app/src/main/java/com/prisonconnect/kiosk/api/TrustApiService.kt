@@ -8,6 +8,7 @@ import com.prisonconnect.kiosk.models.inmate.InmateBalance
 import com.prisonconnect.kiosk.models.inmate.InmateProfile
 import com.prisonconnect.kiosk.models.call.ScheduledCall
 import com.prisonconnect.kiosk.models.call.CallSession
+import com.prisonconnect.kiosk.models.call.CreateCallRequest
 import com.prisonconnect.kiosk.models.schedule.AvailableSlot
 import com.prisonconnect.kiosk.models.schedule.ScheduleRequest
 import com.prisonconnect.kiosk.models.wallet.WalletStatement
@@ -93,7 +94,10 @@ interface TrustApiService {
     suspend fun getAvailableSlots(@Path("contactId") contactId: String): ApiResponse<List<AvailableSlot>>
 
     @POST("schedule/book")
-    suspend fun bookCall(@Body request: ScheduleRequest): ApiResponse<CallSession>
+    suspend fun bookCall(@Body request: ScheduleRequest): ApiResponse<ScheduledCall>
+
+    @POST("calls")
+    suspend fun createCall(@Body request: CreateCallRequest): ApiResponse<CallSession>
 
     @DELETE("schedule/cancel/{bookingId}")
     suspend fun cancelBooking(@Path("bookingId") bookingId: String): ApiResponse<Unit>
