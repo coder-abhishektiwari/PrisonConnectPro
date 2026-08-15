@@ -3,6 +3,7 @@ package com.prisonconnect.kiosk.ui.dashboard
 import androidx.lifecycle.viewModelScope
 import com.prisonconnect.kiosk.core.BaseViewModel
 import com.prisonconnect.kiosk.core.Constants
+import com.prisonconnect.kiosk.core.JailBalanceSync
 import com.prisonconnect.kiosk.core.UiState
 import com.prisonconnect.kiosk.models.contacts.Contact
 import com.prisonconnect.kiosk.models.inmate.InmateProfile
@@ -25,7 +26,8 @@ class DashboardViewModel @Inject constructor(
     private val inmateRepository: InmateRepository,
     private val contactRepository: ContactRepository,
     private val callRepository: CallRepository,
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val jailBalanceSync: JailBalanceSync
 ) : BaseViewModel() {
 
     private val _dashboardState = MutableStateFlow<UiState<DashboardData>>(UiState.Loading)
@@ -43,8 +45,12 @@ class DashboardViewModel @Inject constructor(
     private val _scheduledCalls = MutableStateFlow<List<ScheduledCall>>(emptyList())
     val scheduledCalls = _scheduledCalls.asStateFlow()
 
+    /** Single-source jail balance shown in the dashboard header. */
+    val jailBalance = jailBalanceSync.balance
+
     init {
         loadDashboardData()
+        viewModelScope.launch { jailBalanceSync.refresh() }
     }
 
     fun loadDashboardData() {
@@ -80,6 +86,14 @@ class DashboardViewModel @Inject constructor(
             }.collect {
                 _dashboardState.value = it
             }
+        }
+    }
+
+    /** Refresh header balance + dashboard data. */
+    fun refreshAll() {
+        viewModelScope.launch {
+            jailBalanceSync.refresh()
+            loadDashboardData()
         }
     }
 

@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.prisonconnect.kiosk.models.admin.Prisoner
 import com.prisonconnect.kiosk.network.NetworkResult
+import com.prisonconnect.kiosk.ui.components.KioskLoadingState
 import com.prisonconnect.kiosk.ui.components.KioskTopBar
 
 @Composable
@@ -47,7 +48,7 @@ fun EditPrisonerScreen(
         Box(modifier = Modifier.padding(paddingValues).fillMaxSize()) {
             when (val result = prisonerResult) {
                 is NetworkResult.Loading -> {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                    KioskLoadingState(modifier = Modifier.align(Alignment.Center))
                 }
                 is NetworkResult.Success -> {
                     EditPrisonerForm(
@@ -68,7 +69,7 @@ fun EditPrisonerScreen(
             }
 
             if (updateResult is NetworkResult.Loading) {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                KioskLoadingState(modifier = Modifier.align(Alignment.Center))
             }
 
             LaunchedEffect(updateResult) {

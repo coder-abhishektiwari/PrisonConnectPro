@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.prisonconnect.kiosk.models.admin.VerifiedContact
 import com.prisonconnect.kiosk.network.NetworkResult
+import com.prisonconnect.kiosk.ui.components.KioskLoadingState
 import com.prisonconnect.kiosk.ui.components.KioskTopBar
 
 @Composable
@@ -56,7 +57,7 @@ fun ManageContactsScreen(
         Box(modifier = Modifier.padding(paddingValues).fillMaxSize()) {
             when (val result = contactsResult) {
                 is NetworkResult.Loading -> {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                    KioskLoadingState(modifier = Modifier.align(Alignment.Center))
                 }
                 is NetworkResult.Success -> {
                     if (result.data.isEmpty()) {

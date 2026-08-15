@@ -76,6 +76,7 @@ fun DashboardScreen(
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val dashboardState by viewModel.dashboardState.collectAsState()
+    val jailBalance by viewModel.jailBalance.collectAsState()
     var currentTab by remember { mutableIntStateOf(0) }
 
     var currentTime by remember { mutableStateOf(System.currentTimeMillis()) }
@@ -88,11 +89,10 @@ fun DashboardScreen(
 
     Scaffold(
         topBar = {
-            val balance = (dashboardState as? UiState.Success)?.data?.balance?.credits ?: 0.0
             KioskTopHeader(
-                balance = balance,
+                balance = jailBalance,
                 currentTime = currentTime,
-                onRefresh = { viewModel.loadDashboardData() },
+                onRefresh = { viewModel.refreshAll() },
                 onLogoutClick = {
                     viewModel.logout()
                     onLogoutClick()
@@ -740,11 +740,11 @@ fun PreviewDashboardMobile() {
                         status = com.prisonconnect.kiosk.models.inmate.InmateStatus.ACTIVE
                     ),
                     balance = InmateBalance(
-                        credits = 100.0,
-                        remainingMinutes = 50,
-                        totalSpent = 250.0,
-                        lastRechargeAmount = 500.0,
-                        lastRechargeDate = "2025-05-20"
+                        credits = 0.0,
+                        remainingMinutes = 0,
+                        totalSpent = 0.0,
+                        lastRechargeAmount = 0.0,
+                        lastRechargeDate = null
                     ),
                     contacts = listOf(
                         Contact(

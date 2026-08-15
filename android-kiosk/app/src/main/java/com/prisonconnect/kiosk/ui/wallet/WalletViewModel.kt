@@ -3,6 +3,7 @@ package com.prisonconnect.kiosk.ui.wallet
 import androidx.lifecycle.viewModelScope
 import com.prisonconnect.kiosk.core.BaseViewModel
 import com.prisonconnect.kiosk.core.Constants
+import com.prisonconnect.kiosk.core.JailBalanceSync
 import com.prisonconnect.kiosk.core.UiState
 import com.prisonconnect.kiosk.models.wallet.WalletTransaction
 import com.prisonconnect.kiosk.repository.AuthRepository
@@ -16,7 +17,8 @@ import javax.inject.Inject
 @HiltViewModel
 class WalletViewModel @Inject constructor(
     private val inmateRepository: InmateRepository,
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val jailBalanceSync: JailBalanceSync
 ) : BaseViewModel() {
 
     private val _walletState = MutableStateFlow<UiState<WalletUiData>>(UiState.Loading)
@@ -42,6 +44,7 @@ class WalletViewModel @Inject constructor(
                         val transactions = statement.transactions
                             .filter { it.status.equals("success", ignoreCase = true) || it.status.equals("completed", ignoreCase = true) }
                             .sortedByDescending { it.timestamp }
+                        jailBalanceSync.push(statement.wallet.balance)
                         _walletState.value = UiState.Success(
                             WalletUiData(
                                 balance = statement.wallet.balance,
