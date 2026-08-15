@@ -1,14 +1,12 @@
 package com.prisonconnect.kiosk.datasource.remote
 
 import android.graphics.Bitmap
+import android.util.Base64
 import com.prisonconnect.kiosk.api.TrustApiService
 import com.prisonconnect.kiosk.datasource.AuthDataSource
 import com.prisonconnect.kiosk.models.auth.*
 import com.prisonconnect.kiosk.models.common.ApiResponse
 import com.prisonconnect.kiosk.models.inmate.InmateProfile
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
-import okhttp3.MultipartBody
-import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.ByteArrayOutputStream
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -27,22 +25,15 @@ class RemoteAuthDataSource @Inject constructor(
         apiService.logout("Bearer $accessToken")
 
     override suspend fun identifyFace(kioskId: String, image: Bitmap): ApiResponse<InmateProfile> {
-        val kioskIdBody = kioskId.toRequestBody("text/plain".toMediaTypeOrNull())
-
         val stream = ByteArrayOutputStream()
         image.compress(Bitmap.CompressFormat.JPEG, 90, stream)
-        val imageBody = stream.toByteArray().toRequestBody("image/jpeg".toMediaTypeOrNull())
-        val imagePart = MultipartBody.Part.createFormData("image", "face.jpg", imageBody)
-
-        return apiService.identifyFace(kioskIdBody, imagePart)
+        val imageBase64 = Base64.encodeToString(stream.toByteArray(), Base64.NO_WRAP)
+        return apiService.identifyFace(FaceIdentifyRequest(kioskId, imageBase64))
     }
 
     override suspend fun identifyFingerprint(kioskId: String, capture: ByteArray): ApiResponse<InmateProfile> {
-        val kioskIdBody = kioskId.toRequestBody("text/plain".toMediaTypeOrNull())
-        val captureBody = capture.toRequestBody("application/octet-stream".toMediaTypeOrNull())
-        val capturePart = MultipartBody.Part.createFormData("capture", "fingerprint.bin", captureBody)
-
-        return apiService.identifyFingerprint(kioskIdBody, capturePart)
+        val captureBase64 = Base64.encodeToString(capture, Base64.NO_WRAP)
+        return apiService.identifyFingerprint(FingerprintIdentifyRequest(kioskId, captureBase64))
     }
 
     override suspend fun identifyRfid(request: LoginRequest): ApiResponse<InmateProfile> =

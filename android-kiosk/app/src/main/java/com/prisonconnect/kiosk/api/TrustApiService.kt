@@ -11,8 +11,6 @@ import com.prisonconnect.kiosk.models.call.CallSession
 import com.prisonconnect.kiosk.models.schedule.AvailableSlot
 import com.prisonconnect.kiosk.models.schedule.ScheduleRequest
 import com.prisonconnect.kiosk.models.wallet.WalletStatement
-import okhttp3.MultipartBody
-import okhttp3.RequestBody
 import retrofit2.http.*
 
 /**
@@ -39,18 +37,14 @@ interface TrustApiService {
     @GET("admin/profile")
     suspend fun getAdminProfile(): ApiResponse<AdminProfile>
 
-    @Multipart
     @POST("auth/face-identify")
     suspend fun identifyFace(
-        @Part("kioskId") kioskId: RequestBody,
-        @Part image: MultipartBody.Part
+        @Body request: FaceIdentifyRequest
     ): ApiResponse<InmateProfile>
 
-    @Multipart
     @POST("auth/fingerprint-identify")
     suspend fun identifyFingerprint(
-        @Part("kioskId") kioskId: RequestBody,
-        @Part capture: MultipartBody.Part
+        @Body request: FingerprintIdentifyRequest
     ): ApiResponse<InmateProfile>
 
     @POST("auth/rfid-identify")

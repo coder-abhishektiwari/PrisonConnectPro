@@ -23,9 +23,12 @@ router.post('/refresh', async (req, res) => {
   const next = await sessions.createSession(claims, req);
   return res.json({
     success: true,
-    accessToken: signAccessToken(claims),
-    refreshToken: next.refreshToken,
-    expiresIn: 3600
+    data: {
+      accessToken: signAccessToken(claims),
+      refreshToken: next.refreshToken,
+      expiresIn: 3600
+    },
+    timestamp: Date.now()
   });
 });
 

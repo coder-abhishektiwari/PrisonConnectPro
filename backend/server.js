@@ -1778,7 +1778,7 @@ app.post('/auth/admin/identify', asyncRoute(async (req, res) => {
 }));
 
 app.post('/auth/admin/verify-pin', authLimiter, asyncRoute(async (req, res) => {
-  const { adminId, pin, kioskId } = req.body;
+  const { adminId, pin, password, kioskId } = req.body;
   const admins = await readDb('admins.json');
   const admin = admins.find((a) => a.adminId === adminId);
   if (!admin) return sendError(res, 'NOT_FOUND', 'Admin not found', 404);
@@ -1790,8 +1790,13 @@ app.post('/auth/admin/verify-pin', authLimiter, asyncRoute(async (req, res) => {
     return sendError(res, 'UNAUTHORIZED', 'Kiosk not authorized for admin access', 403);
   }
 
-  const valid = await verifySecret(pin, admin.pin);
-  if (!valid) return sendError(res, 'INVALID_PIN', 'Incorrect PIN', 401);
+  // Accept the admin's login secret as "password" (preferred) or "pin".
+  const secret = password ?? pin;
+  if (!secret) return sendError(res, 'INVALID_REQUEST', 'password is required', 400);
+
+  const storedSecret = admin.password ?? admin.pin;
+  const valid = storedSecret ? await verifySecret(secret, storedSecret) : false;
+  if (!valid) return sendError(res, 'INVALID_PIN', 'Incorrect password', 401);
 
   const claims = { sub: admin.adminId, role: admin.role || 'admin', kioskId };
   const session = await createSession(claims, req);
