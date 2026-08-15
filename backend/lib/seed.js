@@ -263,8 +263,10 @@ async function main() {
   // ---- write in dependency order ----
   // Seeding is NON-destructive: collections that already contain data are left
   // untouched so runtime-created records (e.g. kiosks registered by a device)
-  // survive restarts and redeploys. Set FORCE_SEED=1 to wipe and re-seed.
-  const forceSeed = ['1', 'true'].includes(String(process.env.FORCE_SEED || '').toLowerCase());
+  // survive restarts and redeploys. Set FORCE_SEED=1 (or pass --force) to wipe
+  // and re-seed.
+  const forceSeed = process.argv.includes('--force') ||
+    ['1', 'true'].includes(String(process.env.FORCE_SEED || '').toLowerCase());
   const write = async (file) => {
     const rows = raw[file];
     if (rows == null) { console.log(`[seed] ${file}: skipped (missing)`); return; }

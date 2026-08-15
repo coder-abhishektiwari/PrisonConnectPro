@@ -4,6 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "start": "node server.js",
+    "seed": "node lib/seed.js",
+    "seed:force": "node lib/seed.js --force",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
