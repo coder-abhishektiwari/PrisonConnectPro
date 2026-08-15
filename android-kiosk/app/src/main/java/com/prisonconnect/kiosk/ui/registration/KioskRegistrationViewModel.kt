@@ -79,17 +79,16 @@ class KioskRegistrationViewModel @Inject constructor(
         viewModelScope.launch {
             val status = sessionManager.getRegistrationStatus()
             val reqId = sessionManager.getRegistrationRequestId()
-            if (status == "pending" && !reqId.isNullOrEmpty()) {
-                _uiState.update {
-                    it.copy(
-                        currentStep = RegistrationStep.PENDING_APPROVAL,
-                        requestId = reqId,
-                        kioskId = reqId,
-                        approvalStatus = "pending"
-                    )
-                }
-                startPollingStatus()
+            if (reqId.isNullOrEmpty() || status == "approved") return@launch
+            _uiState.update {
+                it.copy(
+                    currentStep = RegistrationStep.PENDING_APPROVAL,
+                    requestId = reqId,
+                    kioskId = reqId,
+                    approvalStatus = if (status == "rejected") "rejected" else "pending"
+                )
             }
+            startPollingStatus()
         }
     }
 
@@ -367,7 +366,34 @@ class KioskRegistrationViewModel @Inject constructor(
     }
 
     fun reRegister() {
-        resetForReRegistration("")
+        pollingJob?.cancel()
+        viewModelScope.launch {
+            sessionManager.clearRegistrationState()
+        }
+        _uiState.update {
+            it.copy(
+                approvalStatus = "pending",
+                isApproved = false,
+                errorMessage = null
+            )
+        }
+        submitRegistration()
+    }
+
+    fun goToEditData() {
+        pollingJob?.cancel()
+        viewModelScope.launch {
+            sessionManager.clearRegistrationState()
+        }
+        _uiState.update {
+            it.copy(
+                currentStep = RegistrationStep.SUBMIT_DEVICE_INFO,
+                approvalStatus = "pending",
+                isApproved = false,
+                isLoading = false,
+                errorMessage = null
+            )
+        }
     }
 
     override fun onCleared() {

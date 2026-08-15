@@ -151,7 +151,8 @@ fun KioskRegistrationScreen(
                             RegistrationStep.PENDING_APPROVAL -> StepPendingApproval(
                                 uiState = uiState,
                                 onCheckStatus = { viewModel.checkStatusManually() },
-                                onReRegister = { viewModel.reRegister() }
+                                onReRegister = { viewModel.reRegister() },
+                                onChangeData = { viewModel.goToEditData() }
                             )
                         }
                     }
@@ -553,7 +554,8 @@ private fun StepSubmitDeviceInfo(
 private fun StepPendingApproval(
     uiState: RegistrationUiState,
     onCheckStatus: () -> Unit,
-    onReRegister: () -> Unit
+    onReRegister: () -> Unit,
+    onChangeData: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -637,6 +639,17 @@ private fun StepPendingApproval(
                 border = BorderStroke(1.dp, Color(0xFF10B981))
             ) {
                 Text("Retry Registration", color = Color(0xFF34D399), fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = onChangeData,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, Color(0xFF475569))
+            ) {
+                Text("Change Data & Re-submit", color = Color(0xFF94A3B8), fontSize = 15.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
