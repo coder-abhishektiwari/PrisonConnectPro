@@ -29,7 +29,9 @@ function requireRole(...roles) {
   const norm = (r) => String(r || '').toLowerCase().replace(/[-_]/g, '');
   const allowed = roles.map(norm);
   return (req, res, next) => {
-    if (!req.auth || !allowed.includes(norm(req.auth.role))) {
+    const role = norm(req.auth?.role);
+    // Super admins inherit admin/warden permissions (same contract as requirePermission).
+    if (!req.auth || (!allowed.includes(role) && !(role === 'superadmin'))) {
       return res.status(403).json({
         success: false,
         error: { code: 'FORBIDDEN', message: 'Insufficient permissions for this action' },

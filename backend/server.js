@@ -10,7 +10,7 @@ const { v4: uuidv4 } = require('uuid');
 const { readDb, updateDb } = require('./lib/db');
 const { signAccessToken, verifyToken, hashSecret, verifySecret } = require('./lib/auth');
 const { createSession } = require('./lib/sessions');
-const { getStatement } = require('./lib/jail-account');
+const { getStatement, resolveInmate } = require('./lib/jail-account');
 const { requireAuth, requireRole, requirePermission } = require('./middleware/auth');
 // NOTE: Mediasoup manager and recorder have been intentionally commented out by developer
 // as they were causing failures on Render deployment. This is a known limitation - 
@@ -69,6 +69,90 @@ function deepMerge(base, patch) {
   return patch === undefined ? base : patch;
 }
 
+// ==================== JAIL SCOPING ====================
+// Every managed entity (inmate, kiosk) belongs to exactly one jail (prisonId).
+// A jail-scoped principal (admin / warden / kiosk staff) must only ever touch
+// records of its own jail. super_admin without an explicit prisonId sees all.
+function jailScopeOf(req) {
+  return req.auth?.prisonId || req.auth?.jailId || null;
+}
+function inJailScope(req, record) {
+  const jailId = jailScopeOf(req);
+  if (!jailId) return true; // global principal (super admin with no jail)
+  return !!record && (record.prisonId === jailId || record.facility === jailId || record.jailId === jailId);
+}
+function scopeFilter(req) {
+  const jailId = jailScopeOf(req);
+  return (x) => !jailId || x.prisonId === jailId || x.facility === jailId || x.jailId === jailId;
+}
+
+// ==================== KIOSK SCOPING (admin level) ====================
+// A kiosk admin (has a kioskId claim) manages only the inmates/family members
+// of THEIR OWN kiosk — not other kiosks, even within the same jail. Principals
+// without a kioskId (super_admin, warden) fall back to jail/global scope.
+function kioskScopeOf(req) {
+  return req.auth?.kioskId || null;
+}
+function inKioskScope(req, record) {
+  const kioskId = kioskScopeOf(req);
+  if (!kioskId) return true; // not kiosk-bound → jail scope governs
+  return !!record && (record.assignedKioskId === kioskId || record.kioskId === kioskId || record.inmateId === kioskId);
+}
+function inAdminScope(req, record) {
+  return inJailScope(req, record) && inKioskScope(req, record);
+}
+function adminScopeFilter(req) {
+  return (x) => inAdminScope(req, x);
+}
+
+// ==================== DOMAIN SCOPING (records that link to inmates/kiosks indirectly) ====================
+// Collections like calls, wallets, contacts, recordings, statistics and transactions
+// may not carry kioskId/prisonId directly. inScopeOf resolves the owner inmate (or
+// the kiosk's jail when only kioskId is present) so a jailed/kiosk-bound principal
+// sees only their own jail's / kiosk's records. Global principals (no kioskId/jailId) see all.
+async function inScopeOf(req, record) {
+  const kioskId = kioskScopeOf(req);
+  const jailId = jailScopeOf(req);
+  if (!kioskId && !jailId) return true; // global principal (super admin with no jail/kiosk)
+  if (!record) return false;
+
+  let recKiosk = record.kioskId || record.assignedKioskId || null;
+  let recJail = record.prisonId || record.jailId || record.facility || null;
+  let refInmateId = record.inmateId || null;
+
+  if (record.walletId) {
+    const wallets = await readDb('wallets.json');
+    const wallet = wallets.find((w) => w.walletId === record.walletId);
+    if (wallet) refInmateId = wallet.inmateId;
+  }
+
+  if (refInmateId) {
+    const inmates = await readDb('inmates.json');
+    const owner = inmates.find((i) => i.inmateId === refInmateId) ||
+                  inmates.find((i) => i.inmateId === `INM-${refInmateId}`);
+    if (owner) {
+      recKiosk = recKiosk || owner.assignedKioskId || owner.kioskId;
+      recJail = recJail || owner.prisonId;
+    }
+  }
+
+  if (!recJail && recKiosk) {
+    const kiosks = await readDb('kiosks.json');
+    const k = kiosks.find((x) => x.kioskId === recKiosk);
+    if (k) recJail = k.prisonId;
+  }
+
+  if (kioskId && recKiosk && recKiosk !== kioskId) return false;
+  if (jailId && recJail && recJail !== jailId) return false;
+  return true;
+}
+
+async function scopeList(req, records) {
+  const out = [];
+  for (const r of records) if (await inScopeOf(req, r)) out.push(r);
+  return out;
+}
+
 // ==================== RATE LIMITING (brute force protection) ====================
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -80,8 +164,6 @@ const authLimiter = rateLimit({
 
 // ==================== EXISTING SUB-ROUTERS ====================
 app.use('/auth', authRouter);
-// Admin router is authenticated: super-admin for account CRUD, admin/warden for biometrics.
-app.use('/admin', requireAuth, adminRouter);
 
 // ==================== CALL STATE MACHINE ====================
 const CALL_STATES = ['scheduled', 'ringing', 'connecting', 'active', 'reconnecting', 'completed', 'failed', 'cancelled', 'rejected', 'missed'];
@@ -755,27 +837,36 @@ app.post('/auth/verify-pin', authLimiter, asyncRoute(async (req, res) => {
 
 // ==================== INMATE ROUTES ====================
 
-app.get('/inmates', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => sendSuccess(res, await readDb('inmates.json'))));
+app.get('/inmates', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+  const inmates = await readDb('inmates.json');
+  return sendSuccess(res, inmates.filter(adminScopeFilter(req)));
+}));
 
 app.get('/inmate/profile/:id', requireAuth, asyncRoute(async (req, res) => {
   const { id } = req.params;
   const inmates = await readDb('inmates.json');
-  const inmate = inmates.find((i) => i.inmateId === id) ||
-                 inmates.find((i) => i.assignedKioskId === id) ||
-                 inmates.find((i) => i.prisonerNumber === id);
+  const inmate = inmates.find((i) => (i.inmateId === id || i.assignedKioskId === id || i.prisonerNumber === id) && inAdminScope(req, i));
   if (!inmate) return sendError(res, 'NOT_FOUND', 'Inmate not found', 404);
   return sendSuccess(res, inmate);
 }));
 
 app.get('/inmates/:inmateId', requireAuth, asyncRoute(async (req, res) => {
   const inmates = await readDb('inmates.json');
-  const inmate = inmates.find((i) => i.inmateId === req.params.inmateId);
+  const inmate = inmates.find((i) => i.inmateId === req.params.inmateId && inAdminScope(req, i));
   if (!inmate) return sendError(res, 'NOT_FOUND', 'Inmate not found', 404);
   return sendSuccess(res, inmate);
 }));
 
 app.post('/inmates', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
   const inmateData = req.body;
+  const jailId = jailScopeOf(req);
+  const kioskId = kioskScopeOf(req);
+  if (jailId && inmateData.prisonId && inmateData.prisonId !== jailId) {
+    return sendError(res, 'FORBIDDEN', 'Cannot create an inmate outside your jail', 403);
+  }
+  if (kioskId && inmateData.assignedKioskId && inmateData.assignedKioskId !== kioskId) {
+    return sendError(res, 'FORBIDDEN', 'Cannot create an inmate for another kiosk', 403);
+  }
   try {
     const newInmate = await updateDb('inmates.json', async (inmates) => {
       if (inmates.find((i) => i.inmateId === inmateData.inmateId) ||
@@ -787,6 +878,9 @@ app.post('/inmates', requireAuth, requireRole('admin', 'warden'), asyncRoute(asy
       const record = {
         ...inmateData,
         inmateId: inmateData.inmateId || `INM-${uuidv4().substring(0, 8).toUpperCase()}`,
+        prisonId: jailId || inmateData.prisonId || inmateData.facility,
+        facility: jailId || inmateData.facility || inmateData.prisonId,
+        assignedKioskId: kioskId || inmateData.assignedKioskId,
         status: inmateData.status || 'active',
         pin: inmateData.pin ? await hashSecret(String(inmateData.pin)) : await hashSecret(uuidv4().substring(0, 8)),
         biometricData: inmateData.biometricData || {
@@ -813,9 +907,20 @@ app.patch('/inmates/:inmateId', requireAuth, requireRole('admin', 'warden'), asy
   const { inmateId } = req.params;
   const updates = { ...req.body };
   INMATE_IMMUTABLE_FIELDS.forEach((f) => delete updates[f]);
+  const jailId = jailScopeOf(req);
+  const kioskId = kioskScopeOf(req);
+  if (jailId && updates.prisonId && updates.prisonId !== jailId) {
+    return sendError(res, 'FORBIDDEN', 'Cannot move an inmate to another jail', 403);
+  }
+  if (kioskId && updates.assignedKioskId && updates.assignedKioskId !== kioskId) {
+    return sendError(res, 'FORBIDDEN', 'Cannot reassign an inmate to another kiosk', 403);
+  }
+  delete updates.prisonId;
+  delete updates.facility;
+  delete updates.assignedKioskId;
 
   const updated = await updateDb('inmates.json', (inmates) => {
-    const idx = inmates.findIndex((i) => i.inmateId === inmateId);
+    const idx = inmates.findIndex((i) => i.inmateId === inmateId && inAdminScope(req, i));
     if (idx === -1) return { data: inmates, result: null };
     inmates[idx] = { ...inmates[idx], ...updates };
     return { data: inmates, result: inmates[idx] };
@@ -828,7 +933,7 @@ app.patch('/inmates/:inmateId', requireAuth, requireRole('admin', 'warden'), asy
 app.delete('/inmates/:inmateId', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
   const { inmateId } = req.params;
   const deleted = await updateDb('inmates.json', (inmates) => {
-    const idx = inmates.findIndex((i) => i.inmateId === inmateId);
+    const idx = inmates.findIndex((i) => i.inmateId === inmateId && inAdminScope(req, i));
     if (idx === -1) return { data: inmates, result: null };
     const [removed] = inmates.splice(idx, 1);
     return { data: inmates, result: removed };
@@ -841,22 +946,31 @@ app.delete('/inmates/:inmateId', requireAuth, requireRole('admin', 'warden'), as
 // ==================== ANDROID COMPATIBILITY: PRISONER MANAGEMENT ALIASES ====================
 // These routes match what the Android app expects while keeping existing /inmates routes
 
-app.get('/admin/prisoners', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
-  // Alias for GET /inmates - return all inmates/prisoners
-  return sendSuccess(res, await readDb('inmates.json'));
+app.get('/admin/prisoners', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+  // Admin scope: only the admin's own kiosk's prisoners (or whole jail for non-kiosk principals).
+  const inmates = await readDb('inmates.json');
+  return sendSuccess(res, inmates.filter(adminScopeFilter(req)));
 }));
 
-app.get('/admin/prisoners/:prisonerId', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
+app.get('/admin/prisoners/:prisonerId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   // Alias for GET /inmates/:inmateId
   const inmates = await readDb('inmates.json');
-  const inmate = inmates.find((i) => i.inmateId === req.params.prisonerId);
+  const inmate = inmates.find((i) => i.inmateId === req.params.prisonerId && inAdminScope(req, i));
   if (!inmate) return sendError(res, 'NOT_FOUND', 'Prisoner not found', 404);
   return sendSuccess(res, inmate);
 }));
 
-app.post('/admin/prisoners', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
-  // Alias for POST /inmates - create new prisoner
+app.post('/admin/prisoners', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+  // Alias for POST /inmates - create new prisoner (locked to the admin's kiosk/jail)
   const inmateData = req.body;
+  const jailId = jailScopeOf(req);
+  const kioskId = kioskScopeOf(req);
+  if (jailId && inmateData.prisonId && inmateData.prisonId !== jailId) {
+    return sendError(res, 'FORBIDDEN', 'Cannot create a prisoner outside your jail', 403);
+  }
+  if (kioskId && inmateData.assignedKioskId && inmateData.assignedKioskId !== kioskId) {
+    return sendError(res, 'FORBIDDEN', 'Cannot create a prisoner for another kiosk', 403);
+  }
   try {
     const newInmate = await updateDb('inmates.json', async (inmates) => {
       if (inmates.find((i) => i.inmateId === inmateData.inmateId) ||
@@ -868,6 +982,9 @@ app.post('/admin/prisoners', requireAuth, requireRole('admin', 'warden'), asyncR
       const record = {
         ...inmateData,
         inmateId: inmateData.inmateId || `INM-${uuidv4().substring(0, 8).toUpperCase()}`,
+        prisonId: jailId || inmateData.prisonId || inmateData.facility,
+        facility: jailId || inmateData.facility || inmateData.prisonId,
+        assignedKioskId: kioskId || inmateData.assignedKioskId,
         status: inmateData.status || 'active',
         pin: inmateData.pin ? await hashSecret(String(inmateData.pin)) : await hashSecret(uuidv4().substring(0, 8)),
         biometricData: inmateData.biometricData || {
@@ -888,43 +1005,57 @@ app.post('/admin/prisoners', requireAuth, requireRole('admin', 'warden'), asyncR
   }
 }));
 
-app.put('/admin/prisoners/:prisonerId', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
-  // Alias for PATCH /inmates/:inmateId - full update
+app.put('/admin/prisoners/:prisonerId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+  // Alias for PATCH /inmates/:inmateId - full update (kiosk-scoped)
   const { prisonerId } = req.params;
   const updates = { ...req.body };
   INMATE_IMMUTABLE_FIELDS.forEach((f) => delete updates[f]);
+  const jailId = jailScopeOf(req);
+  const kioskId = kioskScopeOf(req);
+  if (jailId && updates.prisonId && updates.prisonId !== jailId) {
+    return sendError(res, 'FORBIDDEN', 'Cannot move a prisoner to another jail', 403);
+  }
+  if (kioskId && updates.assignedKioskId && updates.assignedKioskId !== kioskId) {
+    return sendError(res, 'FORBIDDEN', 'Cannot reassign a prisoner to another kiosk', 403);
+  }
+  delete updates.prisonId;
+  delete updates.facility;
+  delete updates.assignedKioskId;
 
   const updated = await updateDb('inmates.json', (inmates) => {
-    const idx = inmates.findIndex((i) => i.inmateId === prisonerId);
+    const idx = inmates.findIndex((i) => i.inmateId === prisonerId && inAdminScope(req, i));
     if (idx === -1) return { data: inmates, result: null };
     inmates[idx] = { ...inmates[idx], ...updates };
     return { data: inmates, result: inmates[idx] };
   });
 
-  if (!updated) return sendError(res, 'NOT_FOUND', 'Prisoner not found', 404);
+  if (!updated) return sendError(res, 'NOT_FOUND', 'Prisoner not found in your kiosk', 404);
   return sendSuccess(res, updated);
 }));
 
-app.patch('/admin/prisoners/:prisonerId/status', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
-  // Android-specific route for updating prisoner status
+app.patch('/admin/prisoners/:prisonerId/status', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+  // Android-specific route for updating prisoner status (kiosk-scoped)
   const { prisonerId } = req.params;
   const { status } = req.body;
   
   if (!status) return sendError(res, 'INVALID_REQUEST', 'status is required', 400);
 
   const updated = await updateDb('inmates.json', (inmates) => {
-    const idx = inmates.findIndex((i) => i.inmateId === prisonerId);
+    const idx = inmates.findIndex((i) => i.inmateId === prisonerId && inAdminScope(req, i));
     if (idx === -1) return { data: inmates, result: null };
     inmates[idx] = { ...inmates[idx], status };
     return { data: inmates, result: inmates[idx] };
   });
 
-  if (!updated) return sendError(res, 'NOT_FOUND', 'Prisoner not found', 404);
+  if (!updated) return sendError(res, 'NOT_FOUND', 'Prisoner not found in your kiosk', 404);
   return sendSuccess(res, updated);
 }));
 
 app.get('/inmate/balance/:id', requireAuth, asyncRoute(async (req, res) => {
   const { id } = req.params;
+  // The balance belongs to an inmate; enforce jail/kiosk scope before returning it.
+  const inmate = await resolveInmate(id);
+  if (!inmate || !(await inScopeOf(req, inmate))) return sendError(res, 'NOT_FOUND', 'No inmate or wallet found', 404);
   // Single source of truth: the wallet statement (ledger-derived balance + totals).
   const statement = await getStatement(id);
   if (!statement) return sendError(res, 'NOT_FOUND', 'No inmate or wallet found', 404);
@@ -943,25 +1074,29 @@ app.get('/inmate/balance/:id', requireAuth, asyncRoute(async (req, res) => {
 // Resolves the inmate via the jail-account layer and returns the live balance
 // with the transaction/deduction history.
 app.get('/inmate/wallet/:id', requireAuth, asyncRoute(async (req, res) => {
-  const statement = await getStatement(req.params.id);
+  const { id } = req.params;
+  // The wallet belongs to an inmate; enforce jail/kiosk scope before returning it.
+  const inmate = await resolveInmate(id);
+  if (!inmate || !(await inScopeOf(req, inmate))) return sendError(res, 'NOT_FOUND', 'Inmate wallet not found', 404);
+  const statement = await getStatement(id);
   if (!statement) return sendError(res, 'NOT_FOUND', 'Inmate wallet not found', 404);
   return sendSuccess(res, statement);
 }));
 
 // ==================== WALLET ROUTES ====================
 
-app.get('/wallets', requireAuth, asyncRoute(async (req, res) => sendSuccess(res, await readDb('wallets.json'))));
+app.get('/wallets', requireAuth, asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('wallets.json')))));
 
 app.get('/wallets/:inmateId', requireAuth, asyncRoute(async (req, res) => {
   const wallets = await readDb('wallets.json');
   const wallet = wallets.find((w) => w.inmateId === req.params.inmateId);
-  if (!wallet) return sendError(res, 'NOT_FOUND', 'Wallet not found', 404);
+  if (!wallet || !(await inScopeOf(req, wallet))) return sendError(res, 'NOT_FOUND', 'Wallet not found', 404);
   return sendSuccess(res, wallet);
 }));
 
 // ==================== CONTACT ROUTES ====================
 
-app.get('/contacts', requireAuth, asyncRoute(async (req, res) => sendSuccess(res, await readDb('contacts.json'))));
+app.get('/contacts', requireAuth, asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('contacts.json')))));
 
 // Single route (was two colliding '/contacts/:param' routes â€” the second
 // could never match). Tries contactId first, falls back to kiosk-scoped list.
@@ -970,33 +1105,43 @@ app.get('/contacts/:id', requireAuth, asyncRoute(async (req, res) => {
   const contacts = await readDb('contacts.json');
 
   const contact = contacts.find((c) => c.contactId === id);
-  if (contact) return sendSuccess(res, contact);
+  if (contact) {
+    if (!(await inScopeOf(req, contact))) return sendError(res, 'NOT_FOUND', 'Contact not found', 404);
+    return sendSuccess(res, contact);
+  }
 
   const inmates = await readDb('inmates.json');
   const inmate = inmates.find((i) => i.inmateId === id) ||
                  inmates.find((i) => i.assignedKioskId === id) ||
                  inmates.find((i) => i.prisonerNumber === id);
-  const scoped = inmate ? contacts.filter((c) => c.inmateId === inmate.inmateId) : [];
+  if (inmate && !(await inScopeOf(req, inmate))) {
+    return sendError(res, 'NOT_FOUND', 'Inmate not found in your kiosk/jail', 404);
+  }
+  const scoped = inmate ? contacts.filter((c) => c.inmateId === inmate.inmateId || c.inmateId === `INM-${inmate.inmateId}`) : [];
   return sendSuccess(res, scoped);
 }));
 
 // ==================== ANDROID COMPATIBILITY: PRISONER-SPECIFIC CONTACTS ====================
 
-app.get('/admin/prisoners/:prisonerId/contacts', requireAuth, asyncRoute(async (req, res) => {
+app.get('/admin/prisoners/:prisonerId/contacts', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const { prisonerId } = req.params;
+  const inmates = await readDb('inmates.json');
+  if (!inmates.find((i) => i.inmateId === prisonerId && inAdminScope(req, i))) {
+    return sendError(res, 'NOT_FOUND', 'Prisoner not found in your kiosk', 404);
+  }
   const contacts = await readDb('contacts.json');
   const scoped = contacts.filter((c) => c.inmateId === prisonerId);
   return sendSuccess(res, scoped);
 }));
 
-app.post('/admin/prisoners/:prisonerId/contacts', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
+app.post('/admin/prisoners/:prisonerId/contacts', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const { prisonerId } = req.params;
   const contactData = req.body;
-  
-  // Verify prisoner exists
+
+  // Verify prisoner exists in the admin's scope
   const inmates = await readDb('inmates.json');
-  const inmate = inmates.find((i) => i.inmateId === prisonerId);
-  if (!inmate) return sendError(res, 'NOT_FOUND', 'Prisoner not found', 404);
+  const inmate = inmates.find((i) => i.inmateId === prisonerId && inAdminScope(req, i));
+  if (!inmate) return sendError(res, 'NOT_FOUND', 'Prisoner not found in your kiosk', 404);
 
   const newContact = {
     contactId: contactData.contactId || `CONT-${uuidv4().substring(0, 8).toUpperCase()}`,
@@ -1017,32 +1162,45 @@ app.post('/admin/prisoners/:prisonerId/contacts', requireAuth, requireRole('admi
   return sendSuccess(res, newContact, 201);
 }));
 
-app.put('/admin/contacts/:contactId', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
+app.put('/admin/contacts/:contactId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const { contactId } = req.params;
   const updates = req.body;
 
-  const updated = await updateDb('contacts.json', (contacts) => {
-    const idx = contacts.findIndex((c) => c.contactId === contactId);
-    if (idx === -1) return { data: contacts, result: null };
-    contacts[idx] = { ...contacts[idx], ...updates };
-    return { data: contacts, result: contacts[idx] };
+  const [contacts, inmates] = await Promise.all([readDb('contacts.json'), readDb('inmates.json')]);
+  const target = contacts.find((c) => c.contactId === contactId);
+  if (!target) return sendError(res, 'NOT_FOUND', 'Contact not found', 404);
+  // Contact belongs to the jail of its inmate; scope the update to the admin's kiosk/jail.
+  const owner = inmates.find((i) => i.inmateId === target.inmateId && inAdminScope(req, i));
+  if (!owner) return sendError(res, 'NOT_FOUND', 'Contact not found in your kiosk', 404);
+
+  const updated = await updateDb('contacts.json', (all) => {
+    const idx = all.findIndex((c) => c.contactId === contactId);
+    if (idx === -1) return { data: all, result: null };
+    all[idx] = { ...all[idx], ...updates };
+    return { data: all, result: all[idx] };
   });
 
   if (!updated) return sendError(res, 'NOT_FOUND', 'Contact not found', 404);
   return sendSuccess(res, updated.result);
 }));
 
-app.patch('/admin/contacts/:contactId/status', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
+app.patch('/admin/contacts/:contactId/status', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const { contactId } = req.params;
   const { status } = req.body;
 
   if (!status) return sendError(res, 'INVALID_REQUEST', 'status is required', 400);
 
-  const updated = await updateDb('contacts.json', (contacts) => {
-    const idx = contacts.findIndex((c) => c.contactId === contactId);
-    if (idx === -1) return { data: contacts, result: null };
-    contacts[idx] = { ...contacts[idx], status };
-    return { data: contacts, result: contacts[idx] };
+  const [contacts, inmates] = await Promise.all([readDb('contacts.json'), readDb('inmates.json')]);
+  const target = contacts.find((c) => c.contactId === contactId);
+  if (!target) return sendError(res, 'NOT_FOUND', 'Contact not found', 404);
+  const owner = inmates.find((i) => i.inmateId === target.inmateId && inAdminScope(req, i));
+  if (!owner) return sendError(res, 'NOT_FOUND', 'Contact not found in your kiosk', 404);
+
+  const updated = await updateDb('contacts.json', (all) => {
+    const idx = all.findIndex((c) => c.contactId === contactId);
+    if (idx === -1) return { data: all, result: null };
+    all[idx] = { ...all[idx], status };
+    return { data: all, result: all[idx] };
   });
 
   if (!updated) return sendError(res, 'NOT_FOUND', 'Contact not found', 404);
@@ -1065,6 +1223,11 @@ app.get('/calls', requireAuth, asyncRoute(async (req, res) => {
     const inmates = await readDb('inmates.json');
     const inmateIds = inmates.filter((i) => prisonIds.includes(i.prisonId)).map((i) => i.inmateId);
     calls = calls.filter((c) => inmateIds.includes(c.inmateId));
+  } else {
+    // Admin/kiosk-level: calls carry kioskId/prisonId/inmateId, so inAdminScope
+    // restricts a kiosk admin to their own kiosk's calls and a jail admin to
+    // their prison's calls. Global super admins (no kiosk/jail claim) see all.
+    calls = calls.filter((c) => inAdminScope(req, c));
   }
   return sendSuccess(res, calls);
 }));
@@ -1082,6 +1245,8 @@ app.get('/calls/active', requireAuth, asyncRoute(async (req, res) => {
     const inmates = await readDb('inmates.json');
     const inmateIds = inmates.filter((i) => prisonIds.includes(i.prisonId)).map((i) => i.inmateId);
     calls = calls.filter((c) => inmateIds.includes(c.inmateId));
+  } else {
+    calls = calls.filter((c) => inAdminScope(req, c));
   }
   return sendSuccess(res, calls.filter((c) => c.status === 'active'));
 }));
@@ -1099,6 +1264,8 @@ app.get('/calls/history', requireAuth, asyncRoute(async (req, res) => {
     const inmates = await readDb('inmates.json');
     const inmateIds = inmates.filter((i) => prisonIds.includes(i.prisonId)).map((i) => i.inmateId);
     calls = calls.filter((c) => inmateIds.includes(c.inmateId));
+  } else {
+    calls = calls.filter((c) => inAdminScope(req, c));
   }
   return sendSuccess(res, calls.filter((c) => TERMINAL_STATES.includes(c.status)));
 }));
@@ -1107,20 +1274,9 @@ app.get('/calls/:callId', requireAuth, asyncRoute(async (req, res) => {
   const calls = await readDb('calls.json');
   const call = calls.find((c) => c.callId === req.params.callId);
   if (!call) return sendError(res, 'NOT_FOUND', 'Call not found', 404);
-  // Wardens can only view calls for their prison(s)
-  if (req.auth.role === 'warden') {
-    const wardens = await readDb('wardens.json');
-    const warden = wardens.find((w) => w.wardenId === req.auth.sub);
-    if (!warden) return sendError(res, 'NOT_FOUND', 'Warden profile not found', 404);
-    const prisons = await readDb('prisons.json');
-    const prisonIds = prisons
-      .filter((p) => p.wardenId === warden.wardenId || p.prisonId === warden.prisonId)
-      .map((p) => p.prisonId);
-    const inmates = await readDb('inmates.json');
-    const inmateIds = inmates.filter((i) => prisonIds.includes(i.prisonId)).map((i) => i.inmateId);
-    if (!inmateIds.includes(call.inmateId)) {
-      return sendError(res, 'FORBIDDEN', 'Not authorized to view this call', 403);
-    }
+  // Wardens, jail admins and kiosk admins can only view calls within their scope.
+  if (!inAdminScope(req, call)) {
+    return sendError(res, 'NOT_FOUND', 'Call not found', 404);
   }
   return sendSuccess(res, call);
 }));
@@ -1137,15 +1293,24 @@ app.post('/calls', requireAuth, asyncRoute(async (req, res) => {
 
   const inmate = inmates.find((i) => i.inmateId === callData.inmateId);
   if (!inmate) return sendError(res, 'INVALID_REFERENCE', 'inmateId does not exist', 422);
+  // A kiosk-bound admin can only create calls for their own kiosk's inmates.
+  if (!inAdminScope(req, inmate)) {
+    return sendError(res, 'FORBIDDEN', 'Cannot create a call for an inmate outside your kiosk/jail', 403);
+  }
 
   const contact = contacts.find((c) => c.contactId === callData.contactId);
   if (!contact) return sendError(res, 'INVALID_REFERENCE', 'contactId does not exist', 422);
-  if (contact.inmateId && contact.inmateId !== callData.inmateId) {
+  if (contact.inmateId && contact.inmateId !== callData.inmateId &&
+      contact.inmateId !== `INM-${callData.inmateId}`) {
     return sendError(res, 'UNAUTHORIZED_CONTACT', 'Contact is not an approved contact for this inmate', 403);
   }
 
   const kiosk = kiosks.find((k) => k.kioskId === callData.kioskId);
   if (!kiosk) return sendError(res, 'INVALID_REFERENCE', 'kioskId does not exist', 422);
+  const requestedKiosk = kioskScopeOf(req);
+  if (requestedKiosk && kiosk.kioskId !== requestedKiosk) {
+    return sendError(res, 'FORBIDDEN', 'Cannot create a call for another kiosk', 403);
+  }
   if (kiosk.status === 'disabled' || kiosk.authorizationStatus !== 'authorized') {
     return sendError(res, 'KIOSK_UNAUTHORIZED', 'Kiosk is not authorized for calls', 403);
   }
@@ -1267,6 +1432,11 @@ app.patch('/calls/:callId', requireAuth, asyncRoute(async (req, res) => {
   const { callId } = req.params;
   const updates = req.body;
 
+  const existing = (await readDb('calls.json')).find((c) => c.callId === callId);
+  if (!existing || !inAdminScope(req, existing)) {
+    return sendError(res, 'NOT_FOUND', 'Call not found', 404);
+  }
+
   try {
     const updated = await updateDb('calls.json', (calls) => {
       const idx = calls.findIndex((c) => c.callId === callId);
@@ -1314,14 +1484,20 @@ app.get('/calls/scheduled/:id', requireAuth, asyncRoute(async (req, res) => {
   const inmate = inmates.find((i) => i.inmateId === id) ||
                  inmates.find((i) => i.assignedKioskId === id) ||
                  inmates.find((i) => i.prisonerNumber === id);
-  const matches = inmate
-    ? schedules.filter((s) => s.inmateId === inmate.inmateId || s.kioskId === inmate.assignedKioskId)
-    : schedules.filter((s) => s.kioskId === id || s.inmateId === id);
-  return sendSuccess(res, matches);
+  if (!inmate || !(await inScopeOf(req, inmate))) {
+    return sendError(res, 'NOT_FOUND', 'Inmate not found in your kiosk/jail', 404);
+  }
+  const matches = schedules.filter((s) => s.inmateId === inmate.inmateId || s.kioskId === inmate.assignedKioskId);
+  return sendSuccess(res, await scopeList(req, matches));
 }));
 
 app.post('/calls/:callId/end', requireAuth, asyncRoute(async (req, res) => {
   const { callId } = req.params;
+
+  const existing = (await readDb('calls.json')).find((c) => c.callId === callId);
+  if (!existing || !inAdminScope(req, existing)) {
+    return sendError(res, 'NOT_FOUND', 'Call not found', 404);
+  }
 
   const updatedCall = await updateDb('calls.json', (calls) => {
     const idx = calls.findIndex((c) => c.callId === callId);
@@ -1376,13 +1552,19 @@ app.post('/calls/:callId/end', requireAuth, asyncRoute(async (req, res) => {
 
 // ==================== ROOM ROUTES ====================
 
-app.get('/rooms', requireAuth, asyncRoute(async (req, res) => sendSuccess(res, await readDb('rooms.json'))));
+app.get('/rooms', requireAuth, asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('rooms.json')))));
 
 app.post('/rooms', requireAuth, asyncRoute(async (req, res) => {
   const roomData = req.body;
+  const inmate = await resolveInmate(roomData.inmateId);
+  if (!inmate) return sendError(res, 'INVALID_REFERENCE', 'inmateId does not exist', 422);
+  if (!(await inScopeOf(req, inmate))) {
+    return sendError(res, 'FORBIDDEN', 'Cannot create a room for an inmate outside your kiosk/jail', 403);
+  }
   const newRoom = {
     roomId: roomData.roomId || `ROOM-${uuidv4().substring(0, 8).toUpperCase()}`,
-    kioskId: roomData.kioskId, inmateId: roomData.inmateId, contactId: roomData.contactId,
+    kioskId: kioskScopeOf(req) || roomData.kioskId,
+    inmateId: roomData.inmateId, contactId: roomData.contactId,
     status: 'idle', participants: [], participantCount: 0,
     createdAt: new Date().toISOString(),
     expiresAt: new Date(Date.now() + 3600000).toISOString()
@@ -1400,7 +1582,7 @@ app.post('/rooms/join', requireAuth, asyncRoute(async (req, res) => {
   const { roomId, participantId } = req.body;
   const rooms = await readDb('rooms.json');
   const room = rooms.find((r) => r.roomId === roomId);
-  if (!room) return sendError(res, 'NOT_FOUND', 'Room not found', 404);
+  if (!room || !(await inScopeOf(req, room))) return sendError(res, 'NOT_FOUND', 'Room not found', 404);
   if (room.expiresAt && new Date(room.expiresAt).getTime() < Date.now()) {
     return sendError(res, 'ROOM_EXPIRED', 'Room has expired', 410);
   }
@@ -1409,7 +1591,7 @@ app.post('/rooms/join', requireAuth, asyncRoute(async (req, res) => {
 
 // ==================== SCHEDULE ROUTES ====================
 
-app.get('/schedule', requireAuth, asyncRoute(async (req, res) => sendSuccess(res, await readDb('schedule.json'))));
+app.get('/schedule', requireAuth, asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('schedule.json')))));
 
 app.get('/schedule/slots/:contactId', requireAuth, asyncRoute(async (req, res) => {
   // TODO: Replace with real warden-configured availability calendar.
@@ -1438,9 +1620,18 @@ app.post('/schedule/book', requireAuth, asyncRoute(async (req, res) => {
   const [inmates, contacts, kiosks] = await Promise.all([
     readDb('inmates.json'), readDb('contacts.json'), readDb('kiosks.json')
   ]);
-  if (!inmates.find((i) => i.inmateId === inmateId)) return sendError(res, 'INVALID_REFERENCE', 'inmateId does not exist', 422);
+  const inmate = inmates.find((i) => i.inmateId === inmateId);
+  if (!inmate) return sendError(res, 'INVALID_REFERENCE', 'inmateId does not exist', 422);
+  if (!(await inScopeOf(req, inmate))) {
+    return sendError(res, 'FORBIDDEN', 'Cannot book a call for an inmate outside your kiosk/jail', 403);
+  }
   if (!contacts.find((c) => c.contactId === contactId)) return sendError(res, 'INVALID_REFERENCE', 'contactId does not exist', 422);
-  if (!kiosks.find((k) => k.kioskId === kioskId)) return sendError(res, 'INVALID_REFERENCE', 'kioskId does not exist', 422);
+  const kiosk = kiosks.find((k) => k.kioskId === kioskId);
+  if (!kiosk) return sendError(res, 'INVALID_REFERENCE', 'kioskId does not exist', 422);
+  const callerKiosk = kioskScopeOf(req);
+  if (callerKiosk && kioskId !== callerKiosk) {
+    return sendError(res, 'FORBIDDEN', 'Cannot book a call at another kiosk', 403);
+  }
 
   // Validate date is in the future.
   const selectedDate = new Date(`${date}T00:00:00`);
@@ -1465,6 +1656,10 @@ app.post('/schedule/book', requireAuth, asyncRoute(async (req, res) => {
 }));
 
 app.delete('/schedule/cancel/:bookingId', requireAuth, asyncRoute(async (req, res) => {
+  const existing = (await readDb('schedule.json')).find((s) => s.scheduleId === req.params.bookingId);
+  if (!existing || !(await inScopeOf(req, existing))) {
+    return sendError(res, 'NOT_FOUND', 'Booking not found', 404);
+  }
   const deleted = await updateDb('schedule.json', (schedules) => {
     const idx = schedules.findIndex((s) => s.scheduleId === req.params.bookingId);
     if (idx === -1) return { data: schedules, result: null };
@@ -1477,14 +1672,18 @@ app.delete('/schedule/cancel/:bookingId', requireAuth, asyncRoute(async (req, re
 
 // ==================== ALERT ROUTES ====================
 
-app.get('/alerts', requireAuth, asyncRoute(async (req, res) => sendSuccess(res, await readDb('alerts.json'))));
+app.get('/alerts', requireAuth, asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('alerts.json')))));
 
 app.post('/alerts', requireAuth, asyncRoute(async (req, res) => {
   const alertData = req.body;
+  const kioskId = kioskScopeOf(req);
+  const jailId = jailScopeOf(req);
   const newAlert = {
     alertId: `ALERT-${uuidv4().substring(0, 8).toUpperCase()}`,
     type: alertData.type || 'system', severity: alertData.severity || 'medium',
     message: alertData.message, source: alertData.source || 'system', sourceId: alertData.sourceId || 'system',
+    kioskId: kioskId || alertData.kioskId || null,
+    prisonId: jailId || alertData.prisonId || null,
     timestamp: new Date().toISOString(), resolved: false, resolvedAt: null, resolvedBy: null
   };
   await updateDb('alerts.json', (a) => ({ data: [...a, newAlert], result: newAlert }));
@@ -1493,6 +1692,10 @@ app.post('/alerts', requireAuth, asyncRoute(async (req, res) => {
 }));
 
 app.patch('/alerts/:alertId/resolve', requireAuth, asyncRoute(async (req, res) => {
+  const existing = (await readDb('alerts.json')).find((a) => a.alertId === req.params.alertId);
+  if (!existing || !(await inScopeOf(req, existing))) {
+    return sendError(res, 'NOT_FOUND', 'Alert not found', 404);
+  }
   const { resolvedBy } = req.body;
   const updated = await updateDb('alerts.json', (alerts) => {
     const idx = alerts.findIndex((a) => a.alertId === req.params.alertId);
@@ -1528,26 +1731,29 @@ app.patch('/devices/:deviceId/status', requireAuth, requireRole('admin', 'warden
 
 // ==================== ANDROID COMPATIBILITY: DEVICE ALIASES ====================
 
-app.get('/admin/devices', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
-  // Alias for GET /devices
-  return sendSuccess(res, await readDb('devices.json'));
+app.get('/admin/devices', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+  // Admin device info maps to the jail's kiosks (matches Android KioskDevice model).
+  const kiosks = await readDb('kiosks.json');
+  return sendSuccess(res, kiosks.filter(adminScopeFilter(req)));
 }));
 
-app.get('/admin/devices/:deviceId', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
-  // Alias for GET /devices/:deviceId
-  const devices = await readDb('devices.json');
-  const device = devices.find((d) => d.deviceId === req.params.deviceId);
-  if (!device) return sendError(res, 'NOT_FOUND', 'Device not found', 404);
-  return sendSuccess(res, device);
+app.get('/admin/devices/:deviceId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+  // Alias for device info — resolve the jail's kiosk by kioskId / serial number.
+  const kiosks = await readDb('kiosks.json');
+  const kiosk = kiosks.find(
+    (k) => (k.kioskId === req.params.deviceId || k.deviceSerialNumber === req.params.deviceId) && inAdminScope(req, k)
+  );
+  if (!kiosk) return sendError(res, 'NOT_FOUND', 'Device not found', 404);
+  return sendSuccess(res, kiosk);
 }));
 
 // ==================== REPORTS / SETTINGS ====================
 
-app.get('/reports', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => sendSuccess(res, await readDb('reports.json'))));
+app.get('/reports', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('reports.json')))));
 app.get('/reports/:reportId', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
   const reports = await readDb('reports.json');
   const report = reports.find((r) => r.reportId === req.params.reportId);
-  if (!report) return sendError(res, 'NOT_FOUND', 'Report not found', 404);
+  if (!report || !(await inScopeOf(req, report))) return sendError(res, 'NOT_FOUND', 'Report not found', 404);
   return sendSuccess(res, report);
 }));
 
@@ -1567,20 +1773,26 @@ app.patch('/settings', requireAuth, requireRole('admin', 'warden', 'super-admin'
 
 // ==================== RECORDINGS (real RTP capture) ====================
 
-app.get('/recordings', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => sendSuccess(res, await readDb('recordings.json'))));
+app.get('/recordings', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('recordings.json')))));
 app.get('/recordings/:recordingId', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
   const recordings = await readDb('recordings.json');
   const recording = recordings.find((r) => r.recordingId === req.params.recordingId);
-  if (!recording) return sendError(res, 'NOT_FOUND', 'Recording not found', 404);
+  if (!recording || !(await inScopeOf(req, recording))) return sendError(res, 'NOT_FOUND', 'Recording not found', 404);
   return sendSuccess(res, recording);
 }));
 
 app.post('/recordings', requireAuth, asyncRoute(async (req, res) => {
   const { callId } = req.body;
   if (!callId) return sendError(res, 'INVALID_REQUEST', 'callId is required', 400);
+  const call = (await readDb('calls.json')).find((c) => c.callId === callId);
+  if (!call || !inAdminScope(req, call)) {
+    return sendError(res, 'NOT_FOUND', 'Call not found', 404);
+  }
   const newRecording = {
     recordingId: `REC-${uuidv4().substring(0, 8).toUpperCase()}`,
-    callId, status: 'not_started', startTime: null, endTime: null, duration: 0,
+    callId, kioskId: call.kioskId || kioskScopeOf(req) || null,
+    inmateId: call.inmateId || null,
+    status: 'not_started', startTime: null, endTime: null, duration: 0,
     createdAt: new Date().toISOString()
   };
   await updateDb('recordings.json', (r) => ({ data: [...r, newRecording], result: newRecording }));
@@ -1591,7 +1803,7 @@ app.post('/recordings/:recordingId/start', requireAuth, requireRole('admin', 'wa
   const { recordingId } = req.params;
   const recordings = await readDb('recordings.json');
   const recording = recordings.find((r) => r.recordingId === recordingId);
-  if (!recording) return sendError(res, 'NOT_FOUND', 'Recording not found', 404);
+  if (!recording || !(await inScopeOf(req, recording))) return sendError(res, 'NOT_FOUND', 'Recording not found', 404);
 
   const calls = await readDb('calls.json');
   const call = calls.find((c) => c.callId === recording.callId);
@@ -1613,7 +1825,7 @@ app.post('/recordings/:recordingId/stop', requireAuth, requireRole('admin', 'war
   const { recordingId } = req.params;
   const recordings = await readDb('recordings.json');
   const recording = recordings.find((r) => r.recordingId === recordingId);
-  if (!recording) return sendError(res, 'NOT_FOUND', 'Recording not found', 404);
+  if (!recording || !(await inScopeOf(req, recording))) return sendError(res, 'NOT_FOUND', 'Recording not found', 404);
 
   const calls = await readDb('calls.json');
   const call = calls.find((c) => c.callId === recording.callId);
@@ -1638,7 +1850,7 @@ app.post('/recordings/:recordingId/stop', requireAuth, requireRole('admin', 'war
 
 // ==================== INCIDENTS ====================
 
-app.get('/incidents', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => sendSuccess(res, await readDb('incidents.json'))));
+app.get('/incidents', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('incidents.json')))));
 app.post('/incidents', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
   const incidentData = req.body;
   const newIncident = {
@@ -1646,7 +1858,11 @@ app.post('/incidents', requireAuth, requireRole('admin', 'warden'), asyncRoute(a
     category: incidentData.category || 'other', severity: incidentData.severity || 'medium',
     remarks: incidentData.remarks || '', time: incidentData.time || new Date().toISOString(),
     officerName: req.auth?.sub || incidentData.officerName || 'unknown',
-    callId: incidentData.callId || null, createdAt: new Date().toISOString()
+    callId: incidentData.callId || null,
+    kioskId: kioskScopeOf(req) || incidentData.kioskId || null,
+    prisonId: jailScopeOf(req) || incidentData.prisonId || null,
+    inmateId: incidentData.inmateId || null,
+    createdAt: new Date().toISOString()
   };
   await updateDb('incidents.json', (i) => ({ data: [...i, newIncident], result: newIncident }));
   broadcastEvent('incident-created', newIncident);
@@ -1655,21 +1871,30 @@ app.post('/incidents', requireAuth, requireRole('admin', 'warden'), asyncRoute(a
 app.get('/incidents/:incidentId', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
   const incidents = await readDb('incidents.json');
   const incident = incidents.find((i) => i.incidentId === req.params.incidentId);
-  if (!incident) return sendError(res, 'NOT_FOUND', 'Incident not found', 404);
+  if (!incident || !(await inScopeOf(req, incident))) return sendError(res, 'NOT_FOUND', 'Incident not found', 404);
   return sendSuccess(res, incident);
 }));
 
 // ==================== PRISONS / VENDOR ====================
 
-app.get('/prisons', requireAuth, requireRole('admin'), asyncRoute(async (req, res) => sendSuccess(res, await readDb('prisons.json'))));
+app.get('/prisons', requireAuth, requireRole('admin'), asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('prisons.json')))));
 app.get('/prisons/:prisonId', requireAuth, requireRole('admin'), asyncRoute(async (req, res) => {
   const prisons = await readDb('prisons.json');
   const prison = prisons.find((p) => p.prisonId === req.params.prisonId);
-  if (!prison) return sendError(res, 'NOT_FOUND', 'Prison not found', 404);
+  if (!prison || !(await inScopeOf(req, prison))) return sendError(res, 'NOT_FOUND', 'Prison not found', 404);
   return sendSuccess(res, prison);
 }));
 app.post('/prisons', requireAuth, requireRole('admin'), asyncRoute(async (req, res) => {
   const prisonData = req.body;
+  // Jail-scoped / kiosk-bound principals can only create within their own jail.
+  const jailId = jailScopeOf(req);
+  const kioskId = kioskScopeOf(req);
+  if (jailId || kioskId) {
+    if (prisonData.prisonId && prisonData.prisonId !== jailId) {
+      return sendError(res, 'FORBIDDEN', 'Cannot create a prison outside your jail', 403);
+    }
+    prisonData.prisonId = jailId || prisonData.prisonId;
+  }
   try {
     const newPrison = await updateDb('prisons.json', (prisons) => {
       if (prisonData.name && prisons.find((p) => p.name === prisonData.name)) {
@@ -1687,6 +1912,10 @@ app.post('/prisons', requireAuth, requireRole('admin'), asyncRoute(async (req, r
   }
 }));
 app.patch('/prisons/:prisonId', requireAuth, requireRole('admin'), asyncRoute(async (req, res) => {
+  const existing = (await readDb('prisons.json')).find((p) => p.prisonId === req.params.prisonId);
+  if (!existing || !(await inScopeOf(req, existing))) {
+    return sendError(res, 'NOT_FOUND', 'Prison not found', 404);
+  }
   const updated = await updateDb('prisons.json', (prisons) => {
     const idx = prisons.findIndex((p) => p.prisonId === req.params.prisonId);
     if (idx === -1) return { data: prisons, result: null };
@@ -1697,23 +1926,40 @@ app.patch('/prisons/:prisonId', requireAuth, requireRole('admin'), asyncRoute(as
   return sendSuccess(res, updated);
 }));
 
-app.get('/subscriptions', requireAuth, requireRole('admin'), asyncRoute(async (req, res) => sendSuccess(res, await readDb('subscriptions.json'))));
+app.get('/subscriptions', requireAuth, requireRole('admin'), asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('subscriptions.json')))));
 app.get('/servers', requireAuth, requireRole('admin'), asyncRoute(async (req, res) => sendSuccess(res, await readDb('servers.json'))));
 app.get('/pricing', asyncRoute(async (req, res) => sendSuccess(res, await readDb('pricing.json'))));
 app.get('/storage-stats', requireAuth, requireRole('admin'), asyncRoute(async (req, res) => sendSuccess(res, await readDb('storage.json'))));
 
 // ==================== STATISTICS ====================
 
-app.get('/statistics', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => sendSuccess(res, await readDb('statistics.json'))));
+app.get('/statistics', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
+  const stats = await readDb('statistics.json');
+  const calls = await readDb('calls.json');
+  const scoped = [];
+  for (const s of stats) {
+    const call = calls.find((c) => c.callId === s.callId);
+    if (call && !inAdminScope(req, call)) continue;
+    if (!call && !(await inScopeOf(req, s))) continue;
+    scoped.push(s);
+  }
+  return sendSuccess(res, scoped);
+}));
 app.get('/statistics/:callId', requireAuth, asyncRoute(async (req, res) => {
   const statistics = await readDb('statistics.json');
   const callStats = statistics.find((s) => s.callId === req.params.callId);
   if (!callStats) return sendError(res, 'NOT_FOUND', 'Statistics not found for call', 404);
+  const call = (await readDb('calls.json')).find((c) => c.callId === req.params.callId);
+  if (!inAdminScope(req, call)) return sendError(res, 'NOT_FOUND', 'Statistics not found for call', 404);
   return sendSuccess(res, callStats);
 }));
 app.patch('/statistics/:callId', requireAuth, asyncRoute(async (req, res) => {
   const { callId } = req.params;
   const updates = req.body;
+  const call = (await readDb('calls.json')).find((c) => c.callId === callId);
+  if (!call || !inAdminScope(req, call)) {
+    return sendError(res, 'NOT_FOUND', 'Call not found', 404);
+  }
   const result = await updateDb('statistics.json', (statistics) => {
     const idx = statistics.findIndex((s) => s.callId === callId);
     const record = idx === -1
@@ -1739,6 +1985,8 @@ app.post('/calls/:callId/control', requireAuth, requireRole('admin', 'warden'), 
   const calls = await readDb('calls.json');
   const call = calls.find((c) => c.callId === callId);
   if (!call) return sendError(res, 'NOT_FOUND', 'Call not found', 404);
+  // Control actions (mute/hangup) must be scoped to the operator's jail/kiosk.
+  if (!inAdminScope(req, call)) return sendError(res, 'NOT_FOUND', 'Call not found', 404);
 
   // Apply the control action on the media room via the signaling server.
   if (call.roomId) {
@@ -1766,11 +2014,17 @@ app.post('/auth/admin/identify', asyncRoute(async (req, res) => {
   const kiosk = kiosks.find((k) => k.kioskId === kioskId);
   if (!kiosk || kiosk.authorizationStatus !== 'authorized') return sendError(res, 'UNAUTHORIZED', 'Kiosk not authorized', 403);
 
+  // Lookup is scoped to this kiosk's jail so an admin assigned to another
+  // jail/kiosk is simply "not found" rather than leaking a mismatch.
+  const scopeAdmin = (a) =>
+    a.status === 'active' &&
+    a.kioskId === kioskId &&
+    (!kiosk.prisonId || !a.prisonId || a.prisonId === kiosk.prisonId);
+
   const admin = username
-    ? admins.find((a) => (a.employeeId === username || a.email === username) && a.status === 'active')
-    : admins.find((a) => a.kioskId === kioskId && a.status === 'active');
-  if (!admin) return sendError(res, 'NOT_FOUND', 'No admin found for this kiosk', 404);
-  if (admin.kioskId !== kioskId) return sendError(res, 'KIOSK_MISMATCH', 'Admin not assigned to this kiosk', 403);
+    ? admins.find((a) => scopeAdmin(a) && (a.employeeId === username || a.email === username))
+    : admins.find(scopeAdmin);
+  if (!admin) return sendError(res, 'ADMIN_NOT_FOUND', 'No admin found for this kiosk', 404);
 
   return sendSuccess(res, {
     adminId: admin.adminId, employeeId: admin.employeeId, name: admin.name, email: admin.email,
@@ -1782,9 +2036,8 @@ app.post('/auth/admin/identify', asyncRoute(async (req, res) => {
 app.post('/auth/admin/verify-pin', authLimiter, asyncRoute(async (req, res) => {
   const { adminId, pin, password, kioskId } = req.body;
   const admins = await readDb('admins.json');
-  const admin = admins.find((a) => a.adminId === adminId);
-  if (!admin) return sendError(res, 'NOT_FOUND', 'Admin not found', 404);
-  if (admin.kioskId !== kioskId) return sendError(res, 'KIOSK_MISMATCH', 'Admin not assigned to this kiosk', 403);
+  const admin = admins.find((a) => a.adminId === adminId && a.kioskId === kioskId);
+  if (!admin) return sendError(res, 'NOT_FOUND', 'Admin not found for this kiosk', 404);
 
   const kiosks = await readDb('kiosks.json');
   const kiosk = kiosks.find((k) => k.kioskId === kioskId);
@@ -1800,26 +2053,26 @@ app.post('/auth/admin/verify-pin', authLimiter, asyncRoute(async (req, res) => {
   const valid = storedSecret ? await verifySecret(secret, storedSecret) : false;
   if (!valid) return sendError(res, 'INVALID_PIN', 'Incorrect password', 401);
 
-  const claims = { sub: admin.adminId, role: admin.role || 'admin', kioskId };
+  const claims = { sub: admin.adminId, role: admin.role || 'admin', kioskId, prisonId: admin.prisonId || kiosk.prisonId };
   const session = await createSession(claims, req);
   return sendSuccess(res, {
     accessToken: signAccessToken(claims), refreshToken: session.refreshToken, expiresIn: 3600,
-    adminId: admin.adminId, role: admin.role, permissions: admin.permissions, kioskId
+    adminId: admin.adminId, role: admin.role, permissions: admin.permissions, kioskId, prisonId: admin.prisonId || kiosk.prisonId
   });
 }));
 
 // ==================== TRANSACTIONS (read-only, as originally scoped) ====================
 
-app.get('/transactions', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => sendSuccess(res, await readDb('transactions.json'))));
+app.get('/transactions', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('transactions.json')))));
 app.get('/transactions/:transactionId', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
   const transactions = await readDb('transactions.json');
   const transaction = transactions.find((t) => t.transactionId === req.params.transactionId);
-  if (!transaction) return sendError(res, 'NOT_FOUND', 'Transaction not found', 404);
+  if (!transaction || !(await inScopeOf(req, transaction))) return sendError(res, 'NOT_FOUND', 'Transaction not found', 404);
   return sendSuccess(res, transaction);
 }));
 app.get('/transactions/wallet/:walletId', requireAuth, asyncRoute(async (req, res) => {
   const transactions = await readDb('transactions.json');
-  return sendSuccess(res, transactions.filter((t) => t.walletId === req.params.walletId));
+  return sendSuccess(res, await scopeList(req, transactions.filter((t) => t.walletId === req.params.walletId)));
 }));
 
 // ==================== KIOSK REGISTRATION REQUESTS ====================
@@ -1862,7 +2115,7 @@ app.get('/kiosks/registration-status/:serialNumber', asyncRoute(async (req, res)
 app.get('/kiosks/registration-requests', requireAuth, asyncRoute(async (req, res) => {
   const [kiosks, prisons] = await Promise.all([readDb('kiosks.json'), readDb('prisons.json')]);
   const registrationRequests = kiosks.filter((k) => k.status === 'pending' || k.authorizationStatus === 'pending');
-  return sendSuccess(res, registrationRequests.map((k) => {
+  return sendSuccess(res, (await scopeList(req, registrationRequests)).map((k) => {
     const prison = prisons.find((p) => p.prisonId === k.prisonId);
     return {
       requestId: k.kioskId,
@@ -1886,6 +2139,10 @@ app.get('/kiosks/registration-requests', requireAuth, asyncRoute(async (req, res
 
 app.put('/kiosks/registration/:requestId/approve', requireAuth, asyncRoute(async (req, res) => {
   const { requestId } = req.params;
+  const kiosk = (await readDb('kiosks.json')).find((k) => k.kioskId === requestId);
+  if (!kiosk || !(await inScopeOf(req, kiosk))) {
+    return sendError(res, 'NOT_FOUND', 'Registration request not found', 404);
+  }
   const updated = await updateDb('kiosks.json', (kiosks) => {
     const idx = kiosks.findIndex((k) => k.kioskId === requestId);
     if (idx === -1) return { data: kiosks, result: null };
@@ -1904,6 +2161,10 @@ app.put('/kiosks/registration/:requestId/approve', requireAuth, asyncRoute(async
 
 app.put('/kiosks/registration/:requestId/reject', requireAuth, asyncRoute(async (req, res) => {
   const { requestId } = req.params;
+  const kiosk = (await readDb('kiosks.json')).find((k) => k.kioskId === requestId);
+  if (!kiosk || !(await inScopeOf(req, kiosk))) {
+    return sendError(res, 'NOT_FOUND', 'Registration request not found', 404);
+  }
   const updated = await updateDb('kiosks.json', (kiosks) => {
     const idx = kiosks.findIndex((k) => k.kioskId === requestId);
     if (idx === -1) return { data: kiosks, result: null };
@@ -1922,18 +2183,26 @@ app.put('/kiosks/registration/:requestId/reject', requireAuth, asyncRoute(async 
 
 // ==================== KIOSK ROUTES (CRUD added â€” was read-only) ====================
 
-app.get('/kiosks', requireAuth, requireRole('admin'), asyncRoute(async (req, res) => sendSuccess(res, await readDb('kiosks.json'))));
+app.get('/kiosks', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+  const kiosks = await readDb('kiosks.json');
+  return sendSuccess(res, kiosks.filter(adminScopeFilter(req)));
+}));
 app.get('/kiosks/:kioskId', requireAuth, asyncRoute(async (req, res) => {
   const kiosks = await readDb('kiosks.json');
-  const kiosk = kiosks.find((k) => k.kioskId === req.params.kioskId);
-  if (!kiosk) return sendError(res, 'NOT_FOUND', 'Kiosk not found', 404);
+  const kiosk = kiosks.find((k) => k.kioskId === req.params.kioskId && inAdminScope(req, k));
+  if (!kiosk) return sendError(res, 'NOT_FOUND', 'Kiosk not found in your kiosk/jail', 404);
   return sendSuccess(res, kiosk);
 }));
-app.post('/kiosks', requireAuth, requireRole('admin'), asyncRoute(async (req, res) => {
+app.post('/kiosks', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const kioskData = req.body;
+  const jailId = jailScopeOf(req);
+  if (jailId && kioskData.prisonId && kioskData.prisonId !== jailId) {
+    return sendError(res, 'FORBIDDEN', 'Cannot create a kiosk outside your jail', 403);
+  }
   const newKiosk = {
     kioskId: `KIOSK-${uuidv4().substring(0, 8).toUpperCase()}`,
     ...kioskData,
+    prisonId: jailId || kioskData.prisonId,
     status: kioskData.status || 'pending',
     authorizationStatus: kioskData.authorizationStatus || 'pending',
     createdAt: new Date().toISOString()
@@ -1941,24 +2210,24 @@ app.post('/kiosks', requireAuth, requireRole('admin'), asyncRoute(async (req, re
   await updateDb('kiosks.json', (k) => ({ data: [...k, newKiosk], result: newKiosk }));
   return sendSuccess(res, newKiosk, 201);
 }));
-app.patch('/kiosks/:kioskId', requireAuth, requireRole('admin'), asyncRoute(async (req, res) => {
+app.patch('/kiosks/:kioskId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const updated = await updateDb('kiosks.json', (kiosks) => {
-    const idx = kiosks.findIndex((k) => k.kioskId === req.params.kioskId);
+    const idx = kiosks.findIndex((k) => k.kioskId === req.params.kioskId && inAdminScope(req, k));
     if (idx === -1) return { data: kiosks, result: null };
     kiosks[idx] = { ...kiosks[idx], ...req.body };
     return { data: kiosks, result: kiosks[idx] };
   });
-  if (!updated) return sendError(res, 'NOT_FOUND', 'Kiosk not found', 404);
+  if (!updated) return sendError(res, 'NOT_FOUND', 'Kiosk not found in your kiosk/jail', 404);
   return sendSuccess(res, updated);
 }));
-app.delete('/kiosks/:kioskId', requireAuth, requireRole('admin'), asyncRoute(async (req, res) => {
+app.delete('/kiosks/:kioskId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const deleted = await updateDb('kiosks.json', (kiosks) => {
-    const idx = kiosks.findIndex((k) => k.kioskId === req.params.kioskId);
+    const idx = kiosks.findIndex((k) => k.kioskId === req.params.kioskId && inAdminScope(req, k));
     if (idx === -1) return { data: kiosks, result: null };
     const [removed] = kiosks.splice(idx, 1);
     return { data: kiosks, result: removed };
   });
-  if (!deleted) return sendError(res, 'NOT_FOUND', 'Kiosk not found', 404);
+  if (!deleted) return sendError(res, 'NOT_FOUND', 'Kiosk not found in your kiosk/jail', 404);
   return sendSuccess(res, { message: 'Kiosk deleted successfully', kioskId: deleted.kioskId });
 }));
 
@@ -1969,7 +2238,7 @@ app.get('/kiosks/setup-pin/:prisonId', requireAuth, requireRole('admin', 'warden
   const { prisonId } = req.params;
   const prisons = await readDb('prisons.json');
   const prison = prisons.find((p) => p.prisonId === prisonId);
-  if (!prison) return sendError(res, 'NOT_FOUND', 'Prison not found', 404);
+  if (!prison || !(await inScopeOf(req, prison))) return sendError(res, 'NOT_FOUND', 'Prison not found', 404);
 
   // The setup PIN is stored bcrypt-hashed; never return the value itself.
   return sendSuccess(res, {
@@ -2015,7 +2284,10 @@ app.post('/kiosks/validate-setup-pin', asyncRoute(async (req, res) => {
 app.put('/kiosks/setup-pin', requireAuth, asyncRoute(async (req, res) => {
   const { prisonId, pin } = req.body;
   if (!prisonId || !pin) return sendError(res, 'INVALID_REQUEST', 'prisonId and pin are required', 400);
-  
+
+  const prison = (await readDb('prisons.json')).find((p) => p.prisonId === prisonId);
+  if (!prison || !(await inScopeOf(req, prison))) return sendError(res, 'NOT_FOUND', 'Prison not found', 404);
+
   // Validate PIN length (6 digits)
   if (!/^\d{6}$/.test(pin)) {
     return sendError(res, 'INVALID_PIN', 'PIN must be exactly 6 digits', 400);
@@ -2052,6 +2324,7 @@ app.post('/kiosks/pin-change-request', requireAuth, asyncRoute(async (req, res) 
   const prisons = await readDb('prisons.json');
   const prison = prisons.find((p) => p.prisonId === prisonId);
   if (!prison) return sendError(res, 'NOT_FOUND', 'Prison not found', 404);
+  if (!(await inScopeOf(req, prison))) return sendError(res, 'NOT_FOUND', 'Prison not found', 404);
   
   const valid = await verifySecret(currentPin, prison.setupPin);
   if (!valid) {
@@ -2093,10 +2366,11 @@ app.post('/kiosks/pin-change-request', requireAuth, asyncRoute(async (req, res) 
 app.get('/kiosks/pin-change-requests', requireAuth, asyncRoute(async (req, res) => {
   const { prisonId } = req.query;
   const prisons = await readDb('prisons.json');
-  
   let requests = [];
-  prisons.forEach((prison) => {
+  for (const prison of prisons) {
     if (prison.pinChangeRequests && prison.pinChangeRequests.length > 0) {
+      // Scoped staff only see pin-change requests for prisons in their jail.
+      if (!(await inScopeOf(req, prison))) continue;
       if (!prisonId || prison.prisonId === prisonId) {
         const prisonName = prison.name;
         requests.push(...prison.pinChangeRequests.map((req) => ({
@@ -2105,7 +2379,7 @@ app.get('/kiosks/pin-change-requests', requireAuth, asyncRoute(async (req, res) 
         })));
       }
     }
-  });
+  }
 
   // Sort by requestedAt descending (newest first)
   requests.sort((a, b) => new Date(b.requestedAt) - new Date(a.requestedAt));
@@ -2117,7 +2391,11 @@ app.put('/kiosks/pin-change-request/:requestId/approve', requireAuth, asyncRoute
   const { requestId } = req.params;
   const { comments } = req.body;
   
-  const prisons = await readDb('prisons.json');
+  const allPrisons = await readDb('prisons.json');
+  const owner = allPrisons.find((p) => p.pinChangeRequests && p.pinChangeRequests.some((r) => r.requestId === requestId));
+  if (!owner || !(await inScopeOf(req, owner))) {
+    return sendError(res, 'NOT_FOUND', 'PIN change request not found or already processed', 404);
+  }
   let found = false;
   
   const updated = await updateDb('prisons.json', (prisons) => {
@@ -2161,7 +2439,11 @@ app.put('/kiosks/pin-change-request/:requestId/reject', requireAuth, asyncRoute(
   const { requestId } = req.params;
   const { comments } = req.body;
   
-  const prisons = await readDb('prisons.json');
+  const allPrisons = await readDb('prisons.json');
+  const owner = allPrisons.find((p) => p.pinChangeRequests && p.pinChangeRequests.some((r) => r.requestId === requestId));
+  if (!owner || !(await inScopeOf(req, owner))) {
+    return sendError(res, 'NOT_FOUND', 'PIN change request not found or already processed', 404);
+  }
   let found = false;
   
   const updated = await updateDb('prisons.json', (prisons) => {
@@ -2198,17 +2480,17 @@ app.put('/kiosks/pin-change-request/:requestId/reject', requireAuth, asyncRoute(
   return sendSuccess(res, { success: true, message: 'PIN change request rejected' });
 }));
 
-app.delete('/admin/prisoners/:prisonerId', requireAuth, requireRole('admin'), asyncRoute(async (req, res) => {
+app.delete('/admin/prisoners/:prisonerId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const { prisonerId } = req.params;
   const deleted = await updateDb('inmates.json', (inmates) => {
-    const idx = inmates.findIndex((i) => i.inmateId === prisonerId);
+    const idx = inmates.findIndex((i) => i.inmateId === prisonerId && inAdminScope(req, i));
     if (idx === -1) return { data: inmates, result: null };
     const [removed] = inmates.splice(idx, 1);
     return { data: inmates, result: removed };
   });
-  if (!deleted) return sendError(res, 'NOT_FOUND', 'Prisoner not found', 404);
+  if (!deleted) return sendError(res, 'NOT_FOUND', 'Prisoner not found in your kiosk', 404);
   return sendSuccess(res, { message: 'Prisoner deleted successfully', prisonerId: deleted.inmateId });
-}));
+}))
 
 // ==================== ADMIN PROFILE (uses the authenticated identity, not a spoofable header) ====================
 
@@ -2229,11 +2511,11 @@ app.get('/admin/profile/:adminId', requireAuth, requireRole('admin', 'super-admi
 
 // ==================== ANDROID COMPATIBILITY: BIOMETRICS ROUTES ====================
 
-app.get('/admin/prisoners/:prisonerId/biometrics', requireAuth, asyncRoute(async (req, res) => {
+app.get('/admin/prisoners/:prisonerId/biometrics', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const { prisonerId } = req.params;
   const inmates = await readDb('inmates.json');
-  const inmate = inmates.find((i) => i.inmateId === prisonerId);
-  if (!inmate) return sendError(res, 'NOT_FOUND', 'Prisoner not found', 404);
+  const inmate = inmates.find((i) => i.inmateId === prisonerId && inAdminScope(req, i));
+  if (!inmate) return sendError(res, 'NOT_FOUND', 'Prisoner not found in your kiosk', 404);
   
   // Return biometric data from the inmate record
   const biometrics = inmate.biometricData || {};
@@ -2247,7 +2529,7 @@ app.get('/admin/prisoners/:prisonerId/biometrics', requireAuth, asyncRoute(async
   });
 }));
 
-app.delete('/admin/biometrics/:biometricId', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
+app.delete('/admin/biometrics/:biometricId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const { biometricId } = req.params;
   
   // Parse biometricId format: BIO-{timestamp}-{TYPE}
@@ -2260,7 +2542,7 @@ app.delete('/admin/biometrics/:biometricId', requireAuth, requireRole('admin', '
   if (!prisonerId) return sendError(res, 'INVALID_REQUEST', 'prisonerId query parameter is required', 400);
 
   const updated = await updateDb('inmates.json', (inmates) => {
-    const idx = inmates.findIndex((i) => i.inmateId === prisonerId);
+    const idx = inmates.findIndex((i) => i.inmateId === prisonerId && inAdminScope(req, i));
     if (idx === -1) return { data: inmates, result: null };
     
     const biometricData = { ...inmates[idx].biometricData };
@@ -2289,13 +2571,18 @@ app.delete('/admin/biometrics/:biometricId', requireAuth, requireRole('admin', '
   return sendSuccess(res, { message: 'Biometric deleted successfully', biometricId, prisonerId });
 }));
 
+// ==================== ADMIN ROUTER (mounted AFTER the explicit /admin routes
+// so the specific routes above win over the router's generic /:adminId) ====================
+// Admin router is authenticated: super-admin for account CRUD, admin/warden for biometrics.
+app.use('/admin', requireAuth, adminRouter);
+
 // ==================== WARDENS ====================
 
-app.get('/wardens', requireAuth, requireRole('admin'), asyncRoute(async (req, res) => sendSuccess(res, await readDb('wardens.json'))));
+app.get('/wardens', requireAuth, requireRole('admin'), asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('wardens.json')))));
 app.get('/wardens/:wardenId', requireAuth, requireRole('admin'), asyncRoute(async (req, res) => {
   const wardens = await readDb('wardens.json');
   const warden = wardens.find((w) => w.wardenId === req.params.wardenId);
-  if (!warden) return sendError(res, 'NOT_FOUND', 'Warden not found', 404);
+  if (!warden || !(await inScopeOf(req, warden))) return sendError(res, 'NOT_FOUND', 'Warden not found', 404);
   return sendSuccess(res, warden);
 }));
 

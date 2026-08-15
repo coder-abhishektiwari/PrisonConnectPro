@@ -4,6 +4,16 @@ const { readDb, updateDb } = require('./lib/db');
 const { hashSecret } = require('./lib/auth');
 const { requireRole } = require('./middleware/auth');
 
+// Kiosk-aware scope: principals with a kioskId claim only manage their own
+// kiosk's prisoners; others fall back to jail scope.
+function inJailScope(req, record) {
+  const jailId = req.auth?.prisonId || req.auth?.jailId || null;
+  if (jailId && !(record && (record.prisonId === jailId || record.facility === jailId || record.jailId === jailId))) return false;
+  const kioskId = req.auth?.kioskId || null;
+  if (kioskId && !(record && (record.assignedKioskId === kioskId || record.kioskId === kioskId || record.inmateId === kioskId))) return false;
+  return true;
+}
+
 // Admin CRUD — restricted to super-admins only.
 router.get('/', requireRole('super-admin', 'super_admin'), async (req, res) => {
   const admins = await readDb('admins.json');
@@ -73,8 +83,8 @@ router.post('/prisoners/:prisonerId/biometrics', requireRole('super-admin', 'sup
   }
 
   const inmates = await readDb('inmates.json');
-  const inmateIdx = inmates.findIndex((i) => i.inmateId === prisonerId);
-  if (inmateIdx === -1) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Prisoner not found' } });
+  const inmateIdx = inmates.findIndex((i) => i.inmateId === prisonerId && inJailScope(req, i));
+  if (inmateIdx === -1) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Prisoner not found in your jail' } });
 
   let updateFields = {};
   let biometricRecord = null;
@@ -138,7 +148,7 @@ router.post('/prisoners/:prisonerId/biometrics', requireRole('super-admin', 'sup
   }
 
   const updated = await updateDb('inmates.json', (inmates) => {
-    const idx = inmates.findIndex((i) => i.inmateId === prisonerId);
+    const idx = inmates.findIndex((i) => i.inmateId === prisonerId && inJailScope(req, i));
     if (idx === -1) return { data: inmates, result: null };
     inmates[idx] = { ...inmates[idx], ...updateFields };
     const existingBiometrics = inmates[idx].biometrics || [];

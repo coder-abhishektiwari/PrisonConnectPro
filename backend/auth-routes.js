@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { signAccessToken } = require('./lib/auth');
 const sessions = require('./lib/sessions');
+const { readDb } = require('./lib/db');
 const { requireAuth } = require('./middleware/auth');
 
 // Refresh token endpoint — rotating. The presented refresh token is revoked
@@ -19,7 +20,47 @@ router.post('/refresh', async (req, res) => {
   }
 
   await sessions.revokeSessionByToken(refreshToken);
-  const claims = { sub: session.sub, role: session.role };
+
+  // Re-derive the full claim set (jail/kiosk scope) from the current record so a
+  // refreshed token keeps the same jail scoping as the original login.
+  const roleKey = String(session.role || '').toLowerCase().replace(/[-_]/g, '');
+  let claims = { sub: session.sub, role: session.role };
+  try {
+    if (roleKey === 'admin' || roleKey === 'superadmin' || roleKey === 'warden') {
+      const admins = await readDb('admins.json');
+      const admin = admins.find((a) => a.adminId === session.sub);
+      if (admin) {
+        let prisonId = admin.prisonId;
+        if (!prisonId && admin.kioskId) {
+          const kiosks = await readDb('kiosks.json');
+          const kiosk = kiosks.find((k) => k.kioskId === admin.kioskId);
+          prisonId = kiosk?.prisonId;
+        }
+        claims = {
+          sub: admin.adminId,
+          role: admin.role || session.role,
+          kioskId: admin.kioskId,
+          prisonId
+        };
+      }
+    } else if (roleKey === 'inmate') {
+      const inmates = await readDb('inmates.json');
+      const inmate = inmates.find((i) => i.inmateId === session.sub);
+      if (inmate) {
+        claims = {
+          sub: inmate.inmateId,
+          role: 'inmate',
+          inmateId: inmate.inmateId,
+          prisonId: inmate.prisonId,
+          kioskId: inmate.assignedKioskId
+        };
+      }
+    }
+  } catch (err) {
+    // Keep only sub/role on read failure — the access token stays valid but
+    // loses jail scoping; this is safe (fail closed to global-view only on error).
+  }
+
   const next = await sessions.createSession(claims, req);
   return res.json({
     success: true,
