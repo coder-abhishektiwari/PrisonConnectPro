@@ -12,7 +12,7 @@ export function OtpVerificationPage() {
   const { addToast } = useToast();
   const { session, setOtpResult } = useSession();
   const [otp, setOtp] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [phoneMasked, setPhoneMasked] = useState<string | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
