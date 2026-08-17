@@ -12,6 +12,14 @@ const { signAccessToken, verifyToken, hashSecret, verifySecret } = require('./li
 const { createSession } = require('./lib/sessions');
 const { getStatement, resolveInmate } = require('./lib/jail-account');
 const { requireAuth, requireRole, requirePermission } = require('./middleware/auth');
+const { sendSms } = require('./lib/sms');
+const {
+  maskedPhone,
+  contactPhone,
+  registerOrVerifyFingerprint,
+  deviceRegisteredForCall,
+  buildLinkSms
+} = require('./lib/familySecurity');
 // NOTE: Mediasoup manager and recorder have been intentionally commented out by developer
 // as they were causing failures on Render deployment. This is a known limitation - 
 // WebRTC calling functionality via mediasoup is disabled until deployment issues are resolved.
@@ -1351,8 +1359,52 @@ app.post('/calls', requireAuth, asyncRoute(async (req, res) => {
     }
   };
 
+  // Room-bound signaling token for the kiosk so it can authenticate the
+  // signaling socket (role 'kiosk') and join exactly this call's room.
+  newCall.signalingToken = signAccessToken({
+    sub: req.auth?.sub || newCall.kioskId,
+    role: 'kiosk',
+    callId: newCall.callId,
+    roomId: newCall.roomId,
+    kioskId: newCall.kioskId
+  });
+
   await updateDb('calls.json', (calls) => ({ data: [...calls, newCall], result: newCall }));
   broadcastEvent('call-created', newCall);
+
+  // ==== FAMILY LINK SMS ====
+  // As soon as a call is initiated from the kiosk, dispatch the secure link to
+  // the family member's phone. SMS gateway failures never fail the call itself.
+  try {
+    const familyPhone = contactPhone(contact);
+    if (familyPhone) {
+      const smsResult = await sendSms({
+        phone: familyPhone,
+        message: buildLinkSms(newCall),
+        kind: 'link',
+        callId: newCall.callId
+      });
+      await updateDb('calls.json', (calls) => {
+        const idx = calls.findIndex((c) => c.callId === newCall.callId);
+        if (idx === -1) return { data: calls, result: null };
+        calls[idx].sms = {
+          sent: true,
+          sentTo: maskedPhone(familyPhone),
+          linkToken: newCall.linkToken,
+          linkUrl: `${process.env.FAMILY_WEB_URL || 'http://127.0.0.1:5173'}/call/${newCall.linkToken}`,
+          transport: smsResult.provider,
+          loggedAt: smsResult.loggedAt
+        };
+        return { data: calls, result: calls[idx] };
+      });
+      newCall.sms = { sent: true, sentTo: maskedPhone(familyPhone) };
+    } else {
+      console.warn('[calls] contact has no phone number — skipping family link SMS');
+    }
+  } catch (err) {
+    console.error('[calls] family link SMS dispatch failed:', err.message);
+  }
+
   return sendSuccess(res, newCall, 201);
 }));
 
@@ -1371,33 +1423,148 @@ app.get('/calls/link/:linkToken', asyncRoute(async (req, res) => {
   const inmate = inmates.find((i) => i.inmateId === call.inmateId);
   const contact = contacts.find((c) => c.contactId === call.contactId);
 
+  // Report whether this phone has a registered device fingerprint so the
+  // portal can route first-time (collect fingerprint) vs returning (verify).
+  const { registered, maskedPhone: phone } = await deviceRegisteredForCall(call);
+  const familyPhone = contactPhone(contact);
+
   return sendSuccess(res, {
     callId: call.callId,
     roomId: call.roomId,
     inmateName: inmate ? `${inmate.firstName} ${inmate.lastName || ''}`.trim() : call.inmateName || '',
-    contactName: contact?.name || call.familyMemberName || 'Contact',
+    contactName: contact?.fullName || contact?.name || call.familyMemberName || 'Family member',
     callType: call.type,
     scheduledAt: call.scheduledAt || call.startTime,
     maxDurationMinutes: call.maxDurationMinutes,
-    ratePerMinute: call.ratePerMinute
+    ratePerMinute: call.ratePerMinute,
+    deviceRegistered: registered,
+    phoneMasked: phone || (familyPhone ? maskedPhone(familyPhone) : null)
   });
 }));
 
 app.post('/calls/:linkToken/device-verification', asyncRoute(async (req, res) => {
   const { linkToken } = req.params;
-  const deviceInfo = req.body || {};
+  const body = req.body || {};
   const calls = await readDb('calls.json');
   const call = calls.find((c) => c.linkToken === linkToken);
   if (!call) return sendError(res, 'NOT_FOUND', 'Invalid or expired call link', 404);
 
+  const { fingerprint, signals } = body;
+
+  // A fingerprint is mandatory. deviceInfo is kept for legacy clients.
+  if (!fingerprint) {
+    return sendError(res, 'INVALID_REQUEST', 'Device fingerprint is required', 400);
+  }
+
+  const contacts = await readDb('contacts.json');
+  const contact = contacts.find((c) => c.contactId === call.contactId);
+  const familyPhone = contactPhone(contact);
+
+  // First call to this number -> register the fingerprint.
+  // Returning call  -> require the fingerprint to match the stored one.
+  const result = await registerOrVerifyFingerprint(call.contactId, familyPhone, { hash: String(fingerprint), signals });
+
+  if (!result.verified && result.reason === 'DEVICE_MISMATCH') {
+    return sendError(res, 'DEVICE_MISMATCH', 'This device is not authorized for this call link', 403);
+  }
+  if (!result.verified) {
+    return sendError(res, 'DEVICE_VERIFICATION_FAILED', result.reason || 'Device verification failed', 400);
+  }
+
   await updateDb('calls.json', (all) => {
     const idx = all.findIndex((c) => c.linkToken === linkToken);
     if (idx === -1) return { data: all, result: null };
-    all[idx].family = { ...(all[idx].family || {}), deviceInfo, deviceVerified: true, deviceVerifiedAt: new Date().toISOString() };
+    all[idx].family = {
+      ...(all[idx].family || {}),
+      deviceInfo: body.deviceInfo || {},
+      deviceVerified: true,
+      isFirstTime: result.isFirstTime === true,
+      deviceVerifiedAt: new Date().toISOString()
+    };
     return { data: all, result: all[idx] };
   });
 
-  return sendSuccess(res, { verified: true });
+  return sendSuccess(res, {
+    verified: true,
+    isFirstTime: result.isFirstTime === true,
+    // OTP may only be dispatched after a successful device check.
+    otpAllowed: true
+  });
+}));
+
+app.post('/calls/:linkToken/send-otp', asyncRoute(async (req, res) => {
+  const { linkToken } = req.params;
+  const calls = await readDb('calls.json');
+  const call = calls.find((c) => c.linkToken === linkToken);
+  if (!call) return sendError(res, 'NOT_FOUND', 'Invalid or expired call link', 404);
+  if (call.status === 'completed' || call.status === 'cancelled') {
+    return sendError(res, 'CALL_ENDED', 'This call has already ended', 410);
+  }
+
+  // First-time call to this number: OTP is dispatched BEFORE the fingerprint
+  // is collected (so we first prove the SIM is in the phone). Returning call:
+  // the stored device fingerprint must match BEFORE an OTP is sent.
+  const { registered: deviceRegistered } = await deviceRegisteredForCall(call);
+  if (deviceRegistered && !call.family?.deviceVerified) {
+    return sendError(res, 'DEVICE_VERIFICATION_REQUIRED', 'Device verification is required before sending the OTP', 403);
+  }
+
+  const contacts = await readDb('contacts.json');
+  const contact = contacts.find((c) => c.contactId === call.contactId);
+  const familyPhone = contactPhone(contact);
+  if (!familyPhone) return sendError(res, 'NO_PHONE', 'Family phone number is not registered', 400);
+
+  // Rotate the OTP on every dispatch so a stale code can never be replayed.
+  const otp = String(Math.floor(100000 + Math.random() * 900000));
+  const expiresAt = new Date(Date.now() + (parseInt(process.env.SMS_OTP_EXPIRY_MINUTES || '5', 10) * 60000)).toISOString();
+
+  await updateDb('calls.json', (all) => {
+    const idx = all.findIndex((c) => c.linkToken === linkToken);
+    if (idx === -1) return { data: all, result: null };
+    all[idx].otp = otp;
+    all[idx].otpExpiresAt = expiresAt;
+    all[idx].otpDispatchCount = (all[idx].otpDispatchCount || 0) + 1;
+    return { data: all, result: all[idx] };
+  });
+
+  const { sendSms } = require('./lib/sms');
+  const { buildOtpMessage } = require('./lib/sms');
+  let smsResult = null;
+  try {
+    smsResult = await sendSms({
+      phone: familyPhone,
+      message: buildOtpMessage(otp, 'call'),
+      kind: 'otp',
+      callId: call.callId
+    });
+  } catch (err) {
+    console.error('[otp] send failed:', err.message);
+  }
+
+  return sendSuccess(res, {
+    sent: true,
+    transport: smsResult?.provider || 'log',
+    expiresAt,
+    phoneMasked: maskedPhone(familyPhone)
+  });
+}));
+
+// DEV/DEMO ONLY: lets the family web auto-complete OTP when running against a
+// local stack (SMS_PROVIDER=log). Never enabled in production or with real SMS.
+app.get('/calls/:linkToken/otp', asyncRoute(async (req, res) => {
+  const { linkToken } = req.params;
+  if (process.env.NODE_ENV === 'production' || (process.env.SMS_PROVIDER || '').toLowerCase() === 'msg91') {
+    return sendError(res, 'FORBIDDEN', 'OTP debug endpoint is disabled', 403);
+  }
+  const calls = await readDb('calls.json');
+  const call = calls.find((c) => c.linkToken === linkToken);
+  if (!call) return sendError(res, 'NOT_FOUND', 'Invalid or expired call link', 404);
+  if (call.status === 'completed' || call.status === 'cancelled') {
+    return sendError(res, 'CALL_ENDED', 'This call has already ended', 410);
+  }
+  if (call.family?.otpVerified) return sendError(res, 'ALREADY_VERIFIED', 'OTP already verified', 409);
+  if (!call.otp) return sendError(res, 'NO_OTP', 'No pending OTP; dispatch it first', 404);
+  return sendSuccess(res, { otp: String(call.otp), expiresAt: call.otpExpiresAt || null });
 }));
 
 app.post('/calls/:linkToken/otp-verification', asyncRoute(async (req, res) => {
@@ -1408,6 +1575,18 @@ app.post('/calls/:linkToken/otp-verification', asyncRoute(async (req, res) => {
   if (!call) return sendError(res, 'NOT_FOUND', 'Invalid or expired call link', 404);
   if (call.status === 'completed' || call.status === 'cancelled') {
     return sendError(res, 'CALL_ENDED', 'This call has already ended', 410);
+  }
+
+  // First-time call: OTP may be redeemed before the fingerprint is collected.
+  // Returning call: OTP is only valid after the stored fingerprint matched.
+  const { registered: deviceRegistered } = await deviceRegisteredForCall(call);
+  if (deviceRegistered && !call.family?.deviceVerified) {
+    return sendError(res, 'DEVICE_VERIFICATION_REQUIRED', 'Device verification is required before entering the OTP', 403);
+  }
+
+  // Reject stale OTPs past their expiry window.
+  if (call.otpExpiresAt && Date.now() > new Date(call.otpExpiresAt).getTime()) {
+    return sendError(res, 'OTP_EXPIRED', 'This OTP has expired. Tap resend to get a new code.', 401);
   }
 
   const valid = String(otp) === String(call.otp);

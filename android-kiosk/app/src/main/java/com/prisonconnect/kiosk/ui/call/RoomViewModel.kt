@@ -3,6 +3,7 @@ package com.prisonconnect.kiosk.ui.call
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.prisonconnect.kiosk.core.Constants
+import com.prisonconnect.kiosk.config.AppConfig
 import com.prisonconnect.kiosk.core.Logger
 import com.prisonconnect.kiosk.core.UiState
 import com.prisonconnect.kiosk.models.call.CallSession
@@ -108,6 +109,9 @@ class RoomViewModel @Inject constructor(
                     is NetworkResult.Loading -> _createRoomState.value = UiState.Loading
                     is NetworkResult.Success -> {
                         _createRoomState.value = UiState.Success(result.data)
+                        // Stash the room-bound signaling token before opening the socket
+                        // so join-room authenticates with role 'kiosk' for this room.
+                        AppConfig.signalingToken = result.data.signalingToken
                         callRepository.joinRoom(result.data.sessionId, "kiosk-${System.currentTimeMillis()}")
                         Logger.d("Room setup complete: ${result.data.sessionId}")
                     }

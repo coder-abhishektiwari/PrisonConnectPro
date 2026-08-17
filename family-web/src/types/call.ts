@@ -11,6 +11,10 @@ export interface CallSession {
   scheduledAt: string;
   maxDurationMinutes: number;
   ratePerMinute: number;
+  /** True when this call's alt phone already has a registered device fingerprint. */
+  deviceRegistered: boolean;
+  /** Masked destination phone number (e.g. +91******3210) safe to show in the browser. */
+  phoneMasked: string | null;
 }
 
 export interface DeviceInfo {
@@ -22,6 +26,16 @@ export interface DeviceInfo {
 
 export interface DeviceVerificationResult {
   verified: boolean;
+  /** True when the fingerprint was newly registered (first call to this number). */
+  isFirstTime: boolean;
+  otpAllowed: boolean;
+}
+
+export interface SendOtpResult {
+  sent: boolean;
+  transport: string;
+  expiresAt: string;
+  phoneMasked: string;
 }
 
 export interface OtpVerificationResult {

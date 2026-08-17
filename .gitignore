@@ -39,3 +39,10 @@ captures/
 *.pem
 *.crt
 .env.example
+
+# External internet exposure launcher state (generated secrets + runtime tuning)
+external/
+start-external.tmp.json
+
+# Runtime SMS/OTP audit logs (may contain phone numbers)
+backend/logs/

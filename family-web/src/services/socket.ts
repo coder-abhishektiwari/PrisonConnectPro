@@ -52,8 +52,7 @@ class SocketService {
         this.emit('system', { type: 'connection_error', error: error.message });
       });
 
-      // Mediasoup backend events
-      this.socket.on('joined', (data) => this.emit('joined', data));
+      // Mediasoup backend events (join result arrives via the join-room ACK)
       this.socket.on('peer-joined', (data) => this.emit('peer-joined', data));
       this.socket.on('peer-left', (data) => this.emit('peer-left', data));
       this.socket.on('new-producer', (data) => this.emit('new-producer', data));
@@ -115,8 +114,9 @@ class SocketService {
     });
   }
 
-  joinRoom(roomId: string, peerId: string): void {
-    this.send('join-room', { roomId, peerId });
+  // The signaling server returns the join result only via the ACK callback.
+  joinRoom(roomId: string, peerId: string): Promise<any> {
+    return this.sendWithAck('join-room', { roomId, peerId });
   }
 
   leaveRoom(roomId: string, peerId: string): void {

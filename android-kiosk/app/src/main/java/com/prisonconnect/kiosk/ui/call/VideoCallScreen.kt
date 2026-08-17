@@ -36,6 +36,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
@@ -47,6 +48,8 @@ import com.prisonconnect.kiosk.ui.components.KioskButton
 import com.prisonconnect.kiosk.ui.components.KioskProgressIndicator
 import com.prisonconnect.kiosk.ui.theme.PrisonKioskTheme
 import kotlinx.coroutines.delay
+import org.webrtc.RendererCommon
+import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoTrack
 import kotlin.math.roundToInt
 
@@ -60,26 +63,50 @@ private val PrimaryBlue = Color(0xFF0284C7)
 private val WarningOrange = Color(0xFFF59E0B)
 
 /**
- * Fallback WebRtcSurfaceView component.
- * If your project already contains a custom WebRtcSurfaceView composable,
- * remove this placeholder and import yours.
+ * Compose wrapper around a WebRTC [SurfaceViewRenderer] that renders a
+ * [VideoTrack] (local preview or remote peer). Falls back to a black surface
+ * while no track is attached so the layout never collapses.
  */
 @Composable
 fun WebRtcSurfaceView(
     videoTrack: VideoTrack?,
     eglContext: org.webrtc.EglBase.Context?,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    mirror: Boolean = false
 ) {
-    Box(
+    // Track attached to the renderer, so swaps detach the previous sink.
+    val attachedTrack = remember { mutableStateOf<VideoTrack?>(null) }
+    val rendererInit = remember { mutableStateOf(false) }
+
+    AndroidView(
         modifier = modifier.background(Color.Black),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = "Video Stream",
-            color = Color.White.copy(alpha = 0.5f),
-            fontSize = 12.sp
-        )
-    }
+        factory = { ctx ->
+            SurfaceViewRenderer(ctx).apply {
+                setMirror(mirror)
+                setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
+            }
+        },
+        update = { view ->
+            if (!rendererInit.value && eglContext != null) {
+                view.init(eglContext, null)
+                rendererInit.value = true
+            }
+            val previous = attachedTrack.value
+            if (previous !== videoTrack) {
+                previous?.removeSink(view)
+                videoTrack?.addSink(view)
+                attachedTrack.value = videoTrack
+            }
+            view.setMirror(mirror)
+        },
+        onRelease = { view ->
+            attachedTrack.value?.removeSink(view)
+            view.clearImage()
+            view.release()
+            attachedTrack.value = null
+            rendererInit.value = false
+        }
+    )
 }
 
 @Composable
@@ -356,6 +383,7 @@ fun VideoCallContent(
                     WebRtcSurfaceView(
                         videoTrack = localTrack,
                         eglContext = eglContext,
+                        mirror = true,
                         modifier = Modifier.fillMaxSize()
                     )
                 } else {

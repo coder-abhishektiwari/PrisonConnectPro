@@ -1,6 +1,7 @@
 package com.prisonconnect.kiosk.repository
 
 import com.prisonconnect.kiosk.api.TrustApiService
+import com.prisonconnect.kiosk.config.AppConfig
 import com.prisonconnect.kiosk.core.Logger
 import com.prisonconnect.kiosk.models.call.*
 import com.prisonconnect.kiosk.models.common.ApiError
@@ -98,7 +99,18 @@ class CallRepositoryImpl @Inject constructor(
             put("roomId", roomId)
             put("peerId", peerId)
         }
-        socketService.emit("join-room", payload)
+        // The signaling server returns the join result only via the ACK callback.
+        socketService.emitWithAck("join-room", payload) { args ->
+            val response = args.getOrNull(0)
+            if (response != null) {
+                val data = response as? JSONObject
+                if (data?.optBoolean("success", false) == true) {
+                    _roomStatus.value = RoomStatus.JOINED
+                    _signalingStatus.value = SignalingStatus.JOINED
+                }
+                _signalingEvents.tryEmit(SignalingEvent("joined", response))
+            }
+        }
     }
 
     override fun leaveRoom(roomId: String, peerId: String) {
@@ -109,6 +121,7 @@ class CallRepositoryImpl @Inject constructor(
         socketService.emit("leave-room", payload)
         _roomStatus.value = RoomStatus.IDLE
         _signalingStatus.value = SignalingStatus.IDLE
+        AppConfig.signalingToken = null
     }
 
     override fun createWebRtcTransport(roomId: String, peerId: String, direction: String, callback: (Any) -> Unit) {

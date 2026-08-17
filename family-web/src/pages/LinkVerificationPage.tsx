@@ -86,10 +86,19 @@ export function LinkVerificationPage() {
             <p className="text-sm text-neutral-600">
               Max Duration: <span className="font-semibold text-neutral-900">{session.maxDurationMinutes} Minutes</span>
             </p>
+            {session.deviceRegistered ? (
+              <p className="text-sm text-primary-600">
+                Known device: <span className="font-medium">verifying this phone</span>
+              </p>
+            ) : (
+              <p className="text-sm text-primary-600">
+                New number: <span className="font-medium">verifying SIM, then registering this device</span>
+              </p>
+            )}
           </div>
-          <Link to={`/call/${linkToken}/device`}>
+          <Link to={session.deviceRegistered ? `/call/${linkToken}/device` : `/call/${linkToken}/otp`}>
             <Button size="lg" className="w-full">
-              Continue to Device Verification
+              {session.deviceRegistered ? 'Continue to Device Verification' : 'Continue to OTP Verification'}
             </Button>
           </Link>
         </div>

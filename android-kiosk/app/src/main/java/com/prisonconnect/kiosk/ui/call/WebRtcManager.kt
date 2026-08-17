@@ -242,7 +242,7 @@ class WebRtcManager @Inject constructor(
                     track,
                     null,
                     null,
-                    "video",
+                    null,
                     null
                 )
             }
@@ -254,7 +254,7 @@ class WebRtcManager @Inject constructor(
                     track,
                     null,
                     null,
-                    "audio",
+                    null,
                     null
                 )
             }

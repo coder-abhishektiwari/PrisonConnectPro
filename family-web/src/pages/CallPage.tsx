@@ -5,7 +5,6 @@ import { useSession } from '@/context/SessionContext';
 import { useToast } from '@/components/Toast';
 import { socketService } from '@/services/socket';
 import { webRtcService, type ConnectionState } from '@/services/webrtc';
-import { callApi } from '@/services/api';
 
 type CallStatus = 
   | 'initializing'
@@ -36,6 +35,7 @@ export function CallPage() {
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const callTimerRef = useRef<ReturnType<typeof setInterval>>();
   const peerIdRef = useRef(`family-${Date.now()}`);
+  const joinStartedRef = useRef(false);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -76,19 +76,6 @@ export function CallPage() {
 
   // Socket event listeners
   useEffect(() => {
-    const handleJoined = async (_event: string, data: any) => {
-      console.log('[Call] Joined room:', data);
-      if (data?.success) {
-        setStatus('connecting');
-        setStatusMessage('Establishing connection...');
-        await webRtcService.handleJoined(data.routerRtpCapabilities);
-      } else {
-        setStatus('error');
-        setError(data?.message || 'Failed to join room');
-        addToast(data?.message || 'Failed to join room', 'error');
-      }
-    };
-
     const handleNewProducer = async (_event: string, data: any) => {
       console.log('[Call] New producer:', data);
       if (data?.producerId) {
@@ -122,7 +109,7 @@ export function CallPage() {
       switch (data.type) {
         case 'connected':
           console.log('[Call] Socket connected');
-          if (status === 'initializing') {
+          if (!joinStartedRef.current) {
             joinRoom();
           }
           break;
@@ -140,7 +127,6 @@ export function CallPage() {
     };
 
     // Register listeners
-    socketService.on('joined', handleJoined);
     socketService.on('new-producer', handleNewProducer);
     socketService.on('peer-joined', handlePeerJoined);
     socketService.on('peer-left', handlePeerLeft);
@@ -148,7 +134,6 @@ export function CallPage() {
     socketService.on('system', handleSystemEvent);
 
     return () => {
-      socketService.off('joined', handleJoined);
       socketService.off('new-producer', handleNewProducer);
       socketService.off('peer-joined', handlePeerJoined);
       socketService.off('peer-left', handlePeerLeft);
@@ -260,13 +245,28 @@ export function CallPage() {
   };
 
   const joinRoom = async () => {
+    if (joinStartedRef.current) return;
+    joinStartedRef.current = true;
     try {
       setStatus('connecting');
       setStatusMessage('Joining room...');
 
-      await callApi.joinRoom(session!.roomId, peerIdRef.current);
-      socketService.joinRoom(session!.roomId, peerIdRef.current);
+      // Media join happens over the socket 'join-room' event below. The REST
+      // /rooms/join endpoint requires a persisted room record the kiosk never
+      // creates, so skip it.
+      const response = await socketService.joinRoom(session!.roomId, peerIdRef.current);
+
+      if (response?.success) {
+        setStatus('connecting');
+        setStatusMessage('Establishing connection...');
+        await webRtcService.handleJoined(response.routerRtpCapabilities);
+      } else {
+        setStatus('error');
+        setError(response?.message || 'Failed to join room');
+        addToast(response?.message || 'Failed to join room', 'error');
+      }
     } catch (error) {
+      joinStartedRef.current = false;
       console.error('[Call] Failed to join room:', error);
       setStatus('error');
       setError(error instanceof Error ? error.message : 'Failed to join room');
@@ -288,17 +288,14 @@ export function CallPage() {
 
   const endCall = useCallback(async () => {
     try {
-      if (session?.callId) {
-        await callApi.endCall(session.callId);
-      }
-    } catch (error) {
-      console.error('[Call] Failed to end call:', error);
-    } finally {
       socketService.leaveRoom(session!.roomId, peerIdRef.current);
       socketService.disconnect();
       webRtcService.close();
+      joinStartedRef.current = false;
       clear();
       setStatus('ended');
+    } catch (error) {
+      console.error('[Call] Error while ending call:', error);
     }
   }, [session, clear]);
 

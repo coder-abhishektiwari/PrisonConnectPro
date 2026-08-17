@@ -42,7 +42,7 @@ export const router = createBrowserRouter([
       {
         path: RoutePaths.deviceVerification,
         element: (
-          <RouteGuard require="session">
+          <RouteGuard require="device">
             <DeviceVerificationPage />
           </RouteGuard>
         ),
@@ -50,7 +50,7 @@ export const router = createBrowserRouter([
       {
         path: RoutePaths.otpVerification,
         element: (
-          <RouteGuard require="device">
+          <RouteGuard require="otp">
             <OtpVerificationPage />
           </RouteGuard>
         ),
@@ -58,7 +58,7 @@ export const router = createBrowserRouter([
       {
         path: RoutePaths.lobby,
         element: (
-          <RouteGuard require="otp">
+          <RouteGuard require="call">
             <LobbyPage />
           </RouteGuard>
         ),
@@ -66,7 +66,7 @@ export const router = createBrowserRouter([
       {
         path: RoutePaths.call,
         element: (
-          <RouteGuard require="otp">
+          <RouteGuard require="call">
             <CallPage />
           </RouteGuard>
         ),

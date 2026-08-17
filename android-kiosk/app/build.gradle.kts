@@ -21,9 +21,13 @@ android {
         // Kiosk identity & backend endpoint (override in local.properties)
         val kioskId = (project.findProperty("KIOSK_ID") as String?) ?: "KIOSK-001"
         val trustApiHost = (project.findProperty("KIOSK_TRUST_API_HOST") as String?) ?: "https://prisonconnect-mockbackend.onrender.com/"
+        val apiBaseUrl = (project.findProperty("API_BASE_URL") as String?) ?: "https://prisonconnect-backend.onrender.com"
+        val signalingUrl = (project.findProperty("SIGNALING_URL") as String?) ?: "https://prisonconnect-signaling.onrender.com"
 
         buildConfigField("String", "KIOSK_ID", "\"$kioskId\"")
         buildConfigField("String", "TRUST_API_HOST", "\"$trustApiHost\"")
+        buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
+        buildConfigField("String", "SIGNALING_URL", "\"$signalingUrl\"")
 
         ndk {
             abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64"))

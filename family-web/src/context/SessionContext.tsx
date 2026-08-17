@@ -1,16 +1,17 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
-import type { CallSession, DeviceInfo, OtpVerificationResult } from '@/types/call';
+import type { CallSession, OtpVerificationResult } from '@/types/call';
 
 interface SessionState {
   session: CallSession | null;
-  deviceInfo: DeviceInfo | null;
+  /** True once this device has been registered/verified via fingerprint. */
+  deviceVerified: boolean;
   otpResult: OtpVerificationResult | null;
 }
 
 interface SessionContextValue extends SessionState {
   setSession: (session: CallSession) => void;
-  setDeviceInfo: (info: DeviceInfo) => void;
-  setOtpResult: (result: OtpVerificationResult) => void;
+  setDeviceVerified: (verified: boolean) => void;
+  setOtpResult: (result: OtpVerificationResult | null) => void;
   clear: () => void;
 }
 
@@ -19,7 +20,7 @@ const SessionContext = createContext<SessionContextValue | null>(null);
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<SessionState>({
     session: null,
-    deviceInfo: null,
+    deviceVerified: false,
     otpResult: null,
   });
 
@@ -27,20 +28,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setState((s) => ({ ...s, session }));
   }, []);
 
-  const setDeviceInfo = useCallback((deviceInfo: DeviceInfo) => {
-    setState((s) => ({ ...s, deviceInfo }));
+  const setDeviceVerified = useCallback((deviceVerified: boolean) => {
+    setState((s) => ({ ...s, deviceVerified }));
   }, []);
 
-  const setOtpResult = useCallback((otpResult: OtpVerificationResult) => {
+  const setOtpResult = useCallback((otpResult: OtpVerificationResult | null) => {
     setState((s) => ({ ...s, otpResult }));
   }, []);
 
   const clear = useCallback(() => {
-    setState({ session: null, deviceInfo: null, otpResult: null });
+    setState({ session: null, deviceVerified: false, otpResult: null });
   }, []);
 
   return (
-    <SessionContext.Provider value={{ ...state, setSession, setDeviceInfo, setOtpResult, clear }}>
+    <SessionContext.Provider value={{ ...state, setSession, setDeviceVerified, setOtpResult, clear }}>
       {children}
     </SessionContext.Provider>
   );

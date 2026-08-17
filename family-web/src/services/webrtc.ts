@@ -44,12 +44,97 @@ class WebRtcService {
     this.peerId = `family-${Date.now()}`;
   }
 
+  private isVirtualDevice(label: string): boolean {
+    const lower = label.toLowerCase();
+    return (
+      lower.includes('phone link') ||
+      lower.includes('link to windows') ||
+      lower.includes('phone-link') ||
+      lower.includes('virtual') ||
+      lower.includes('cross-device') ||
+      lower.includes('mobile camera') ||
+      lower.includes('remote camera') ||
+      lower.includes('ip webcam') ||
+      lower.includes('droidcam') ||
+      lower.includes('video camera')
+    );
+  }
+
+  private async selectPreferredDevices(): Promise<MediaStreamConstraints> {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const preferred: MediaStreamConstraints = {};
+
+      const videoInput = devices.find(
+        (d) => d.kind === 'videoinput' && !this.isVirtualDevice(d.label || '')
+      );
+      const audioInput = devices.find(
+        (d) => d.kind === 'audioinput' && !this.isVirtualDevice(d.label || '')
+      );
+
+      if (videoInput && videoInput.deviceId) {
+        preferred.video = {
+          deviceId: { exact: videoInput.deviceId },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        };
+      }
+      if (audioInput && audioInput.deviceId) {
+        preferred.audio = {
+          deviceId: { exact: audioInput.deviceId },
+          echoCancellation: true,
+          noiseSuppression: true,
+        };
+      }
+      return preferred;
+    } catch (error) {
+      console.warn('[WebRTC] Device enumeration failed, using defaults:', error);
+      return {};
+    }
+  }
+
+  private static toDeviceIdString(value: ConstrainDOMString | undefined): string | undefined {
+    if (!value) return undefined;
+    if (typeof value === 'string') return value;
+    if (Array.isArray(value)) return value[0] ?? undefined;
+    if (typeof value === 'object' && value.exact !== undefined) return Array.isArray(value.exact) ? value.exact[0] : value.exact;
+    if (typeof value === 'object' && value.ideal !== undefined) return Array.isArray(value.ideal) ? value.ideal[0] : value.ideal;
+    return undefined;
+  }
+
   async setupLocalMedia(constraints: MediaStreamConstraints = {
     video: true,
     audio: true,
   }): Promise<MediaStream> {
     try {
       this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+      const preferred = await this.selectPreferredDevices();
+      const preferredVideo = preferred.video as MediaTrackConstraints | undefined;
+      const preferredAudio = preferred.audio as MediaTrackConstraints | undefined;
+      const preferredVideoId = WebRtcService.toDeviceIdString(preferredVideo?.deviceId);
+      const preferredAudioId = WebRtcService.toDeviceIdString(preferredAudio?.deviceId);
+      const currentVideoId = this.localStream.getVideoTracks()[0]?.getSettings().deviceId;
+      const currentAudioId = this.localStream.getAudioTracks()[0]?.getSettings().deviceId;
+      const videoChanged = !!preferredVideoId && currentVideoId !== preferredVideoId;
+      const audioChanged = !!preferredAudioId && currentAudioId !== preferredAudioId;
+
+      if (videoChanged || audioChanged) {
+        const newStream = await navigator.mediaDevices.getUserMedia(preferred);
+        this.localStream.getTracks().forEach((t) => t.stop());
+        this.localStream = newStream;
+        console.log(
+          '[WebRTC] Switched to preferred devices:',
+          preferredVideoId ? 'video: ' + preferredVideoId.split(':')[0] : 'same video',
+          preferredAudioId ? 'audio: ' + preferredAudioId.split(':')[0] : 'same audio'
+        );
+      } else {
+        console.log(
+          '[WebRTC] Using default devices:',
+          this.localStream.getVideoTracks()[0]?.getSettings().deviceId,
+          this.localStream.getAudioTracks()[0]?.getSettings().deviceId
+        );
+      }
+
       this.emit('local-stream', this.localStream);
       return this.localStream;
     } catch (error) {

@@ -9,7 +9,8 @@ data class CallSession(
     @SerializedName("contactName") val contactName: String? = null,
     @SerializedName("type") val type: CallType? = null,
     @SerializedName("durationMinutes") val durationMinutes: Int? = null,
-    @SerializedName("startTime") val startTime: String? = null
+    @SerializedName("startTime") val startTime: String? = null,
+    @SerializedName("signalingToken") val signalingToken: String? = null
 )
 
 data class CreateCallRequest(

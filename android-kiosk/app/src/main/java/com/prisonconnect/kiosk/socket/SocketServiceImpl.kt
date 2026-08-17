@@ -8,7 +8,9 @@ import io.socket.client.Socket
 import io.socket.engineio.client.transports.WebSocket
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.launch
 import java.net.URI
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -19,9 +21,26 @@ class SocketServiceImpl @Inject constructor(
 ) : SocketService {
 
     private var socket: Socket? = null
+    private var lastAuthToken: String? = null
+
+    // Published whenever a (new) socket instance is created so collectors can
+    // attach to the latest connection after token-triggered reconnects.
+    private val socketFlow = MutableSharedFlow<Socket>(extraBufferCapacity = 1)
+
+    private fun desiredToken(): String =
+        AppConfig.signalingToken ?: (authInterceptor.getToken() ?: "")
 
     override fun connect() {
-        if (socket?.connected() == true) return
+        val desired = desiredToken()
+        if (socket?.connected() == true && lastAuthToken == desired) return
+
+        // Token changed (e.g. fresh room-bound kiosk signalingToken minted for a
+        // new call). The socket.io client must be re-created so the new token is
+        // sent on the handshake; otherwise the server sees an old room binding and
+        // rejects join-room with FORBIDDEN.
+        socket?.disconnect()
+        socket?.off()
+        socket = null
 
         try {
             val options = IO.Options.builder()
@@ -32,11 +51,15 @@ class SocketServiceImpl @Inject constructor(
                 .setReconnectionDelayMax(5000)
                 .setRandomizationFactor(0.5)
                 .setTimeout(20000)
-                // Authentication
-                .setAuth(mapOf("token" to (authInterceptor.getToken() ?: "")))
+                // Authentication — prefer the room-bound kiosk signaling token
+                // minted for the active call, falling back to the login token.
+                .setAuth(mapOf("token" to desired))
                 .build()
 
             socket = IO.socket(URI.create(AppConfig.signalingUrl), options)
+            lastAuthToken = desired
+
+            socket?.let { socketFlow.tryEmit(it) }
 
             socket?.on(Socket.EVENT_CONNECT) {
                 Logger.d("Socket connected: ${socket?.id()}")
@@ -65,47 +88,41 @@ class SocketServiceImpl @Inject constructor(
     override fun isConnected(): Boolean = socket?.connected() ?: false
 
     override fun observeEvents(): Flow<Pair<String, Any>> = callbackFlow {
-        val socketInstance = socket ?: run {
-            close()
-            return@callbackFlow
-        }
-
         val events = listOf(
             "joined", "peer-joined", "peer-left", "new-producer",
             "call-ended", "room-updated", "recording-status", "call-status"
         )
 
-        val listeners = events.associateWith { event ->
-            { args: Array<Any> ->
-                if (args.isNotEmpty()) {
-                    trySend(event to args[0])
-                } else {
-                    trySend(event to Unit)
+        fun attach(target: Socket) {
+            val onEvent: (String) -> (Any?) -> Unit = { event ->
+                { args: Any? ->
+                    if (args != null) trySend(event to args) else trySend(event to Unit)
                 }
+            }
+            events.forEach { event ->
+                target.on(event) { args -> onEvent(event)(args.getOrNull(0)) }
+            }
+            target.on(Socket.EVENT_CONNECT) { trySend(Socket.EVENT_CONNECT to Unit) }
+            target.on(Socket.EVENT_DISCONNECT) { trySend(Socket.EVENT_DISCONNECT to Unit) }
+            target.on(Socket.EVENT_CONNECT_ERROR) { args ->
+                trySend(Socket.EVENT_CONNECT_ERROR to (args.getOrNull(0) ?: "Unknown error"))
             }
         }
 
-        listeners.forEach { (event, listener) ->
-            socketInstance.on(event) { args -> listener(args) }
-        }
-
-        // Also observe system events if needed
-        socketInstance.on(Socket.EVENT_CONNECT) { trySend(Socket.EVENT_CONNECT to Unit) }
-        socketInstance.on(Socket.EVENT_DISCONNECT) { trySend(Socket.EVENT_DISCONNECT to Unit) }
-        socketInstance.on(Socket.EVENT_CONNECT_ERROR) { args ->
-            trySend(Socket.EVENT_CONNECT_ERROR to (args.getOrNull(0) ?: "Unknown error"))
+        // Attach to whatever socket exists now...
+        socket?.let { attach(it) }
+        // ...and to any socket created later (token-triggered reconnect).
+        val job = launch {
+            socketFlow.collect { s ->
+                if (s !== socket) return@collect
+                attach(s)
+            }
         }
 
         awaitClose {
+            job.cancel()
             // We don't necessarily want to disconnect the socket when the flow is closed,
             // as multiple collectors might exist or we might want to keep the connection.
-            // But we should remove listeners if we want to be clean.
-            listeners.forEach { (event, _) ->
-                socketInstance.off(event)
-            }
-            socketInstance.off(Socket.EVENT_CONNECT)
-            socketInstance.off(Socket.EVENT_DISCONNECT)
-            socketInstance.off(Socket.EVENT_CONNECT_ERROR)
         }
     }
 

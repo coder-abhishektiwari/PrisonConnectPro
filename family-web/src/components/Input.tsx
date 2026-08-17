@@ -6,6 +6,7 @@ interface InputProps {
   placeholder?: string;
   error?: string;
   disabled?: boolean;
+  readOnly?: boolean;
   className?: string;
   inputMode?: string;
   maxLength?: number;
@@ -23,6 +24,7 @@ export function Input({
   placeholder = '',
   error,
   disabled = false,
+  readOnly = false,
   className = '',
   inputMode,
   maxLength,
@@ -37,6 +39,7 @@ export function Input({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         disabled={disabled}
+        readOnly={readOnly}
         inputMode={inputMode as any}
         maxLength={maxLength}
         autoComplete={autoComplete}
@@ -44,6 +47,7 @@ export function Input({
           w-full px-4 py-2.5 rounded-lg border-2 transition-colors
           focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500
           disabled:opacity-50 disabled:cursor-not-allowed
+          read-only:cursor-not-allowed
           ${error ? 'border-error bg-error-50' : 'border-neutral-300 bg-white hover:border-neutral-400'}
         `}
       />

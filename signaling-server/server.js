@@ -63,9 +63,13 @@ function isFamily(auth) {
   return auth?.role === 'family';
 }
 
+function isKiosk(auth) {
+  return auth?.role === 'kiosk';
+}
+
 io.on('connection', (socket) => {
   const auth = socket.data.auth;
-  console.log(`[signaling] connected ${socket.id} (peer=${auth.sub} role=${auth.role})`);
+  console.log(`[signaling] connected ${socket.id} (peer=${auth.sub} role=${auth.role} room=${auth.roomId || '-'})`);
   let currentRoomId = null;
   let currentPeerId = null;
   // Mediasoup transport ids for this socket, populated by createWebRtcTransport.
@@ -76,18 +80,24 @@ io.on('connection', (socket) => {
 
   socket.on('join-room', async (data = {}, callback) => {
     const { roomId, peerId } = data;
-    if (!roomId || !peerId) return callback?.({ success: false, error: 'roomId and peerId required' });
-    // A family token is bound to one specific room — it must not be reused elsewhere.
-    if (isFamily(auth) && auth.roomId !== roomId) return callback?.({ success: false, error: 'FORBIDDEN' });
+    console.log(`[join-room] sid=${socket.id} roomId=${roomId} peerId=${peerId} authRole=${auth.role} authRoom=${auth.roomId || '-'}`);
+    if (!roomId || !peerId) { console.log('[join-room] REJECT missing roomId/peerId'); return callback?.({ success: false, error: 'roomId and peerId required' }); }
+    // A family or kiosk token is bound to one specific room — it must not be
+    // reused elsewhere.
+    if ((isFamily(auth) || isKiosk(auth)) && auth.roomId !== roomId) {
+      console.log(`[join-room] REJECT FORBIDDEN (authRoom=${auth.roomId || '-'} != ${roomId})`);
+      return callback?.({ success: false, error: 'FORBIDDEN' });
+    }
     // Only the room's owner (kiosk/family identity) or staff may enter under this peerId.
-    if (!isStaff(auth) && !isFamily(auth) && peerId !== auth.sub) {
+    if (!isStaff(auth) && !isFamily(auth) && !isKiosk(auth) && peerId !== auth.sub) {
+      console.log('[join-room] REJECT peerId FORBIDDEN');
       return callback?.({ success: false, error: 'FORBIDDEN' });
     }
 
     const peers = roomPeers(roomId);
     const already = [...peers.values()].filter((s) => s.id !== socket.id).length;
     const roomMax = parseInt(process.env.ROOM_MAX_PARTICIPANTS || '2', 10);
-    if (already >= roomMax) return callback?.({ success: false, error: 'Room is full' });
+    if (already >= roomMax) { console.log(`[join-room] REJECT full already=${already}`); return callback?.({ success: false, error: 'Room is full' }); }
 
     try {
       await media('POST', '/rooms', { roomId });
@@ -97,6 +107,7 @@ io.on('connection', (socket) => {
       currentRoomId = roomId;
       currentPeerId = peerId;
       socket.to(roomId).emit('peer-joined', { peerId });
+      console.log(`[join-room] OK roomId=${roomId} peerId=${peerId} rtpCapsCodecs=${info.data.rtpCapabilities && info.data.rtpCapabilities.codecs ? info.data.rtpCapabilities.codecs.length : '?'}`);
       return callback?.({ success: true, routerRtpCapabilities: info.data.rtpCapabilities });
     } catch (err) {
       console.error(`[signaling] join-room media error (${err.message})`);

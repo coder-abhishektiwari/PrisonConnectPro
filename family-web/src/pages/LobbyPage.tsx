@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/Button';
 import { Loading } from '@/components/States';
-import { callApi } from '@/services/api';
 import { useSession } from '@/context/SessionContext';
 import { useToast } from '@/components/Toast';
 
@@ -10,6 +9,7 @@ type LobbyStatus = 'waiting' | 'ready' | 'joining' | 'joined' | 'error';
 
 export function LobbyPage() {
   const { linkToken } = useParams<{ linkToken: string }>();
+  const navigate = useNavigate();
   const { addToast } = useToast();
   const { session } = useSession();
   const [loading, setLoading] = useState(true);
@@ -39,16 +39,26 @@ export function LobbyPage() {
     return () => {
       timers.forEach(clearTimeout);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);
+
+  // Dev/demo: auto-join once the room is ready so no clicks are needed.
+  useEffect(() => {
+    if (!import.meta.env.DEV || status !== 'ready') return;
+    if (!linkToken || !session) return;
+    void handleJoin();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, linkToken, session]);
 
   const handleJoin = async () => {
     if (!linkToken || !session) return;
     try {
       setStatus('joining');
       setStatusMessage('Joining room...');
-      await callApi.joinRoom(session.roomId, 'family-1');
-      // Navigate to call page
-      window.location.href = `/call/${linkToken}/call`;
+      // Actual media join happens over the socket 'join-room' event in the call
+      // page. The REST /rooms/join endpoint requires a persisted room record the
+      // kiosk never creates, so skip it and navigate straight to the call page.
+      navigate(`/call/${linkToken}/call`);
     } catch (err) {
       setStatus('error');
       setStatusMessage(err instanceof Error ? err.message : 'Failed to join call room.');
