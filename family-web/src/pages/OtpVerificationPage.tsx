@@ -152,7 +152,8 @@ export function OtpVerificationPage() {
             </p>
           </div>
 
-          {/* Read-only: the OTP is auto-filled from the SMS and never typed by hand. */}
+          {/* Auto-filled from the SMS when WebOTP is available; also editable by hand
+              (e.g. log-based SMS where the code is communicated out-of-band). */}
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -170,9 +171,8 @@ export function OtpVerificationPage() {
               onChange={setOtp}
               placeholder={waitingForSms ? 'Waiting for SMS…' : '000000'}
               error={error || undefined}
-              readOnly
               disabled={!phoneMasked}
-              className="text-center text-2xl tracking-widest font-mono opacity-90 cursor-not-allowed"
+              className="text-center text-2xl tracking-widest font-mono"
             />
 
             <Button size="lg" className="w-full" type="submit" disabled={loading || !otp}>
@@ -190,7 +190,7 @@ export function OtpVerificationPage() {
               {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Didn't receive the code? Resend SMS"}
             </button>
             <p className="text-xs text-neutral-400">
-              The code is read automatically — no need to type anything.
+              If the code is read automatically it fills in by itself — otherwise type the 6-digit code you received.
             </p>
           </div>
         </div>

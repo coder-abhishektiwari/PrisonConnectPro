@@ -18,7 +18,8 @@ const {
   contactPhone,
   registerOrVerifyFingerprint,
   deviceRegisteredForCall,
-  buildLinkSms
+  buildLinkSms,
+  buildCallLink
 } = require('./lib/familySecurity');
 // NOTE: Mediasoup manager and recorder have been intentionally commented out by developer
 // as they were causing failures on Render deployment. This is a known limitation - 
@@ -1391,7 +1392,7 @@ app.post('/calls', requireAuth, asyncRoute(async (req, res) => {
           sent: true,
           sentTo: maskedPhone(familyPhone),
           linkToken: newCall.linkToken,
-          linkUrl: `${process.env.FAMILY_WEB_URL || 'http://127.0.0.1:5173'}/call/${newCall.linkToken}`,
+          linkUrl: buildCallLink(newCall.linkToken),
           transport: smsResult.provider,
           loggedAt: smsResult.loggedAt
         };
