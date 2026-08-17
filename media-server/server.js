@@ -14,6 +14,8 @@ const RTC_LISTEN_IP = process.env.RTC_LISTEN_IP || '0.0.0.0';
 const RTC_ANNOUNCED_IP = process.env.RTC_ANNOUNCED_IP || '127.0.0.1';
 const RTC_MIN_PORT = parseInt(process.env.RTC_MIN_PORT || '40000', 10);
 const RTC_MAX_PORT = parseInt(process.env.RTC_MAX_PORT || '49999', 10);
+const RTC_ENABLE_UDP = process.env.RTC_ENABLE_UDP !== 'false';
+const RTC_ENABLE_TCP = process.env.RTC_ENABLE_TCP === 'true';
 const REC_DIR = path.join(__dirname, 'recordings');
 fs.mkdirSync(REC_DIR, { recursive: true });
 
@@ -97,7 +99,7 @@ app.post('/rooms/:roomId/transports', async (req, res) => {
   const p = peer(req.params.roomId, peerId);
   const transport = await room.router.createWebRtcTransport({
     listenIps: [{ ip: RTC_LISTEN_IP, announcedIp: RTC_ANNOUNCED_IP }],
-    enableUdp: true, enableTcp: true, preferUdp: true,
+    enableUdp: RTC_ENABLE_UDP, enableTcp: RTC_ENABLE_TCP, preferUdp: true,
     appData: { peerId, direction }
   });
   transportOwner.set(transport.id, { roomId: req.params.roomId, peerId, transport, direction });
@@ -165,7 +167,7 @@ app.post('/rooms/:roomId/consume', async (req, res) => {
   if (!recv) {
     recv = await room.router.createWebRtcTransport({
       listenIps: [{ ip: RTC_LISTEN_IP, announcedIp: RTC_ANNOUNCED_IP }],
-      enableUdp: true, enableTcp: true, preferUdp: true,
+      enableUdp: RTC_ENABLE_UDP, enableTcp: RTC_ENABLE_TCP, preferUdp: true,
       appData: { peerId, direction: 'recv' }
     });
     transportOwner.set(recv.id, { roomId: req.params.roomId, peerId, transport: recv, direction: 'recv' });
