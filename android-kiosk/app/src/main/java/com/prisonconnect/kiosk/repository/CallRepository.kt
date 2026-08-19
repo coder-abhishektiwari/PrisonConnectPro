@@ -13,6 +13,7 @@ interface CallRepository {
     val signalingStatus: StateFlow<SignalingStatus>
 
     fun getScheduledCalls(id: String): Flow<NetworkResult<List<ScheduledCall>>>
+    fun getCallHistory(id: String): Flow<NetworkResult<List<CallHistory>>>
     fun getAvailableSlots(contactId: String): Flow<NetworkResult<List<AvailableSlot>>>
     fun bookCall(request: ScheduleRequest): Flow<NetworkResult<ScheduledCall>>
     fun cancelBooking(bookingId: String): Flow<NetworkResult<Unit>>

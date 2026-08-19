@@ -1659,8 +1659,9 @@ app.patch('/calls/:callId', requireAuth, asyncRoute(async (req, res) => {
 
 app.get('/calls/scheduled/:id', requireAuth, asyncRoute(async (req, res) => {
   const { id } = req.params;
-  const schedules = await readDb('schedule.json');
-  const inmates = await readDb('inmates.json');
+  const [schedules, inmates, contacts] = await Promise.all([
+    readDb('schedule.json'), readDb('inmates.json'), readDb('contacts.json')
+  ]);
   const inmate = inmates.find((i) => i.inmateId === id) ||
                  inmates.find((i) => i.assignedKioskId === id) ||
                  inmates.find((i) => i.prisonerNumber === id);
@@ -1668,7 +1669,32 @@ app.get('/calls/scheduled/:id', requireAuth, asyncRoute(async (req, res) => {
     return sendError(res, 'NOT_FOUND', 'Inmate not found in your kiosk/jail', 404);
   }
   const matches = schedules.filter((s) => s.inmateId === inmate.inmateId || s.kioskId === inmate.assignedKioskId);
-  return sendSuccess(res, await scopeList(req, matches));
+  const scoped = await scopeList(req, matches);
+  const contactName = (contactId) => contacts.find((c) => c.contactId === contactId)?.fullName || null;
+  return sendSuccess(res, scoped.map((s) => ({ ...s, contactName: contactName(s.contactId) })));
+}));
+
+// Inmate/kiosk-scoped call history (terminal calls only) — mirrors
+// /calls/scheduled/:id so the kiosk dashboard can show a real history list.
+app.get('/calls/history/:id', requireAuth, asyncRoute(async (req, res) => {
+  const { id } = req.params;
+  const [calls, inmates, contacts] = await Promise.all([
+    readDb('calls.json'), readDb('inmates.json'), readDb('contacts.json')
+  ]);
+  const inmate = inmates.find((i) => i.inmateId === id) ||
+                 inmates.find((i) => i.assignedKioskId === id) ||
+                 inmates.find((i) => i.prisonerNumber === id);
+  if (!inmate || !(await inScopeOf(req, inmate))) {
+    return sendError(res, 'NOT_FOUND', 'Inmate not found in your kiosk/jail', 404);
+  }
+  const matches = calls.filter((c) => c.inmateId === inmate.inmateId || c.kioskId === inmate.assignedKioskId);
+  const scoped = await scopeList(req, matches);
+  const contactName = (contactId) => contacts.find((c) => c.contactId === contactId)?.fullName || null;
+  const history = scoped
+    .filter((c) => TERMINAL_STATES.includes(c.status))
+    .sort((a, b) => new Date(b.startTime || 0) - new Date(a.startTime || 0))
+    .map((c) => ({ ...c, contactName: contactName(c.contactId) || c.familyMemberName || null }));
+  return sendSuccess(res, history);
 }));
 
 app.post('/calls/:callId/end', requireAuth, asyncRoute(async (req, res) => {

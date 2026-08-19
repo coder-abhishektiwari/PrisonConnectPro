@@ -9,6 +9,7 @@ import com.prisonconnect.kiosk.models.contacts.Contact
 import com.prisonconnect.kiosk.models.inmate.InmateProfile
 import com.prisonconnect.kiosk.models.inmate.InmateBalance
 import com.prisonconnect.kiosk.models.call.ScheduledCall
+import com.prisonconnect.kiosk.models.call.CallHistory
 import com.prisonconnect.kiosk.network.NetworkResult
 import com.prisonconnect.kiosk.repository.AuthRepository
 import com.prisonconnect.kiosk.repository.ContactRepository
@@ -45,6 +46,9 @@ class DashboardViewModel @Inject constructor(
     private val _scheduledCalls = MutableStateFlow<List<ScheduledCall>>(emptyList())
     val scheduledCalls = _scheduledCalls.asStateFlow()
 
+    private val _callHistory = MutableStateFlow<List<CallHistory>>(emptyList())
+    val callHistory = _callHistory.asStateFlow()
+
     /** Single-source jail balance shown in the dashboard header. */
     val jailBalance = jailBalanceSync.balance
 
@@ -67,12 +71,14 @@ class DashboardViewModel @Inject constructor(
                 inmateRepository.getProfile(inmateId),
                 inmateRepository.getBalance(inmateId),
                 contactRepository.getContacts(inmateId),
-                callRepository.getScheduledCalls(inmateId)
-            ) { profile, balance, contacts, calls ->
+                callRepository.getScheduledCalls(inmateId),
+                callRepository.getCallHistory(inmateId)
+            ) { profile, balance, contacts, calls, history ->
                 val p = (profile as? NetworkResult.Success)?.data
                 val b = (balance as? NetworkResult.Success)?.data
                 val c = (contacts as? NetworkResult.Success)?.data?.filter { it.isApproved } ?: emptyList()
                 val s = (calls as? NetworkResult.Success)?.data ?: emptyList()
+                val h = (history as? NetworkResult.Success)?.data ?: emptyList()
 
                 if (p != null) {
                     // Partial data is fine: profile loaded, the rest is best-effort.
@@ -80,13 +86,15 @@ class DashboardViewModel @Inject constructor(
                     _inmateBalance.value = b
                     _contacts.value = c.take(5) // Show top 5 on dashboard
                     _scheduledCalls.value = s
-                    UiState.Success(DashboardData(p, b, c, s))
+                    _callHistory.value = h
+                    UiState.Success(DashboardData(p, b, c, s, h))
                 } else {
                     // Still waiting on pending reads -> keep loading, don't flicker Error.
                     val anyLoading = profile is NetworkResult.Loading ||
                         balance is NetworkResult.Loading ||
                         contacts is NetworkResult.Loading ||
-                        calls is NetworkResult.Loading
+                        calls is NetworkResult.Loading ||
+                        history is NetworkResult.Loading
                     val profileFailed = profile is NetworkResult.Failure
                     when {
                         profileFailed -> {
@@ -123,6 +131,7 @@ class DashboardViewModel @Inject constructor(
         val profile: InmateProfile,
         val balance: InmateBalance?,
         val contacts: List<Contact>,
-        val scheduledCalls: List<ScheduledCall>
+        val scheduledCalls: List<ScheduledCall>,
+        val callHistory: List<CallHistory>
     )
 }

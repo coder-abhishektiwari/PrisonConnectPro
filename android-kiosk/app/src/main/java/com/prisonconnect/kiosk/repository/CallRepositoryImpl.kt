@@ -200,6 +200,20 @@ class CallRepositoryImpl @Inject constructor(
         }
     }
 
+    override fun getCallHistory(id: String): Flow<NetworkResult<List<CallHistory>>> = flow {
+        emit(NetworkResult.Loading)
+        try {
+            val response = apiService.getCallHistory(id)
+            if (response.success && response.data != null) {
+                emit(NetworkResult.Success(response.data))
+            } else {
+                emit(NetworkResult.Failure(response.error ?: ApiError("UNKNOWN", "Unknown error")))
+            }
+        } catch (e: Exception) {
+            emit(NetworkResult.Failure(ApiError("EXCEPTION", e.message ?: "Network exception")))
+        }
+    }
+
     override fun getAvailableSlots(contactId: String): Flow<NetworkResult<List<AvailableSlot>>> = flow {
         emit(NetworkResult.Loading)
         try {

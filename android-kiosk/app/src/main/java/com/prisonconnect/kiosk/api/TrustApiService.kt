@@ -7,6 +7,7 @@ import com.prisonconnect.kiosk.models.contacts.Contact
 import com.prisonconnect.kiosk.models.inmate.InmateBalance
 import com.prisonconnect.kiosk.models.inmate.InmateProfile
 import com.prisonconnect.kiosk.models.call.ScheduledCall
+import com.prisonconnect.kiosk.models.call.CallHistory
 import com.prisonconnect.kiosk.models.call.CallSession
 import com.prisonconnect.kiosk.models.call.CreateCallRequest
 import com.prisonconnect.kiosk.models.schedule.AvailableSlot
@@ -89,6 +90,9 @@ interface TrustApiService {
 
     @GET("calls/scheduled/{id}")
     suspend fun getScheduledCalls(@Path("id") id: String): ApiResponse<List<ScheduledCall>>
+
+    @GET("calls/history/{id}")
+    suspend fun getCallHistory(@Path("id") id: String): ApiResponse<List<CallHistory>>
 
     @GET("schedule/slots/{contactId}")
     suspend fun getAvailableSlots(@Path("contactId") contactId: String): ApiResponse<List<AvailableSlot>>

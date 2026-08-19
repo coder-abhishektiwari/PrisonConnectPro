@@ -32,7 +32,19 @@ data class ScheduledCall(
     @SerializedName("callType") val type: CallType? = null,
     @SerializedName("contactId") val contactId: String? = null,
     @SerializedName("status") val status: String? = null,
-    val contactName: String? = null
+    @SerializedName("contactName") val contactName: String? = null
+)
+
+data class CallHistory(
+    @SerializedName("callId") val callId: String,
+    @SerializedName("type") val type: CallType? = null,
+    @SerializedName("contactId") val contactId: String? = null,
+    @SerializedName("contactName") val contactName: String? = null,
+    @SerializedName("status") val status: String? = null,
+    @SerializedName("startTime") val startTime: String? = null,
+    @SerializedName("endTime") val endTime: String? = null,
+    @SerializedName("durationMinutes") val durationMinutes: Int? = null,
+    @SerializedName("duration") val duration: Int? = null
 )
 
 enum class SocketStatus {

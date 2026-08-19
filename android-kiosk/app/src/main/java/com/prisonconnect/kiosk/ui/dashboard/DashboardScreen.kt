@@ -41,6 +41,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.prisonconnect.kiosk.core.UiState
 import com.prisonconnect.kiosk.models.call.CallType
+import com.prisonconnect.kiosk.models.call.CallHistory
 import com.prisonconnect.kiosk.models.contacts.Contact
 import com.prisonconnect.kiosk.models.inmate.InmateBalance
 import com.prisonconnect.kiosk.models.inmate.InmateProfile
@@ -127,7 +128,10 @@ fun DashboardScreen(
                             scheduledCalls = state.data.scheduledCalls,
                             onCallClick = onScheduledCallClick
                         )
-                        2 -> HistoryTabContent()
+                        2 -> HistoryTabContent(
+                            callHistory = state.data.callHistory,
+                            onRefresh = { viewModel.refreshAll() }
+                        )
                     }
                 }
                 else -> Unit
@@ -169,23 +173,136 @@ fun ScheduleTabContent(
 }
 
 @Composable
-fun HistoryTabContent() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
-                imageVector = Icons.Default.Refresh,
-                contentDescription = null,
-                modifier = Modifier.size(64.dp),
-                tint = TextGray.copy(alpha = 0.5f)
-            )
-            Spacer(modifier = Modifier.height(16.dp))
+fun HistoryTabContent(
+    callHistory: List<CallHistory>,
+    onRefresh: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text(
-                text = "Call History coming soon",
-                style = MaterialTheme.typography.titleLarge,
-                color = TextGray
+                text = "CALL HISTORY",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = TextDarkBlue
             )
+            TextButton(onClick = onRefresh) {
+                Icon(Icons.Default.Refresh, contentDescription = null, tint = HeaderBlue, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Refresh", color = HeaderBlue)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        if (callHistory.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("No call history yet", color = TextGray)
+            }
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                items(callHistory) { call ->
+                    CallHistoryCard(call = call)
+                }
+            }
         }
     }
+}
+
+@Composable
+fun CallHistoryCard(call: CallHistory) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                color = HeaderBlue.copy(alpha = 0.1f),
+                shape = CircleShape,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = if (call.type == CallType.VIDEO) Icons.Default.Videocam else Icons.Default.Call,
+                        contentDescription = null,
+                        tint = HeaderBlue
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = call.contactName.orEmpty(),
+                    fontWeight = FontWeight.Bold,
+                    color = TextDarkBlue
+                )
+                Text(
+                    text = formatCallDate(call.startTime) + " • " + formatCallDuration(call),
+                    fontSize = 12.sp,
+                    color = TextGray
+                )
+            }
+
+            Surface(
+                color = when (call.status) {
+                    "completed" -> GreenActiveBg
+                    "failed" -> Color(0xFFFFEBEE)
+                    "cancelled", "rejected", "missed" -> Color(0xFFFFF3E0)
+                    else -> Color(0xFFF0F4F8)
+                },
+                shape = RoundedCornerShape(50)
+            ) {
+                Text(
+                    text = call.status.orEmpty().uppercase(),
+                    color = when (call.status) {
+                        "completed" -> GreenActiveText
+                        "failed" -> Color(0xFFC62828)
+                        "cancelled", "rejected", "missed" -> Color(0xFFE65100)
+                        else -> TextGray
+                    },
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                )
+            }
+        }
+    }
+}
+
+private fun formatCallDate(startTime: String?): String {
+    if (startTime.isNullOrBlank()) return "—"
+    return try {
+        val parsed = try {
+            java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssX", Locale.getDefault()).parse(startTime)
+                ?: java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSX", Locale.getDefault()).parse(startTime)
+        } catch (e: Exception) {
+            java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSX", Locale.getDefault()).parse(startTime)
+        }
+        if (parsed != null) {
+            java.text.SimpleDateFormat("d MMM yyyy • h:mm a", Locale.getDefault()).format(parsed)
+        } else "—"
+    } catch (e: Exception) {
+        startTime
+    }
+}
+
+private fun formatCallDuration(call: CallHistory): String {
+    val mins = call.durationMinutes ?: (call.duration?.div(60))
+    return if (mins != null && mins > 0) "${mins} min" else ""
 }
 
 @Composable
@@ -770,7 +887,8 @@ fun PreviewDashboardMobile() {
                         ),
 
                         ),
-                    scheduledCalls = emptyList()
+                    scheduledCalls = emptyList(),
+                    callHistory = emptyList()
                 ),
                 onContactClick = { _, _, _ -> },
                 onContactDetailClick = {},
