@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.launch
 import java.net.URI
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -22,6 +24,7 @@ class SocketServiceImpl @Inject constructor(
 
     private var socket: Socket? = null
     private var lastAuthToken: String? = null
+    private var connectLatch: CountDownLatch? = null
 
     // Published whenever a (new) socket instance is created so collectors can
     // attach to the latest connection after token-triggered reconnects.
@@ -61,8 +64,16 @@ class SocketServiceImpl @Inject constructor(
 
             socket?.let { socketFlow.tryEmit(it) }
 
+            // Fresh latch for THIS socket instance. Any stallered emits (e.g.
+            // join-room fired before the websocket handshake finished) wait on
+            // it and then retry once the connection is live.
+            val latch = CountDownLatch(1)
+            connectLatch = latch
+
             socket?.on(Socket.EVENT_CONNECT) {
                 Logger.d("Socket connected: ${socket?.id()}")
+                latch.countDown()
+                connectLatch = null
             }
 
             socket?.on(Socket.EVENT_DISCONNECT) {
@@ -77,6 +88,25 @@ class SocketServiceImpl @Inject constructor(
         } catch (e: Exception) {
             Logger.e("Failed to initialize socket", e)
         }
+
+        // Block the caller until the socket is actually connected (or 25s give
+        // up) so that room-signaling emits queued right after connect() are not
+        // dropped. Runs on a background thread to avoid blocking the main
+        // thread while the websocket handshake (and optional Render cold start)
+        // completes.
+        val latch = connectLatch ?: return
+        val s = socket
+        val token = desired
+        Thread {
+            try {
+                latch.await(25, TimeUnit.SECONDS)
+                if (s?.connected() != true || token != lastAuthToken) {
+                    Logger.w("Socket did not become ready in time for signaling emit")
+                }
+            } catch (e: Exception) {
+                Logger.e("Error waiting for socket connect", e)
+            }
+        }.start()
     }
 
     override fun disconnect() {
@@ -136,15 +166,42 @@ class SocketServiceImpl @Inject constructor(
 
     /**
      * Emit an event with an acknowledgement callback.
+     *
+     * If the socket is not connected yet (e.g. join-room fired immediately
+     * after connect() during a cold Render start), defers the emit to a
+     * background thread until the connection is ready, then retries.
      */
     override fun emitWithAck(event: String, payload: Any, callback: (Array<Any>) -> Unit) {
         if (socket?.connected() == true) {
-            socket?.emit(event, payload, io.socket.client.Ack { args ->
-                callback(args ?: arrayOf())
-            })
+            directEmitWithAck(event, payload, callback)
+            return
+        }
+
+        val latch = connectLatch
+        val s = socket
+        if (latch != null && s != null) {
+            Thread {
+                try {
+                    latch.await(25, TimeUnit.SECONDS)
+                } catch (e: Exception) {
+                    Logger.e("Error waiting for socket before $event", e)
+                }
+                if (s.connected()) {
+                    directEmitWithAck(event, payload, callback)
+                } else {
+                    Logger.w("Socket never became ready; dropping $event")
+                    callback(arrayOf())
+                }
+            }.start()
         } else {
             Logger.w("Attempted to emit $event with ack while socket is disconnected")
             callback(arrayOf())
         }
+    }
+
+    private fun directEmitWithAck(event: String, payload: Any, callback: (Array<Any>) -> Unit) {
+        socket?.emit(event, payload, io.socket.client.Ack { args ->
+            callback(args ?: arrayOf())
+        })
     }
 }

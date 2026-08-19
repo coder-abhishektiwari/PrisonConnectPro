@@ -56,16 +56,53 @@ function peer(roomId, peerId) {
   return room.peers.get(peerId);
 }
 
+function log(...args) { console.log('[media]', ...args); }
+
+function touchRoom(roomId) {
+  const r = rooms.get(roomId);
+  if (r) r.lastActivity = Date.now();
+}
+
+function closeRoom(roomId) {
+  const room = rooms.get(roomId);
+  if (!room) return false;
+  stopRecordings(roomId);
+  for (const entry of room.peers.values()) {
+    for (const t of entry.transports.values()) t.close();
+  }
+  room.router.close();
+  rooms.delete(roomId);
+  for (const [tid, owner] of transportOwner) if (owner.roomId === roomId) transportOwner.delete(tid);
+  for (const [pid, owner] of producerOwner) if (owner.roomId === roomId) producerOwner.delete(pid);
+  for (const [cid, owner] of consumerOwner) if (owner.roomId === roomId) consumerOwner.delete(cid);
+  log(`room closed roomId=${roomId}`);
+  return true;
+}
+
+// Rooms that outlive their signaling session (e.g. after a signaling redeploy)
+// must not pin transports/ports forever. Any room idle > 15m is reclaimed.
+setInterval(() => {
+  const now = Date.now();
+  for (const [roomId, room] of rooms) {
+    if ((now - (room.lastActivity || room.createdAt || 0)) > 15 * 60 * 1000 && room.peers.size === 0) {
+      log(`room swept (idle > 15m, no peers) roomId=${roomId}`);
+      closeRoom(roomId);
+    }
+  }
+}, 60000).unref();
+
 // ---- room ----
 app.post('/rooms', async (req, res) => {
   const { roomId } = req.body || {};
   if (!roomId) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'roomId is required' } });
   let room = rooms.get(roomId);
+  const created = !room;
   if (!room) {
     const router = await worker.createRouter({ mediaCodecs: MEDIA_CODECS });
-    room = { router, peers: new Map(), recorders: new Map(), recordingMeta: null };
+    room = { router, peers: new Map(), recorders: new Map(), recordingMeta: null, createdAt: Date.now() };
     rooms.set(roomId, room);
   }
+  log(`room created=${created ? 'NEW' : 'EXISTS'} roomId=${roomId}`);
   return res.json({ success: true, rtpCapabilities: room.router.rtpCapabilities });
 });
 
@@ -75,18 +112,20 @@ app.get('/rooms/:roomId', (req, res) => {
   return res.json({ success: true, data: { rtpCapabilities: room.router.rtpCapabilities, peers: [...room.peers.keys()] } });
 });
 
-app.delete('/rooms/:roomId', (req, res) => {
+app.get('/rooms/:roomId/producers', (req, res) => {
   const room = rooms.get(req.params.roomId);
-  if (!room) return res.json({ success: true });
-  stopRecordings(req.params.roomId);
-  for (const entry of room.peers.values()) {
-    for (const t of entry.transports.values()) t.close();
+  if (!room) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'room not found' } });
+  const producers = [];
+  for (const [peerId, p] of room.peers) {
+    for (const producer of p.producers.values()) {
+      producers.push({ producerId: producer.id, kind: producer.kind, peerId });
+    }
   }
-  room.router.close();
-  rooms.delete(req.params.roomId);
-  for (const [tid, owner] of transportOwner) if (owner.roomId === req.params.roomId) transportOwner.delete(tid);
-  for (const [pid, owner] of producerOwner) if (owner.roomId === req.params.roomId) producerOwner.delete(pid);
-  for (const [cid, owner] of consumerOwner) if (owner.roomId === req.params.roomId) consumerOwner.delete(cid);
+  return res.json({ success: true, data: { producers } });
+});
+
+app.delete('/rooms/:roomId', (req, res) => {
+  closeRoom(req.params.roomId);
   return res.json({ success: true });
 });
 
@@ -97,6 +136,7 @@ app.post('/rooms/:roomId/transports', async (req, res) => {
   const room = rooms.get(req.params.roomId);
   if (!room) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'room not found' } });
   const p = peer(req.params.roomId, peerId);
+  touchRoom(req.params.roomId);
   const transport = await room.router.createWebRtcTransport({
     listenIps: [{ ip: RTC_LISTEN_IP, announcedIp: RTC_ANNOUNCED_IP }],
     enableUdp: RTC_ENABLE_UDP, enableTcp: RTC_ENABLE_TCP, preferUdp: true,
@@ -104,6 +144,7 @@ app.post('/rooms/:roomId/transports', async (req, res) => {
   });
   transportOwner.set(transport.id, { roomId: req.params.roomId, peerId, transport, direction });
   p.transports.set(transport.id, transport);
+  log(`transport created room=${req.params.roomId} peer=${peerId} dir=${direction} id=${transport.id} udp=${transport.iceCandidates.filter(c => c.protocol === 'udp').map(c => `${c.ip}:${c.port}`).join(',')}`);
   return res.json({
     success: true,
     data: { id: transport.id, iceParameters: transport.iceParameters, iceCandidates: transport.iceCandidates, dtlsParameters: transport.dtlsParameters }
@@ -113,7 +154,9 @@ app.post('/rooms/:roomId/transports', async (req, res) => {
 app.post('/transports/:transportId/connect', async (req, res) => {
   const owner = transportOwner.get(req.params.transportId);
   if (!owner) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'transport not found' } });
+  touchRoom(owner.roomId);
   await owner.transport.connect({ dtlsParameters: req.body.dtlsParameters });
+  log(`transport connected id=${req.params.transportId} room=${owner.roomId} peer=${owner.peerId}`);
   return res.json({ success: true });
 });
 
@@ -140,6 +183,7 @@ app.post('/transports/:transportId/trickle', (req, res) => {
 app.post('/transports/:transportId/produce', async (req, res) => {
   const owner = transportOwner.get(req.params.transportId);
   if (!owner) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'transport not found' } });
+  touchRoom(owner.roomId);
   const { kind, rtpParameters, appData } = req.body || {};
   const producer = await owner.transport.produce({ kind, rtpParameters, appData: { ...(appData || {}), peerId: owner.peerId, roomId: owner.roomId } });
   const room = rooms.get(owner.roomId);
@@ -149,11 +193,11 @@ app.post('/transports/:transportId/produce', async (req, res) => {
     producerOwner.delete(producer.id);
     rooms.get(owner.roomId)?.peers.get(owner.peerId)?.producers.delete(producer.id);
   });
+  log(`produce room=${owner.roomId} peer=${owner.peerId} kind=${kind} producer=${producer.id}`);
   return res.json({ success: true, id: producer.id, kind });
 });
 
-app.post('/rooms/:roomId/consume', async (req, res) => {
-  const { peerId, producerId, rtpCapabilities } = req.body || {};
+app.post('/rooms/:roomId/consume', async (req, res) => {  const { peerId, producerId, rtpCapabilities } = req.body || {};
   if (!peerId || !producerId || !rtpCapabilities) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'peerId, producerId and rtpCapabilities are required' } });
   const room = rooms.get(req.params.roomId);
   if (!room) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'room not found' } });
@@ -162,6 +206,7 @@ app.post('/rooms/:roomId/consume', async (req, res) => {
   if (!room.router.canConsume({ producerId, rtpCapabilities })) {
     return res.status(422).json({ success: false, error: { code: 'CANNOT_CONSUME', message: 'cannot consume this producer' } });
   }
+  touchRoom(req.params.roomId);
   const p = peer(req.params.roomId, peerId);
   let recv = [...p.transports.values()].find((t) => t.appData?.direction === 'recv');
   if (!recv) {
@@ -180,6 +225,7 @@ app.post('/rooms/:roomId/consume', async (req, res) => {
     consumerOwner.delete(consumer.id);
     rooms.get(req.params.roomId)?.peers.get(peerId)?.consumers.delete(consumer.id);
   });
+  log(`consume room=${req.params.roomId} peer=${peerId} producer=${producerId} consumer=${consumer.id} kind=${consumer.kind}`);
   return res.json({ success: true, id: consumer.id, producerId, kind: consumer.kind, rtpParameters: consumer.rtpParameters });
 });
 

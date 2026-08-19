@@ -77,6 +77,9 @@ io.on('connection', (socket) => {
   // events, so we resolve it from the socket state instead of failing.
   let sendTransportId = null;
   let recvTransportId = null;
+  // Producers announced by join-room that this peer has not yet consumed
+  // (flushed once its recv transport exists).
+  let pendingProducers = [];
 
   socket.on('join-room', async (data = {}, callback) => {
     const { roomId, peerId } = data;
@@ -107,7 +110,15 @@ io.on('connection', (socket) => {
       currentRoomId = roomId;
       currentPeerId = peerId;
       socket.to(roomId).emit('peer-joined', { peerId });
-      console.log(`[join-room] OK roomId=${roomId} peerId=${peerId} rtpCapsCodecs=${info.data.rtpCapabilities && info.data.rtpCapabilities.codecs ? info.data.rtpCapabilities.codecs.length : '?'}`);
+      // Buffer producers that already exist in the room (e.g. the kiosk started
+      // producing before the family joined). These are flushed once this peer
+      // has created its recv transport, so its client can actually consume.
+      pendingProducers = [];
+      try {
+        const existing = await media('GET', `/rooms/${roomId}/producers`);
+        pendingProducers = existing.data.producers || [];
+      } catch (_) {}
+      console.log(`[join-room] OK roomId=${roomId} peerId=${peerId} existingProducers=${pendingProducers.length} rtpCapsCodecs=${info.data.rtpCapabilities && info.data.rtpCapabilities.codecs ? info.data.rtpCapabilities.codecs.length : '?'}`);
       return callback?.({ success: true, routerRtpCapabilities: info.data.rtpCapabilities });
     } catch (err) {
       console.error(`[signaling] join-room media error (${err.message})`);
@@ -143,9 +154,20 @@ io.on('connection', (socket) => {
     try {
       const direction = data.direction || 'send';
       const r = await media('POST', `/rooms/${currentRoomId}/transports`, { peerId: currentPeerId, direction });
-      if (direction === 'recv') recvTransportId = r.data.id;
+      const isRecv = direction === 'recv';
+      if (isRecv) recvTransportId = r.data.id;
       else sendTransportId = r.data.id;
-      return callback?.({ success: true, data: r.data });
+      // Ack first so the client's createRecvTransport callback (which assigns
+      // this.recvTransport) runs before the buffered new-producer events below.
+      callback?.({ success: true, data: r.data });
+      if (isRecv) {
+        // Announce producers that already existed when this peer joined so it
+        // can consume them now that its recv transport is in place.
+        for (const p of pendingProducers) {
+          socket.emit('new-producer', { peerId: p.peerId, producerId: p.producerId, kind: p.kind });
+        }
+        pendingProducers = [];
+      }
     } catch (e) {
       return callback?.({ success: false, error: 'Failed to create transport' });
     }

@@ -16,7 +16,7 @@ if "%RC%"=="0" (echo. & pause) else (goto :fail)
 exit /b %RC%
 
 :stopall
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$pids = @(); if(Test-Path (Join-Path $env:TEMP 'pc_playit_pids.txt')){ Get-Content (Join-Path $env:TEMP 'pc_playit_pids.txt') | ForEach-Object { if($_ -match '^\d+$'){ Stop-Process -Id ([int]$_) -Force -ErrorAction SilentlyContinue } } }; Remove-Item (Join-Path $env:TEMP 'pc_playit_pids.txt') -ErrorAction SilentlyContinue; Write-Host 'Stopped playit media server.' -ForegroundColor Yellow"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$pids = @(); if(Test-Path (Join-Path $env:TEMP 'pc_playit_pids.txt')){ Get-Content (Join-Path $env:TEMP 'pc_playit_pids.txt') | ForEach-Object { if($_ -match '^\d+$'){ Stop-Process -Id ([int]$_) -Force -ErrorAction SilentlyContinue } } }; Remove-Item (Join-Path $env:TEMP 'pc_playit_pids.txt') -ErrorAction SilentlyContinue; Get-Process -Name 'mediasoup-worker' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Write-Host 'Stopped playit media server (incl. orphaned worker).' -ForegroundColor Yellow"
 pause
 exit /b 0
 
@@ -33,7 +33,7 @@ $extEnv = Join-Path $repo 'external\ext.env'
 $logRoot = Join-Path $repo 'backend\logs'
 New-Item -ItemType Directory -Force -Path $logRoot | Out-Null
 
-$playitHost = '147.185.221.231'
+$playitHostname = 'tissues-cafeteria.tun.ply.gg'
 $playitPortBase = 35384
 $playitPortCount = 4
 
@@ -42,6 +42,10 @@ function Write-Ok($s)   { Write-Host "[OK] $s" -ForegroundColor Green }
 function Write-Warn($s) { Write-Host "[WARN] $s" -ForegroundColor Yellow }
 
 Write-Step '1/3 Config'
+if (Get-Command Resolve-DnsName -ErrorAction SilentlyContinue) {
+  $ip = (Resolve-DnsName $playitHostname -Type A -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress } | Select-Object -First 1 -ExpandProperty IPAddress)
+  if ($ip) { $playitHost = $ip } else { Write-Warn "Could not resolve $playitHostname - using cached $playitHost"; $playitHost = '147.185.221.231' }
+} else { $playitHost = '147.185.221.231' }
 if (-not (Test-Path -LiteralPath $extEnv)) { Write-Host 'external\ext.env not found. Run start-external.bat once to generate secrets.' -ForegroundColor Red; exit 1 }
 $vars = @{}
 Get-Content -LiteralPath $extEnv | ForEach-Object { if ($_ -match '^([A-Z0-9_]+)=(.*)$') { $vars[$Matches[1]] = $Matches[2] } }
@@ -49,9 +53,22 @@ $mediaKey = $vars['PC_MEDIA_API_KEY']
 if (-not $mediaKey) { Write-Host 'PC_MEDIA_API_KEY missing in external\ext.env.' -ForegroundColor Red; exit 1 }
 
 Write-Host "Media API key : $mediaKey" -ForegroundColor Gray
-Write-Host "Playit host   : $playitHost  (udp $playitPortBase-$($playitPortBase + $playitPortCount - 1))" -ForegroundColor Gray
+Write-Host "Playit host   : $playitHost  (udp $playitPortBase-$($playitPortBase + $playitPortCount - 1), from $playitHostname)" -ForegroundColor Gray
 
-Write-Step '2/3 Launch media server'
+Write-Step '2/3 Free port + launch media server'
+$oldPidFile = Join-Path $env:TEMP 'pc_playit_pids.txt'
+if (Test-Path -LiteralPath $oldPidFile) {
+  Get-Content -LiteralPath $oldPidFile | ForEach-Object { if ($_ -match '^\d+$') { Stop-Process -Id ([int]$_) -Force -ErrorAction SilentlyContinue } }
+}
+# Orphaned mediasoup worker children (killed node leaves them holding ports)
+Get-Process -Name 'mediasoup-worker' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+$free = $false
+for ($i = 0; $i -lt 8; $i++) {
+  Start-Sleep -Milliseconds 750
+  $busy = Get-NetTCPConnection -LocalPort 3003 -State Listen -ErrorAction SilentlyContinue
+  if (-not $busy) { $free = $true; break }
+}
+if (-not $free) { Write-Host "Port 3003 is still in use by pid(s) $((Get-NetTCPConnection -LocalPort 3003 -State Listen -ErrorAction SilentlyContinue).OwningProcess -join ',') - stop the conflicting media server first (run: start-playit.bat stop or start-local.bat stop) then retry." -ForegroundColor Red; exit 1 }
 $env:PORT = '3003'
 $env:MEDIA_API_KEY = $mediaKey
 $env:RTC_LISTEN_IP = '0.0.0.0'
