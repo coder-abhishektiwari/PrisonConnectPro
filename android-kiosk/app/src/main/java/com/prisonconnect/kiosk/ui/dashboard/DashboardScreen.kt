@@ -301,7 +301,7 @@ private fun formatCallDate(startTime: String?): String {
 }
 
 private fun formatCallDuration(call: CallHistory): String {
-    val mins = call.durationMinutes ?: (call.duration?.div(60))
+    val mins = if (call.duration != null && call.duration > 0) call.duration.div(60) else call.durationMinutes
     return if (mins != null && mins > 0) "${mins} min" else ""
 }
 
