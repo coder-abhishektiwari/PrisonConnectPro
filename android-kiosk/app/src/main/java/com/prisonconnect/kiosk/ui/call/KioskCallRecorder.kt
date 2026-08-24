@@ -210,6 +210,13 @@ class KioskCallRecorder @Inject constructor(
     }
 
     private suspend fun uploadVerifyDelete(file: File) {
+        // Nothing usable captured (e.g. call abandoned before audio started):
+        // MediaMuxer leaves an empty/missing file — skip upload entirely.
+        if (!file.exists() || file.length() < 1024) {
+            Logger.d("Recording empty (${file.length()} bytes) - nothing to upload, discarding")
+            file.delete()
+            return
+        }
         try {
             val base64 = android.util.Base64.encodeToString(file.readBytes(), android.util.Base64.NO_WRAP)
             // Collect exactly one terminal result from the upload flow.
