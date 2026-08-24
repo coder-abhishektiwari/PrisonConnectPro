@@ -172,6 +172,11 @@ class CallEngine @Inject constructor(
                             _callFailedAfterConnect.value = true
                         }
                         _callState.value = CallUIState.FAILED
+                        // Tear down media NOW so the OS camera/mic privacy
+                        // indicators (green dot) clear instead of staying lit.
+                        pollJob?.cancel(); pollJob = null
+                        timerJob?.cancel(); timerJob = null
+                        webRtcManager.endCall()
                     }
                     PeerConnection.PeerConnectionState.CLOSED -> {
                         if (_callState.value == CallUIState.CONNECTED ||

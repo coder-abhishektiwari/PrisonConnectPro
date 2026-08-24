@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/Button';
 import { Loading } from '@/components/States';
 import { callApi } from '@/services/api';
@@ -8,6 +8,7 @@ import type { CallSession } from '@/types/call';
 
 export function LinkVerificationPage() {
   const { linkToken } = useParams<{ linkToken: string }>();
+  const navigate = useNavigate();
   const { setSession } = useSession();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +46,16 @@ export function LinkVerificationPage() {
     };
   }, [linkToken, setSession]);
 
-  if (loading) return <Loading message="Verifying your secure link..." />;
+  // Fully automatic: verified link flows straight into the next step.
+  useEffect(() => {
+    if (!session || !linkToken) return;
+    const next = session.deviceRegistered ? `/call/${linkToken}/device` : `/call/${linkToken}/otp`;
+    const t = setTimeout(() => navigate(next, { replace: true }), 1200);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session]);
+
+  if (loading) return <Loading message="Checking your secure link..." />;
 
   if (error || !session) {
     return (
@@ -56,8 +66,8 @@ export function LinkVerificationPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-neutral-900 mb-2">Verification Failed</h1>
-          <p className="text-neutral-600 mb-8">{error || 'Invalid or expired call link session.'}</p>
+          <h1 className="text-2xl font-bold text-neutral-900 mb-2">Link Expired</h1>
+          <p className="text-neutral-600 mb-8">{error || 'This call link is no longer valid.'}</p>
           <Button variant="primary" size="lg" className="w-full" onClick={() => window.location.reload()}>
             Try Again
           </Button>
@@ -68,39 +78,18 @@ export function LinkVerificationPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 to-neutral-100 flex items-center justify-center p-4">
-      <div className="max-w-md w-full">
-        <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
-          <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <svg className="w-8 h-8 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div className="max-w-md w-full text-center">
+        <div className="bg-white rounded-2xl shadow-xl p-10">
+          <div className="w-16 h-16 bg-success/10 rounded-full flex items-center justify-center mx-auto mb-6">
+            <svg className="w-8 h-8 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-neutral-900 mb-2">Link Verified</h1>
-          <div className="bg-neutral-50 rounded-lg p-4 mb-6 text-left space-y-2">
-            <p className="text-sm text-neutral-600">
-              Inmate: <span className="font-semibold text-neutral-900">{session.inmateName}</span>
-            </p>
-            <p className="text-sm text-neutral-600">
-              Call Type: <span className="font-semibold text-neutral-900 capitalize">{session.callType}</span>
-            </p>
-            <p className="text-sm text-neutral-600">
-              Max Duration: <span className="font-semibold text-neutral-900">{session.maxDurationMinutes} Minutes</span>
-            </p>
-            {session.deviceRegistered ? (
-              <p className="text-sm text-primary-600">
-                Known device: <span className="font-medium">verifying this phone</span>
-              </p>
-            ) : (
-              <p className="text-sm text-primary-600">
-                New number: <span className="font-medium">verifying SIM, then registering this device</span>
-              </p>
-            )}
-          </div>
-          <Link to={session.deviceRegistered ? `/call/${linkToken}/device` : `/call/${linkToken}/otp`}>
-            <Button size="lg" className="w-full">
-              {session.deviceRegistered ? 'Continue to Device Verification' : 'Continue to OTP Verification'}
-            </Button>
-          </Link>
+          <p className="text-lg font-semibold text-neutral-900 mb-1">
+            Hi {session.contactName.split(' ')[0]}, your call is ready
+          </p>
+          <p className="text-sm text-neutral-500 mb-8">Setting things up for you…</p>
+          <div className="w-10 h-10 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto" />
         </div>
       </div>
     </div>
