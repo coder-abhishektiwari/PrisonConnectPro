@@ -288,23 +288,45 @@ export function CallPage() {
 
   // Streams can arrive BEFORE the call UI mounts (tracks fire at
   // setRemoteDescription, long before ICE reaches 'connected'). Re-attach
-  // them once the video elements actually exist.
-  const [mediaAttached, setMediaAttached] = useState(false);
+  // them once the video elements actually exist, then force playback so
+  // remote AUDIO is actually audible (autoplay policies can silently block).
   useEffect(() => {
-    if (status !== 'connected' || mediaAttached) return;
+    if (status !== 'connected') return;
     const remote = webRtcService.getRemoteStream();
     const local = webRtcService.getLocalStream();
-    let attached = false;
     if (remote && remoteVideoRef.current && remoteVideoRef.current.srcObject !== remote) {
       remoteVideoRef.current.srcObject = remote;
-      remoteVideoRef.current.play().catch(() => {});
-      attached = true;
     }
     if (local && localVideoRef.current && localVideoRef.current.srcObject !== local) {
       localVideoRef.current.srcObject = local;
     }
-    if (attached) setMediaAttached(true);
-  }, [status, mediaAttached]);
+    const v = remoteVideoRef.current;
+    if (v) {
+      v.muted = false;
+      v.volume = 1;
+      v.play().catch((e) => console.warn('[Call] video.play() blocked:', e));
+    }
+  }, [status]);
+
+  // Autoplay fallback: if the browser blocked audible playback, the first tap
+  // or keypress (OTP typing counts) unlocks it — retry once.
+  useEffect(() => {
+    if (status !== 'connected') return;
+    const unlock = () => {
+      const v = remoteVideoRef.current;
+      if (v && (v.paused || v.muted)) {
+        v.muted = false;
+        v.volume = 1;
+        v.play().catch(() => {});
+      }
+    };
+    window.addEventListener('pointerdown', unlock);
+    window.addEventListener('keydown', unlock);
+    return () => {
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
+  }, [status]);
 
   const initializeCall = async () => {
     try {
@@ -470,7 +492,7 @@ export function CallPage() {
             </span>
           </div>
           <h1 className="text-xl font-semibold text-white mb-2">
-            {isReconnecting ? 'Hold on...' : `Calling ${session.inmateName}`}
+            {isReconnecting ? 'Hold on...' : 'Connecting'}
           </h1>
           <p className="text-sm text-neutral-400">{statusMessage}</p>
         </div>
@@ -497,13 +519,14 @@ export function CallPage() {
 
       {/* Video Area */}
       <div className="flex-1 relative bg-black">
-        {/* Remote Video (Full Screen) */}
+        {/* Remote Video (Full Screen) — object-contain so the WHOLE frame is
+            always visible; letterbox bars are fine, cropping/scrolling is not */}
         {isVideoCall && (
           <video
             ref={remoteVideoRef}
             autoPlay
             playsInline
-            className="w-full h-full object-cover"
+            className="absolute inset-0 w-full h-full object-contain"
           />
         )}
 

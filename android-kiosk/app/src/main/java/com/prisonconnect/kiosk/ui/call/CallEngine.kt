@@ -62,6 +62,9 @@ class CallEngine @Inject constructor(
     companion object {
         /** Maximum connected talk-time per call. The call auto-ends after this. */
         const val MAX_CALL_SECONDS = 300
+
+        /** How long a DISCONNECTED state must persist before the UI says so. */
+        const val RECONNECT_DEBOUNCE_MS = 4_000L
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -115,6 +118,7 @@ class CallEngine @Inject constructor(
 
     private var timerJob: Job? = null
     private var pollJob: Job? = null
+    private var reconnectJob: Job? = null
     @Volatile private var callSessionActive = false
 
     private val connectivityManager =
@@ -153,7 +157,16 @@ class CallEngine @Inject constructor(
                 if (!callSessionActive) return@collect
                 when (state) {
                     PeerConnection.PeerConnectionState.CONNECTED -> {
+                        // A single transient DISCONNECTED must not flash the
+                        // reconnect banner — cancel any pending one.
+                        reconnectJob?.cancel(); reconnectJob = null
                         _callState.value = CallUIState.CONNECTED
+                        // Route audio to the loudspeaker so both sides are
+                        // clearly audible on a kiosk device.
+                        if (!_isSpeakerOn.value) {
+                            _isSpeakerOn.value = true
+                        }
+                        webRtcManager.setSpeakerphoneOn(context, true)
                         startTimer()
                     }
                     PeerConnection.PeerConnectionState.CONNECTING -> {
@@ -163,12 +176,26 @@ class CallEngine @Inject constructor(
                         _callState.value = CallUIState.WAITING
                     }
                     PeerConnection.PeerConnectionState.DISCONNECTED -> {
-                        if (_callState.value == CallUIState.CONNECTED) {
-                            _callState.value = CallUIState.RECONNECTING
+                        // WebRTC fires DISCONNECTED for brief hiccups that heal
+                        // on their own. Only surface "reconnecting" when the
+                        // state actually persists.
+                        if (_callState.value == CallUIState.CONNECTED && reconnectJob?.isActive != true) {
+                            reconnectJob = scope.launch {
+                                delay(RECONNECT_DEBOUNCE_MS)
+                                if (rtcConnectionState.value == PeerConnection.PeerConnectionState.DISCONNECTED &&
+                                    callSessionActive
+                                ) {
+                                    _callState.value = CallUIState.RECONNECTING
+                                    _callFailedAfterConnect.value = true
+                                }
+                            }
                         }
                     }
                     PeerConnection.PeerConnectionState.FAILED -> {
-                        if (_callState.value == CallUIState.CONNECTED) {
+                        reconnectJob?.cancel(); reconnectJob = null
+                        if (_callState.value == CallUIState.CONNECTED ||
+                            _callState.value == CallUIState.RECONNECTING
+                        ) {
                             _callFailedAfterConnect.value = true
                         }
                         _callState.value = CallUIState.FAILED
@@ -214,6 +241,7 @@ class CallEngine @Inject constructor(
         _callFailedAfterConnect.value = false
         _callState.value = CallUIState.WAITING
         timerJob?.cancel(); timerJob = null
+        reconnectJob?.cancel(); reconnectJob = null
         _timerSeconds.value = 0
         callSessionActive = false
         webRtcManager.endCall()
