@@ -238,11 +238,17 @@ class CallEngine @Inject constructor(
 
     private fun applySnapshot(s: CallStatusSnapshot) {
         val fam = s.family ?: return
-        _familyStage.value = when {
+        val target = when {
             fam.otpVerified == true -> FamilyStage.OTP_VERIFIED
             fam.deviceVerified == true -> FamilyStage.DEVICE_VERIFIED
             !s.linkOpenedAt.isNullOrBlank() -> FamilyStage.LINK_OPENED
             else -> FamilyStage.LINK_SENT
+        }
+        // Advance at most one stage per poll so the progress screen animates
+        // instead of jumping straight from LINK_SENT to OTP_VERIFIED.
+        val current = _familyStage.value
+        if (target.ordinal > current.ordinal) {
+            _familyStage.value = FamilyStage.entries[current.ordinal + 1]
         }
     }
 

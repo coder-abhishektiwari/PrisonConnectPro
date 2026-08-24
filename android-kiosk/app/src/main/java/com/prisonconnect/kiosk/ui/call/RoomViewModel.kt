@@ -123,6 +123,9 @@ class RoomViewModel @Inject constructor(
                     is NetworkResult.Loading -> _createRoomState.value = UiState.Loading
                     is NetworkResult.Success -> {
                         _createRoomState.value = UiState.Success(result.data)
+                        // Remember the backend call id so the progress screen
+                        // can poll family-side verification stages.
+                        AppConfigBridge.lastCallId = result.data.callId
                         // Stash the room-bound signaling token before opening the socket
                         // so join-room authenticates with role 'kiosk' for this room.
                         AppConfig.signalingToken = result.data.signalingToken

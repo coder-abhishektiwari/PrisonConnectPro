@@ -232,7 +232,7 @@ class WebRtcService {
   private async handleOffer(offerSdp: RTCSessionDescriptionInit): Promise<void> {
     try {
       const pc = this.createPeerConnection();
-      await pc.setRemoteDescription(new RTCSessionDescription(offerSdp));
+      await pc.setRemoteDescription(offerSdp);
       console.log('[WebRTC] Remote SDP Offer set successfully');
 
       // Flush any ICE candidates received before remote description was set
@@ -253,7 +253,7 @@ class WebRtcService {
   private async handleAnswer(answerSdp: RTCSessionDescriptionInit): Promise<void> {
     try {
       if (!this.pc) return;
-      await this.pc.setRemoteDescription(new RTCSessionDescription(answerSdp));
+      await this.pc.setRemoteDescription(answerSdp);
       console.log('[WebRTC] Remote SDP Answer set successfully');
 
       for (const candidate of this.pendingCandidates) {

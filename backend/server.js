@@ -1368,6 +1368,8 @@ app.post('/calls', requireAuth, asyncRoute(async (req, res) => {
     callId: callData.callId || `CALL-${uuidv4().substring(0, 8).toUpperCase()}`,
     roomId: callData.roomId || `ROOM-${uuidv4().substring(0, 8).toUpperCase()}`,
     inmateId: callData.inmateId, contactId: callData.contactId, kioskId: callData.kioskId,
+    prisonId: kiosk.prisonId || inmate.prisonId || null,
+    facility: kiosk.prisonId || inmate.prisonId || null,
     type: callData.type || 'video',
     status: 'scheduled',
     startTime: callData.startTime || new Date().toISOString(),
