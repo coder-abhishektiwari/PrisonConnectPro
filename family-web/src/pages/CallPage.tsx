@@ -286,6 +286,26 @@ export function CallPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startReconnect]);
 
+  // Streams can arrive BEFORE the call UI mounts (tracks fire at
+  // setRemoteDescription, long before ICE reaches 'connected'). Re-attach
+  // them once the video elements actually exist.
+  const [mediaAttached, setMediaAttached] = useState(false);
+  useEffect(() => {
+    if (status !== 'connected' || mediaAttached) return;
+    const remote = webRtcService.getRemoteStream();
+    const local = webRtcService.getLocalStream();
+    let attached = false;
+    if (remote && remoteVideoRef.current && remoteVideoRef.current.srcObject !== remote) {
+      remoteVideoRef.current.srcObject = remote;
+      remoteVideoRef.current.play().catch(() => {});
+      attached = true;
+    }
+    if (local && localVideoRef.current && localVideoRef.current.srcObject !== local) {
+      localVideoRef.current.srcObject = local;
+    }
+    if (attached) setMediaAttached(true);
+  }, [status, mediaAttached]);
+
   const initializeCall = async () => {
     try {
       setStatus('initializing');
