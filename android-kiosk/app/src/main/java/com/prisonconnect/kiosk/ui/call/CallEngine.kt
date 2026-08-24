@@ -142,10 +142,16 @@ class CallEngine @Inject constructor(
     private fun observeRemoteEnd() {
         scope.launch {
             callRepository.observeSignalingEvents().collect { event ->
-                if (event.type == "call-ended" && callSessionActive) {
-                    Logger.d("Call ended remotely - stopping session")
+                val remoteEnded = event.type == "call-ended" || event.type == "peer-left"
+                if (remoteEnded && callSessionActive) {
+                    Logger.d("Call ended remotely (${event.type}) - stopping session")
+                    callSessionActive = false
                     pollJob?.cancel(); pollJob = null
+                    timerJob?.cancel(); timerJob = null
+                    reconnectJob?.cancel(); reconnectJob = null
                     webRtcManager.endCall()
+                    _timerSeconds.value = 0
+                    _callState.value = CallUIState.DISCONNECTED
                 }
             }
         }

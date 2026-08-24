@@ -190,6 +190,10 @@ class CallRepositoryImpl @Inject constructor(
         _signalingStatus.value = SignalingStatus.ANSWER_SENT
     }
 
+    override fun sendCallEnded() {
+        socketService.emit("call-ended", JSONObject().put("reason", "hangup"))
+    }
+
     override fun sendIceCandidate(candidate: JSONObject) {
         socketService.emit("ice-candidate", candidate)
     }

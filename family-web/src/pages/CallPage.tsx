@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, Navigate } from 'react-router-dom';
+import { useParams, useNavigate, Navigate } from 'react-router-dom';
 import { ErrorState } from '@/components/States';
 import { useSession } from '@/context/SessionContext';
 import { useToast } from '@/components/Toast';
@@ -38,6 +38,7 @@ async function waitForSocket(timeoutMs: number): Promise<boolean> {
 
 export function CallPage() {
   const { linkToken } = useParams<{ linkToken: string }>();
+  const navigate = useNavigate();
   const { session, otpResult, clear } = useSession();
   const { addToast } = useToast();
 
@@ -197,11 +198,26 @@ export function CallPage() {
       startReconnect();
     };
 
-    const handleCallEnded = (_event: string, _data: any) => {
-      console.log('[Call] Call ended');
+    const handleCallEnded = (_event: string, data: any) => {
+      // Ignore the echo of OUR OWN hang-up.
+      if (data?.sender && data.sender === peerIdRef.current) return;
+      console.log('[Call] Call ended remotely');
       wasConnectedRef.current = false;
-      setStatus('ended');
-      setTimeout(goToBlank, 800);
+      reconnectingRef.current = true; // stop any in-flight reconnect loop
+      setStatusMessage('Ending call...');
+      addToast('The inmate has ended the call', 'info');
+      // Give the user a beat to see "Ending call...", then land on the lobby
+      // screen with the session still alive so they are not dumped on a blank page.
+      setTimeout(() => {
+        webRtcService.close();
+        socketService.leaveRoom(session!.roomId, peerIdRef.current);
+        socketService.disconnect();
+        joinStartedRef.current = false;
+        navigate(`/call/${linkToken}/lobby`, {
+          replace: true,
+          state: { callEnded: true },
+        });
+      }, 1500);
     };
 
     const handleSystemEvent = (_event: string, data: any) => {
@@ -440,6 +456,8 @@ export function CallPage() {
   const endCall = useCallback(async () => {
     try {
       wasConnectedRef.current = false;
+      // Tell the kiosk IMMEDIATELY so its call ends at the same moment.
+      socketService.send('call-ended', { reason: 'family hung up' });
       socketService.leaveRoom(session!.roomId, peerIdRef.current);
       socketService.disconnect();
       webRtcService.close();

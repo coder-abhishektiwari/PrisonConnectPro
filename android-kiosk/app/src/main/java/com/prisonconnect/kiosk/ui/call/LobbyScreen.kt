@@ -415,7 +415,14 @@ fun LobbyContent(
 
                     // Action Buttons
                     if (!isSlotBookedForCurrentTime) {
-                        CallNowActions(onScheduleCall, onCallNow, isSlotAvailableNow, isVideoCall, isTablet)
+                        CallNowActions(
+                            onScheduleCall,
+                            onCallNow,
+                            isSlotAvailableNow,
+                            isVideoCall,
+                            isTablet,
+                            createRoomState = createRoomState
+                        )
                     } else {
                         ScheduledCallActions(
                             roomStatus = roomStatus,
@@ -487,14 +494,17 @@ private fun CallNowActions(
     onCallNow: () -> Unit,
     isSlotAvailableNow: Boolean,
     isVideoCall: Boolean,
-    isTablet: Boolean
+    isTablet: Boolean,
+    createRoomState: UiState<*>
 ) {
+    val isStarting = createRoomState is UiState.Loading
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         OutlinedButton(
             onClick = onScheduleCall,
+            enabled = !isStarting,
             modifier = Modifier
                 .weight(1f)
                 .height(if (isTablet) 56.dp else 50.dp),
@@ -517,7 +527,7 @@ private fun CallNowActions(
 
         Button(
             onClick = onCallNow,
-            enabled = isSlotAvailableNow,
+            enabled = isSlotAvailableNow && !isStarting,
             modifier = Modifier
                 .weight(1f)
                 .height(if (isTablet) 56.dp else 50.dp),
@@ -532,15 +542,28 @@ private fun CallNowActions(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = if (isVideoCall) Icons.Default.Videocam else Icons.Default.PhoneInTalk,
-                    contentDescription = null
-                )
-                Text(
-                    text = "Call Now",
-                    fontSize = if (isTablet) 15.sp else 13.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                if (isStarting) {
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        strokeWidth = 2.5.dp,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Text(
+                        text = "Connecting...",
+                        fontSize = if (isTablet) 15.sp else 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                } else {
+                    Icon(
+                        imageVector = if (isVideoCall) Icons.Default.Videocam else Icons.Default.PhoneInTalk,
+                        contentDescription = null
+                    )
+                    Text(
+                        text = "Call Now",
+                        fontSize = if (isTablet) 15.sp else 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
     }

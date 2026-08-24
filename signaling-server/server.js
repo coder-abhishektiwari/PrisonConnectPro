@@ -229,6 +229,18 @@ io.on('connection', (socket) => {
     callback?.({ success: true });
   });
 
+  // Explicit hang-up relay: whichever peer ends first notifies the other
+  // immediately so both sides tear down together.
+  socket.on('call-ended', (data = {}, callback) => {
+    if (!currentRoomId || !currentPeerId) return callback?.({ success: false, error: 'Not in a room' });
+    io.to(currentRoomId).emit('call-ended', {
+      roomId: currentRoomId,
+      reason: data.reason || 'peer ended call',
+      sender: currentPeerId,
+    });
+    callback?.({ success: true });
+  });
+
   // Backwards compatibility handler for trickle-ice
   socket.on('trickle-ice', (data = {}, callback) => {
     const target = data.target;

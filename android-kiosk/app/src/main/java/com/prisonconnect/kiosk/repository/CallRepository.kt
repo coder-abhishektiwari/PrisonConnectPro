@@ -27,6 +27,9 @@ interface CallRepository {
     fun leaveRoom(roomId: String, peerId: String)
     fun sendOffer(sdp: JSONObject)
     fun sendAnswer(sdp: JSONObject)
+
+    /** Notify the room that this peer hung up, so the other side ends too. */
+    fun sendCallEnded()
     fun sendIceCandidate(candidate: JSONObject)
     fun getCallStatus(callId: String): Flow<NetworkResult<CallStatusSnapshot>>
     fun uploadRecording(request: RecordingUploadRequest): Flow<NetworkResult<RecordingUploadResponse>>

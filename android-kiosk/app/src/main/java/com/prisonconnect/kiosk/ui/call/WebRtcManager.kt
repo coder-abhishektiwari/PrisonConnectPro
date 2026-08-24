@@ -494,6 +494,8 @@ class WebRtcManager @Inject constructor(
         callRecorder.stopRecordingAndUpload()
 
         if (hadRealSession) {
+            // Tell the other peer FIRST so it ends instantly too, then leave.
+            callRepository.sendCallEnded()
             callRepository.leaveRoom(roomId, peerId)
         }
         signalingJob?.cancel()
