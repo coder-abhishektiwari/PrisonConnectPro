@@ -59,6 +59,11 @@ class CallEngine @Inject constructor(
     private val authRepository: AuthRepository,
     private val webRtcManager: WebRtcManager
 ) {
+    companion object {
+        /** Maximum connected talk-time per call. The call auto-ends after this. */
+        const val MAX_CALL_SECONDS = 300
+    }
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     val eglContext: EglBase.Context get() = webRtcManager.eglContext(context)
@@ -243,10 +248,29 @@ class CallEngine @Inject constructor(
 
     private fun startTimer() {
         if (timerJob != null) return
+        // Timer runs ONLY while the media session is CONNECTED — wall-clock
+        // waiting for the family to answer never counts against the quota.
         timerJob = scope.launch {
-            while (true) {
-                delay(1000)
-                _timerSeconds.value++
+            var connected = false
+            rtcConnectionState.collect { state ->
+                if (state == PeerConnection.PeerConnectionState.CONNECTED) {
+                    connected = true
+                } else if (state == PeerConnection.PeerConnectionState.DISCONNECTED ||
+                    state == PeerConnection.PeerConnectionState.FAILED ||
+                    state == PeerConnection.PeerConnectionState.CLOSED
+                ) {
+                    connected = false
+                }
+                if (connected) {
+                    delay(1000)
+                    _timerSeconds.value++
+                    // Max call duration: the call auto-ends after 5 minutes
+                    // of actual connected talk time.
+                    if (_timerSeconds.value >= MAX_CALL_SECONDS) {
+                        Logger.d("Max call duration (${MAX_CALL_SECONDS}s) reached - ending call")
+                        webRtcManager.endCall()
+                    }
+                }
             }
         }
     }
