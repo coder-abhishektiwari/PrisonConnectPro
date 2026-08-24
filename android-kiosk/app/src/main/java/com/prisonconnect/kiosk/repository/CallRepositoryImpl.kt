@@ -196,6 +196,19 @@ class CallRepositoryImpl @Inject constructor(
 
     override fun observeSignalingEvents(): Flow<SignalingEvent> = _signalingEvents.asSharedFlow()
 
+    override fun getCallStatus(callId: String): Flow<NetworkResult<CallStatusSnapshot>> = flow {
+        try {
+            val response = apiService.getCallStatus(callId)
+            if (response.success && response.data != null) {
+                emit(NetworkResult.Success(response.data))
+            } else {
+                emit(NetworkResult.Failure(response.error ?: ApiError("NOT_FOUND", "Call not found")))
+            }
+        } catch (e: Exception) {
+            emit(NetworkResult.Failure(ApiError("EXCEPTION", e.message ?: "Network exception")))
+        }
+    }.flowOn(Dispatchers.IO)
+
     override fun uploadRecording(request: RecordingUploadRequest): Flow<NetworkResult<RecordingUploadResponse>> = flow {
         try {
             val response = apiService.uploadRecording(request)

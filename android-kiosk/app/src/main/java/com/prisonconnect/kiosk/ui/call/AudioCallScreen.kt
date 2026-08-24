@@ -86,15 +86,8 @@ fun AudioCallScreen(
     LaunchedEffect(roomId, hasPermissions) {
         if (!hasPermissions && !permissionDeniedOnce) {
             launcher.launch(arrayOf(Manifest.permission.RECORD_AUDIO))
-        } else if (hasPermissions) {
-            viewModel.initCall(context, roomId, isVideoCall = false)
         }
-    }
-
-    LaunchedEffect(timerSeconds) {
-        if (timerSeconds >= 300) {
-            onEndCall()
-        }
+        // initCall already ran on CallProgressScreen (shared singleton engine).
     }
 
     // Track whether the call ever reached CONNECTED so a peer-side disconnect
@@ -136,7 +129,10 @@ fun AudioCallScreen(
             inmateProfile = inmateProfile,
             onMuteToggle = { viewModel.toggleMute() },
             onSpeakerToggle = { viewModel.toggleSpeaker() },
-            onEndCall = onEndCall
+            onEndCall = {
+                viewModel.endCall()
+                onEndCall()
+            }
         )
     }
 }

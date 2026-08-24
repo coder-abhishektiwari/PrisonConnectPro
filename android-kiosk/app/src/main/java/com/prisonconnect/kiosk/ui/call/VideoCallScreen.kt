@@ -153,15 +153,9 @@ fun VideoCallScreen(
     LaunchedEffect(roomId, hasPermissions) {
         if (!hasPermissions && !permissionDeniedOnce) {
             launcher.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO))
-        } else if (hasPermissions) {
-            viewModel.initCall(context, roomId)
         }
-    }
-
-    LaunchedEffect(timerSeconds) {
-        if (timerSeconds >= 300) {
-            onEndCall()
-        }
+        // NOTE: initCall already happened on CallProgressScreen — the engine
+        // is a singleton, so we just attach to the live session here.
     }
 
     // Track whether the call ever reached CONNECTED so a peer-side disconnect
@@ -210,7 +204,10 @@ fun VideoCallScreen(
             onVideoToggle = { viewModel.toggleCamera() },
             onSpeakerToggle = { viewModel.toggleSpeaker() },
             onSwitchCamera = { viewModel.switchCamera() },
-            onEndCall = onEndCall
+            onEndCall = {
+                viewModel.endCall()
+                onEndCall()
+            }
         )
     }
 }

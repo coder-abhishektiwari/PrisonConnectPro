@@ -10,6 +10,7 @@ import com.prisonconnect.kiosk.ui.SplashScreen
 import com.prisonconnect.kiosk.ui.UnauthorizedDeviceScreen
 import com.prisonconnect.kiosk.ui.auth.LoginScreen
 import com.prisonconnect.kiosk.ui.call.AudioCallScreen
+import com.prisonconnect.kiosk.ui.call.CallProgressScreen
 import com.prisonconnect.kiosk.ui.call.LobbyScreen
 import com.prisonconnect.kiosk.ui.call.ScheduleCallScreen
 import com.prisonconnect.kiosk.ui.call.VideoCallScreen
@@ -298,16 +299,33 @@ fun KioskNavHost(
                 isSlotBookedForCurrentTime = isSlotBooked,
                 windowSizeClass = windowSizeClass,
                 onConfirm = { roomId ->
-                    if (type == "Video") {
-                        navController.navigate("video_call/$contactName/$roomId")
-                    } else {
-                        navController.navigate("audio_call/$contactName/$roomId")
-                    }
+                    navController.navigate("call_progress/$contactName/$roomId/${type == "Video"}")
                 },
                 onScheduleCall = {
                     navController.navigate("schedule/$contactId/$contactName/$type")
                 },
                 onBack = { navController.popBackStack() }
+            )
+        }
+        composable("call_progress/{contactName}/{roomId}/{isVideo}") { backStackEntry ->
+            val contactName = backStackEntry.arguments?.getString("contactName") ?: ""
+            val roomId = backStackEntry.arguments?.getString("roomId") ?: ""
+            val isVideo = backStackEntry.arguments?.getString("isVideo")?.toBoolean() ?: true
+            CallProgressScreen(
+                contactName = contactName,
+                roomId = roomId,
+                isVideoCall = isVideo,
+                onConnected = {
+                    // Media is live — only now enter the actual call screen.
+                    navController.navigate(
+                        if (isVideo) "video_call/$contactName/$roomId"
+                        else "audio_call/$contactName/$roomId"
+                    ) {
+                        popUpTo("call_progress/$contactName/$roomId/$isVideo") { inclusive = true }
+                    }
+                },
+                onFailed = { navController.popBackStack() },
+                onCancel = { navController.popBackStack() }
             )
         }
         composable(KioskRoutes.VIDEO_CALL) { backStackEntry ->

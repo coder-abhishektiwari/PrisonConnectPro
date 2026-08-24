@@ -1460,6 +1460,17 @@ app.get('/calls/link/:linkToken', asyncRoute(async (req, res) => {
   const inmate = inmates.find((i) => i.inmateId === call.inmateId);
   const contact = contacts.find((c) => c.contactId === call.contactId);
 
+  // Record the first time the family member actually opens the link so the
+  // kiosk can show real progress instead of a generic "waiting" spinner.
+  if (!call.linkOpenedAt) {
+    await updateDb('calls.json', (all) => {
+      const idx = all.findIndex((c) => c.callId === call.callId);
+      if (idx === -1) return { data: all, result: null };
+      if (!all[idx].linkOpenedAt) all[idx].linkOpenedAt = new Date().toISOString();
+      return { data: all, result: all[idx] };
+    });
+  }
+
   // Report whether this phone has a registered device fingerprint so the
   // portal can route first-time (collect fingerprint) vs returning (verify).
   const { registered, maskedPhone: phone } = await deviceRegisteredForCall(call);

@@ -12,6 +12,7 @@ import com.prisonconnect.kiosk.models.call.CallSession
 import com.prisonconnect.kiosk.models.call.CreateCallRequest
 import com.prisonconnect.kiosk.models.call.RecordingUploadRequest
 import com.prisonconnect.kiosk.models.call.RecordingUploadResponse
+import com.prisonconnect.kiosk.models.call.CallStatusSnapshot
 import com.prisonconnect.kiosk.models.schedule.AvailableSlot
 import com.prisonconnect.kiosk.models.schedule.ScheduleRequest
 import com.prisonconnect.kiosk.models.wallet.WalletStatement
@@ -104,6 +105,9 @@ interface TrustApiService {
 
     @POST("calls")
     suspend fun createCall(@Body request: CreateCallRequest): ApiResponse<CallSession>
+
+    @GET("calls/{callId}")
+    suspend fun getCallStatus(@Path("callId") callId: String): ApiResponse<CallStatusSnapshot>
 
     @POST("recordings/upload")
     suspend fun uploadRecording(@Body request: RecordingUploadRequest): ApiResponse<RecordingUploadResponse>

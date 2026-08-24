@@ -103,3 +103,16 @@ data class RecordingUploadResponse(
     @SerializedName("fileName") val fileName: String? = null,
     @SerializedName("status") val status: String? = null
 )
+
+/** Slim snapshot of a call used by the kiosk progress screen. */
+data class CallStatusSnapshot(
+    @SerializedName("callId") val callId: String? = null,
+    @SerializedName("status") val status: String? = null,
+    @SerializedName("linkOpenedAt") val linkOpenedAt: String? = null,
+    @SerializedName("family") val family: FamilyProgress? = null
+) {
+    data class FamilyProgress(
+        @SerializedName("deviceVerified") val deviceVerified: Boolean? = null,
+        @SerializedName("otpVerified") val otpVerified: Boolean? = null
+    )
+}

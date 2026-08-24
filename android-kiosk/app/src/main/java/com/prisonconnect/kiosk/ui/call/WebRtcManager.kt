@@ -72,8 +72,22 @@ class WebRtcManager @Inject constructor(
     val connectionState = _connectionState.asStateFlow()
 
     private var eglBaseContext: EglBase.Context? = null
+    private var eglBase: EglBase? = null
+    @Volatile private var currentRoomId: String = ""
     private var roomId: String = ""
     private var peerId: String = ""
+
+    /** Lazily-created shared EGL context (thread-safe via singleton use). */
+    fun eglContext(context: Context): EglBase.Context {
+        if (eglBaseContext == null) {
+            val base = EglBase.create()
+            eglBase = base
+            eglBaseContext = base.eglBaseContext
+        }
+        return eglBaseContext!!
+    }
+
+    fun activeRoomId(): String = currentRoomId
 
     // Session generation: incremented on every startCall()/endCall(). Async
     // callbacks arriving after teardown capture their gen and bail out if it
@@ -130,6 +144,7 @@ class WebRtcManager @Inject constructor(
         sessionGen++
         val gen = sessionGen
         this.roomId = roomId
+        this.currentRoomId = roomId
         this.peerId = "kiosk-${System.currentTimeMillis()}"
         remoteDescriptionSet = false
         pendingIceCandidates.clear()
@@ -513,6 +528,7 @@ class WebRtcManager @Inject constructor(
         pendingIceCandidates.clear()
         remoteDescriptionSet = false
         roomId = ""
+        currentRoomId = ""
         peerId = ""
     }
 }
