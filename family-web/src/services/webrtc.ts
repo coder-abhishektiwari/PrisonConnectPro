@@ -145,7 +145,11 @@ class WebRtcService {
 
       socketService.on('ice-candidate', async (_event: string, data: any) => {
         if (data?.candidate) {
-          await this.addIceCandidate(data.candidate);
+          await this.addIceCandidate({
+            candidate: data.candidate,
+            sdpMid: data?.sdpMid ?? undefined,
+            sdpMLineIndex: data?.sdpMLineIndex ?? undefined,
+          });
         }
       });
 
