@@ -1,24 +1,43 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate, Navigate } from 'react-router-dom';
+import { useParams, Navigate } from 'react-router-dom';
 import { ErrorState } from '@/components/States';
 import { useSession } from '@/context/SessionContext';
 import { useToast } from '@/components/Toast';
 import { socketService } from '@/services/socket';
 import { webRtcService, type ConnectionState } from '@/services/webrtc';
 
-type CallStatus = 
+type CallStatus =
   | 'initializing'
   | 'waiting'
   | 'connecting'
   | 'connected'
   | 'reconnecting'
-  | 'disconnected'
   | 'ended'
   | 'error';
 
+const RECONNECT_MAX_ATTEMPTS = 6;
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Leave this world entirely — the link is dead once the kiosk hangs up. */
+function goToBlank() {
+  try {
+    window.location.replace('about:blank');
+  } catch (_) {
+    /* ignore */
+  }
+}
+
+async function waitForSocket(timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (socketService.isConnected()) return true;
+    await wait(250);
+  }
+  return socketService.isConnected();
+}
+
 export function CallPage() {
   const { linkToken } = useParams<{ linkToken: string }>();
-  const navigate = useNavigate();
   const { session, otpResult, clear } = useSession();
   const { addToast } = useToast();
 
@@ -37,12 +56,20 @@ export function CallPage() {
   const callTimerRef = useRef<ReturnType<typeof setInterval>>();
   const peerIdRef = useRef(`family-${Date.now()}`);
   const joinStartedRef = useRef(false);
+  const statusRef = useRef<CallStatus>('initializing');
+  const wasConnectedRef = useRef(false);
+  const reconnectingRef = useRef(false);
+
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       endCall();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Initialize call
@@ -54,6 +81,7 @@ export function CallPage() {
     }
 
     initializeCall();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, linkToken]);
 
   // Call timer
@@ -75,11 +103,68 @@ export function CallPage() {
     };
   }, [status]);
 
+  /**
+   * Network dropped mid-call. Probe the signaling room: if the kiosk is still
+   * sitting in it, rebuild the media path automatically; if it is gone, the
+   * call is over — blank the page entirely.
+   */
+  const startReconnect = useCallback(() => {
+    if (reconnectingRef.current || !wasConnectedRef.current) return;
+    reconnectingRef.current = true;
+    setStatus('reconnecting');
+    setStatusMessage('Connection lost. Checking if the call is still active...');
+    void (async () => {
+      for (let attempt = 1; attempt <= RECONNECT_MAX_ATTEMPTS; attempt++) {
+        if (!wasConnectedRef.current) return; // call ended elsewhere
+        try {
+          setStatusMessage(`Restoring your call... (attempt ${attempt}/${RECONNECT_MAX_ATTEMPTS})`);
+          await wait(attempt === 1 ? 1500 : 3000);
+
+          if (!socketService.isConnected()) {
+            socketService.connect(session!, otpResult?.sessionToken);
+            const ok = await waitForSocket(10000);
+            if (!ok) continue;
+          }
+
+          const resp = await socketService.joinRoom(session!.roomId, peerIdRef.current);
+          const peers: string[] = Array.isArray(resp?.existingPeers) ? resp.existingPeers : [];
+          if (!resp?.success || peers.length === 0) {
+            // Kiosk is no longer on the call — nothing to return to.
+            goToBlank();
+            return;
+          }
+
+          // Kiosk still waiting — rebuild the peer connection from scratch.
+          webRtcService.close();
+          await webRtcService.setupLocalMedia({ video: true, audio: true });
+          await webRtcService.initialize(session!, []);
+          joinStartedRef.current = true;
+          await webRtcService.handleJoined(resp);
+
+          // Give ICE a chance; if it lands, the 'connected' state handler
+          // clears reconnectingRef and flips us back into the call UI.
+          const deadline = Date.now() + 12000;
+          while (Date.now() < deadline && wasConnectedRef.current) {
+            await wait(500);
+            if (webRtcService.getConnectionState() === 'connected') {
+              reconnectingRef.current = false;
+              return;
+            }
+          }
+        } catch (err) {
+          console.warn('[Call] Reconnect attempt failed:', err);
+        }
+      }
+      // Exhausted every attempt without reaching the kiosk — blank out.
+      goToBlank();
+    })();
+  }, [session, otpResult]);
+
   // Socket event listeners
   useEffect(() => {
     const handlePeerJoined = (_event: string, _data: any) => {
       console.log('[Call] Peer joined');
-      if (status === 'waiting') {
+      if (statusRef.current === 'waiting') {
         setStatus('connecting');
         setStatusMessage('Connecting...');
       }
@@ -87,17 +172,16 @@ export function CallPage() {
 
     const handlePeerLeft = (_event: string, _data: any) => {
       console.log('[Call] Peer left');
-      setStatus('disconnected');
-      setStatusMessage('Other participant left');
-      addToast('Other participant left the call', 'info');
+      // Could be a network blip on the kiosk side — probe the room. If it is
+      // truly gone the reconnect loop blanks the page.
+      startReconnect();
     };
 
     const handleCallEnded = (_event: string, _data: any) => {
       console.log('[Call] Call ended');
+      wasConnectedRef.current = false;
       setStatus('ended');
-      setStatusMessage('Call has ended');
-      addToast('Call has ended', 'info');
-      setTimeout(() => navigate('/'), 1500);
+      setTimeout(goToBlank, 800);
     };
 
     const handleSystemEvent = (_event: string, data: any) => {
@@ -110,9 +194,8 @@ export function CallPage() {
           break;
         case 'disconnected':
           console.log('[Call] Socket disconnected:', data.reason);
-          if (status === 'connected' || status === 'connecting') {
-            setStatus('reconnecting');
-            setStatusMessage('Reconnecting...');
+          if (statusRef.current === 'connected' || statusRef.current === 'connecting') {
+            startReconnect();
           }
           break;
         case 'connection_error':
@@ -133,7 +216,8 @@ export function CallPage() {
       socketService.off('call-ended', handleCallEnded);
       socketService.off('system', handleSystemEvent);
     };
-  }, [status, addToast]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startReconnect]);
 
   // WebRTC event listeners
   useEffect(() => {
@@ -150,8 +234,6 @@ export function CallPage() {
       if (remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = stream;
       }
-      setStatus('connected');
-      setStatusMessage('Connected');
     };
 
     const handleConnectionStateChange = (_event: string, data: unknown) => {
@@ -161,25 +243,33 @@ export function CallPage() {
 
       switch (state) {
         case 'connecting':
-          setStatus('connecting');
-          setStatusMessage('Establishing connection...');
+          if (statusRef.current !== 'connected') {
+            setStatus('connecting');
+            setStatusMessage('Establishing connection...');
+          }
           break;
         case 'connected':
+          wasConnectedRef.current = true;
+          reconnectingRef.current = false;
           setStatus('connected');
           setStatusMessage('Connected');
           break;
         case 'disconnected':
-          setStatus('reconnecting');
-          setStatusMessage('Connection lost. Reconnecting...');
+          startReconnect();
           break;
         case 'failed':
-          setStatus('error');
-          setError('Connection failed');
-          addToast('Connection failed', 'error');
+          if (wasConnectedRef.current) {
+            startReconnect();
+          } else {
+            setStatus('error');
+            setError('Could not reach the prison kiosk.');
+            addToast('Connection failed', 'error');
+          }
           break;
         case 'closed':
-          setStatus('ended');
-          setStatusMessage('Call ended');
+          if (!reconnectingRef.current) {
+            setStatus('ended');
+          }
           break;
       }
     };
@@ -193,7 +283,8 @@ export function CallPage() {
       webRtcService.off('remote-stream', handleRemoteStream);
       webRtcService.off('connection-state', handleConnectionStateChange);
     };
-  }, [addToast]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startReconnect]);
 
   const initializeCall = async () => {
     try {
@@ -213,10 +304,10 @@ export function CallPage() {
       socketService.connect(session!, otpResult?.sessionToken);
 
       setStatus('waiting');
-      setStatusMessage('Waiting for prisoner to connect...');
+      setStatusMessage(`Calling ${session!.inmateName}...`);
     } catch (error) {
       console.error('[Call] Initialization error:', error);
-      
+
       if (error instanceof Error) {
         if (error.name === 'NotAllowedError') {
           setError('Camera and microphone permissions are required for this call.');
@@ -232,7 +323,7 @@ export function CallPage() {
         setError('Failed to initialize call');
         addToast('Failed to initialize call', 'error');
       }
-      
+
       setStatus('error');
     }
   };
@@ -283,6 +374,7 @@ export function CallPage() {
 
   const endCall = useCallback(async () => {
     try {
+      wasConnectedRef.current = false;
       socketService.leaveRoom(session!.roomId, peerIdRef.current);
       socketService.disconnect();
       webRtcService.close();
@@ -314,22 +406,6 @@ export function CallPage() {
     }
   };
 
-  const getStatusColor = () => {
-    switch (status) {
-      case 'connected':
-        return 'text-success';
-      case 'connecting':
-      case 'reconnecting':
-        return 'text-warning';
-      case 'error':
-      case 'disconnected':
-      case 'ended':
-        return 'text-error';
-      default:
-        return 'text-neutral-600';
-    }
-  };
-
   if (!session) {
     return <Navigate to="/" replace />;
   }
@@ -338,20 +414,51 @@ export function CallPage() {
     return (
       <div className="flex min-h-screen items-center justify-center p-4 bg-gradient-to-br from-red-50 to-neutral-100">
         <div className="max-w-md w-full">
-          <ErrorState
-            message={error}
-            onRetry={() => window.location.reload()}
-          />
+          <ErrorState message={error} onRetry={() => window.location.reload()} />
         </div>
       </div>
     );
   }
 
-  const isWaiting = status === 'waiting' || status === 'initializing';
-  const isConnecting = status === 'connecting' || status === 'reconnecting';
-  const isConnected = status === 'connected';
   const isVideoCall = session.callType === 'video';
+  const isConnected = status === 'connected';
 
+  if (status === 'ended') {
+    return (
+      <div className="min-h-screen bg-neutral-900 flex items-center justify-center p-4">
+        <p className="text-lg font-semibold text-white">Call ended</p>
+      </div>
+    );
+  }
+
+  // ---- Gate: the actual call UI appears ONLY once media is fully connected ----
+  if (!isConnected) {
+    const isReconnecting = status === 'reconnecting';
+    return (
+      <div className="min-h-screen bg-neutral-900 flex items-center justify-center p-4">
+        <div className="max-w-md w-full text-center">
+          <div className="relative w-24 h-24 mx-auto mb-8">
+            <span className="absolute inset-0 rounded-full bg-primary-500 animate-ping opacity-30" />
+            <span className="absolute inset-2 rounded-full bg-neutral-800 flex items-center justify-center">
+              {isReconnecting ? (
+                <div className="w-10 h-10 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <svg className="w-10 h-10 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                </svg>
+              )}
+            </span>
+          </div>
+          <h1 className="text-xl font-semibold text-white mb-2">
+            {isReconnecting ? 'Hold on...' : `Calling ${session.inmateName}`}
+          </h1>
+          <p className="text-sm text-neutral-400">{statusMessage}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ---- Fully connected: real call screen ----
   return (
     <div className="flex flex-col h-screen bg-neutral-900">
       {/* Header */}
@@ -363,14 +470,8 @@ export function CallPage() {
           </p>
         </div>
         <div className="text-right">
-          {isConnected && (
-            <>
-              <div className="text-sm font-mono">{formatDuration(callDuration)}</div>
-              <div className={`text-xs ${getStatusColor()}`}>
-                {getConnectionQuality().toUpperCase()}
-              </div>
-            </>
-          )}
+          <div className="text-sm font-mono">{formatDuration(callDuration)}</div>
+          <div className="text-xs text-success">{getConnectionQuality().toUpperCase()}</div>
         </div>
       </div>
 
@@ -413,33 +514,11 @@ export function CallPage() {
           </div>
         )}
 
-        {/* Status Overlay */}
-        {(isWaiting || isConnecting) && (
-          <div className="absolute inset-0 bg-black bg-opacity-75 flex items-center justify-center">
-            <div className="text-center text-white">
-              {isWaiting && (
-                <div className="w-16 h-16 border-4 border-white border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-              )}
-              {isConnecting && (
-                <div className="w-16 h-16 border-4 border-white border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-              )}
-              <h2 className="text-2xl font-semibold mb-2">
-                {isWaiting && 'Waiting for Prisoner'}
-                {isConnecting && status === 'connecting' && 'Connecting...'}
-                {isConnecting && status === 'reconnecting' && 'Reconnecting...'}
-              </h2>
-              <p className="text-neutral-300">{statusMessage}</p>
-            </div>
-          </div>
-        )}
-
         {/* Recording Notice */}
-        {isConnected && (
-          <div className="absolute top-4 left-4 bg-red-600 text-white px-3 py-1 rounded-full text-xs font-medium flex items-center gap-2">
-            <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
-            REC
-          </div>
-        )}
+        <div className="absolute top-4 left-4 bg-red-600 text-white px-3 py-1 rounded-full text-xs font-medium flex items-center gap-2">
+          <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+          REC
+        </div>
       </div>
 
       {/* Controls */}
@@ -492,12 +571,15 @@ export function CallPage() {
 
           {/* End Call */}
           <button
-            onClick={endCall}
+            onClick={() => {
+              endCall();
+              goToBlank();
+            }}
             className="w-14 h-14 rounded-full bg-red-600 text-white flex items-center justify-center hover:bg-red-700 transition-colors"
             title="End call"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 8l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M5 3a2 2 0 00-2 2v1c0 8.284 6.716 15 15 15h1a2 2 0 002-2v-3.28a1 1 0 00-.684-.948l-4.493-1.498a1 1 0 00-1.21.502l-1.13 2.257a11.042 11.042 0 01-5.516-5.517l2.257-1.128a1 1 0 00.502-1.21L9.228 3.683A1 1 0 008.279 3H5z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
             </svg>
           </button>
         </div>
