@@ -616,17 +616,33 @@ fun VideoCallContent(
                             )
                         }
 
-                        VideoActionButton(
-                            icon = if (isSpeakerOn) Icons.AutoMirrored.Filled.VolumeUp else Icons.AutoMirrored.Filled.VolumeOff,
-                            label = "Speaker",
-                            isActive = isSpeakerOn,
-                            activeColor = PrimaryBlue,
+                        Row(
                             modifier = Modifier.align(Alignment.CenterEnd),
-                            onClick = {
-                                onSpeakerToggle()
-                                lastInteractionTime = System.currentTimeMillis()
-                            }
-                        )
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            VideoActionButton(
+                                icon = if (isSpeakerOn) Icons.AutoMirrored.Filled.VolumeUp else Icons.AutoMirrored.Filled.VolumeOff,
+                                label = "Speaker",
+                                isActive = isSpeakerOn,
+                                activeColor = PrimaryBlue,
+                                onClick = {
+                                    onSpeakerToggle()
+                                    lastInteractionTime = System.currentTimeMillis()
+                                }
+                            )
+
+                            VideoActionButton(
+                                icon = Icons.Default.Info,
+                                label = "Info",
+                                isActive = showInfoDialog,
+                                activeColor = PrimaryBlue,
+                                onClick = {
+                                    showInfoDialog = true
+                                    lastInteractionTime = System.currentTimeMillis()
+                                }
+                            )
+                        }
 
                         VideoActionButton(
                             icon = Icons.Default.CallEnd,
