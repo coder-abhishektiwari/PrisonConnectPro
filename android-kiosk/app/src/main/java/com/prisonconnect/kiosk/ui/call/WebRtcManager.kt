@@ -18,7 +18,6 @@ import org.webrtc.AudioTrack
 import org.webrtc.Camera2Enumerator
 import org.webrtc.CameraVideoCapturer
 import org.webrtc.DefaultVideoDecoderFactory
-import org.webrtc.DefaultVideoEncoderFactory
 import org.webrtc.EglBase
 import org.webrtc.IceCandidate
 import org.webrtc.MediaConstraints
@@ -26,6 +25,7 @@ import org.webrtc.PeerConnection
 import org.webrtc.PeerConnectionFactory
 import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
+import org.webrtc.SoftwareVideoEncoderFactory
 import org.webrtc.SurfaceTextureHelper
 import org.webrtc.VideoCapturer
 import org.webrtc.VideoSource
@@ -107,7 +107,11 @@ class WebRtcManager @Inject constructor(
             .setSamplesReadyCallback(callRecorder)
             .createAudioDeviceModule()
 
-        val videoEncoderFactory = DefaultVideoEncoderFactory(eglContext, true, true)
+        // Software encoder only: some OEM hardware codecs (e.g. Samsung
+        // Exynos OMX.Exynos.VP8.Encoder) fail to create their EGL context on
+        // the encoder queue and abort the whole process natively. A single
+        // 720p P2P call encodes fine on CPU.
+        val videoEncoderFactory = SoftwareVideoEncoderFactory()
         val videoDecoderFactory = DefaultVideoDecoderFactory(eglContext)
 
         peerConnectionFactory = PeerConnectionFactory.builder()
