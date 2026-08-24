@@ -83,14 +83,20 @@ fun CallProgressScreen(
 
     var showFailure by remember { mutableStateOf(false) }
     var everConnected by remember { mutableStateOf(false) }
+    // The engine is a Singleton: its callState may still be CONNECTED/FAILED
+    // from a PREVIOUS session when this screen first composes. Navigation
+    // must stay blocked until THIS screen has run initCall().
+    var sessionStarted by remember { mutableStateOf(false) }
 
     // Start the call session the moment this screen appears.
     LaunchedEffect(roomId) {
         viewModel.initCall(context, roomId, isVideoCall)
+        sessionStarted = true
     }
 
     // Navigate into the real call screen only once media is CONNECTED.
-    LaunchedEffect(callState) {
+    LaunchedEffect(callState, sessionStarted) {
+        if (!sessionStarted) return@LaunchedEffect
         when (callState) {
             CallUIState.CONNECTED -> {
                 everConnected = true
