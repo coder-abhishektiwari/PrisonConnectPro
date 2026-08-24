@@ -18,9 +18,9 @@ export function useWardenSocket(
     // Connect to socket
     socket.connect();
 
-    // Define event handlers - aligned with backend Mediasoup events
+    // Define event handlers - aligned with P2P signaling events
     const handlers: Record<string, EventHandler> = {
-      // Mediasoup backend events
+      // Signaling room events
       'joined': (data) => {
         console.log('[WardenSocket] Room joined:', data);
       },
@@ -30,9 +30,6 @@ export function useWardenSocket(
       'peer-left': (data) => {
         console.log('[WardenSocket] Peer left:', data);
         onActiveCallsUpdate?.();
-      },
-      'new-producer': (data) => {
-        console.log('[WardenSocket] New producer:', data);
       },
       'call-ended': (data) => {
         console.log('[WardenSocket] Call ended:', data);

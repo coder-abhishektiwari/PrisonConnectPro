@@ -6,29 +6,8 @@ const jwt = require('jsonwebtoken');
 const { Server } = require('socket.io');
 
 const PORT = parseInt(process.env.PORT || '3002', 10);
-const JWT_SECRET = process.env.JWT_SECRET;
-const MEDIA_SERVER_URL = process.env.MEDIA_SERVER_URL || 'http://127.0.0.1:3003';
-const MEDIA_API_KEY = process.env.MEDIA_API_KEY;
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-only-change-me';
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
-
-if (!JWT_SECRET) throw new Error('JWT_SECRET env var is required');
-if (!MEDIA_API_KEY) throw new Error('MEDIA_API_KEY env var is required');
-
-const H = { 'Content-Type': 'application/json', 'X-API-Key': MEDIA_API_KEY, Connection: 'close' };
-
-async function media(method, path, body) {
-  const res = await fetch(MEDIA_SERVER_URL + path, {
-    method, headers: H, body: body ? JSON.stringify(body) : undefined
-  });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const err = new Error(json.error?.message || `media ${method} ${path} -> ${res.status}`);
-    err.status = res.status;
-    err.code = json.error?.code || 'MEDIA_ERROR';
-    throw err;
-  }
-  return json;
-}
 
 const app = express();
 app.use(express.json());
@@ -38,6 +17,44 @@ const io = new Server(server, { cors: { origin: CORS_ORIGIN } });
 
 // roomId -> Map(peerId -> socket)
 const rooms = new Map();
+
+// Teardown timers for transient socket drop grace periods
+const DISCONNECT_GRACE_MS = parseInt(process.env.DISCONNECT_GRACE_MS || '15000', 10);
+const roomTeardownTimers = new Map(); // roomId -> Timeout
+
+function hasLiveSocket(roomId) {
+  const peers = rooms.get(roomId);
+  if (!peers) return false;
+  for (const s of peers.values()) {
+    if (s && s.connected) return true;
+  }
+  return false;
+}
+
+function cancelRoomTeardown(roomId) {
+  const t = roomTeardownTimers.get(roomId);
+  if (t) {
+    clearTimeout(t);
+    roomTeardownTimers.delete(roomId);
+  }
+}
+
+function teardownRoom(roomId, reason) {
+  cancelRoomTeardown(roomId);
+  rooms.delete(roomId);
+  io.to(roomId).emit('call-ended', { roomId, reason });
+}
+
+function scheduleRoomTeardown(roomId, reason) {
+  if (hasLiveSocket(roomId)) return;
+  if (roomTeardownTimers.has(roomId)) return;
+  const t = setTimeout(() => {
+    roomTeardownTimers.delete(roomId);
+    if (hasLiveSocket(roomId)) return;
+    teardownRoom(roomId, reason);
+  }, DISCONNECT_GRACE_MS);
+  roomTeardownTimers.set(roomId, t);
+}
 
 function roomPeers(roomId) {
   if (!rooms.has(roomId)) rooms.set(roomId, new Map());
@@ -58,181 +75,147 @@ io.use((socket, next) => {
 function isStaff(auth) {
   return ['warden', 'admin', 'super-admin', 'super_admin'].includes(auth?.role);
 }
-
-function isFamily(auth) {
-  return auth?.role === 'family';
-}
-
-function isKiosk(auth) {
-  return auth?.role === 'kiosk';
-}
+function isFamily(auth) { return auth?.role === 'family'; }
+function isKiosk(auth) { return auth?.role === 'kiosk'; }
+function isInmate(auth) { return auth?.role === 'inmate'; }
 
 io.on('connection', (socket) => {
   const auth = socket.data.auth;
   console.log(`[signaling] connected ${socket.id} (peer=${auth.sub} role=${auth.role} room=${auth.roomId || '-'})`);
   let currentRoomId = null;
   let currentPeerId = null;
-  // Mediasoup transport ids for this socket, populated by createWebRtcTransport.
-  // Clients (family-web, android-kiosk) do not send transportId on transport
-  // events, so we resolve it from the socket state instead of failing.
-  let sendTransportId = null;
-  let recvTransportId = null;
-  // Producers announced by join-room that this peer has not yet consumed
-  // (flushed once its recv transport exists).
-  let pendingProducers = [];
 
   socket.on('join-room', async (data = {}, callback) => {
     const { roomId, peerId } = data;
-    console.log(`[join-room] sid=${socket.id} roomId=${roomId} peerId=${peerId} authRole=${auth.role} authRoom=${auth.roomId || '-'}`);
-    if (!roomId || !peerId) { console.log('[join-room] REJECT missing roomId/peerId'); return callback?.({ success: false, error: 'roomId and peerId required' }); }
-    // A family or kiosk token is bound to one specific room — it must not be
-    // reused elsewhere.
-    if ((isFamily(auth) || isKiosk(auth)) && auth.roomId !== roomId) {
-      console.log(`[join-room] REJECT FORBIDDEN (authRoom=${auth.roomId || '-'} != ${roomId})`);
+    console.log(`[join-room] sid=${socket.id} roomId=${roomId} peerId=${peerId} authRole=${auth.role}`);
+
+    if (!roomId || !peerId) {
+      return callback?.({ success: false, error: 'roomId and peerId required' });
+    }
+
+    if ((isFamily(auth) || isKiosk(auth) || isInmate(auth)) && auth.roomId && auth.roomId !== roomId) {
+      console.log(`[join-room] REJECT FORBIDDEN (authRoom=${auth.roomId} != ${roomId})`);
       return callback?.({ success: false, error: 'FORBIDDEN' });
     }
-    // Only the room's owner (kiosk/family identity) or staff may enter under this peerId.
-    if (!isStaff(auth) && !isFamily(auth) && !isKiosk(auth) && peerId !== auth.sub) {
+
+    if (!isStaff(auth) && !isFamily(auth) && !isKiosk(auth) && !isInmate(auth) && peerId !== auth.sub) {
       console.log('[join-room] REJECT peerId FORBIDDEN');
       return callback?.({ success: false, error: 'FORBIDDEN' });
     }
 
     const peers = roomPeers(roomId);
-    const already = [...peers.values()].filter((s) => s.id !== socket.id).length;
     const roomMax = parseInt(process.env.ROOM_MAX_PARTICIPANTS || '2', 10);
-    if (already >= roomMax) { console.log(`[join-room] REJECT full already=${already}`); return callback?.({ success: false, error: 'Room is full' }); }
+    const activePeers = [...peers.values()].filter((s) => s.id !== socket.id);
 
-    try {
-      await media('POST', '/rooms', { roomId });
-      const info = await media('GET', `/rooms/${roomId}`);
-      if (!peers.has(peerId)) peers.set(peerId, socket);
-      socket.join(roomId);
-      currentRoomId = roomId;
-      currentPeerId = peerId;
-      socket.to(roomId).emit('peer-joined', { peerId });
-      // Buffer producers that already exist in the room (e.g. the kiosk started
-      // producing before the family joined). These are flushed once this peer
-      // has created its recv transport, so its client can actually consume.
-      pendingProducers = [];
-      try {
-        const existing = await media('GET', `/rooms/${roomId}/producers`);
-        pendingProducers = existing.data.producers || [];
-      } catch (_) {}
-      console.log(`[join-room] OK roomId=${roomId} peerId=${peerId} existingProducers=${pendingProducers.length} rtpCapsCodecs=${info.data.rtpCapabilities && info.data.rtpCapabilities.codecs ? info.data.rtpCapabilities.codecs.length : '?'}`);
-      return callback?.({ success: true, routerRtpCapabilities: info.data.rtpCapabilities });
-    } catch (err) {
-      console.error(`[signaling] join-room media error (${err.message})`);
-      return callback?.({ success: false, error: 'MEDIA_UNAVAILABLE' });
+    if (activePeers.length >= roomMax) {
+      console.log(`[join-room] REJECT full already=${activePeers.length}`);
+      return callback?.({ success: false, error: 'Room is full' });
     }
+
+    peers.set(peerId, socket);
+    socket.join(roomId);
+    currentRoomId = roomId;
+    currentPeerId = peerId;
+
+    cancelRoomTeardown(roomId);
+
+    // Notify room of existing peers and notify other peer about this join
+    const existingPeers = [...peers.keys()].filter((p) => p !== peerId);
+    socket.to(roomId).emit('peer-joined', { peerId, role: auth.role });
+
+    console.log(`[join-room] OK roomId=${roomId} peerId=${peerId} existingPeers=${existingPeers.length}`);
+    return callback?.({
+      success: true,
+      existingPeers,
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+      ]
+    });
   });
 
-  socket.on('leave-room', async (_data, callback) => {
-    await doLeave();
+  // ---- Pure P2P WebRTC Signaling Events ----
+
+  socket.on('offer', (data = {}, callback) => {
+    const { sdp, target } = data;
+    if (!currentRoomId || !currentPeerId) return callback?.({ success: false, error: 'Not in a room' });
+    console.log(`[signaling] SDP OFFER from ${currentPeerId} in ${currentRoomId}`);
+    if (target) {
+      const targetSocket = rooms.get(currentRoomId)?.get(target);
+      if (targetSocket) {
+        targetSocket.emit('offer', { sdp, sender: currentPeerId, peerId: currentPeerId });
+      }
+    } else {
+      socket.to(currentRoomId).emit('offer', { sdp, sender: currentPeerId, peerId: currentPeerId });
+    }
     callback?.({ success: true });
   });
 
-  async function doLeave() {
+  socket.on('answer', (data = {}, callback) => {
+    const { sdp, target } = data;
+    if (!currentRoomId || !currentPeerId) return callback?.({ success: false, error: 'Not in a room' });
+    console.log(`[signaling] SDP ANSWER from ${currentPeerId} in ${currentRoomId}`);
+    if (target) {
+      const targetSocket = rooms.get(currentRoomId)?.get(target);
+      if (targetSocket) {
+        targetSocket.emit('answer', { sdp, sender: currentPeerId, peerId: currentPeerId });
+      }
+    } else {
+      socket.to(currentRoomId).emit('answer', { sdp, sender: currentPeerId, peerId: currentPeerId });
+    }
+    callback?.({ success: true });
+  });
+
+  socket.on('ice-candidate', (data = {}, callback) => {
+    const { candidate, target } = data;
+    if (!currentRoomId || !currentPeerId) return callback?.({ success: false, error: 'Not in a room' });
+    if (target) {
+      const targetSocket = rooms.get(currentRoomId)?.get(target);
+      if (targetSocket) {
+        targetSocket.emit('ice-candidate', { candidate, sender: currentPeerId, peerId: currentPeerId });
+      }
+    } else {
+      socket.to(currentRoomId).emit('ice-candidate', { candidate, sender: currentPeerId, peerId: currentPeerId });
+    }
+    callback?.({ success: true });
+  });
+
+  // Backwards compatibility handler for trickle-ice
+  socket.on('trickle-ice', (data = {}, callback) => {
+    const { candidate, target } = data;
+    if (currentRoomId && currentPeerId) {
+      if (target) {
+        rooms.get(currentRoomId)?.get(target)?.emit('ice-candidate', { candidate, sender: currentPeerId, peerId: currentPeerId });
+      } else {
+        socket.to(currentRoomId).emit('ice-candidate', { candidate, sender: currentPeerId, peerId: currentPeerId });
+      }
+    }
+    callback?.({ success: true });
+  });
+
+  socket.on('leave-room', async (_data, callback) => {
+    await doLeave({ immediate: true });
+    callback?.({ success: true });
+  });
+
+  async function doLeave({ immediate = false } = {}) {
     const roomId = currentRoomId;
     const peerId = currentPeerId;
     if (!roomId || !peerId) return;
     rooms.get(roomId)?.delete(peerId);
+    const remaining = rooms.get(roomId)?.size || 0;
     socket.to(roomId).emit('peer-left', { peerId });
     socket.leave(roomId);
     currentRoomId = null;
     currentPeerId = null;
-    if ((rooms.get(roomId)?.size || 0) === 0) {
-      rooms.delete(roomId);
-      try { await media('DELETE', `/rooms/${roomId}`); } catch (_) {}
+    if (remaining === 0) {
+      if (immediate) {
+        teardownRoom(roomId, 'call ended');
+      } else {
+        scheduleRoomTeardown(roomId, 'peer disconnected');
+      }
     }
   }
-
-  const requireRoom = () => (currentRoomId && currentPeerId ? null : 'Not in a room');
-
-  socket.on('createWebRtcTransport', async (data = {}, callback) => {
-    const err = requireRoom();
-    if (err) return callback?.({ success: false, error: err });
-    try {
-      const direction = data.direction || 'send';
-      const r = await media('POST', `/rooms/${currentRoomId}/transports`, { peerId: currentPeerId, direction });
-      const isRecv = direction === 'recv';
-      if (isRecv) recvTransportId = r.data.id;
-      else sendTransportId = r.data.id;
-      // Ack first so the client's createRecvTransport callback (which assigns
-      // this.recvTransport) runs before the buffered new-producer events below.
-      callback?.({ success: true, data: r.data });
-      if (isRecv) {
-        // Announce producers that already existed when this peer joined so it
-        // can consume them now that its recv transport is in place.
-        for (const p of pendingProducers) {
-          socket.emit('new-producer', { peerId: p.peerId, producerId: p.producerId, kind: p.kind });
-        }
-        pendingProducers = [];
-      }
-    } catch (e) {
-      return callback?.({ success: false, error: 'Failed to create transport' });
-    }
-  });
-
-  socket.on('connectWebRtcTransport', async (data = {}, callback) => {
-    try {
-      const tid = data.transportId || (data.direction === 'recv' ? recvTransportId : sendTransportId);
-      if (!tid) return callback?.({ success: false, error: 'No transport for this socket' });
-      await media('POST', `/transports/${tid}/connect`, { dtlsParameters: data.dtlsParameters });
-      return callback?.({ success: true });
-    } catch (e) {
-      return callback?.({ success: false, error: 'Failed to connect transport' });
-    }
-  });
-
-  socket.on('produce', async (data = {}, callback) => {
-    try {
-      const tid = data.transportId || sendTransportId;
-      if (!tid) return callback?.({ success: false, error: 'No send transport for this socket' });
-      const r = await media('POST', `/transports/${tid}/produce`, { kind: data.kind, rtpParameters: data.rtpParameters, appData: data.appData });
-      socket.to(currentRoomId).emit('new-producer', { peerId: currentPeerId, producerId: r.id, kind: r.kind });
-      return callback?.({ success: true, id: r.id, kind: r.kind });
-    } catch (e) {
-      return callback?.({ success: false, error: 'Failed to produce' });
-    }
-  });
-
-  socket.on('consume', async (data = {}, callback) => {
-    const err = requireRoom();
-    if (err) return callback?.({ success: false, error: err });
-    try {
-      const r = await media('POST', `/rooms/${currentRoomId}/consume`, { peerId: currentPeerId, producerId: data.producerId, rtpCapabilities: data.rtpCapabilities });
-      return callback?.({ success: true, id: r.id, producerId: r.producerId, kind: r.kind, rtpParameters: r.rtpParameters });
-    } catch (e) {
-      return callback?.({ success: false, error: 'Failed to consume' });
-    }
-  });
-
-  socket.on('resumeConsumer', async (data = {}, callback) => {
-    try { await media('POST', `/consumers/${data.consumerId}/resume`); callback?.({ success: true }); }
-    catch (e) { callback?.({ success: false, error: 'Failed to resume consumer' }); }
-  });
-  socket.on('pauseConsumer', async (data = {}, callback) => {
-    try { await media('POST', `/consumers/${data.consumerId}/pause`); callback?.({ success: true }); }
-    catch (e) { callback?.({ success: false, error: 'Failed to pause consumer' }); }
-  });
-  socket.on('closeProducer', async (data = {}, callback) => {
-    try { await media('POST', `/transports/${data.transportId || 'x'}/close`); } catch (_) {}
-    socket.to(currentRoomId).emit('producer-closed', { peerId: currentPeerId, producerId: data.producerId });
-    callback?.({ success: true });
-  });
-  socket.on('closeConsumer', async (data = {}, callback) => {
-    try { await media('POST', `/consumers/${data.consumerId}/close`); } catch (_) {}
-    callback?.({ success: true });
-  });
-  socket.on('trickle-ice', async (data = {}, callback) => {
-    try {
-      const tid = data.transportId || sendTransportId || recvTransportId;
-      if (tid) await media('POST', `/transports/${tid}/trickle`, { candidate: data.candidate });
-      return callback?.({ success: true });
-    } catch (_) {
-      return callback?.({ success: true });
-    }
-  });
 
   socket.on('disconnect', async () => {
     console.log(`[signaling] disconnected ${socket.id}`);
@@ -240,60 +223,24 @@ io.on('connection', (socket) => {
   });
 });
 
-// ---- HTTP control API (called by the backend) ----
-function serviceAuth(req, res, next) {
-  if (req.path === '/health') return next();
-  if (req.get('x-api-key') !== MEDIA_API_KEY) {
-    return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'invalid api key' } });
-  }
-  next();
-}
-app.use('/api', serviceAuth);
+// ---- HTTP Control API ----
+app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
-app.post('/api/rooms/:roomId/control', async (req, res) => {
+app.post('/api/rooms/:roomId/control', (req, res) => {
   const { action, target } = req.body || {};
   const roomId = req.params.roomId;
-  try {
-    await media('POST', `/rooms/${roomId}/control`, { action, targetPeerId: target || null });
-    io.to(roomId).emit('call-control', { action, target });
-    if (action === 'terminate') {
-      io.to(roomId).emit('call-ended', { roomId, reason: 'terminated by staff' });
-      try { await media('DELETE', `/rooms/${roomId}`); } catch (_) {}
-      rooms.delete(roomId);
-    }
-    return res.json({ success: true, data: { action, target } });
-  } catch (err) {
-    return res.status(err.status || 500).json({ success: false, error: { code: err.code || 'INTERNAL_ERROR', message: err.message } });
+  io.to(roomId).emit('call-control', { action, target });
+  if (action === 'terminate') {
+    io.to(roomId).emit('call-ended', { roomId, reason: 'terminated by staff' });
+    teardownRoom(roomId, 'terminated by staff');
   }
+  return res.json({ success: true, data: { action, target } });
 });
 
-app.post('/api/rooms/:roomId/recording', async (req, res) => {
-  const { action, recordingId } = req.body || {};
-  const roomId = req.params.roomId;
-  if (!recordingId) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'recordingId is required' } });
-  try {
-    if (action === 'start') {
-      const r = await media('POST', `/rooms/${roomId}/record`, { recordingId });
-      io.to(roomId).emit('recording-started', { recordingId });
-      return res.json({ success: true, data: r.data || { status: 'recording' } });
-    }
-    if (action === 'stop') {
-      const r = await media('POST', `/rooms/${roomId}/record/stop`, { recordingId });
-      io.to(roomId).emit('recording-finished', { recordingId, ...(r.data || {}) });
-      return res.json({ success: true, data: r.data });
-    }
-    return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'action must be start or stop' } });
-  } catch (err) {
-    return res.status(err.status || 500).json({ success: false, error: { code: err.code || 'INTERNAL_ERROR', message: err.message } });
-  }
-});
-
-app.post('/api/rooms/:roomId/close', async (req, res) => {
+app.post('/api/rooms/:roomId/close', (req, res) => {
   const roomId = req.params.roomId;
   const { reason } = req.body || {};
-  io.to(roomId).emit('call-ended', { roomId, reason });
-  try { await media('DELETE', `/rooms/${roomId}`); } catch (_) {}
-  rooms.delete(roomId);
+  teardownRoom(roomId, reason || 'room closed');
   return res.json({ success: true });
 });
 
@@ -302,9 +249,21 @@ app.get('/api/rooms/:roomId', (req, res) => {
   return res.json({ success: true, data: { roomId: req.params.roomId, participants: peers } });
 });
 
-app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
+let listenAttempts = 0;
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE' && listenAttempts < 10) {
+    listenAttempts += 1;
+    console.warn(`[signaling] port ${PORT} in use, retrying in 2s (attempt ${listenAttempts}/10)...`);
+    setTimeout(() => {
+      server.close();
+      server.listen(PORT);
+    }, 2000);
+    return;
+  }
+  console.error('[signaling] server error:', err);
+  process.exit(1);
+});
 
 server.listen(PORT, () => {
-  console.log(`[signaling] listening on ${PORT}`);
-  console.log(`[signaling] media-server: ${MEDIA_SERVER_URL}`);
+  console.log(`[signaling] P2P signaling server listening on ${PORT}`);
 });

@@ -8,7 +8,14 @@ object AppConfig {
     val baseUrl: String get() = BuildConfig.API_BASE_URL
 
     /** Socket.IO signaling server (overridable via gradle -P SIGNALING_URL). */
-    val signalingUrl: String get() = BuildConfig.SIGNALING_URL
+    val signalingUrl: String
+        get() = signalingUrlOverride ?: BuildConfig.SIGNALING_URL
+  /**
+     * Runtime signaling URL delivered by the backend inside the create-call
+     * response. Takes precedence over the build-time default so the APK never
+     * needs rebuilding when the deployment's public signaling URL changes.
+     */
+    var signalingUrlOverride: String? = null
 
     const val NETWORK_TIMEOUT = 30L // Seconds
 

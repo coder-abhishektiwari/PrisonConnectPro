@@ -99,8 +99,22 @@ class RoomViewModel @Inject constructor(
         }
     }
 
+    /**
+     * One-shot navigation consume. The lobby auto-navigates into the call
+     * screen when createRoomState is Success. Without consuming the state,
+     * every recomposition of the lobby (e.g. popping back from a failed call)
+     * re-fires the navigation and hurls the user straight back into another
+     * failing call — an infinite fail/restart loop.
+     */
+    fun consumeCreateRoomNavigation() {
+        _createRoomState.value = UiState.Idle
+    }
+
     fun createRoom(contactId: String, callType: String) {
         _createRoomState.value = UiState.Loading
+        // Drop any stale runtime signaling URL from a previous call; a fresh
+        // one (if the backend provides it) is set on Success below.
+        AppConfig.signalingUrlOverride = null
         viewModelScope.launch {
             val inmateId = authRepository.getInmateId() ?: Constants.KIOSK_ID
             val kioskId = authRepository.getVerifiedKiosk()?.kioskId ?: Constants.KIOSK_ID
@@ -112,7 +126,12 @@ class RoomViewModel @Inject constructor(
                         // Stash the room-bound signaling token before opening the socket
                         // so join-room authenticates with role 'kiosk' for this room.
                         AppConfig.signalingToken = result.data.signalingToken
-                        callRepository.joinRoom(result.data.sessionId, "kiosk-${System.currentTimeMillis()}")
+                        // Prefer the backend-provided public signaling URL so the APK
+                        // keeps working even when the deployment's tunnel URL changes.
+                        result.data.signalingUrl?.takeIf { it.isNotBlank() }?.let {
+                            AppConfig.signalingUrlOverride = it
+                            Logger.d("Using backend-provided signaling URL")
+                        }
                         Logger.d("Room setup complete: ${result.data.sessionId}")
                     }
                     is NetworkResult.Failure -> {

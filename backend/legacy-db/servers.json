@@ -14,8 +14,8 @@
   },
   {
     "serverId": "SERVER-02",
-    "name": "MediaSoup-Worker-01",
-    "type": "mediasoup-worker",
+    "name": "webrtc-peer-01",
+    "type": "webrtc-peer",
     "location": "Mumbai-DataCenter-01",
     "status": "online",
     "cpu": 35,
@@ -92,8 +92,8 @@
   },
   {
     "serverId": "SERVER-08",
-    "name": "MediaSoup-Worker-02",
-    "type": "mediasoup-worker",
+    "name": "webrtc-peer-02",
+    "type": "webrtc-peer",
     "location": "Bangalore-DataCenter-01",
     "status": "online",
     "cpu": 31,
@@ -157,8 +157,8 @@
   },
   {
     "serverId": "SERVER-13",
-    "name": "MediaSoup-Worker-03",
-    "type": "mediasoup-worker",
+    "name": "webrtc-peer-03",
+    "type": "webrtc-peer",
     "location": "Delhi-DataCenter-01",
     "status": "online",
     "cpu": 33,

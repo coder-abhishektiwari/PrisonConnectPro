@@ -78,6 +78,11 @@ fun LobbyScreen(
     LaunchedEffect(createRoomState) {
         if (createRoomState is UiState.Success<*>) {
             val session = (createRoomState as UiState.Success<CallSession>).data
+            // Consume BEFORE navigating: this effect re-runs on every
+            // recomposition, so leaving the state as Success would re-enter
+            // the call screen each time we pop back to the lobby (e.g. after
+            // a failed call) — an infinite fail/restart loop.
+            viewModel.consumeCreateRoomNavigation()
             onConfirm(session.sessionId)
         }
     }

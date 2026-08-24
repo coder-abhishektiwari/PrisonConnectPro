@@ -3,9 +3,21 @@ const fs = require('fs');
 const http = require('http');
 const jpeg = require('jpeg-js');
 const pngjs = require('pngjs');
-// Bypass package "exports" restriction by loading the WASM build directly
-// Works on local dev, Render, and any deployment environment
-const HumanDir = path.resolve(__dirname, '../../node_modules/@vladmandic/human');
+// Bypass package "exports" restriction by loading the WASM build directly.
+// Works everywhere: host monorepo (backend/lib -> ../../node_modules),
+// Docker container (/app/lib -> ../node_modules) and Render.
+function resolveHumanDir() {
+  const candidates = [
+    path.resolve(__dirname, '../../node_modules/@vladmandic/human'),
+    path.resolve(__dirname, '../node_modules/@vladmandic/human'),
+    path.resolve(__dirname, 'node_modules/@vladmandic/human')
+  ];
+  for (const dir of candidates) {
+    if (fs.existsSync(path.join(dir, 'dist', 'human.node-wasm.js'))) return dir;
+  }
+  return candidates[0];
+}
+const HumanDir = resolveHumanDir();
 const Human = require(path.join(HumanDir, 'dist/human.node-wasm.js'));
 
 const MODELS_DIR = path.join(__dirname, '..', 'human-models');

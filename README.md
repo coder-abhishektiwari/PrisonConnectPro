@@ -27,7 +27,7 @@ Each component contains an `.env.example` or `local.properties.example` template
 
 1. Copy `.env.example` to `.env` in `family-web/` and `warden-dashboard/`.
 2. Copy `local.properties.example` to `local.properties` in `android-kiosk/`.
-3. Configure Signaling Server (Node.js/WebSocket), Media Server (Mediasoup SFU / Coturn TURN), and Trust Account API endpoints.
+3. Configure Signaling Server (Node.js/WebSocket, pure P2P WebRTC relay), Coturn TURN (connectivity fallback), and Trust Account API endpoints.
 
 ## Code Standards
 

@@ -321,7 +321,8 @@ fun KioskNavHost(
                     navController.navigate("call_summary/$contactName/10.00") {
                         popUpTo(KioskRoutes.VIDEO_CALL) { inclusive = true }
                     }
-                }
+                },
+                onBack = { navController.popBackStack() }
             )
         }
         composable(KioskRoutes.AUDIO_CALL) { backStackEntry ->
@@ -335,7 +336,8 @@ fun KioskNavHost(
                     navController.navigate("call_summary/$contactName/5.00") {
                         popUpTo(KioskRoutes.AUDIO_CALL) { inclusive = true }
                     }
-                }
+                },
+                onBack = { navController.popBackStack() }
             )
         }
         composable(KioskRoutes.CALL_SUMMARY) { backStackEntry ->

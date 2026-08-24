@@ -30,7 +30,6 @@ class SocketService {
         randomizationFactor: 0.5,
         timeout: 20000,
         auth: {
-          // The verified family session token (JWT) issued by OTP verification.
           token: authToken ?? session.roomId,
         },
       });
@@ -38,24 +37,29 @@ class SocketService {
       this.socket.on('connect', () => {
         console.log('[Socket] Connected:', this.socket?.id);
         this.reconnectAttempts = 0;
+        this.isConnecting = false;
         this.emit('system', { type: 'connected' });
       });
 
       this.socket.on('disconnect', (reason) => {
         console.log('[Socket] Disconnected:', reason);
+        this.isConnecting = false;
         this.emit('system', { type: 'disconnected', reason });
       });
 
       this.socket.on('connect_error', (error) => {
         console.error('[Socket] Connection error:', error);
         this.reconnectAttempts++;
+        this.isConnecting = false;
         this.emit('system', { type: 'connection_error', error: error.message });
       });
 
-      // Mediasoup backend events (join result arrives via the join-room ACK)
+      // P2P WebRTC Signaling Events
       this.socket.on('peer-joined', (data) => this.emit('peer-joined', data));
       this.socket.on('peer-left', (data) => this.emit('peer-left', data));
-      this.socket.on('new-producer', (data) => this.emit('new-producer', data));
+      this.socket.on('offer', (data) => this.emit('offer', data));
+      this.socket.on('answer', (data) => this.emit('answer', data));
+      this.socket.on('ice-candidate', (data) => this.emit('ice-candidate', data));
       this.socket.on('call-ended', (data) => this.emit('call-ended', data));
       this.socket.on('room-updated', (data) => this.emit('room-updated', data));
       this.socket.on('recording-status', (data) => this.emit('recording-status', data));
@@ -114,7 +118,6 @@ class SocketService {
     });
   }
 
-  // The signaling server returns the join result only via the ACK callback.
   joinRoom(roomId: string, peerId: string): Promise<any> {
     return this.sendWithAck('join-room', { roomId, peerId });
   }
@@ -123,24 +126,16 @@ class SocketService {
     this.send('leave-room', { roomId, peerId });
   }
 
-  createWebRtcTransport(roomId: string, peerId: string, direction: 'send' | 'recv'): Promise<any> {
-    return this.sendWithAck('createWebRtcTransport', { roomId, peerId, direction });
+  sendOffer(sdp: RTCSessionDescriptionInit, target?: string): void {
+    this.send('offer', { sdp, target });
   }
 
-  connectWebRtcTransport(peerId: string, direction: 'send' | 'recv', dtlsParameters: any): void {
-    this.send('connectWebRtcTransport', { peerId, direction, dtlsParameters });
+  sendAnswer(sdp: RTCSessionDescriptionInit, target?: string): void {
+    this.send('answer', { sdp, target });
   }
 
-  produce(peerId: string, kind: 'audio' | 'video', rtpParameters: any): Promise<any> {
-    return this.sendWithAck('produce', { peerId, kind, rtpParameters, appData: {} });
-  }
-
-  consume(peerId: string, producerId: string, rtpCapabilities: any): Promise<any> {
-    return this.sendWithAck('consume', { peerId, producerId, rtpCapabilities });
-  }
-
-  resumeConsumer(peerId: string, consumerId: string): void {
-    this.send('resumeConsumer', { peerId, consumerId });
+  sendIceCandidate(candidate: RTCIceCandidateInit, target?: string): void {
+    this.send('ice-candidate', { candidate, target });
   }
 }
 

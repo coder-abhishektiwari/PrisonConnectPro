@@ -11,5 +11,8 @@ export default defineConfig({
   },
   server: {
     port: 5174,
+    host: true,
+    // Allow cloudflared quick-tunnel hostnames (random subdomain each run).
+    allowedHosts: ['.trycloudflare.com'],
   },
 });

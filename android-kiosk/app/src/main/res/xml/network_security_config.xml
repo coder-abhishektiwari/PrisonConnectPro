@@ -7,7 +7,8 @@
         <domain includeSubdomains="true">10.0.2.2</domain> <!-- Android Emulator Loopback -->
     </domain-config>
     <domain-config cleartextTrafficPermitted="false">
-        <domain includeSubdomains="true">prisonconnect-mockbackend.onrender.com</domain>
+        <!-- Real deployments are HTTPS (Render). Cleartext stays permitted
+             only for the base-config dev hosts above. -->
         <domain includeSubdomains="true">onrender.com</domain>
     </domain-config>
 </network-security-config>

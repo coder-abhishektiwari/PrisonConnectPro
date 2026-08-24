@@ -15,22 +15,22 @@
                                               |
                      +------------------------+------------------------+
                      |                                                 |
-           +---------v----------+                            +---------v----------+
-           | Node.js Signaling  |                            | Mediasoup SFU      |
-           | & Room Management  |                            | Media Server       |
-           +---------+----------+                            +---------+----------+
-                     |                                                 |
-         +-----------+-----------+                             +-------+-------+
-         |                       |                             |               |
-+--------v-------+       +-------v-------+             +-------v-------+ +-----v-----+
-| PostgreSQL DB  |       | Redis Cache   |             | FFmpeg        | | Coturn    |
-| (UserData, Logs|       | (Session/OTP) |             | Recorder      | | STUN/TURN |
-+----------------+       +---------------+             +-------+-------+ +-----------+
-                                                               |
-                                                       +-------v-------+
-                                                       | MinIO Storage |
-                                                       | (WORM Vault)  |
-                                                       +---------------+
+           +---------v----------+                            +---------+----------+
+           | Node.js Signaling  |                            | Coturn             |
+           | & Room Management  |                            | STUN/TURN (P2P     |
+           +---------+----------+                            | fallback only)     |
+                     |                                        +---------+----------+
+                     |
+         +-----------+-----------+
+         |                       |
++--------v-------+       +-------v-------+
+| PostgreSQL DB  |       | Redis Cache   |
+| (UserData, Logs|       | (Session/OTP) |
++----------------+       +---------------+
+
+Calls are pure 1-to-1 P2P WebRTC: media flows directly between the kiosk and
+the family browser. Recordings are made on the Android kiosk side and
+uploaded to the backend after the call ends.
 ```
 
 ## Functional Workflows

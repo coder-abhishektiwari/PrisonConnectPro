@@ -46,3 +46,7 @@ start-external.tmp.json
 
 # Runtime SMS/OTP audit logs (may contain phone numbers)
 backend/logs/
+
+# Runtime launcher logs + call recordings (uploaded to backend, never committed)
+logs/
+backend/recordings/

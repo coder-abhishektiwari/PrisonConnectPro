@@ -6,6 +6,7 @@ import com.prisonconnect.kiosk.models.schedule.ScheduleRequest
 import com.prisonconnect.kiosk.network.NetworkResult
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
+import org.json.JSONObject
 
 interface CallRepository {
     val socketStatus: StateFlow<SocketStatus>
@@ -20,14 +21,13 @@ interface CallRepository {
     fun createRoom(inmateId: String, contactId: String, kioskId: String, callType: String): Flow<NetworkResult<CallSession>>
     fun checkSlotAvailability(contactId: String): Flow<NetworkResult<Boolean>>
 
-    // Signaling
+    // Signaling (pure P2P WebRTC — Socket.IO only relays SDP + ICE)
     fun initSignaling()
     fun joinRoom(roomId: String, peerId: String)
     fun leaveRoom(roomId: String, peerId: String)
-    fun createWebRtcTransport(roomId: String, peerId: String, direction: String, callback: (Any) -> Unit)
-    fun connectWebRtcTransport(peerId: String, direction: String, dtlsParameters: String)
-    fun produce(peerId: String, kind: String, rtpParameters: String, callback: (Any) -> Unit)
-    fun consume(peerId: String, producerId: String, rtpCapabilities: String, callback: (Any) -> Unit)
-    fun resumeConsumer(peerId: String, consumerId: String)
+    fun sendOffer(sdp: JSONObject)
+    fun sendAnswer(sdp: JSONObject)
+    fun sendIceCandidate(candidate: JSONObject)
+    fun uploadRecording(request: RecordingUploadRequest): Flow<NetworkResult<RecordingUploadResponse>>
     fun observeSignalingEvents(): Flow<SignalingEvent>
 }

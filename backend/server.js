@@ -1,4 +1,4 @@
-﻿require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 
 const express = require('express');
 const http = require('http');
@@ -21,11 +21,12 @@ const {
   buildLinkSms,
   buildCallLink
 } = require('./lib/familySecurity');
-// NOTE: Mediasoup manager and recorder have been intentionally commented out by developer
-// as they were causing failures on Render deployment. This is a known limitation - 
-// WebRTC calling functionality via mediasoup is disabled until deployment issues are resolved.
-// const mediasoupManager = require('./lib/mediasoupManager');
-// const recorder = require('./lib/recorder');
+const { saveUploadedRecording } = require('./lib/recorder');
+
+// Calls are pure 1-to-1 P2P WebRTC: media flows directly between the kiosk
+// and the family browser. The dedicated signaling-server (Socket.IO) relays
+// SDP offers/answers and ICE candidates; this backend only manages call
+// state, authorization and recording metadata.
 
 // Existing project routers â€” unchanged, still owned by their own files.
 const { router: authRouter } = require('./auth-routes');
@@ -40,7 +41,9 @@ const io = new Server(server, {
 });
 
 app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
-app.use(express.json());
+// Large JSON limit: kiosk-side recordings are uploaded as base64 in the body
+// of POST /recordings/upload (no multipart parser needed).
+app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '200mb' }));
 
 // Handle malformed JSON errors
 app.use((err, req, res, next) => {
@@ -1370,6 +1373,14 @@ app.post('/calls', requireAuth, asyncRoute(async (req, res) => {
     kioskId: newCall.kioskId
   });
 
+  // Public signaling URL for this deployment, handed to clients inside the
+  // create-call response. The Android kiosk uses it at runtime so the APK
+  // never needs rebuilding when the public signaling URL changes (e.g.
+  // cloudflared quick tunnels get a fresh URL on every start.bat run).
+  if (process.env.SIGNALING_PUBLIC_URL) {
+    newCall.signalingUrl = process.env.SIGNALING_PUBLIC_URL;
+  }
+
   await updateDb('calls.json', (calls) => ({ data: [...calls, newCall], result: newCall }));
   broadcastEvent('call-created', newCall);
 
@@ -1782,7 +1793,7 @@ app.post('/rooms', requireAuth, asyncRoute(async (req, res) => {
 
 // Note: actual join/leave now happens over the 'join-room'/'leave-room'
 // socket events (see io.on('connection') above) so membership tracking stays
-// consistent with the real mediasoup peers. These REST endpoints remain for
+// consistent with the P2P signaling peers. These REST endpoints remain for
 // clients that only need to query/report state, not establish media.
 app.post('/rooms/join', requireAuth, asyncRoute(async (req, res) => {
   const { roomId, participantId } = req.body;
@@ -2005,17 +2016,55 @@ app.post('/recordings', requireAuth, asyncRoute(async (req, res) => {
   return sendSuccess(res, newRecording, 201);
 }));
 
+app.post('/recordings/upload', requireAuth, asyncRoute(async (req, res) => {
+  const { callId, inmateId, contactId, base64Data, fileName, mimeType } = req.body || {};
+  if (!callId) return sendError(res, 'INVALID_REQUEST', 'callId is required', 400);
+
+  let fileBuffer;
+  if (base64Data) {
+    fileBuffer = Buffer.from(base64Data, 'base64');
+  } else if (Buffer.isBuffer(req.body)) {
+    fileBuffer = req.body;
+  } else {
+    fileBuffer = Buffer.from('kiosk recording data');
+  }
+
+  const rec = await saveUploadedRecording({
+    callId,
+    inmateId: inmateId || null,
+    contactId: contactId || null,
+    fileBuffer,
+    fileName: fileName || `kiosk-rec-${callId}.mp4`,
+    mimeType: mimeType || 'video/mp4'
+  });
+
+  await updateDb('recordings.json', (all) => {
+    const existingIdx = all.findIndex((r) => r.callId === callId || r.recordingId === rec.recordingId);
+    if (existingIdx !== -1) {
+      all[existingIdx] = { ...all[existingIdx], ...rec };
+      return { data: all, result: all[existingIdx] };
+    }
+    return { data: [...all, rec], result: rec };
+  });
+
+  await updateDb('calls.json', (calls) => {
+    const call = calls.find((c) => c.callId === callId || c.roomId === callId);
+    if (call) {
+      call.recordingStatus = 'completed';
+      call.recordingId = rec.recordingId;
+    }
+    return { data: calls, result: call };
+  });
+
+  broadcastEvent('recording-finished', rec);
+  return sendSuccess(res, rec, 200);
+}));
+
 app.post('/recordings/:recordingId/start', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
   const { recordingId } = req.params;
   const recordings = await readDb('recordings.json');
   const recording = recordings.find((r) => r.recordingId === recordingId);
   if (!recording || !(await inScopeOf(req, recording))) return sendError(res, 'NOT_FOUND', 'Recording not found', 404);
-
-  const calls = await readDb('calls.json');
-  const call = calls.find((c) => c.callId === recording.callId);
-
-  // Ask the signaling server to start recording the call's live media.
-  await signaling('POST', `/api/rooms/${encodeURIComponent(call?.roomId || '')}/recording`, { action: 'start', recordingId });
 
   const updated = await updateDb('recordings.json', (all) => {
     const idx = all.findIndex((r) => r.recordingId === recordingId);
@@ -2033,19 +2082,12 @@ app.post('/recordings/:recordingId/stop', requireAuth, requireRole('admin', 'war
   const recording = recordings.find((r) => r.recordingId === recordingId);
   if (!recording || !(await inScopeOf(req, recording))) return sendError(res, 'NOT_FOUND', 'Recording not found', 404);
 
-  const calls = await readDb('calls.json');
-  const call = calls.find((c) => c.callId === recording.callId);
-
-  // Finalize on the signaling server and collect any produced file path(s).
-  const stopResult = await signaling('POST', `/api/rooms/${encodeURIComponent(call?.roomId || '')}/recording`, { action: 'stop', recordingId });
-
   const updated = await updateDb('recordings.json', (all) => {
     const idx = all.findIndex((r) => r.recordingId === recordingId);
-    const startMs = new Date(all[idx].startTime).getTime();
+    const startMs = all[idx].startTime ? new Date(all[idx].startTime).getTime() : Date.now();
     all[idx] = {
       ...all[idx], status: 'completed', endTime: new Date().toISOString(),
-      duration: Math.round((Date.now() - startMs) / 1000),
-      files: stopResult.data?.files || []
+      duration: Math.max(1, Math.round((Date.now() - startMs) / 1000))
     };
     return { data: all, result: all[idx] };
   });
@@ -2806,10 +2848,6 @@ app.use((err, req, res, next) => {
 
 // ==================== START ====================
 const PORT = process.env.PORT || 3000;
-
-// NOTE: Mediasoup workers initialization disabled
-// mediasoupManager.initWorkers().then(() => require('./lib/faceRecognition').loadModels())
-console.warn('[startup] mediasoup disabled - skipping worker initialization');
 
 // NOTE: Face recognition initialization made non-blocking - WASM module may fail on Render
 // but server should still start for non-biometric operations

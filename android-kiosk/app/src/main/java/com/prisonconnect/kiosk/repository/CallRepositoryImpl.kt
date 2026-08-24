@@ -13,7 +13,6 @@ import io.socket.client.Socket
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import org.json.JSONObject
@@ -37,7 +36,22 @@ class CallRepositoryImpl @Inject constructor(
     private val _signalingStatus = MutableStateFlow(SignalingStatus.IDLE)
     override val signalingStatus = _signalingStatus.asStateFlow()
 
+    // No replay: a fresh collector (new call session) must NOT receive the
+    // previous session's last event — a replayed "joined" used to trigger a
+    // duplicate handleJoined and orphan transports.
     private val _signalingEvents = MutableSharedFlow<SignalingEvent>(extraBufferCapacity = 64)
+
+    // Last join-room request, kept so a LATE socket connection can retry it.
+    // If the signaling server/tunnel is slow, emitWithAck drops join-room
+    // after its latch timeout — without this retry the call would hang even
+    // after the connection finally comes up. lastJoinDropped ensures we only
+    // retry an ACTUALLY-dropped join (never duplicate a live one).
+    private var pendingJoin: Pair<String, String>? = null
+    @Volatile private var lastJoinDropped = false
+    // Set when the socket drops unexpectedly while a session is active. The
+    // next EVENT_CONNECT then re-joins the room, because the signaling server
+    // tracks room/transport state per socket instance.
+    @Volatile private var needRejoin = false
 
     init {
         observeSocketEvents()
@@ -55,11 +69,29 @@ class CallRepositoryImpl @Inject constructor(
         when (event) {
             Socket.EVENT_CONNECT -> {
                 _socketStatus.value = SocketStatus.CONNECTED
+                // Late connection or reconnect after an unexpected drop:
+                // retry/re-join. A plain in-flight join is never duplicated.
+                val pj = pendingJoin
+                if (pj != null && (lastJoinDropped || needRejoin)) {
+                    Logger.d("Socket (re)connected - ${if (needRejoin) "re" else ""}joining room")
+                    lastJoinDropped = false
+                    needRejoin = false
+                    _roomStatus.value = RoomStatus.JOINING
+                    emitJoin(pj.first, pj.second)
+                }
             }
             Socket.EVENT_DISCONNECT -> {
                 _socketStatus.value = SocketStatus.DISCONNECTED
-                _roomStatus.value = RoomStatus.IDLE
-                _signalingStatus.value = SignalingStatus.IDLE
+                if (pendingJoin != null) {
+                    // Session still active — the P2P connection survives short
+                    // socket drops (media path is independent of signaling);
+                    // re-join on reconnect so late SDP/ICE still relays.
+                    needRejoin = true
+                    _signalingStatus.value = SignalingStatus.IDLE
+                } else {
+                    _roomStatus.value = RoomStatus.IDLE
+                    _signalingStatus.value = SignalingStatus.IDLE
+                }
             }
             Socket.EVENT_CONNECT_ERROR -> {
                 _socketStatus.value = SocketStatus.ERROR
@@ -75,8 +107,16 @@ class CallRepositoryImpl @Inject constructor(
             "peer-left" -> {
                 _signalingEvents.emit(SignalingEvent("peer-left", data))
             }
-            "new-producer" -> {
-                _signalingEvents.emit(SignalingEvent("new-producer", data))
+            "offer" -> {
+                _signalingStatus.value = SignalingStatus.OFFER_RECEIVED
+                _signalingEvents.emit(SignalingEvent("offer", data))
+            }
+            "answer" -> {
+                _signalingStatus.value = SignalingStatus.ANSWER_RECEIVED
+                _signalingEvents.emit(SignalingEvent("answer", data))
+            }
+            "ice-candidate" -> {
+                _signalingEvents.emit(SignalingEvent("ice-candidate", data))
             }
             "call-ended" -> {
                 _signalingStatus.value = SignalingStatus.IDLE
@@ -91,10 +131,14 @@ class CallRepositoryImpl @Inject constructor(
     }
 
     override fun joinRoom(roomId: String, peerId: String) {
-        if (!socketService.isConnected()) {
-            socketService.connect()
-        }
+        socketService.connect()
         _roomStatus.value = RoomStatus.JOINING
+        pendingJoin = roomId to peerId
+        lastJoinDropped = false
+        emitJoin(roomId, peerId)
+    }
+
+    private fun emitJoin(roomId: String, peerId: String) {
         val payload = JSONObject().apply {
             put("roomId", roomId)
             put("peerId", peerId)
@@ -102,11 +146,20 @@ class CallRepositoryImpl @Inject constructor(
         // The signaling server returns the join result only via the ACK callback.
         socketService.emitWithAck("join-room", payload) { args ->
             val response = args.getOrNull(0)
-            if (response != null) {
+            if (response == null) {
+                // Dropped locally (socket never became ready within the latch
+                // window). Keep pendingJoin so EVENT_CONNECT can retry it.
+                lastJoinDropped = true
+                Logger.w("join-room dropped before connect - will retry on connect")
+            } else {
                 val data = response as? JSONObject
                 if (data?.optBoolean("success", false) == true) {
                     _roomStatus.value = RoomStatus.JOINED
                     _signalingStatus.value = SignalingStatus.JOINED
+                    lastJoinDropped = false
+                    needRejoin = false
+                    // pendingJoin is intentionally RETAINED so an unexpected
+                    // disconnect can re-join on reconnect; cleared in leaveRoom().
                 }
                 _signalingEvents.tryEmit(SignalingEvent("joined", response))
             }
@@ -122,69 +175,40 @@ class CallRepositoryImpl @Inject constructor(
         _roomStatus.value = RoomStatus.IDLE
         _signalingStatus.value = SignalingStatus.IDLE
         AppConfig.signalingToken = null
+        pendingJoin = null
+        lastJoinDropped = false
+        needRejoin = false
     }
 
-    override fun createWebRtcTransport(roomId: String, peerId: String, direction: String, callback: (Any) -> Unit) {
-        val payload = JSONObject().apply {
-            put("roomId", roomId)
-            put("peerId", peerId)
-            put("direction", direction)
-        }
-        socketService.emitWithAck("createWebRtcTransport", payload) { args ->
-            val response = args.getOrNull(0)
-            if (response != null) {
-                callback(response)
-            }
-        }
+    override fun sendOffer(sdp: JSONObject) {
+        socketService.emit("offer", sdp)
+        _signalingStatus.value = SignalingStatus.OFFER_SENT
     }
 
-    override fun connectWebRtcTransport(peerId: String, direction: String, dtlsParameters: String) {
-        val payload = JSONObject().apply {
-            put("peerId", peerId)
-            put("direction", direction)
-            put("dtlsParameters", JSONObject(dtlsParameters))
-        }
-        socketService.emit("connectWebRtcTransport", payload)
+    override fun sendAnswer(sdp: JSONObject) {
+        socketService.emit("answer", sdp)
+        _signalingStatus.value = SignalingStatus.ANSWER_SENT
     }
 
-    override fun produce(peerId: String, kind: String, rtpParameters: String, callback: (Any) -> Unit) {
-        val payload = JSONObject().apply {
-            put("peerId", peerId)
-            put("kind", kind)
-            put("rtpParameters", JSONObject(rtpParameters))
-            put("appData", JSONObject())
-        }
-        socketService.emitWithAck("produce", payload) { args ->
-            val response = args.getOrNull(0)
-            if (response != null) {
-                callback(response)
-            }
-        }
-    }
-
-    override fun consume(peerId: String, producerId: String, rtpCapabilities: String, callback: (Any) -> Unit) {
-        val payload = JSONObject().apply {
-            put("peerId", peerId)
-            put("producerId", producerId)
-            put("rtpCapabilities", JSONObject(rtpCapabilities))
-        }
-        socketService.emitWithAck("consume", payload) { args ->
-            val response = args.getOrNull(0)
-            if (response != null) {
-                callback(response)
-            }
-        }
-    }
-
-    override fun resumeConsumer(peerId: String, consumerId: String) {
-        val payload = JSONObject().apply {
-            put("peerId", peerId)
-            put("consumerId", consumerId)
-        }
-        socketService.emit("resumeConsumer", payload)
+    override fun sendIceCandidate(candidate: JSONObject) {
+        socketService.emit("ice-candidate", candidate)
     }
 
     override fun observeSignalingEvents(): Flow<SignalingEvent> = _signalingEvents.asSharedFlow()
+
+    override fun uploadRecording(request: RecordingUploadRequest): Flow<NetworkResult<RecordingUploadResponse>> = flow {
+        try {
+            val response = apiService.uploadRecording(request)
+            if (response.success && response.data != null) {
+                emit(NetworkResult.Success(response.data))
+            } else {
+                emit(NetworkResult.Failure(response.error ?: ApiError("UPLOAD_FAILED", "Recording upload failed")))
+            }
+        } catch (e: Exception) {
+            Logger.e("Recording upload exception", e)
+            emit(NetworkResult.Failure(ApiError("EXCEPTION", e.message ?: "Upload network exception")))
+        }
+    }.flowOn(Dispatchers.IO)
 
     override fun getScheduledCalls(id: String): Flow<NetworkResult<List<ScheduledCall>>> = flow {
         emit(NetworkResult.Loading)

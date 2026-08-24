@@ -1,6 +1,0 @@
-node_modules
-.env
-*.log
-test.js
-Dockerfile
-.dockerignore

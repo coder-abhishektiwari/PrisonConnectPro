@@ -180,10 +180,10 @@ try {
   const dup = await api('POST', '/calls', { inmateId: inmate?.inmateId, contactId: contact?.contactId, kioskId }, wardenToken);
   record('CALL STATE: duplicate active call blocked', dup.status === 409 ? 'PASS' : 'FAIL', `status=${dup.status}, code=${dup.json?.error?.code}`);
 
-  // Call control: /calls/:callId/control uses undefined mediasoupManager -> should 500
+  // Call control: delegates the room action to the signaling server
   if (callId) {
     const control = await api('POST', `/calls/${callId}/control`, { action: 'mute' }, wardenToken);
-    record('POST /calls/:id/control (mediasoupManager undefined)', control.status === 500 ? 'FAIL' : 'PASS', `status=${control.status}, error=${control.json?.error?.code}`);
+    record('POST /calls/:id/control (signaling delegation)', control.status === 200 ? 'PASS' : 'FAIL', `status=${control.status}, error=${control.json?.error?.code}`);
   }
 
   // Recording stop: outputPaths undefined -> should 500
@@ -219,7 +219,7 @@ try {
   await socketTokenCheck('SOCKET: roomId-as-token rejected (family-web contract)', 'ROOM-ABCD1234');
   if (wardenToken) await socketTokenCheck('SOCKET: valid warden token accepted', wardenToken);
 
-  // join-room over socket with valid token -> mediasoup disabled message
+  // join-room over socket with valid token -> P2P signaling room (should succeed)
   if (wardenToken) {
     // create a fresh room via REST so it exists and is not expired
     const newRoom = await api('POST', '/rooms', { kioskId, inmateId: '100101' }, wardenToken);
@@ -235,9 +235,9 @@ try {
       setTimeout(() => done({ timeout: true, connected: false }), 6000);
     });
     if (joinResult.connected) {
-      record('SOCKET: join-room functional (mediasoup on)', joinResult.resp?.success ? 'FAIL' : 'PASS', `resp=${JSON.stringify(joinResult.resp)}`);
+      record('SOCKET: join-room functional (P2P)', joinResult.resp?.success ? 'PASS' : 'FAIL', `resp=${JSON.stringify(joinResult.resp)}`);
     } else {
-      record('SOCKET: join-room functional (mediasoup on)', 'FAIL', joinResult.err || 'timeout');
+      record('SOCKET: join-room functional (P2P)', 'FAIL', joinResult.err || 'timeout');
     }
   }
 

@@ -2,6 +2,7 @@ package com.prisonconnect.kiosk.core
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,6 +44,10 @@ abstract class BaseViewModel : ViewModel() {
         viewModelScope.launch(dispatcher) {
             try {
                 block()
+            } catch (e: CancellationException) {
+                // Normal coroutine cancellation (e.g. ViewModel cleared while
+                // collecting a flow) — rethrow, never report as an error.
+                throw e
             } catch (e: Exception) {
                 Logger.e("Unhandled error in ${this@BaseViewModel::class.simpleName}", e)
                 setError(e.message ?: "Unexpected error")

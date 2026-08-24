@@ -39,24 +39,7 @@ services:
       - ./coturn/certs:/etc/coturn/certs:ro
     networks: [prisonconnect]
 
-  # Media server (mediasoup) — separate process, no business logic.
-  media-server:
-    build: ./media-server
-    container_name: prisonconnect-media
-    restart: unless-stopped
-    environment:
-      PORT: 3003
-      MEDIA_API_KEY: ${MEDIA_API_KEY:?set MEDIA_API_KEY in .env}
-      RTC_MIN_PORT: 40000
-      RTC_MAX_PORT: 40999
-      RTC_ANNOUNCED_IP: ${RTC_ANNOUNCED_IP:-127.0.0.1}
-      RTC_LISTEN_IP: 0.0.0.0
-    ports:
-      - "3003:3003"
-      - "40000-40999:40000-40999/udp"
-    networks: [prisonconnect]
-
-  # Signaling server (Socket.IO + WebRTC signaling) — no mediasoup, no business logic.
+  # Signaling server (Socket.IO + WebRTC P2P signaling) — no mediasoup, no business logic.
   signaling-server:
     build: ./signaling-server
     container_name: prisonconnect-signaling
@@ -64,30 +47,37 @@ services:
     environment:
       PORT: 3002
       JWT_SECRET: ${JWT_SECRET:-dev-only-change-me}
-      MEDIA_SERVER_URL: http://media-server:3003
-      MEDIA_API_KEY: ${MEDIA_API_KEY:?set MEDIA_API_KEY in .env}
       CORS_ORIGIN: "*"
+      # Grace period before a room is torn down after its last socket drops
+      # unexpectedly (client auto-reconnects within this window).
+      DISCONNECT_GRACE_MS: ${DISCONNECT_GRACE_MS:-15000}
     ports:
       - "3002:3002"
-    depends_on:
-      - media-server
     networks: [prisonconnect]
 
   # API / business layer.
+  # Host port 59354 matches the Android kiosk's default API_BASE_URL.
+  # SIGNALING_PUBLIC_URL is handed to clients (kiosk/family-web) inside the
+  # create-call response so the Android app never needs a rebuild when the
+  # public signaling URL changes.
   backend:
     build: ./backend
     container_name: prisonconnect-backend
     restart: unless-stopped
     environment:
-      NODE_ENV: production
+      # Dev deployment behind tunnels: keep NODE_ENV off "production" so the
+      # family-link validator accepts the http://<public-ip>:5173 call links.
+      NODE_ENV: development
       PORT: 3001
       DATABASE_URL: postgres://prisonconnect:${POSTGRES_PASSWORD}@postgres:5432/prisonconnect
       JWT_SECRET: ${JWT_SECRET:-dev-only-change-me}
       SIGNALING_URL: http://signaling-server:3002
-      MEDIA_SERVER_URL: http://media-server:3003
-      MEDIA_API_KEY: ${MEDIA_API_KEY:?set MEDIA_API_KEY in .env}
+      SIGNALING_PUBLIC_URL: ${SIGNALING_PUBLIC_URL:-}
+      FAMILY_WEB_URL: ${FAMILY_WEB_URL:-http://127.0.0.1:5173}
+      SMS_PROVIDER: ${SMS_PROVIDER:-log}
+      ROOM_MAX_PARTICIPANTS: ${ROOM_MAX_PARTICIPANTS:-2}
     ports:
-      - "3001:3001"
+      - "59354:3001"
     depends_on:
       postgres:
         condition: service_healthy
@@ -110,7 +100,6 @@ services:
     depends_on:
       - backend
       - signaling-server
-      - media-server
     networks: [prisonconnect]
 
   # Warden & SaaS admin monitoring dashboard.
@@ -120,7 +109,6 @@ services:
       args:
         VITE_API_GATEWAY_URL: ${VITE_API_GATEWAY_URL:-http://127.0.0.1:3001}
         VITE_SIGNALING_URL: ${VITE_SIGNALING_URL:-http://127.0.0.1:3002}
-        VITE_MEDIASOUP_MONITOR_URL: ${VITE_MEDIASOUP_MONITOR_URL:-http://127.0.0.1:3003}
     container_name: prisonconnect-warden-dashboard
     restart: unless-stopped
     ports:
@@ -128,7 +116,6 @@ services:
     depends_on:
       - backend
       - signaling-server
-      - media-server
     networks: [prisonconnect]
 
   # Vendor dashboard.

@@ -27,8 +27,6 @@
     "express-rate-limit": "^8.6.2",
     "jpeg-js": "^0.4.4",
     "jsonwebtoken": "^9.0.3",
-    "mediasoup": "^3.24.2",
-    "mediasoup-client": "^3.21.0",
     "pg": "^8.23.0",
     "pngjs": "^7.0.0",
     "proper-lockfile": "^4.1.2",

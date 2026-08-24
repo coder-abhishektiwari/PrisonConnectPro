@@ -37,6 +37,7 @@ import com.prisonconnect.kiosk.models.inmate.InmateProfile
 import com.prisonconnect.kiosk.ui.components.KioskButton
 import com.prisonconnect.kiosk.ui.components.KioskProgressIndicator
 import com.prisonconnect.kiosk.ui.theme.PrisonKioskTheme
+import kotlinx.coroutines.delay
 
 // --- Color Palette ---
 private val LightScreenBg = Color(0xFFF4F7FA)
@@ -54,6 +55,7 @@ fun AudioCallScreen(
     roomId: String,
     @Suppress("UNUSED_PARAMETER") windowSizeClass: WindowSizeClass,
     onEndCall: () -> Unit,
+    onBack: () -> Unit = onEndCall,
     viewModel: CallViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
@@ -92,6 +94,29 @@ fun AudioCallScreen(
     LaunchedEffect(timerSeconds) {
         if (timerSeconds >= 300) {
             onEndCall()
+        }
+    }
+
+    // Track whether the call ever reached CONNECTED so a peer-side disconnect
+    // (call ended remotely) exits via the billing summary, while a call that
+    // never connected (join failed / media failed) simply goes back.
+    var everConnected by remember { mutableStateOf(false) }
+
+    LaunchedEffect(callState) {
+        if (callState == CallUIState.CONNECTED) everConnected = true
+    }
+
+    LaunchedEffect(callState) {
+        when (callState) {
+            CallUIState.FAILED -> {
+                delay(2500)
+                onBack()
+            }
+            CallUIState.DISCONNECTED -> {
+                delay(1500)
+                if (everConnected) onEndCall() else onBack()
+            }
+            else -> {}
         }
     }
 

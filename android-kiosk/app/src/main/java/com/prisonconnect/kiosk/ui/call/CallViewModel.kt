@@ -8,6 +8,7 @@ import android.net.NetworkRequest
 import androidx.lifecycle.viewModelScope
 import com.prisonconnect.kiosk.core.BaseViewModel
 import com.prisonconnect.kiosk.core.Constants
+import com.prisonconnect.kiosk.core.Logger
 import com.prisonconnect.kiosk.models.call.SignalingStatus
 import com.prisonconnect.kiosk.models.call.SocketStatus
 import com.prisonconnect.kiosk.models.contacts.Contact
@@ -86,6 +87,20 @@ class CallViewModel @Inject constructor(
 
     private var timerJob: Job? = null
 
+    // True only while a call session is actually running (between initCall()
+    // and onCleared()). The underlying WebRtcManager is a @Singleton whose
+    // connectionState keeps values from previous sessions, and initCall()
+    // itself emits CLOSED via its defensive endCall(). Without this gate the
+    // collector maps those stale/synthetic CLOSED|FAILED states to
+    // DISCONNECTED|FAILED and the UI backs out of the call before it even
+    // joins the room.
+    private var callSessionActive = false
+
+    // Fails the call if media/signaling never reaches CONNECTED (e.g. the
+    // signaling server is down or ICE cannot reach the media server) instead
+    // of leaving the user stuck on "Waiting..." forever.
+    private var connectWatchdog: Job? = null
+
     private val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
@@ -110,8 +125,10 @@ class CallViewModel @Inject constructor(
     private fun observeRtcState() {
         launch {
             rtcConnectionState.collect { state ->
+                if (!callSessionActive) return@collect  // stale value from a previous/tearing-down session
                 when (state) {
                     PeerConnection.PeerConnectionState.CONNECTED -> {
+                        connectWatchdog?.cancel()
                         _callState.value = CallUIState.CONNECTED
                         startTimer()
                     }
@@ -157,8 +174,22 @@ class CallViewModel @Inject constructor(
 
     fun initCall(context: Context, roomId: String, isVideoCall: Boolean = true) {
         _callState.value = CallUIState.WAITING
+        // Deactivate first so the CLOSED emitted by the defensive endCall()
+        // below is not interpreted as "the call disconnected".
+        callSessionActive = false
+        webRtcManager.endCall()
         webRtcManager.init(context, eglContext)
         webRtcManager.startCall(roomId, context, isVideoCall)
+        callSessionActive = true
+
+        connectWatchdog?.cancel()
+        connectWatchdog = viewModelScope.launch {
+            delay(45_000)
+            if (_callState.value == CallUIState.WAITING || _callState.value == CallUIState.RECONNECTING) {
+                Logger.e("Call never reached CONNECTED within 45s — failing (check signaling/media servers)")
+                _callState.value = CallUIState.FAILED
+            }
+        }
     }
 
     private fun startTimer() {
@@ -195,6 +226,7 @@ class CallViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
+        callSessionActive = false  // stop reacting to endCall()'s CLOSED emission
         connectivityManager.unregisterNetworkCallback(networkCallback)
         webRtcManager.endCall()
         eglBase.release()

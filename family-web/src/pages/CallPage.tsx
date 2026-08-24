@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, Navigate } from 'react-router-dom';
+import { useParams, useNavigate, Navigate } from 'react-router-dom';
 import { ErrorState } from '@/components/States';
 import { useSession } from '@/context/SessionContext';
 import { useToast } from '@/components/Toast';
@@ -18,6 +18,7 @@ type CallStatus =
 
 export function CallPage() {
   const { linkToken } = useParams<{ linkToken: string }>();
+  const navigate = useNavigate();
   const { session, otpResult, clear } = useSession();
   const { addToast } = useToast();
 
@@ -76,13 +77,6 @@ export function CallPage() {
 
   // Socket event listeners
   useEffect(() => {
-    const handleNewProducer = async (_event: string, data: any) => {
-      console.log('[Call] New producer:', data);
-      if (data?.producerId) {
-        await webRtcService.consumeRemoteTrack(data.producerId);
-      }
-    };
-
     const handlePeerJoined = (_event: string, _data: any) => {
       console.log('[Call] Peer joined');
       if (status === 'waiting') {
@@ -103,6 +97,7 @@ export function CallPage() {
       setStatus('ended');
       setStatusMessage('Call has ended');
       addToast('Call has ended', 'info');
+      setTimeout(() => navigate('/'), 1500);
     };
 
     const handleSystemEvent = (_event: string, data: any) => {
@@ -127,14 +122,12 @@ export function CallPage() {
     };
 
     // Register listeners
-    socketService.on('new-producer', handleNewProducer);
     socketService.on('peer-joined', handlePeerJoined);
     socketService.on('peer-left', handlePeerLeft);
     socketService.on('call-ended', handleCallEnded);
     socketService.on('system', handleSystemEvent);
 
     return () => {
-      socketService.off('new-producer', handleNewProducer);
       socketService.off('peer-joined', handlePeerJoined);
       socketService.off('peer-left', handlePeerLeft);
       socketService.off('call-ended', handleCallEnded);
@@ -259,7 +252,9 @@ export function CallPage() {
       if (response?.success) {
         setStatus('connecting');
         setStatusMessage('Establishing connection...');
-        await webRtcService.handleJoined(response.routerRtpCapabilities);
+        // Pure P2P: the join ACK carries existingPeers + iceServers (no
+        // routerRtpCapabilities). If the kiosk is already waiting, WE offer.
+        await webRtcService.handleJoined(response);
       } else {
         setStatus('error');
         setError(response?.message || 'Failed to join room');

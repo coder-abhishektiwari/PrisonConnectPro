@@ -1,5 +1,5 @@
-import { Device, types } from 'mediasoup-client';
 import { socketService } from './socket';
+import { env } from '@/config/env';
 import type { CallSession } from '@/types/call';
 
 export type ConnectionState = 
@@ -26,22 +26,31 @@ export type CallState = {
 type WebRtcEventCallback = (event: string, data: unknown) => void;
 
 class WebRtcService {
-  private device: Device | null = null;
-  private sendTransport: types.Transport | null = null;
-  private recvTransport: types.Transport | null = null;
-  private videoProducer: types.Producer | null = null;
-  private audioProducer: types.Producer | null = null;
-  private videoConsumer: types.Consumer | null = null;
-  private audioConsumer: types.Consumer | null = null;
+  private pc: RTCPeerConnection | null = null;
   private localStream: MediaStream | null = null;
   private remoteStream: MediaStream | null = null;
   private eventListeners: Map<string, Set<WebRtcEventCallback>> = new Map();
-  private peerId: string = '';
-  private roomId: string = '';
+  private iceServers: RTCIceServer[] = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' }
+  ];
+  private pendingCandidates: RTCIceCandidateInit[] = [];
 
-  async initialize(session: CallSession, _iceServers: RTCIceServer[]): Promise<void> {
-    this.roomId = session.roomId;
-    this.peerId = `family-${Date.now()}`;
+  async initialize(_session: CallSession, customIceServers?: RTCIceServer[]): Promise<void> {
+    if (customIceServers && customIceServers.length > 0) {
+      this.iceServers = customIceServers;
+    } else if (env.webrtcIceServers) {
+      // Deployment-provided STUN/TURN config (build-time). TURN is strictly a
+      // connectivity fallback — media is P2P, never relayed through a server.
+      try {
+        const parsed = JSON.parse(env.webrtcIceServers) as RTCIceServer[];
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          this.iceServers = parsed;
+        }
+      } catch (e) {
+        console.warn('[WebRTC] Invalid VITE_WEBRTC_ICE_SERVERS, keeping defaults:', e);
+      }
+    }
   }
 
   private isVirtualDevice(label: string): boolean {
@@ -93,15 +102,6 @@ class WebRtcService {
     }
   }
 
-  private static toDeviceIdString(value: ConstrainDOMString | undefined): string | undefined {
-    if (!value) return undefined;
-    if (typeof value === 'string') return value;
-    if (Array.isArray(value)) return value[0] ?? undefined;
-    if (typeof value === 'object' && value.exact !== undefined) return Array.isArray(value.exact) ? value.exact[0] : value.exact;
-    if (typeof value === 'object' && value.ideal !== undefined) return Array.isArray(value.ideal) ? value.ideal[0] : value.ideal;
-    return undefined;
-  }
-
   async setupLocalMedia(constraints: MediaStreamConstraints = {
     video: true,
     audio: true,
@@ -109,30 +109,12 @@ class WebRtcService {
     try {
       this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
       const preferred = await this.selectPreferredDevices();
-      const preferredVideo = preferred.video as MediaTrackConstraints | undefined;
-      const preferredAudio = preferred.audio as MediaTrackConstraints | undefined;
-      const preferredVideoId = WebRtcService.toDeviceIdString(preferredVideo?.deviceId);
-      const preferredAudioId = WebRtcService.toDeviceIdString(preferredAudio?.deviceId);
-      const currentVideoId = this.localStream.getVideoTracks()[0]?.getSettings().deviceId;
-      const currentAudioId = this.localStream.getAudioTracks()[0]?.getSettings().deviceId;
-      const videoChanged = !!preferredVideoId && currentVideoId !== preferredVideoId;
-      const audioChanged = !!preferredAudioId && currentAudioId !== preferredAudioId;
-
-      if (videoChanged || audioChanged) {
-        const newStream = await navigator.mediaDevices.getUserMedia(preferred);
-        this.localStream.getTracks().forEach((t) => t.stop());
-        this.localStream = newStream;
-        console.log(
-          '[WebRTC] Switched to preferred devices:',
-          preferredVideoId ? 'video: ' + preferredVideoId.split(':')[0] : 'same video',
-          preferredAudioId ? 'audio: ' + preferredAudioId.split(':')[0] : 'same audio'
-        );
-      } else {
-        console.log(
-          '[WebRTC] Using default devices:',
-          this.localStream.getVideoTracks()[0]?.getSettings().deviceId,
-          this.localStream.getAudioTracks()[0]?.getSettings().deviceId
-        );
+      if (preferred.video || preferred.audio) {
+        try {
+          const preferredStream = await navigator.mediaDevices.getUserMedia(preferred);
+          this.localStream.getTracks().forEach((t) => t.stop());
+          this.localStream = preferredStream;
+        } catch (_) {}
       }
 
       this.emit('local-stream', this.localStream);
@@ -143,188 +125,158 @@ class WebRtcService {
     }
   }
 
-  async createPeerConnection(): Promise<void> {
-    // No-op for Mediasoup - device is created after joining room
-  }
-
-  async handleJoined(routerRtpCapabilities: any): Promise<void> {
+  async handleJoined(joinData: any): Promise<void> {
     try {
-      // Create Mediasoup Device
-      this.device = new Device();
-      await this.device.load({ routerRtpCapabilities });
-
-      // Create Send Transport
-      const sendTransportData = await socketService.createWebRtcTransport(this.roomId, this.peerId, 'send');
-      if (sendTransportData.success) {
-        this.sendTransport = this.device.createSendTransport({
-          id: sendTransportData.data.id,
-          iceParameters: sendTransportData.data.iceParameters,
-          iceCandidates: sendTransportData.data.iceCandidates,
-          dtlsParameters: sendTransportData.data.dtlsParameters,
-        });
-
-        this.sendTransport.on('connect', ({ dtlsParameters }, callback, _errback) => {
-          socketService.connectWebRtcTransport(this.peerId, 'send', dtlsParameters);
-          callback();
-        });
-
-        this.sendTransport.on('produce', async ({ kind, rtpParameters }, callback, errback) => {
-          try {
-            const response = await socketService.produce(this.peerId, kind, rtpParameters);
-            if (response.success) {
-              callback({ id: response.id });
-            } else {
-              errback(new Error(response.message || 'Produce failed'));
-            }
-          } catch (error) {
-            errback(error as Error);
-          }
-        });
-
-        this.sendTransport.on('connectionstatechange', (state) => {
-          console.log('[WebRTC] Send transport state:', state);
-          this.handleTransportState(state);
-        });
+      if (joinData && joinData.iceServers && joinData.iceServers.length > 0) {
+        this.iceServers = joinData.iceServers;
       }
+      this.createPeerConnection();
 
-      // Create Recv Transport
-      const recvTransportData = await socketService.createWebRtcTransport(this.roomId, this.peerId, 'recv');
-      if (recvTransportData.success) {
-        this.recvTransport = this.device.createRecvTransport({
-          id: recvTransportData.data.id,
-          iceParameters: recvTransportData.data.iceParameters,
-          iceCandidates: recvTransportData.data.iceCandidates,
-          dtlsParameters: recvTransportData.data.dtlsParameters,
-        });
+      // Socket Signaling Event Listeners for P2P
+      socketService.on('offer', async (_event: string, data: any) => {
+        console.log('[WebRTC] Received SDP Offer from peer:', data.sender);
+        await this.handleOffer(data.sdp);
+      });
 
-        this.recvTransport.on('connect', ({ dtlsParameters }, callback, _errback) => {
-          socketService.connectWebRtcTransport(this.peerId, 'recv', dtlsParameters);
-          callback();
-        });
+      socketService.on('answer', async (_event: string, data: any) => {
+        console.log('[WebRTC] Received SDP Answer from peer:', data.sender);
+        await this.handleAnswer(data.sdp);
+      });
 
-        this.recvTransport.on('connectionstatechange', (state) => {
-          console.log('[WebRTC] Recv transport state:', state);
-        });
+      socketService.on('ice-candidate', async (_event: string, data: any) => {
+        if (data?.candidate) {
+          await this.addIceCandidate(data.candidate);
+        }
+      });
+
+      socketService.on('peer-joined', async (_event: string, data: any) => {
+        console.log('[WebRTC] Peer joined room:', data?.peerId);
+        // Glare-free rule: the party that joined an OCCUPIED room creates the
+        // offer (see handleJoined). The party already waiting must NOT offer
+        // here — it only answers.
+      });
+
+      // If existing peers are already in the room when we join, create SDP Offer
+      if (joinData && Array.isArray(joinData.existingPeers) && joinData.existingPeers.length > 0) {
+        console.log('[WebRTC] Existing peers present in room, creating offer...');
+        await this.createAndSendOffer();
       }
-
-      // Produce local tracks
-      await this.produceLocalTracks();
     } catch (error) {
       console.error('[WebRTC] Failed to handle joined:', error);
       this.emit('connection-state', 'failed');
     }
   }
 
-  private async produceLocalTracks(): Promise<void> {
-    if (!this.localStream || !this.sendTransport) return;
+  private createPeerConnection(): RTCPeerConnection {
+    if (this.pc) return this.pc;
 
-    // Produce video
-    const videoTrack = this.localStream.getVideoTracks()[0];
-    if (videoTrack) {
-      try {
-        this.videoProducer = await this.sendTransport.produce({
-          track: videoTrack,
-          encodings: [
-            { maxBitrate: 1000000, maxFramerate: 30 }
-          ],
-          codecOptions: {
-            videoGoogleStartBitrate: 1000
-          }
-        });
-        console.log('[WebRTC] Video producer created:', this.videoProducer.id);
-      } catch (error) {
-        console.error('[WebRTC] Failed to produce video:', error);
-      }
+    console.log('[WebRTC] Creating RTCPeerConnection with ICE servers:', this.iceServers);
+    this.pc = new RTCPeerConnection({ iceServers: this.iceServers });
+
+    if (this.localStream) {
+      this.localStream.getTracks().forEach((track) => {
+        if (this.localStream && this.pc) {
+          this.pc.addTrack(track, this.localStream);
+        }
+      });
     }
 
-    // Produce audio
-    const audioTrack = this.localStream.getAudioTracks()[0];
-    if (audioTrack) {
-      try {
-        this.audioProducer = await this.sendTransport.produce({
-          track: audioTrack,
-          encodings: [
-            { maxBitrate: 128000 }
-          ]
-        });
-        console.log('[WebRTC] Audio producer created:', this.audioProducer.id);
-      } catch (error) {
-        console.error('[WebRTC] Failed to produce audio:', error);
+    this.pc.ontrack = (event) => {
+      console.log('[WebRTC] Remote track received:', event.track.kind);
+      if (event.streams && event.streams[0]) {
+        this.remoteStream = event.streams[0];
+      } else {
+        if (!this.remoteStream) {
+          this.remoteStream = new MediaStream();
+        }
+        this.remoteStream.addTrack(event.track);
       }
+      this.emit('remote-stream', this.remoteStream);
+    };
+
+    this.pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        console.log('[WebRTC] Generated local ICE candidate');
+        socketService.sendIceCandidate(event.candidate.toJSON());
+      }
+    };
+
+    this.pc.onconnectionstatechange = () => {
+      const state = this.pc?.connectionState as ConnectionState;
+      console.log('[WebRTC] Connection state changed:', state);
+      this.emit('connection-state', state || 'new');
+    };
+
+    this.pc.oniceconnectionstatechange = () => {
+      console.log('[WebRTC] ICE connection state:', this.pc?.iceConnectionState);
+    };
+
+    return this.pc;
+  }
+
+  async createAndSendOffer(): Promise<void> {
+    try {
+      const pc = this.createPeerConnection();
+      const offer = await pc.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: true
+      });
+      await pc.setLocalDescription(offer);
+      console.log('[WebRTC] Local SDP Offer created and set');
+      socketService.sendOffer(offer);
+    } catch (error) {
+      console.error('[WebRTC] Failed to create offer:', error);
     }
   }
 
-  async consumeRemoteTrack(producerId: string): Promise<void> {
-    if (!this.device || !this.recvTransport) return;
-
+  private async handleOffer(offerSdp: RTCSessionDescriptionInit): Promise<void> {
     try {
-      const rtpCapabilities = this.device.rtpCapabilities;
-      const response = await socketService.consume(this.peerId, producerId, rtpCapabilities);
+      const pc = this.createPeerConnection();
+      await pc.setRemoteDescription(new RTCSessionDescription(offerSdp));
+      console.log('[WebRTC] Remote SDP Offer set successfully');
 
-      if (response.success) {
-        const consumer = await this.recvTransport.consume({
-          id: response.id,
-          producerId: response.producerId,
-          kind: response.kind,
-          rtpParameters: response.rtpParameters,
-        });
+      // Flush any ICE candidates received before remote description was set
+      for (const candidate of this.pendingCandidates) {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      }
+      this.pendingCandidates = [];
 
-        if (response.kind === 'video') {
-          this.videoConsumer = consumer;
-          const track = consumer.track;
-          if (track) {
-            const stream = new MediaStream([track]);
-            this.remoteStream = stream;
-            this.emit('remote-stream', stream);
-          }
-        } else {
-          this.audioConsumer = consumer;
-        }
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      console.log('[WebRTC] Local SDP Answer created and set');
+      socketService.sendAnswer(answer);
+    } catch (error) {
+      console.error('[WebRTC] Failed to handle offer:', error);
+    }
+  }
 
-        // Resume consumer
-        socketService.resumeConsumer(this.peerId, response.id);
+  private async handleAnswer(answerSdp: RTCSessionDescriptionInit): Promise<void> {
+    try {
+      if (!this.pc) return;
+      await this.pc.setRemoteDescription(new RTCSessionDescription(answerSdp));
+      console.log('[WebRTC] Remote SDP Answer set successfully');
+
+      for (const candidate of this.pendingCandidates) {
+        await this.pc.addIceCandidate(new RTCIceCandidate(candidate));
+      }
+      this.pendingCandidates = [];
+    } catch (error) {
+      console.error('[WebRTC] Failed to handle answer:', error);
+    }
+  }
+
+  async addIceCandidate(candidateInit: RTCIceCandidateInit): Promise<void> {
+    try {
+      if (this.pc && this.pc.remoteDescription && this.pc.remoteDescription.type) {
+        await this.pc.addIceCandidate(new RTCIceCandidate(candidateInit));
+        console.log('[WebRTC] Added remote ICE candidate');
+      } else {
+        console.log('[WebRTC] Buffering remote ICE candidate until remote description is set');
+        this.pendingCandidates.push(candidateInit);
       }
     } catch (error) {
-      console.error('[WebRTC] Failed to consume remote track:', error);
+      console.warn('[WebRTC] Error adding ICE candidate:', error);
     }
-  }
-
-  private handleTransportState(state: string): void {
-    switch (state) {
-      case 'connecting':
-        this.emit('connection-state', 'connecting');
-        break;
-      case 'connected':
-        this.emit('connection-state', 'connected');
-        break;
-      case 'disconnected':
-        this.emit('connection-state', 'disconnected');
-        break;
-      case 'failed':
-        this.emit('connection-state', 'failed');
-        break;
-      case 'closed':
-        this.emit('connection-state', 'closed');
-        break;
-    }
-  }
-
-  async createOffer(): Promise<RTCSessionDescriptionInit> {
-    // No-op for Mediasoup - offer/answer handled by transport produce/consume
-    return {} as RTCSessionDescriptionInit;
-  }
-
-  async createAnswer(_offer: RTCSessionDescriptionInit): Promise<RTCSessionDescriptionInit> {
-    // No-op for Mediasoup
-    return {} as RTCSessionDescriptionInit;
-  }
-
-  async setRemoteDescription(_answer: RTCSessionDescriptionInit): Promise<void> {
-    // No-op for Mediasoup
-  }
-
-  async addIceCandidate(_candidate: RTCIceCandidateInit): Promise<void> {
-    // No-op for Mediasoup
   }
 
   toggleVideo(enabled: boolean): void {
@@ -358,41 +310,22 @@ class WebRtcService {
   }
 
   getConnectionState(): ConnectionState {
-    return this.sendTransport?.connectionState as ConnectionState || 'new';
+    return (this.pc?.connectionState as ConnectionState) || 'new';
   }
 
   close(): void {
-    // Close producers
-    this.videoProducer?.close();
-    this.videoProducer = null;
-    this.audioProducer?.close();
-    this.audioProducer = null;
-
-    // Close consumers
-    this.videoConsumer?.close();
-    this.videoConsumer = null;
-    this.audioConsumer?.close();
-    this.audioConsumer = null;
-
-    // Close transports
-    this.sendTransport?.close();
-    this.sendTransport = null;
-    this.recvTransport?.close();
-    this.recvTransport = null;
-
-    // Close device - note: mediasoup Device may not have close() in some versions
-    if (this.device) {
-      (this.device as any).close?.();
+    if (this.pc) {
+      this.pc.close();
+      this.pc = null;
     }
-    this.device = null;
 
-    // Stop local media
     if (this.localStream) {
       this.localStream.getTracks().forEach((track) => track.stop());
       this.localStream = null;
     }
 
     this.remoteStream = null;
+    this.pendingCandidates = [];
   }
 
   on(event: string, callback: WebRtcEventCallback): void {

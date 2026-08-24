@@ -115,6 +115,7 @@ fun VideoCallScreen(
     roomId: String,
     @Suppress("UNUSED_PARAMETER") windowSizeClass: WindowSizeClass,
     onEndCall: () -> Unit,
+    onBack: () -> Unit = onEndCall,
     viewModel: CallViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
@@ -160,6 +161,29 @@ fun VideoCallScreen(
     LaunchedEffect(timerSeconds) {
         if (timerSeconds >= 300) {
             onEndCall()
+        }
+    }
+
+    // Track whether the call ever reached CONNECTED so a peer-side disconnect
+    // (call ended remotely) exits via the billing summary, while a call that
+    // never connected (join failed / media failed) simply goes back.
+    var everConnected by remember { mutableStateOf(false) }
+
+    LaunchedEffect(callState) {
+        if (callState == CallUIState.CONNECTED) everConnected = true
+    }
+
+    LaunchedEffect(callState) {
+        when (callState) {
+            CallUIState.FAILED -> {
+                delay(2500)
+                onBack()
+            }
+            CallUIState.DISCONNECTED -> {
+                delay(1500)
+                if (everConnected) onEndCall() else onBack()
+            }
+            else -> {}
         }
     }
 

@@ -95,12 +95,27 @@ export function collectSignals(): FingerprintSignal {
 }
 
 /**
- * SHA-256 hash of the canonical signal string. Available in all modern
- * browsers (Web Crypto API) and on the secure context required by WebOTP.
+ * SHA-256 hash of the canonical signal string.
+ *
+ * Only stable signals are included in the hash — volatile values like
+ * canvasHash, online status, pixelRatio and colorDepth are excluded so the
+ * fingerprint survives browser updates and minor environment changes.
  */
 export async function fingerprintHash(signals?: FingerprintSignal): Promise<string> {
   const data = signals || collectSignals();
-  const canonical = JSON.stringify(data);
+  const stable = {
+    deviceId: data.deviceId,
+    userAgent: data.userAgent,
+    language: data.language,
+    languages: data.languages,
+    platform: data.platform,
+    hardwareConcurrency: data.hardwareConcurrency,
+    deviceMemory: data.deviceMemory,
+    screen: data.screen,
+    timezone: data.timezone,
+    touchPoints: data.touchPoints,
+  };
+  const canonical = JSON.stringify(stable);
   const bytes = new TextEncoder().encode(canonical);
   const digest = await crypto.subtle.digest('SHA-256', bytes);
   return Array.from(new Uint8Array(digest))

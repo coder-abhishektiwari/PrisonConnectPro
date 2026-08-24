@@ -10,7 +10,10 @@ data class CallSession(
     @SerializedName("type") val type: CallType? = null,
     @SerializedName("durationMinutes") val durationMinutes: Int? = null,
     @SerializedName("startTime") val startTime: String? = null,
-    @SerializedName("signalingToken") val signalingToken: String? = null
+    @SerializedName("signalingToken") val signalingToken: String? = null,
+    /** Public signaling URL delivered by the backend at runtime, so the APK
+     *  never needs rebuilding when the deployment's signaling URL changes. */
+    @SerializedName("signalingUrl") val signalingUrl: String? = null
 )
 
 data class CreateCallRequest(
@@ -82,4 +85,21 @@ enum class SignalingStatus {
 data class SignalingEvent(
     val type: String,
     val data: Any
+)
+
+/** Kiosk-side recording upload payload (base64-encoded MP4). */
+data class RecordingUploadRequest(
+    @SerializedName("callId") val callId: String,
+    @SerializedName("inmateId") val inmateId: String? = null,
+    @SerializedName("contactId") val contactId: String? = null,
+    @SerializedName("base64Data") val base64Data: String,
+    @SerializedName("fileName") val fileName: String,
+    @SerializedName("mimeType") val mimeType: String = "video/mp4"
+)
+
+data class RecordingUploadResponse(
+    @SerializedName("recordingId") val recordingId: String? = null,
+    @SerializedName("callId") val callId: String? = null,
+    @SerializedName("fileName") val fileName: String? = null,
+    @SerializedName("status") val status: String? = null
 )

@@ -5,6 +5,7 @@ import com.prisonconnect.kiosk.core.Logger
 import com.prisonconnect.kiosk.network.interceptors.AuthInterceptor
 import io.socket.client.IO
 import io.socket.client.Socket
+import io.socket.engineio.client.transports.Polling
 import io.socket.engineio.client.transports.WebSocket
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -35,7 +36,13 @@ class SocketServiceImpl @Inject constructor(
 
     override fun connect() {
         val desired = desiredToken()
-        if (socket?.connected() == true && lastAuthToken == desired) return
+        val existing = socket
+        // Already connected with the right token, OR a handshake with the same
+        // token is still in flight (initSignaling + joinRoom both call connect()
+        // back-to-back — don't tear down the connecting socket).
+        if (existing != null && lastAuthToken == desired &&
+            (existing.connected() || connectLatch != null)
+        ) return
 
         // Token changed (e.g. fresh room-bound kiosk signalingToken minted for a
         // new call). The socket.io client must be re-created so the new token is
@@ -47,7 +54,11 @@ class SocketServiceImpl @Inject constructor(
 
         try {
             val options = IO.Options.builder()
-                .setTransports(arrayOf(WebSocket.NAME))
+                // Start with HTTP long-polling and upgrade to WebSocket. A
+                // polling fallback keeps signaling alive when the WebSocket
+                // handshake hiccups through the Cloudflare quick tunnel
+                // (websocket-only left the call stuck when WS failed).
+                .setTransports(arrayOf(Polling.NAME, WebSocket.NAME))
                 .setReconnection(true)
                 .setReconnectionAttempts(Int.MAX_VALUE)
                 .setReconnectionDelay(1000)
@@ -59,6 +70,9 @@ class SocketServiceImpl @Inject constructor(
                 .setAuth(mapOf("token" to desired))
                 .build()
 
+            // Resolved at connect time: build-time default OR the fresh public
+            // URL delivered by the backend inside the create-call response.
+            Logger.d("Connecting signaling socket to: ${AppConfig.signalingUrl}")
             socket = IO.socket(URI.create(AppConfig.signalingUrl), options)
             lastAuthToken = desired
 
@@ -119,7 +133,7 @@ class SocketServiceImpl @Inject constructor(
 
     override fun observeEvents(): Flow<Pair<String, Any>> = callbackFlow {
         val events = listOf(
-            "joined", "peer-joined", "peer-left", "new-producer",
+            "joined", "peer-joined", "peer-left", "offer", "answer", "ice-candidate",
             "call-ended", "room-updated", "recording-status", "call-status"
         )
 

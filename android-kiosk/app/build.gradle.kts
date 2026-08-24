@@ -1,9 +1,23 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
 }
+
+// Custom keys in local.properties are NOT auto-exposed to findProperty (only
+// sdk.dir is). Load them explicitly so endpoint config lives in ONE file and
+// survives rebuilds without touching this script.
+val localProperties = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+fun appProp(name: String, fallback: String): String =
+    (project.findProperty(name) as String?)
+        ?: localProperties.getProperty(name)?.trim()?.takeIf { it.isNotEmpty() }
+        ?: fallback
 
 android {
     namespace = "com.prisonconnect.kiosk"
@@ -18,16 +32,29 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // Kiosk identity & backend endpoint (override in local.properties)
-        val kioskId = (project.findProperty("KIOSK_ID") as String?) ?: "KIOSK-001"
-        val trustApiHost = (project.findProperty("KIOSK_TRUST_API_HOST") as String?) ?: "https://prisonconnect-mockbackend.onrender.com/"
-        val apiBaseUrl = (project.findProperty("API_BASE_URL") as String?) ?: "https://prisonconnect-backend.onrender.com"
-        val signalingUrl = (project.findProperty("SIGNALING_URL") as String?) ?: "https://prisonconnect-signaling.onrender.com"
+        // Kiosk identity & backend endpoint.
+        // Priority: gradle -P flag > local.properties > default below.
+        // NOTE: SIGNALING_URL is only a FALLBACK - at runtime the backend
+        // delivers the fresh public signaling URL inside every create-call
+        // response, so tunnel changes never require a rebuild.
+        // Defaults point at the real deployed services (Render).
+        val kioskId = appProp("KIOSK_ID", "KIOSK-001")
+        val trustApiHost = appProp("KIOSK_TRUST_API_HOST", "https://prisonconnect-backend.onrender.com")
+        val apiBaseUrl = appProp("API_BASE_URL", "https://prisonconnect-backend.onrender.com")
+        val signalingUrl = appProp("SIGNALING_URL", "https://prisonconnect-signaling.onrender.com")
+        val turnServerUrl = appProp("TURN_SERVER_URL", "turn:tissues-cafeteria.tun.ply.gg:3478")
+        val turnTlsUrl = appProp("TURN_TLS_URL", "turns:tissues-cafeteria.tun.ply.gg:5349")
+        val turnUsername = appProp("TURN_USERNAME", "turnuser")
+        val turnCredential = appProp("TURN_CREDENTIAL", "turnpass")
 
         buildConfigField("String", "KIOSK_ID", "\"$kioskId\"")
         buildConfigField("String", "TRUST_API_HOST", "\"$trustApiHost\"")
         buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
         buildConfigField("String", "SIGNALING_URL", "\"$signalingUrl\"")
+        buildConfigField("String", "TURN_SERVER_URL", "\"$turnServerUrl\"")
+        buildConfigField("String", "TURN_TLS_URL", "\"$turnTlsUrl\"")
+        buildConfigField("String", "TURN_USERNAME", "\"$turnUsername\"")
+        buildConfigField("String", "TURN_CREDENTIAL", "\"$turnCredential\"")
 
         ndk {
             abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64"))
@@ -99,8 +126,8 @@ dependencies {
     // Socket.IO Client (WebRTC signaling)
     implementation(libs.socketio.client)
 
-    // Mediasoup Client
-    implementation(libs.mediasoup.client)
+    // WebRTC Native Client
+    implementation(libs.google.webrtc)
 
     // Coil (image loading)
     implementation(libs.coil.compose)
