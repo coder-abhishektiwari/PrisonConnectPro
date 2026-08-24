@@ -131,42 +131,7 @@ class WebRtcService {
         this.iceServers = joinData.iceServers;
       }
       this.createPeerConnection();
-
-      // Socket Signaling Event Listeners for P2P
-      socketService.on('offer', async (_event: string, data: any) => {
-        console.log('[WebRTC] Received SDP Offer from peer:', data.sender);
-        await this.handleOffer({ type: data?.type ?? 'offer', sdp: data?.sdp });
-      });
-
-      socketService.on('answer', async (_event: string, data: any) => {
-        console.log('[WebRTC] Received SDP Answer from peer:', data.sender);
-        await this.handleAnswer({ type: data?.type ?? 'answer', sdp: data?.sdp });
-      });
-
-      socketService.on('ice-candidate', async (_event: string, data: any) => {
-        // Accept both relay shapes:
-        //   new signaling: {candidate: {candidate, sdpMid, sdpMLineIndex}, sender}
-        //   old signaling: {candidate: "<sdp line>", sdpMid, sdpMLineIndex}
-        const raw = data?.candidate;
-        const init =
-          typeof raw === 'string'
-            ? {
-                candidate: raw,
-                sdpMid: data?.sdpMid ?? undefined,
-                sdpMLineIndex: data?.sdpMLineIndex ?? undefined,
-              }
-            : raw;
-        if (init) {
-          await this.addIceCandidate(init);
-        }
-      });
-
-      socketService.on('peer-joined', async (_event: string, data: any) => {
-        console.log('[WebRTC] Peer joined room:', data?.peerId);
-        // Glare-free rule: the party that joined an OCCUPIED room creates the
-        // offer (see handleJoined). The party already waiting must NOT offer
-        // here — it only answers.
-      });
+      this.registerSignalingListeners();
 
       // If existing peers are already in the room when we join, create SDP Offer
       if (joinData && Array.isArray(joinData.existingPeers) && joinData.existingPeers.length > 0) {
@@ -177,6 +142,71 @@ class WebRtcService {
       console.error('[WebRTC] Failed to handle joined:', error);
       this.emit('connection-state', 'failed');
     }
+  }
+
+  /**
+   * Signaling listeners must be registered exactly ONCE per page load.
+   * handleJoined() runs again on every reconnect; re-registering would stack
+   * duplicate handlers and cause concurrent SDP operations (race condition).
+   */
+  private listenersRegistered = false;
+
+  private registerSignalingListeners(): void {
+    if (this.listenersRegistered) return;
+    this.listenersRegistered = true;
+
+    socketService.on('offer', async (_event: string, data: any) => {
+      console.log('[WebRTC] Received SDP Offer from peer:', data.sender);
+      await this.handleOffer({ type: data?.type ?? 'offer', sdp: data?.sdp });
+    });
+
+    socketService.on('answer', async (_event: string, data: any) => {
+      console.log('[WebRTC] Received SDP Answer from peer:', data.sender);
+      await this.handleAnswer({ type: data?.type ?? 'answer', sdp: data?.sdp });
+    });
+
+    socketService.on('ice-candidate', async (_event: string, data: any) => {
+      // Accept both relay shapes:
+      //   new signaling: {candidate: {candidate, sdpMid, sdpMLineIndex}, sender}
+      //   old signaling: {candidate: "<sdp line>", sdpMid, sdpMLineIndex}
+      const raw = data?.candidate;
+      const init =
+        typeof raw === 'string'
+          ? {
+              candidate: raw,
+              sdpMid: data?.sdpMid ?? undefined,
+              sdpMLineIndex: data?.sdpMLineIndex ?? undefined,
+            }
+          : raw;
+      if (init) {
+        await this.addIceCandidate(init);
+      }
+    });
+
+    socketService.on('peer-joined', async (_event: string, data: any) => {
+      console.log('[WebRTC] Peer joined room:', data?.peerId);
+      // Glare-free rule: the party that joined an OCCUPIED room creates the
+      // offer (see handleJoined). The party already waiting must NOT offer
+      // here — it only answers.
+    });
+  }
+
+  /**
+   * Mutex that serializes every SDP/ICE operation. WebRTC's async steps
+   * (createOffer -> setLocalDescription -> remote answer -> addIceCandidate)
+   * MUST NOT interleave; overlapping calls corrupt the signaling state and
+   * kill media in one direction. Every entry point below goes through this
+   * lock so operations run strictly one at a time, in arrival order.
+   */
+  private sdpLock: Promise<unknown> = Promise.resolve();
+
+  private runExclusive<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.sdpLock.then(fn, fn);
+    this.sdpLock = run.then(
+      () => undefined,
+      () => undefined
+    );
+    return run;
   }
 
   private createPeerConnection(): RTCPeerConnection {
@@ -227,68 +257,96 @@ class WebRtcService {
   }
 
   async createAndSendOffer(): Promise<void> {
-    try {
-      const pc = this.createPeerConnection();
-      const offer = await pc.createOffer({
-        offerToReceiveAudio: true,
-        offerToReceiveVideo: true
-      });
-      await pc.setLocalDescription(offer);
-      console.log('[WebRTC] Local SDP Offer created and set');
-      socketService.sendOffer(offer);
-    } catch (error) {
-      console.error('[WebRTC] Failed to create offer:', error);
-    }
+    return this.runExclusive(async () => {
+      try {
+        const pc = this.createPeerConnection();
+        if (pc.signalingState !== 'stable') {
+          console.warn('[WebRTC] Skipping offer, signaling not stable:', pc.signalingState);
+          return;
+        }
+        const offer = await pc.createOffer({
+          offerToReceiveAudio: true,
+          offerToReceiveVideo: true
+        });
+        await pc.setLocalDescription(offer);
+        console.log('[WebRTC] Local SDP Offer created and set');
+        socketService.sendOffer(offer);
+      } catch (error) {
+        console.error('[WebRTC] Failed to create offer:', error);
+      }
+    });
   }
 
   private async handleOffer(offerSdp: RTCSessionDescriptionInit): Promise<void> {
-    try {
-      const pc = this.createPeerConnection();
-      await pc.setRemoteDescription(offerSdp);
-      console.log('[WebRTC] Remote SDP Offer set successfully');
+    return this.runExclusive(async () => {
+      try {
+        const pc = this.createPeerConnection();
+        // Glare guard: we are the designated offerer. An offer arriving while
+        // our own offer is outstanding means a stale/duplicate relay — drop it.
+        if (pc.signalingState !== 'stable') {
+          console.warn('[WebRTC] Ignoring offer in state:', pc.signalingState);
+          return;
+        }
+        await pc.setRemoteDescription(offerSdp);
+        console.log('[WebRTC] Remote SDP Offer set successfully');
 
-      // Flush any ICE candidates received before remote description was set
-      for (const candidate of this.pendingCandidates) {
-        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        // Flush any ICE candidates received before remote description was set
+        for (const candidate of this.pendingCandidates) {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        }
+        this.pendingCandidates = [];
+
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        console.log('[WebRTC] Local SDP Answer created and set');
+        socketService.sendAnswer(answer);
+      } catch (error) {
+        console.error('[WebRTC] Failed to handle offer:', error);
       }
-      this.pendingCandidates = [];
-
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      console.log('[WebRTC] Local SDP Answer created and set');
-      socketService.sendAnswer(answer);
-    } catch (error) {
-      console.error('[WebRTC] Failed to handle offer:', error);
-    }
+    });
   }
 
   private async handleAnswer(answerSdp: RTCSessionDescriptionInit): Promise<void> {
-    try {
-      if (!this.pc) return;
-      await this.pc.setRemoteDescription(answerSdp);
-      console.log('[WebRTC] Remote SDP Answer set successfully');
+    return this.runExclusive(async () => {
+      try {
+        const pc = this.pc;
+        if (!pc) return;
+        // Only valid when OUR offer is on the table. Anything else is stale.
+        if (pc.signalingState !== 'have-local-offer') {
+          console.warn('[WebRTC] Ignoring answer in state:', pc.signalingState);
+          return;
+        }
+        await pc.setRemoteDescription(answerSdp);
+        console.log('[WebRTC] Remote SDP Answer set successfully');
 
-      for (const candidate of this.pendingCandidates) {
-        await this.pc.addIceCandidate(new RTCIceCandidate(candidate));
+        for (const candidate of this.pendingCandidates) {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        }
+        this.pendingCandidates = [];
+      } catch (error) {
+        console.error('[WebRTC] Failed to handle answer:', error);
       }
-      this.pendingCandidates = [];
-    } catch (error) {
-      console.error('[WebRTC] Failed to handle answer:', error);
-    }
+    });
   }
 
   async addIceCandidate(candidateInit: RTCIceCandidateInit): Promise<void> {
-    try {
-      if (this.pc && this.pc.remoteDescription && this.pc.remoteDescription.type) {
-        await this.pc.addIceCandidate(new RTCIceCandidate(candidateInit));
-        console.log('[WebRTC] Added remote ICE candidate');
-      } else {
-        console.log('[WebRTC] Buffering remote ICE candidate until remote description is set');
-        this.pendingCandidates.push(candidateInit);
+    return this.runExclusive(async () => {
+      try {
+        if (!this.pc) {
+          this.pendingCandidates.push(candidateInit);
+          return;
+        }
+        if (this.pc.remoteDescription && this.pc.remoteDescription.type) {
+          await this.pc.addIceCandidate(new RTCIceCandidate(candidateInit));
+          console.log('[WebRTC] Added remote ICE candidate');
+        } else {
+          console.log('[WebRTC] Buffering remote ICE candidate until remote description is set');
+          this.pendingCandidates.push(candidateInit);
+        }
+      } catch (error) {
+        console.warn('[WebRTC] Error adding ICE candidate:', error);
       }
-    } catch (error) {
-      console.warn('[WebRTC] Error adding ICE candidate:', error);
-    }
+    });
   }
 
   toggleVideo(enabled: boolean): void {

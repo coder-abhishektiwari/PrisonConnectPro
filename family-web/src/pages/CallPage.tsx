@@ -44,11 +44,31 @@ export function CallPage() {
   // Call state
   const [status, setStatus] = useState<CallStatus>('initializing');
   const [statusMessage, setStatusMessage] = useState('Initializing call...');
-  const [connectionState, setConnectionState] = useState<ConnectionState>('new');
-  const [videoEnabled, setVideoEnabled] = useState(true);
   const [audioEnabled, setAudioEnabled] = useState(true);
+  const [speakerOn, setSpeakerOn] = useState(true);
   const [callDuration, setCallDuration] = useState(0);
   const [error, setError] = useState<string | null>(null);
+
+  // Auto-hiding controls: visible on any interaction, hidden after 3s idle.
+  const [controlsVisible, setControlsVisible] = useState(true);
+  const controlsTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const bumpInteraction = useCallback(() => {
+    setControlsVisible(true);
+    if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
+    controlsTimerRef.current = setTimeout(() => setControlsVisible(false), 3000);
+  }, []);
+
+  useEffect(() => {
+    if (status !== 'connected') return;
+    bumpInteraction();
+    window.addEventListener('pointerdown', bumpInteraction);
+    window.addEventListener('pointermove', bumpInteraction);
+    return () => {
+      window.removeEventListener('pointerdown', bumpInteraction);
+      window.removeEventListener('pointermove', bumpInteraction);
+      if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
+    };
+  }, [status, bumpInteraction]);
 
   // Refs
   const localVideoRef = useRef<HTMLVideoElement>(null);
@@ -239,7 +259,6 @@ export function CallPage() {
     const handleConnectionStateChange = (_event: string, data: unknown) => {
       const state = data as ConnectionState;
       console.log('[Call] Connection state changed:', state);
-      setConnectionState(state);
 
       switch (state) {
         case 'connecting':
@@ -402,17 +421,21 @@ export function CallPage() {
     }
   };
 
-  const toggleVideo = useCallback(() => {
-    const newState = !videoEnabled;
-    setVideoEnabled(newState);
-    webRtcService.toggleVideo(newState);
-  }, [videoEnabled]);
-
   const toggleAudio = useCallback(() => {
     const newState = !audioEnabled;
     setAudioEnabled(newState);
     webRtcService.toggleAudio(newState);
   }, [audioEnabled]);
+
+  /** Speaker toggle = mute/unmute the REMOTE audio output on this device. */
+  const toggleSpeaker = useCallback(() => {
+    setSpeakerOn((prev) => {
+      const next = !prev;
+      const v = remoteVideoRef.current;
+      if (v) v.muted = !next;
+      return next;
+    });
+  }, []);
 
   const endCall = useCallback(async () => {
     try {
@@ -432,20 +455,6 @@ export function CallPage() {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const getConnectionQuality = (): 'excellent' | 'good' | 'poor' | 'unknown' => {
-    switch (connectionState) {
-      case 'connected':
-        return 'excellent';
-      case 'connecting':
-        return 'good';
-      case 'disconnected':
-      case 'failed':
-        return 'poor';
-      default:
-        return 'unknown';
-    }
   };
 
   if (!session) {
@@ -500,130 +509,125 @@ export function CallPage() {
     );
   }
 
-  // ---- Fully connected: real call screen ----
+  // ---- Fully connected: immersive call screen ----
+  // Video fills the whole viewport (portrait gets full height, letterboxed);
+  // header and controls float above it and auto-hide after 3s idle.
   return (
-    <div className="flex flex-col h-screen bg-neutral-900">
-      {/* Header */}
-      <div className="bg-neutral-800 text-white p-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-semibold">Secure Call</h1>
-          <p className="text-sm text-neutral-300">
-            {session.inmateName} ↔ {session.contactName}
-          </p>
-        </div>
-        <div className="text-right">
-          <div className="text-sm font-mono">{formatDuration(callDuration)}</div>
-          <div className="text-xs text-success">{getConnectionQuality().toUpperCase()}</div>
-        </div>
-      </div>
+    <div className="relative h-[100dvh] w-full bg-black overflow-hidden select-none">
+      {/* Remote video — object-contain: the WHOLE frame is always visible */}
+      {isVideoCall && (
+        <video
+          ref={remoteVideoRef}
+          autoPlay
+          playsInline
+          className="absolute inset-0 w-full h-full object-contain"
+        />
+      )}
 
-      {/* Video Area */}
-      <div className="flex-1 relative bg-black">
-        {/* Remote Video (Full Screen) — object-contain so the WHOLE frame is
-            always visible; letterbox bars are fine, cropping/scrolling is not */}
-        {isVideoCall && (
-          <video
-            ref={remoteVideoRef}
-            autoPlay
-            playsInline
-            className="absolute inset-0 w-full h-full object-contain"
-          />
-        )}
-
-        {/* Placeholder when no video */}
-        {(!isVideoCall || !remoteVideoRef.current?.srcObject) && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="text-center text-white">
-              <div className="w-24 h-24 bg-neutral-700 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-12 h-12 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-              </div>
-              <p className="text-lg">{session.inmateName}</p>
+      {/* Audio-only call placeholder */}
+      {!isVideoCall && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="text-center text-white">
+            <div className="w-28 h-28 bg-neutral-800 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-14 h-14 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
             </div>
+            <p className="text-lg">{session.inmateName}</p>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Local Video (Picture-in-Picture) */}
-        {isVideoCall && (
-          <div className="absolute bottom-24 right-4 w-32 h-40 bg-neutral-800 rounded-lg overflow-hidden shadow-lg border-2 border-neutral-700">
-            <video
-              ref={localVideoRef}
-              autoPlay
-              playsInline
-              muted
-              className="w-full h-full object-cover"
-            />
-          </div>
-        )}
+      {/* Local Video (Picture-in-Picture) — shrinks when controls hide */}
+      {isVideoCall && (
+        <div
+          className={`absolute right-4 bg-neutral-900 rounded-xl overflow-hidden shadow-lg border border-neutral-700 transition-all duration-300 ${
+            controlsVisible ? 'bottom-32 w-28 h-36' : 'bottom-6 w-16 h-20 opacity-70'
+          }`}
+        >
+          <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+        </div>
+      )}
 
-        {/* Recording Notice */}
-        <div className="absolute top-4 left-4 bg-red-600 text-white px-3 py-1 rounded-full text-xs font-medium flex items-center gap-2">
-          <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
-          REC
+      {/* Top overlay */}
+      <div
+        className={`absolute top-0 inset-x-0 z-10 flex items-start justify-between px-4 pt-4 pb-10 bg-gradient-to-b from-black/70 to-transparent transition-opacity duration-300 ${
+          controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
+      >
+        <div className="text-white">
+          <p className="text-base font-semibold leading-tight">{session.inmateName}</p>
+          <p className="text-xs text-neutral-300">Secure monitored call</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="bg-red-600 text-white px-2.5 py-1 rounded-full text-[10px] font-semibold flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+            REC
+          </span>
+          <span className="text-white font-mono text-sm bg-black/40 rounded-md px-2 py-1">
+            {formatDuration(callDuration)}
+          </span>
         </div>
       </div>
 
-      {/* Controls */}
-      <div className="bg-neutral-800 p-6">
-        <div className="flex items-center justify-center gap-4 max-w-md mx-auto">
-          {/* Video Toggle */}
-          {isVideoCall && (
-            <button
-              onClick={toggleVideo}
-              className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors ${
-                videoEnabled
-                  ? 'bg-neutral-700 text-white hover:bg-neutral-600'
-                  : 'bg-red-600 text-white hover:bg-red-700'
-              }`}
-              title={videoEnabled ? 'Turn off camera' : 'Turn on camera'}
-            >
-              {videoEnabled ? (
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-              ) : (
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-                </svg>
-              )}
-            </button>
-          )}
-
-          {/* Audio Toggle */}
+      {/* Bottom controls — mic | END (center) | speaker */}
+      <div
+        className={`absolute bottom-0 inset-x-0 z-10 pb-10 pt-14 bg-gradient-to-t from-black/80 to-transparent transition-opacity duration-300 ${
+          controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
+      >
+        <div className="relative flex items-center justify-center h-16 max-w-md mx-auto">
+          {/* Mic toggle (left) */}
           <button
             onClick={toggleAudio}
-            className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors ${
-              audioEnabled
-                ? 'bg-neutral-700 text-white hover:bg-neutral-600'
-                : 'bg-red-600 text-white hover:bg-red-700'
+            className={`absolute left-8 w-13 h-13 p-3.5 rounded-full flex items-center justify-center transition-colors ${
+              audioEnabled ? 'bg-neutral-800/90 text-white' : 'bg-red-600 text-white'
             }`}
-            title={audioEnabled ? 'Mute' : 'Unmute'}
+            title={audioEnabled ? 'Mute microphone' : 'Unmute microphone'}
           >
             {audioEnabled ? (
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
               </svg>
             ) : (
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
               </svg>
             )}
           </button>
 
-          {/* End Call */}
+          {/* End Call (dead center) */}
           <button
             onClick={() => {
               endCall();
               goToBlank();
             }}
-            className="w-14 h-14 rounded-full bg-red-600 text-white flex items-center justify-center hover:bg-red-700 transition-colors"
+            className="w-16 h-16 rounded-full bg-red-600 text-white flex items-center justify-center hover:bg-red-700 active:scale-95 transition-all shadow-lg"
             title="End call"
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
             </svg>
+          </button>
+
+          {/* Speaker (output) toggle (right) */}
+          <button
+            onClick={toggleSpeaker}
+            className={`absolute right-8 w-13 h-13 p-3.5 rounded-full flex items-center justify-center transition-colors ${
+              speakerOn ? 'bg-neutral-800/90 text-white' : 'bg-red-600 text-white'
+            }`}
+            title={speakerOn ? 'Turn off speaker' : 'Turn on speaker'}
+          >
+            {speakerOn ? (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15zM17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+              </svg>
+            )}
           </button>
         </div>
       </div>

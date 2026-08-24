@@ -72,7 +72,8 @@ fun WebRtcSurfaceView(
     videoTrack: VideoTrack?,
     eglContext: org.webrtc.EglBase.Context?,
     modifier: Modifier = Modifier,
-    mirror: Boolean = false
+    mirror: Boolean = false,
+    fit: Boolean = false
 ) {
     // Track attached to the renderer, so swaps detach the previous sink.
     val attachedTrack = remember { mutableStateOf<VideoTrack?>(null) }
@@ -83,7 +84,12 @@ fun WebRtcSurfaceView(
         factory = { ctx ->
             SurfaceViewRenderer(ctx).apply {
                 setMirror(mirror)
-                setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
+                // FIT shows the WHOLE remote frame (letterboxed); FILL crops.
+                // The remote peer must never be cropped — use FIT there.
+                setScalingType(
+                    if (fit) RendererCommon.ScalingType.SCALE_ASPECT_FIT
+                    else RendererCommon.ScalingType.SCALE_ASPECT_FILL
+                )
             }
         },
         update = { view ->
@@ -337,6 +343,7 @@ fun VideoCallContent(
                 WebRtcSurfaceView(
                     videoTrack = remoteTrack,
                     eglContext = eglContext,
+                    fit = true,
                     modifier = Modifier.fillMaxSize()
                 )
             } else {
@@ -575,64 +582,48 @@ fun VideoCallContent(
                     shape = RoundedCornerShape(24.dp),
                     color = DarkControlsBg
                 ) {
-                    Row(
+                    // END sits dead-center; mic+cam grouped left, speaker right.
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.CenterVertically
+                            .padding(horizontal = 10.dp, vertical = 10.dp)
                     ) {
-                        VideoActionButton(
-                            icon = if (isMuted) Icons.Default.MicOff else Icons.Default.Mic,
-                            label = if (isMuted) "Unmute" else "Mute",
-                            isActive = isMuted,
-                            activeColor = AlertRed,
-                            onClick = {
-                                onMuteToggle()
-                                lastInteractionTime = System.currentTimeMillis()
-                            }
-                        )
+                        Row(
+                            modifier = Modifier.align(Alignment.CenterStart),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            VideoActionButton(
+                                icon = if (isMuted) Icons.Default.MicOff else Icons.Default.Mic,
+                                label = if (isMuted) "Unmute" else "Mute",
+                                isActive = isMuted,
+                                activeColor = AlertRed,
+                                onClick = {
+                                    onMuteToggle()
+                                    lastInteractionTime = System.currentTimeMillis()
+                                }
+                            )
 
-                        VideoActionButton(
-                            icon = if (!isCameraOn) Icons.Default.VideocamOff else Icons.Default.Videocam,
-                            label = if (!isCameraOn) "Cam Off" else "Cam On",
-                            isActive = !isCameraOn,
-                            activeColor = AlertRed,
-                            onClick = {
-                                onVideoToggle()
-                                lastInteractionTime = System.currentTimeMillis()
-                            }
-                        )
-
-                        VideoActionButton(
-                            icon = Icons.Default.FlipCameraAndroid,
-                            label = "Flip",
-                            isActive = false,
-                            activeColor = PrimaryBlue,
-                            onClick = {
-                                onSwitchCamera()
-                                lastInteractionTime = System.currentTimeMillis()
-                            }
-                        )
+                            VideoActionButton(
+                                icon = if (!isCameraOn) Icons.Default.VideocamOff else Icons.Default.Videocam,
+                                label = if (!isCameraOn) "Cam Off" else "Cam On",
+                                isActive = !isCameraOn,
+                                activeColor = AlertRed,
+                                onClick = {
+                                    onVideoToggle()
+                                    lastInteractionTime = System.currentTimeMillis()
+                                }
+                            )
+                        }
 
                         VideoActionButton(
                             icon = if (isSpeakerOn) Icons.AutoMirrored.Filled.VolumeUp else Icons.AutoMirrored.Filled.VolumeOff,
                             label = "Speaker",
                             isActive = isSpeakerOn,
                             activeColor = PrimaryBlue,
+                            modifier = Modifier.align(Alignment.CenterEnd),
                             onClick = {
                                 onSpeakerToggle()
-                                lastInteractionTime = System.currentTimeMillis()
-                            }
-                        )
-
-                        VideoActionButton(
-                            icon = Icons.Default.Info,
-                            label = "Info",
-                            isActive = showInfoDialog,
-                            activeColor = PrimaryBlue,
-                            onClick = {
-                                showInfoDialog = true
                                 lastInteractionTime = System.currentTimeMillis()
                             }
                         )
@@ -643,6 +634,7 @@ fun VideoCallContent(
                             isActive = true,
                             activeColor = AlertRed,
                             isEndCall = true,
+                            modifier = Modifier.align(Alignment.Center),
                             onClick = onEndCall
                         )
                     }
@@ -719,9 +711,11 @@ fun VideoActionButton(
     isActive: Boolean,
     activeColor: Color,
     isEndCall: Boolean = false,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     Column(
+        modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
