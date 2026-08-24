@@ -91,6 +91,16 @@ class WebRtcManager @Inject constructor(
         }
         this.eglBaseContext = eglContext
 
+        // MANDATORY before touching any factory: loads the libwebrtc JNI
+        // (libjingle_peerconnection_so.so). Without this the encoder factory
+        // crashes with UnsatisfiedLinkError — mediasoup-client used to load
+        // the native lib itself, pure WebRTC does not.
+        PeerConnectionFactory.initialize(
+            PeerConnectionFactory.InitializationOptions.builder(context.applicationContext)
+                .setEnableInternalTracer(false)
+                .createInitializationOptions()
+        )
+
         // Audio device module doubles as the recorder tap: every captured mic
         // PCM chunk is handed to the kiosk-side recorder while a call runs.
         val adm = JavaAudioDeviceModule.builder(context.applicationContext)
