@@ -144,12 +144,20 @@ class WebRtcService {
       });
 
       socketService.on('ice-candidate', async (_event: string, data: any) => {
-        if (data?.candidate) {
-          await this.addIceCandidate({
-            candidate: data.candidate,
-            sdpMid: data?.sdpMid ?? undefined,
-            sdpMLineIndex: data?.sdpMLineIndex ?? undefined,
-          });
+        // Accept both relay shapes:
+        //   new signaling: {candidate: {candidate, sdpMid, sdpMLineIndex}, sender}
+        //   old signaling: {candidate: "<sdp line>", sdpMid, sdpMLineIndex}
+        const raw = data?.candidate;
+        const init =
+          typeof raw === 'string'
+            ? {
+                candidate: raw,
+                sdpMid: data?.sdpMid ?? undefined,
+                sdpMLineIndex: data?.sdpMLineIndex ?? undefined,
+              }
+            : raw;
+        if (init) {
+          await this.addIceCandidate(init);
         }
       });
 
