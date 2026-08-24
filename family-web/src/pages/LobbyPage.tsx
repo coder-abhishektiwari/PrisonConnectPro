@@ -16,7 +16,7 @@ export function LobbyPage() {
   const location = useLocation();
   // Set when the inmate hung up: show the ended state, never re-dial.
   const callEnded = (location.state as { callEnded?: boolean } | null)?.callEnded === true;
-  const { session, clear } = useSession();
+  const { session } = useSession();
   const [error] = useState<string | null>(null);
   const [line, setLine] = useState(0);
 
@@ -35,7 +35,14 @@ export function LobbyPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [linkToken, session, callEnded]);
 
-  // Arrived back here because the inmate ended the call.
+  // Arrived back here because the inmate ended the call: show "Call ended"
+  // for 3 seconds, then blank the page entirely.
+  useEffect(() => {
+    if (!callEnded) return;
+    const t = setTimeout(() => window.location.replace('about:blank'), 3000);
+    return () => clearTimeout(t);
+  }, [callEnded]);
+
   if (callEnded) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-primary-50 to-neutral-100 flex items-center justify-center p-4">
@@ -47,18 +54,7 @@ export function LobbyPage() {
               </svg>
             </div>
             <p className="text-lg font-semibold text-neutral-900 mb-1">Call ended</p>
-            <p className="text-sm text-neutral-500 mb-8">Thanks for joining. You can close this page now.</p>
-            <Button
-              variant="primary"
-              size="lg"
-              className="w-full"
-              onClick={() => {
-                clear();
-                window.location.replace('about:blank');
-              }}
-            >
-              Close
-            </Button>
+            <p className="text-sm text-neutral-500">Thanks for joining.</p>
           </div>
         </div>
       </div>

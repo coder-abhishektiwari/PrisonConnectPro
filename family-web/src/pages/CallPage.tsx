@@ -205,9 +205,8 @@ export function CallPage() {
       wasConnectedRef.current = false;
       reconnectingRef.current = true; // stop any in-flight reconnect loop
       setStatusMessage('Ending call...');
-      addToast('The inmate has ended the call', 'info');
       // Give the user a beat to see "Ending call...", then land on the lobby
-      // screen with the session still alive so they are not dumped on a blank page.
+      // screen which shows "Call ended" and blanks itself after 3s.
       setTimeout(() => {
         webRtcService.close();
         socketService.leaveRoom(session!.roomId, peerIdRef.current);
@@ -325,6 +324,7 @@ export function CallPage() {
   // setRemoteDescription, long before ICE reaches 'connected'). Re-attach
   // them once the video elements actually exist, then force playback so
   // remote AUDIO is actually audible (autoplay policies can silently block).
+  const audioElRef = useRef<HTMLAudioElement>(null);
   useEffect(() => {
     if (status !== 'connected') return;
     const remote = webRtcService.getRemoteStream();
@@ -335,24 +335,38 @@ export function CallPage() {
     if (local && localVideoRef.current && localVideoRef.current.srcObject !== local) {
       localVideoRef.current.srcObject = local;
     }
-    const v = remoteVideoRef.current;
-    if (v) {
-      v.muted = false;
-      v.volume = 1;
-      v.play().catch((e) => console.warn('[Call] video.play() blocked:', e));
+    // Diagnostics: prove whether the kiosk's audio track actually arrived.
+    if (remote) {
+      remote.getTracks().forEach((t) =>
+        console.log(`[AudioDiag] remote ${t.kind}: enabled=${t.enabled} muted=${t.muted} readyState=${t.readyState}`)
+      );
     }
-  }, [status]);
+    const v = remoteVideoRef.current;
+    const a = audioElRef.current;
+    if (v) {
+      // Video element stays SILENT — the dedicated <audio> element carries
+      // output so the same stream is never played twice.
+      if (remote && v.srcObject !== remote) v.srcObject = remote;
+      v.muted = true;
+      v.play().catch(() => {});
+    }
+    if (a) {
+      if (remote && a.srcObject !== remote) a.srcObject = remote;
+      a.muted = !speakerOn;
+      a.volume = 1;
+      a.play().catch((e) => console.warn('[AudioDiag] audio.play() blocked:', e));
+    }
+  }, [status, speakerOn]);
 
   // Autoplay fallback: if the browser blocked audible playback, the first tap
   // or keypress (OTP typing counts) unlocks it — retry once.
   useEffect(() => {
     if (status !== 'connected') return;
     const unlock = () => {
-      const v = remoteVideoRef.current;
-      if (v && (v.paused || v.muted)) {
-        v.muted = false;
-        v.volume = 1;
-        v.play().catch(() => {});
+      const a = audioElRef.current;
+      if (a && (a.paused || a.muted)) {
+        a.muted = !speakerOn;
+        a.play().catch(() => {});
       }
     };
     window.addEventListener('pointerdown', unlock);
@@ -361,7 +375,7 @@ export function CallPage() {
       window.removeEventListener('pointerdown', unlock);
       window.removeEventListener('keydown', unlock);
     };
-  }, [status]);
+  }, [status, speakerOn]);
 
   const initializeCall = async () => {
     try {
@@ -445,12 +459,7 @@ export function CallPage() {
 
   /** Speaker toggle = mute/unmute the REMOTE audio output on this device. */
   const toggleSpeaker = useCallback(() => {
-    setSpeakerOn((prev) => {
-      const next = !prev;
-      const v = remoteVideoRef.current;
-      if (v) v.muted = !next;
-      return next;
-    });
+    setSpeakerOn((prev) => !prev);
   }, []);
 
   const endCall = useCallback(async () => {
@@ -532,15 +541,19 @@ export function CallPage() {
   // header and controls float above it and auto-hide after 3s idle.
   return (
     <div className="relative h-[100dvh] w-full bg-black overflow-hidden select-none">
-      {/* Remote video — object-contain: the WHOLE frame is always visible */}
+      {/* Remote video — object-contain: the WHOLE frame is always visible.
+          Output is MUTED here; the hidden <audio> element below carries sound. */}
       {isVideoCall && (
         <video
           ref={remoteVideoRef}
           autoPlay
           playsInline
+          muted
           className="absolute inset-0 w-full h-full object-contain"
         />
       )}
+      {/* Hidden audio sink for remote audio (reliable across browsers) */}
+      <audio ref={audioElRef} autoPlay className="hidden" />
 
       {/* Audio-only call placeholder */}
       {!isVideoCall && (
