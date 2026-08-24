@@ -1121,16 +1121,18 @@ app.delete('/contacts/:contactId/devices', requireAuth, asyncRoute(async (req, r
   if (!contact || !(await inAdminScope(req, contact))) {
     return sendError(res, 'NOT_FOUND', 'Contact not found', 404);
   }
-  const result = await updateDb('contacts.json', (all) => {
+  // NOTE: updateDb resolves to the MUTATOR's inner `result` directly
+  // (db.js does `return result`, not `{data, result}`).
+  const cleared = await updateDb('contacts.json', (all) => {
     const idx = all.findIndex((c) => c.contactId === contactId);
     if (idx === -1) return { data: all, result: null };
     const removed = Array.isArray(all[idx].deviceFingerprints) ? all[idx].deviceFingerprints.length : 0;
     all[idx].deviceFingerprints = [];
     return { data: all, result: { contactId, removedDevices: removed, clearedAt: new Date().toISOString() } };
   });
-  broadcastEvent('contact-devices-cleared', result.result);
-  if (!result.result) return sendError(res, 'NOT_FOUND', 'Contact not found', 404);
-  return sendSuccess(res, result.result);
+  if (!cleared) return sendError(res, 'NOT_FOUND', 'Contact not found', 404);
+  broadcastEvent('contact-devices-cleared', cleared);
+  return sendSuccess(res, cleared);
 }));
 
 // Single route (was two colliding '/contacts/:param' routes â€” the second
