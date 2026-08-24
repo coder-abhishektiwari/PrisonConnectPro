@@ -2017,8 +2017,15 @@ app.post('/recordings', requireAuth, asyncRoute(async (req, res) => {
 }));
 
 app.post('/recordings/upload', requireAuth, asyncRoute(async (req, res) => {
-  const { callId, inmateId, contactId, base64Data, fileName, mimeType } = req.body || {};
+  const { callId, base64Data, fileName, mimeType } = req.body || {};
   if (!callId) return sendError(res, 'INVALID_REQUEST', 'callId is required', 400);
+
+  // recordings.call_id carries a FK to calls.id — reject unknown calls with a
+  // clean error instead of letting the INSERT blow up as INTERNAL_ERROR.
+  const call = (await readDb('calls.json')).find((c) => c.callId === callId || c.roomId === callId);
+  if (!call || !(await inScopeOf(req, call))) {
+    return sendError(res, 'CALL_NOT_FOUND', 'No call matches the given callId', 404);
+  }
 
   let fileBuffer;
   if (base64Data) {
@@ -2029,14 +2036,21 @@ app.post('/recordings/upload', requireAuth, asyncRoute(async (req, res) => {
     fileBuffer = Buffer.from('kiosk recording data');
   }
 
-  const rec = await saveUploadedRecording({
-    callId,
-    inmateId: inmateId || null,
-    contactId: contactId || null,
-    fileBuffer,
-    fileName: fileName || `kiosk-rec-${callId}.mp4`,
-    mimeType: mimeType || 'video/mp4'
-  });
+  let rec;
+  try {
+    rec = await saveUploadedRecording({
+      callId,
+      kioskId: call.kioskId || null,
+      inmateId: req.body?.inmateId || call.inmateId || null,
+      contactId: req.body?.contactId || call.contactId || null,
+      fileBuffer,
+      fileName: fileName || `kiosk-rec-${callId}.mp4`,
+      mimeType: mimeType || 'video/mp4'
+    });
+  } catch (err) {
+    console.error('[recordings] failed persisting upload:', err.message);
+    return sendError(res, 'STORAGE_ERROR', 'Failed to store uploaded recording', 500);
+  }
 
   await updateDb('recordings.json', (all) => {
     const existingIdx = all.findIndex((r) => r.callId === callId || r.recordingId === rec.recordingId);
@@ -2048,12 +2062,12 @@ app.post('/recordings/upload', requireAuth, asyncRoute(async (req, res) => {
   });
 
   await updateDb('calls.json', (calls) => {
-    const call = calls.find((c) => c.callId === callId || c.roomId === callId);
-    if (call) {
-      call.recordingStatus = 'completed';
-      call.recordingId = rec.recordingId;
+    const c = calls.find((x) => x.callId === callId || x.roomId === callId);
+    if (c) {
+      c.recordingStatus = 'completed';
+      c.recordingId = rec.recordingId;
     }
-    return { data: calls, result: call };
+    return { data: calls, result: c };
   });
 
   broadcastEvent('recording-finished', rec);
