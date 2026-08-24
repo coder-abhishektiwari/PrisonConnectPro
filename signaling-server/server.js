@@ -24,10 +24,21 @@ const TURN_TCP_URL = process.env.TURN_TCP_URL || 'turn:tissues-cafeteria.tun.ply
 const TURN_STATIC_AUTH_SECRET = process.env.TURN_STATIC_AUTH_SECRET || '464f02dad3072f5b202da1a8928a07cd94d0b45634e41f57db1ad47c2156d90a';
 const TURN_CREDENTIAL_TTL = parseInt(process.env.TURN_CREDENTIAL_TTL || '3600', 10);
 
+// Public fallback relay (Open Relay Project by Metered - free community TURN).
+// Carries media when the self-hosted coturn is unreachable (e.g. home ISP /
+// tunnel down). Set FALLBACK_TURN_DISABLED=1 to drop these entries.
+const USE_FALLBACK_TURN = process.env.FALLBACK_TURN_DISABLED !== '1';
+const FALLBACK_TURN_SERVERS = USE_FALLBACK_TURN ? [
+  { urls: 'turn:global.turn.metered.ca:80', username: 'free', credential: 'openrelayproject' },
+  { urls: 'turn:global.turn.metered.ca:443', username: 'free', credential: 'openrelayproject' },
+  { urls: 'turn:global.turn.metered.ca:443?transport=tcp', username: 'free', credential: 'openrelayproject' },
+] : [];
+
 function buildIceServers() {
   const servers = [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
+    ...FALLBACK_TURN_SERVERS,
   ];
   if (TURN_STATIC_AUTH_SECRET) {
     const username = `${Math.floor(Date.now() / 1000) + TURN_CREDENTIAL_TTL}`;
@@ -37,9 +48,9 @@ function buildIceServers() {
       .digest('base64');
     if (TURN_URL) servers.push({ urls: TURN_URL, username, credential });
     if (TURN_TCP_URL) servers.push({ urls: TURN_TCP_URL, username, credential });
-    console.log(`[join-room] TURN credentials minted (ttl=${TURN_CREDENTIAL_TTL}s)`);
+    console.log(`[join-room] iceServers: ${servers.length} entries (self-hosted TURN + ${FALLBACK_TURN_SERVERS.length} fallback)`);
   } else {
-    console.warn('[join-room] TURN_STATIC_AUTH_SECRET not set - handing out STUN only');
+    console.warn('[join-room] TURN_STATIC_AUTH_SECRET not set - handing out STUN + fallback only');
   }
   return servers;
 }
