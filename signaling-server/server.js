@@ -3,11 +3,46 @@ require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { Server } = require('socket.io');
 
 const PORT = parseInt(process.env.PORT || '3002', 10);
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-only-change-me';
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
+
+// ---- TURN (REST API / use-auth-secret) ----
+// coturn runs with `use-auth-secret`, so clients need ephemeral credentials:
+//   username   = expiry-epoch
+//   credential = base64(HMAC-SHA1(static-auth-secret, username))
+// Both peers get these inside the join-room ACK, so no client-side TURN
+// config is needed and credentials stay short-lived.
+const TURN_URL = process.env.TURN_URL || 'turn:tissues-cafeteria.tun.ply.gg:3478?transport=udp';
+const TURN_TCP_URL = process.env.TURN_TCP_URL || 'turn:tissues-cafeteria.tun.ply.gg:3478?transport=tcp';
+// NOTE: the static-auth-secret already lives in coturn/turnserver.conf in
+// this repo (it only guards ephemeral call-relay access), so a matching
+// fallback keeps fresh deployments working without extra setup.
+const TURN_STATIC_AUTH_SECRET = process.env.TURN_STATIC_AUTH_SECRET || '464f02dad3072f5b202da1a8928a07cd94d0b45634e41f57db1ad47c2156d90a';
+const TURN_CREDENTIAL_TTL = parseInt(process.env.TURN_CREDENTIAL_TTL || '3600', 10);
+
+function buildIceServers() {
+  const servers = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+  ];
+  if (TURN_STATIC_AUTH_SECRET) {
+    const username = `${Math.floor(Date.now() / 1000) + TURN_CREDENTIAL_TTL}`;
+    const credential = crypto
+      .createHmac('sha1', TURN_STATIC_AUTH_SECRET)
+      .update(username)
+      .digest('base64');
+    if (TURN_URL) servers.push({ urls: TURN_URL, username, credential });
+    if (TURN_TCP_URL) servers.push({ urls: TURN_TCP_URL, username, credential });
+    console.log(`[join-room] TURN credentials minted (ttl=${TURN_CREDENTIAL_TTL}s)`);
+  } else {
+    console.warn('[join-room] TURN_STATIC_AUTH_SECRET not set - handing out STUN only');
+  }
+  return servers;
+}
 
 const app = express();
 app.use(express.json());
@@ -127,10 +162,7 @@ io.on('connection', (socket) => {
     return callback?.({
       success: true,
       existingPeers,
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-      ]
+      iceServers: buildIceServers()
     });
   });
 

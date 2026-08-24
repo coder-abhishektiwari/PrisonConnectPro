@@ -51,6 +51,10 @@ services:
       # Grace period before a room is torn down after its last socket drops
       # unexpectedly (client auto-reconnects within this window).
       DISCONNECT_GRACE_MS: ${DISCONNECT_GRACE_MS:-15000}
+      # TURN relay (coturn) handed to peers inside the join-room ACK.
+      TURN_URL: ${TURN_URL:-turn:tissues-cafeteria.tun.ply.gg:3478?transport=udp}
+      TURN_TCP_URL: ${TURN_TCP_URL:-turn:tissues-cafeteria.tun.ply.gg:3478?transport=tcp}
+      TURN_STATIC_AUTH_SECRET: ${TURN_STATIC_AUTH_SECRET:-464f02dad3072f5b202da1a8928a07cd94d0b45634e41f57db1ad47c2156d90a}
     ports:
       - "3002:3002"
     networks: [prisonconnect]
