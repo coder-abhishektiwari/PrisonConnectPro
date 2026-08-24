@@ -135,12 +135,12 @@ class WebRtcService {
       // Socket Signaling Event Listeners for P2P
       socketService.on('offer', async (_event: string, data: any) => {
         console.log('[WebRTC] Received SDP Offer from peer:', data.sender);
-        await this.handleOffer(data.sdp);
+        await this.handleOffer({ type: data?.type ?? 'offer', sdp: data?.sdp });
       });
 
       socketService.on('answer', async (_event: string, data: any) => {
         console.log('[WebRTC] Received SDP Answer from peer:', data.sender);
-        await this.handleAnswer(data.sdp);
+        await this.handleAnswer({ type: data?.type ?? 'answer', sdp: data?.sdp });
       });
 
       socketService.on('ice-candidate', async (_event: string, data: any) => {
