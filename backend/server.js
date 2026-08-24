@@ -1110,6 +1110,29 @@ app.get('/wallets/:inmateId', requireAuth, asyncRoute(async (req, res) => {
 
 app.get('/contacts', requireAuth, asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('contacts.json')))));
 
+// Clear all registered family-device fingerprints for a contact. The NEXT
+// call to this contact registers whatever device opens the link — use when a
+// family member changed phone/browser and verification now fails with
+// DEVICE_MISMATCH / "device not verified".
+app.delete('/contacts/:contactId/devices', requireAuth, asyncRoute(async (req, res) => {
+  const { contactId } = req.params;
+  const contacts = await readDb('contacts.json');
+  const contact = contacts.find((c) => c.contactId === contactId);
+  if (!contact || !(await inAdminScope(req, contact))) {
+    return sendError(res, 'NOT_FOUND', 'Contact not found', 404);
+  }
+  const result = await updateDb('contacts.json', (all) => {
+    const idx = all.findIndex((c) => c.contactId === contactId);
+    if (idx === -1) return { data: all, result: null };
+    const removed = Array.isArray(all[idx].deviceFingerprints) ? all[idx].deviceFingerprints.length : 0;
+    all[idx].deviceFingerprints = [];
+    return { data: all, result: { contactId, removedDevices: removed, clearedAt: new Date().toISOString() } };
+  });
+  broadcastEvent('contact-devices-cleared', result.result);
+  if (!result.result) return sendError(res, 'NOT_FOUND', 'Contact not found', 404);
+  return sendSuccess(res, result.result);
+}));
+
 // Single route (was two colliding '/contacts/:param' routes â€” the second
 // could never match). Tries contactId first, falls back to kiosk-scoped list.
 app.get('/contacts/:id', requireAuth, asyncRoute(async (req, res) => {
