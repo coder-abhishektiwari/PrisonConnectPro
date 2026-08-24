@@ -210,8 +210,14 @@ io.on('connection', (socket) => {
   });
 
   socket.on('ice-candidate', (data = {}, callback) => {
-    const { candidate, target } = data;
-    if (!currentRoomId || !currentPeerId) return callback?.({ success: false, error: 'Not in a room' });
+    const target = data.target;
+    // Clients send either a full RTCIceCandidateInit object or a flat
+    // {candidate, sdpMid, sdpMLineIndex}. Normalize to an object so neither
+    // side loses sdpMid/sdpMLineIndex in transit.
+    const candidate = typeof data.candidate === 'string'
+      ? { candidate: data.candidate, sdpMid: data.sdpMid ?? null, sdpMLineIndex: data.sdpMLineIndex ?? null }
+      : data.candidate;
+    if (!currentRoomId || !currentPeerId || !candidate) return callback?.({ success: false, error: 'Not in a room' });
     if (target) {
       const targetSocket = rooms.get(currentRoomId)?.get(target);
       if (targetSocket) {
@@ -225,13 +231,15 @@ io.on('connection', (socket) => {
 
   // Backwards compatibility handler for trickle-ice
   socket.on('trickle-ice', (data = {}, callback) => {
-    const { candidate, target } = data;
-    if (currentRoomId && currentPeerId) {
-      if (target) {
-        rooms.get(currentRoomId)?.get(target)?.emit('ice-candidate', { candidate, sender: currentPeerId, peerId: currentPeerId });
-      } else {
-        socket.to(currentRoomId).emit('ice-candidate', { candidate, sender: currentPeerId, peerId: currentPeerId });
-      }
+    const target = data.target;
+    const candidate = typeof data.candidate === 'string'
+      ? { candidate: data.candidate, sdpMid: data.sdpMid ?? null, sdpMLineIndex: data.sdpMLineIndex ?? null }
+      : data.candidate;
+    if (!currentRoomId || !currentPeerId || !candidate) return callback?.({ success: false, error: 'Not in a room' });
+    if (target) {
+      rooms.get(currentRoomId)?.get(target)?.emit('ice-candidate', { candidate, sender: currentPeerId, peerId: currentPeerId });
+    } else {
+      socket.to(currentRoomId).emit('ice-candidate', { candidate, sender: currentPeerId, peerId: currentPeerId });
     }
     callback?.({ success: true });
   });
