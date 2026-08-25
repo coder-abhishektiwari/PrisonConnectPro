@@ -1,19 +1,30 @@
 # Keep-alive for Render free-tier services.
-# Render spins down idle free services; the next request then pays a ~30-60s
-# cold start (the "first call is slow" problem). This workflow pings both the
-# backend and the signaling server every 10 minutes so they stay warm.
+# Render spins down idle free services after ~15 min; the next request then
+# pays a ~30-60s cold start. This workflow pings every service every 5 minutes
+# so nothing ever sleeps. GitHub Actions cron can run a few minutes late, so
+# 5 min keeps the effective gap under Render's 15 min limit.
 name: keep-alive
 
 on:
   schedule:
-    - cron: '*/10 * * * *'
+    - cron: '*/5 * * * *'
   workflow_dispatch: {} # allow manual trigger
+
+env:
+  BACKEND: https://prisonconnect-backend.onrender.com
+  SIGNALING: https://prisonconnect-signaling.onrender.com
+  FAMILY_WEB: https://prisonconnect-familyweb.onrender.com
 
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
       - name: Ping backend
-        run: curl -sf --max-time 30 https://prisonconnect-backend.onrender.com/health > /dev/null && echo "backend OK" || echo "backend ping failed"
+        run: curl -sf --max-time 30 "$BACKEND/health" > /dev/null && echo "backend OK" || echo "backend ping failed"
       - name: Ping signaling server
-        run: curl -sf --max-time 30 https://prisonconnect-signaling.onrender.com/api/health > /dev/null && echo "signaling OK" || echo "signaling ping failed"
+        run: curl -sf --max-time 30 "$SIGNALING/api/health" > /dev/null && echo "signaling OK" || echo "signaling ping failed"
+      - name: Ping family web
+        run: curl -sf --max-time 30 "$FAMILY_WEB/" > /dev/null && echo "family-web OK" || echo "family-web ping failed"
+      # Add vendor/warden dashboards here once they are deployed to Render:
+      # - name: Ping vendor dashboard
+      #   run: curl -sf --max-time 30 "https://<vendor-service>.onrender.com/" > /dev/null

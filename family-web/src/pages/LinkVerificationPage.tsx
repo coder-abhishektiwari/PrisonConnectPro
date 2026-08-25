@@ -52,7 +52,7 @@ export function LinkVerificationPage() {
   useEffect(() => {
     if (!session || !linkToken) return;
     const next = session.deviceRegistered ? `/call/${linkToken}/device` : `/call/${linkToken}/otp`;
-    const t = setTimeout(() => navigate(next, { replace: true }), 1200);
+    const t = setTimeout(() => navigate(next, { replace: true }), 400);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);

@@ -22,6 +22,15 @@ export function OtpVerificationPage() {
   const abortRef = useRef<AbortController | null>(null);
   const submittingRef = useRef(false);
 
+  // Warm up camera/mic NOW (while the user types the OTP) so the call page
+  // doesn't pay the getUserMedia cost after verification. If permission was
+  // never granted the prompt appears here instead of delaying the call.
+  useEffect(() => {
+    navigator.mediaDevices?.getUserMedia({ video: true, audio: true })
+      .then((s) => s.getTracks().forEach((t) => t.stop()))
+      .catch(() => {});
+  }, []);
+
   const listenForOtp = useCallback(() => {
     // Abort any previous listener so we don't double-dispatch.
     abortRef.current?.abort();
@@ -101,9 +110,10 @@ export function OtpVerificationPage() {
       setOtpResult(result);
       addToast('OTP verified successfully.', 'success');
       // First-time call: collect + register the device fingerprint next.
-      // Returning call: fingerprint already matched, go straight to the lobby.
+      // Returning call: fingerprint already matched — skip the lobby entirely
+      // and head straight into the call screen (saves a hop).
       if (session.deviceRegistered) {
-        navigate(`/call/${linkToken}/lobby`);
+        navigate(`/call/${linkToken}/call`);
       } else {
         navigate(`/call/${linkToken}/device`);
       }

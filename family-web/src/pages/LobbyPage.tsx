@@ -30,7 +30,7 @@ export function LobbyPage() {
   useEffect(() => {
     if (callEnded) return; // the call is over — do NOT re-dial
     if (!linkToken || !session) return;
-    const t = setTimeout(() => navigate(`/call/${linkToken}/call`, { replace: true }), 1000);
+    const t = setTimeout(() => navigate(`/call/${linkToken}/call`, { replace: true }), 300);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [linkToken, session, callEnded]);
