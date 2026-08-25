@@ -14,6 +14,8 @@ env:
   BACKEND: https://prisonconnect-backend.onrender.com
   SIGNALING: https://prisonconnect-signaling.onrender.com
   FAMILY_WEB: https://prisonconnect-familyweb.onrender.com
+  SUPERADMIN: https://prisonconnect-superadmin.onrender.com
+  WARDEN: https://prisonconnect-warden.onrender.com
 
 jobs:
   ping:
@@ -25,6 +27,7 @@ jobs:
         run: curl -sf --max-time 30 "$SIGNALING/api/health" > /dev/null && echo "signaling OK" || echo "signaling ping failed"
       - name: Ping family web
         run: curl -sf --max-time 30 "$FAMILY_WEB/" > /dev/null && echo "family-web OK" || echo "family-web ping failed"
-      # Add vendor/warden dashboards here once they are deployed to Render:
-      # - name: Ping vendor dashboard
-      #   run: curl -sf --max-time 30 "https://<vendor-service>.onrender.com/" > /dev/null
+      - name: Ping superadmin dashboard
+        run: curl -sf --max-time 30 "$SUPERADMIN/" > /dev/null && echo "superadmin OK" || echo "superadmin ping failed"
+      - name: Ping warden dashboard
+        run: curl -sf --max-time 30 "$WARDEN/" > /dev/null && echo "warden OK" || echo "warden ping failed"
