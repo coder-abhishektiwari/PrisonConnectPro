@@ -5,10 +5,12 @@ import { Input } from '@/components/Input';
 import { callApi } from '@/services/api';
 import { useSession } from '@/context/SessionContext';
 import { useToast } from '@/components/Toast';
+import { useHeartbeat } from '@/hooks/useHeartbeat';
 
 export function OtpVerificationPage() {
   const { linkToken } = useParams<{ linkToken: string }>();
   const navigate = useNavigate();
+  useHeartbeat(linkToken);
   const { addToast } = useToast();
   const { session, setOtpResult } = useSession();
   const [otp, setOtp] = useState('');

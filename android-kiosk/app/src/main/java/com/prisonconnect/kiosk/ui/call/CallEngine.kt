@@ -75,6 +75,9 @@ class CallEngine @Inject constructor(
          * poll misses this many times in a row (~50s), creation truly failed.
          */
         const val POLL_FAIL_THRESHOLD = 15
+
+        /** How stale the family heartbeat may get before we say they left. */
+        const val FAMILY_LEFT_STALE_MS = 15_000L
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -118,6 +121,17 @@ class CallEngine @Inject constructor(
 
     private val _callFailedAfterConnect = MutableStateFlow(false)
     val callFailedAfterConnect = _callFailedAfterConnect.asStateFlow()
+
+    /** Family-side verification failures — shown red on the progress screen. */
+    private val _deviceVerifyFailed = MutableStateFlow(false)
+    val deviceVerifyFailed = _deviceVerifyFailed.asStateFlow()
+
+    private val _otpVerifyFailed = MutableStateFlow(false)
+    val otpVerifyFailed = _otpVerifyFailed.asStateFlow()
+
+    /** Family member closed the verification screen mid-flow. */
+    private val _familyLeft = MutableStateFlow(false)
+    val familyLeft = _familyLeft.asStateFlow()
 
     /** UI badge: the kiosk always records calls (KioskCallRecorder). */
     private val _isRecording = MutableStateFlow(true)
@@ -294,6 +308,9 @@ class CallEngine @Inject constructor(
         activeCallId = callId
         _familyStage.value = FamilyStage.LINK_SENT
         _callFailedAfterConnect.value = false
+        _deviceVerifyFailed.value = false
+        _otpVerifyFailed.value = false
+        _familyLeft.value = false
         _callState.value = CallUIState.WAITING
         timerJob?.cancel(); timerJob = null
         reconnectJob?.cancel(); reconnectJob = null
@@ -342,6 +359,24 @@ class CallEngine @Inject constructor(
 
     private fun applySnapshot(s: CallStatusSnapshot) {
         val fam = s.family ?: return
+        // Verification failures (wrong OTP / device mismatch) — the progress
+        // screen marks these steps red until they succeed.
+        _deviceVerifyFailed.value = (fam.deviceFailedAttempts ?: 0) > 0
+        _otpVerifyFailed.value = (fam.otpFailedAttempts ?: 0) > 0
+
+        // Family-left detection: the verification pages heartbeat every 5s.
+        // Once the link is open, a stale heartbeat mid-verification means the
+        // family member closed the screen.
+        if (!_familyLeft.value && !s.linkOpenedAt.isNullOrBlank() && fam.otpVerified != true && !fam.lastSeenAt.isNullOrBlank()) {
+            val staleMs = runCatching {
+                System.currentTimeMillis() - java.time.Instant.parse(fam.lastSeenAt).toEpochMilli()
+            }.getOrDefault(0L)
+            if (staleMs > FAMILY_LEFT_STALE_MS) {
+                Logger.d("Family heartbeat stale (${staleMs}ms) - family member left")
+                _familyLeft.value = true
+            }
+        }
+
         val target = when {
             fam.otpVerified == true -> FamilyStage.OTP_VERIFIED
             fam.deviceVerified == true -> FamilyStage.DEVICE_VERIFIED

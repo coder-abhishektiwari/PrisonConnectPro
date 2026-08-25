@@ -23,6 +23,9 @@ export const callApi = {
   getSession: (linkToken: string) =>
     api.get<ApiResponse<CallSession>>(`/calls/link/${linkToken}`).then((r) => r.data.data),
 
+  heartbeat: (linkToken: string) =>
+    api.post<ApiResponse<{ ok: boolean; done?: boolean }>>(`/calls/link/${linkToken}/heartbeat`).then((r) => r.data.data),
+
   verifyDevice: (linkToken: string, payload: { fingerprint: string; signals: Record<string, unknown>; deviceInfo?: DeviceInfo }) =>
     api.post<ApiResponse<DeviceVerificationResult>>(`/calls/${linkToken}/device-verification`, payload).then((r) => r.data.data),
 

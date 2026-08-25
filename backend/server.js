@@ -1516,10 +1516,20 @@ app.post('/calls/:linkToken/device-verification', asyncRoute(async (req, res) =>
   // Returning call  -> require the fingerprint to match the stored one.
   const result = await registerOrVerifyFingerprint(call.contactId, familyPhone, { hash: String(fingerprint), signals });
 
-  if (!result.verified && result.reason === 'DEVICE_MISMATCH') {
-    return sendError(res, 'DEVICE_MISMATCH', 'This device is not authorized for this call link', 403);
-  }
   if (!result.verified) {
+    // Track failed attempts so the kiosk can show the step in red.
+    await updateDb('calls.json', (all) => {
+      const idx = all.findIndex((c) => c.linkToken === linkToken);
+      if (idx === -1) return { data: all, result: null };
+      all[idx].family = {
+        ...(all[idx].family || {}),
+        deviceFailedAttempts: (all[idx].family?.deviceFailedAttempts || 0) + 1
+      };
+      return { data: all, result: all[idx] };
+    });
+    if (result.reason === 'DEVICE_MISMATCH') {
+      return sendError(res, 'DEVICE_MISMATCH', 'This device is not authorized for this call link', 403);
+    }
     return sendError(res, 'DEVICE_VERIFICATION_FAILED', result.reason || 'Device verification failed', 400);
   }
 
@@ -1601,6 +1611,23 @@ app.post('/calls/:linkToken/send-otp', asyncRoute(async (req, res) => {
   });
 }));
 
+// Family presence heartbeat: the verification pages ping this every few
+// seconds so the kiosk can tell "still working" from "left the screen".
+app.post('/calls/link/:linkToken/heartbeat', asyncRoute(async (req, res) => {
+  const { linkToken } = req.params;
+  const calls = await readDb('calls.json');
+  const call = calls.find((c) => c.linkToken === linkToken);
+  if (!call) return sendError(res, 'NOT_FOUND', 'Invalid or expired call link', 404);
+  if (call.family?.otpVerified) return sendSuccess(res, { ok: true, done: true });
+  await updateDb('calls.json', (all) => {
+    const idx = all.findIndex((c) => c.linkToken === linkToken);
+    if (idx === -1) return { data: all, result: null };
+    all[idx].family = { ...(all[idx].family || {}), lastSeenAt: new Date().toISOString() };
+    return { data: all, result: all[idx] };
+  });
+  return sendSuccess(res, { ok: true });
+}));
+
 // DEV/DEMO ONLY: lets the family web auto-complete OTP when running against a
 // local stack (SMS_PROVIDER=log). Never enabled in production or with real SMS.
 app.get('/calls/:linkToken/otp', asyncRoute(async (req, res) => {
@@ -1642,7 +1669,19 @@ app.post('/calls/:linkToken/otp-verification', asyncRoute(async (req, res) => {
   }
 
   const valid = String(otp) === String(call.otp);
-  if (!valid) return sendError(res, 'INVALID_OTP', 'Incorrect one-time password', 401);
+  if (!valid) {
+    // Track failed attempts so the kiosk can show the step in red.
+    await updateDb('calls.json', (all) => {
+      const idx = all.findIndex((c) => c.linkToken === linkToken);
+      if (idx === -1) return { data: all, result: null };
+      all[idx].family = {
+        ...(all[idx].family || {}),
+        otpFailedAttempts: (all[idx].family?.otpFailedAttempts || 0) + 1
+      };
+      return { data: all, result: all[idx] };
+    });
+    return sendError(res, 'INVALID_OTP', 'Incorrect one-time password', 401);
+  }
 
   const sessionToken = signAccessToken({
     sub: call.contactId, role: 'family',

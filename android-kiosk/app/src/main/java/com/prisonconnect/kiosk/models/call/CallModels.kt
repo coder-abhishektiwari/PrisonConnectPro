@@ -117,6 +117,12 @@ data class CallStatusSnapshot(
 ) {
     data class FamilyProgress(
         @SerializedName("deviceVerified") val deviceVerified: Boolean? = null,
-        @SerializedName("otpVerified") val otpVerified: Boolean? = null
+        @SerializedName("otpVerified") val otpVerified: Boolean? = null,
+        /** Failed verification attempts — the kiosk shows these steps in red. */
+        @SerializedName("deviceFailedAttempts") val deviceFailedAttempts: Int? = null,
+        @SerializedName("otpFailedAttempts") val otpFailedAttempts: Int? = null,
+        /** Presence heartbeat from the family verification pages. If this goes
+         *  stale mid-verification, the family member closed the screen. */
+        @SerializedName("lastSeenAt") val lastSeenAt: String? = null
     )
 }

@@ -40,6 +40,9 @@ class CallViewModel @Inject constructor(
     val rtcConnectionState: StateFlow<PeerConnection.PeerConnectionState> = engine.rtcConnectionState
     val isNetworkAvailable: StateFlow<Boolean> = engine.isNetworkAvailable
     val isRecording: StateFlow<Boolean> = engine.isRecording
+    val deviceVerifyFailed: StateFlow<Boolean> = engine.deviceVerifyFailed
+    val otpVerifyFailed: StateFlow<Boolean> = engine.otpVerifyFailed
+    val familyLeft: StateFlow<Boolean> = engine.familyLeft
 
     val eglContext: EglBase.Context
         get() = engine.eglContext

@@ -40,6 +40,7 @@ private fun StageRow(label: String, state: StageState) {
     val (color, symbol) = when (state) {
         StageState.DONE -> Color(0xFF22C55E) to "✓"
         StageState.ACTIVE -> Color(0xFFF59E0B) to "•"
+        StageState.FAILED -> Color(0xFFEF4444) to "✗"
         StageState.PENDING -> Color(0xFF525252) to ""
     }
     Row(
@@ -65,7 +66,7 @@ private fun StageRow(label: String, state: StageState) {
     }
 }
 
-private enum class StageState { PENDING, ACTIVE, DONE }
+private enum class StageState { PENDING, ACTIVE, DONE, FAILED }
 
 @Composable
 fun CallProgressScreen(
@@ -80,6 +81,9 @@ fun CallProgressScreen(
     val viewModel: CallViewModel = androidx.hilt.navigation.compose.hiltViewModel()
     val callState by viewModel.callState.collectAsState()
     val stage by viewModel.familyStage.collectAsState()
+    val deviceVerifyFailed by viewModel.deviceVerifyFailed.collectAsState()
+    val otpVerifyFailed by viewModel.otpVerifyFailed.collectAsState()
+    val familyLeft by viewModel.familyLeft.collectAsState()
 
     var showFailure by remember { mutableStateOf(false) }
     var everConnected by remember { mutableStateOf(false) }
@@ -111,6 +115,16 @@ fun CallProgressScreen(
         }
     }
 
+    // Family member closed the verification screen mid-flow: tell the inmate
+    // and return to the lobby.
+    LaunchedEffect(familyLeft) {
+        if (familyLeft) {
+            kotlinx.coroutines.delay(2500)
+            viewModel.endCall()
+            onFailed()
+        }
+    }
+
     val stages: List<Pair<String, StageState>> = run {
         val s = stage
         listOf(
@@ -119,13 +133,15 @@ fun CallProgressScreen(
                 s.ordinal >= FamilyStage.LINK_OPENED.ordinal -> StageState.DONE
                 else -> StageState.ACTIVE
             },
-            "Device verified" to when {
-                s.ordinal >= FamilyStage.OTP_VERIFIED.ordinal || s == FamilyStage.DEVICE_VERIFIED -> StageState.DONE
+            "Device verification" to when {
+                s.ordinal >= FamilyStage.DEVICE_VERIFIED.ordinal -> StageState.DONE
+                deviceVerifyFailed -> StageState.FAILED
                 s.ordinal >= FamilyStage.LINK_OPENED.ordinal -> StageState.ACTIVE
                 else -> StageState.PENDING
             },
-            "OTP verified" to when {
+            "OTP verification" to when {
                 s.ordinal >= FamilyStage.OTP_VERIFIED.ordinal -> StageState.DONE
+                otpVerifyFailed -> StageState.FAILED
                 s.ordinal >= FamilyStage.DEVICE_VERIFIED.ordinal -> StageState.ACTIVE
                 else -> StageState.PENDING
             },
@@ -149,8 +165,16 @@ fun CallProgressScreen(
             modifier = Modifier.align(Alignment.Center)
         ) {
             Text(
-                text = if (showFailure) "Call Failed" else "Calling $contactName",
-                color = if (showFailure) Color(0xFFEF4444) else Color.White,
+                text = when {
+                    familyLeft -> "Family member left"
+                    showFailure -> "Call Failed"
+                    else -> "Calling $contactName"
+                },
+                color = when {
+                    familyLeft -> Color(0xFFF59E0B)
+                    showFailure -> Color(0xFFEF4444)
+                    else -> Color.White
+                },
                 fontSize = 28.sp,
                 style = MaterialTheme.typography.titleLarge
             )

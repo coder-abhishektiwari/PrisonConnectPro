@@ -4,12 +4,14 @@ import { Button } from '@/components/Button';
 import { callApi } from '@/services/api';
 import { useSession } from '@/context/SessionContext';
 import { collectSignals, fingerprintHash } from '@/services/fingerprint';
+import { useHeartbeat } from '@/hooks/useHeartbeat';
 
 const STEPS = ['Checking your device…', 'Matching your secure profile…', 'Almost done…'];
 
 export function DeviceVerificationPage() {
   const { linkToken } = useParams<{ linkToken: string }>();
   const navigate = useNavigate();
+  useHeartbeat(linkToken);
   const { session, setDeviceVerified } = useSession();
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);

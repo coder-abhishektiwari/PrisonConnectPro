@@ -4,11 +4,13 @@ import { Button } from '@/components/Button';
 import { Loading } from '@/components/States';
 import { callApi } from '@/services/api';
 import { useSession } from '@/context/SessionContext';
+import { useHeartbeat } from '@/hooks/useHeartbeat';
 import type { CallSession } from '@/types/call';
 
 export function LinkVerificationPage() {
   const { linkToken } = useParams<{ linkToken: string }>();
   const navigate = useNavigate();
+  useHeartbeat(linkToken);
   const { setSession } = useSession();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
