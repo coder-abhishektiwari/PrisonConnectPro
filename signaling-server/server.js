@@ -3,7 +3,6 @@ require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const jwt = require('jsonwebtoken');
-const crypto = require('crypto');
 const { Server } = require('socket.io');
 
 const PORT = parseInt(process.env.PORT || '3002', 10);
@@ -14,49 +13,36 @@ if (!JWT_SECRET) {
 }
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
 
-// ---- TURN (REST API / use-auth-secret) ----
-// coturn runs with `use-auth-secret`, so clients need ephemeral credentials:
-//   username   = expiry-epoch
-//   credential = base64(HMAC-SHA1(static-auth-secret, username))
-// Both peers get these inside the join-room ACK, so no client-side TURN
-// config is needed and credentials stay short-lived.
-const TURN_URL = process.env.TURN_URL || 'turn:tissues-cafeteria.tun.ply.gg:3478?transport=udp';
-const TURN_TCP_URL = process.env.TURN_TCP_URL || 'turn:tissues-cafeteria.tun.ply.gg:3478?transport=tcp';
-// NOTE: the static-auth-secret already lives in coturn/turnserver.conf in
-// this repo (it only guards ephemeral call-relay access), so a matching
-// fallback keeps fresh deployments working without extra setup.
-const TURN_STATIC_AUTH_SECRET = process.env.TURN_STATIC_AUTH_SECRET || '464f02dad3072f5b202da1a8928a07cd94d0b45634e41f57db1ad47c2156d90a';
-const TURN_CREDENTIAL_TTL = parseInt(process.env.TURN_CREDENTIAL_TTL || '3600', 10);
-
-// Public fallback relay (Open Relay Project by Metered - free community TURN).
-// Carries media when the self-hosted coturn is unreachable (e.g. home ISP /
-// tunnel down). Set FALLBACK_TURN_DISABLED=1 to drop these entries.
-const USE_FALLBACK_TURN = process.env.FALLBACK_TURN_DISABLED !== '1';
-const FALLBACK_TURN_SERVERS = USE_FALLBACK_TURN ? [
-  { urls: 'turn:global.turn.metered.ca:80', username: 'free', credential: 'openrelayproject' },
-  { urls: 'turn:global.turn.metered.ca:443', username: 'free', credential: 'openrelayproject' },
-  { urls: 'turn:global.turn.metered.ca:443?transport=tcp', username: 'free', credential: 'openrelayproject' },
-] : [];
+// ---- ICE servers ----
+// STUN is public — safe to hardcode. TURN credentials must NEVER live in
+// code: provide them via the TURN_SERVERS env var as a JSON array, e.g.
+//   TURN_SERVERS=[{"urls":"turn:host:3478","username":"...","credential":"..."}]
+// When the var is absent or invalid the server runs STUN-only (direct P2P
+// with hole-punching), which works for most networks.
+const STUN_SERVERS = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'stun:stun2.l.google.com:19302' },
+];
 
 function buildIceServers() {
-  const servers = [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    ...FALLBACK_TURN_SERVERS,
-  ];
-  if (TURN_STATIC_AUTH_SECRET) {
-    const username = `${Math.floor(Date.now() / 1000) + TURN_CREDENTIAL_TTL}`;
-    const credential = crypto
-      .createHmac('sha1', TURN_STATIC_AUTH_SECRET)
-      .update(username)
-      .digest('base64');
-    if (TURN_URL) servers.push({ urls: TURN_URL, username, credential });
-    if (TURN_TCP_URL) servers.push({ urls: TURN_TCP_URL, username, credential });
-    console.log(`[join-room] iceServers: ${servers.length} entries (self-hosted TURN + ${FALLBACK_TURN_SERVERS.length} fallback)`);
+  let turnServers = [];
+  if (process.env.TURN_SERVERS) {
+    try {
+      const parsed = JSON.parse(process.env.TURN_SERVERS);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        turnServers = parsed;
+        console.log(`[join-room] iceServers: ${STUN_SERVERS.length} STUN + ${turnServers.length} TURN (from TURN_SERVERS env)`);
+      } else {
+        console.warn('[join-room] TURN_SERVERS is empty - running STUN-only');
+      }
+    } catch (e) {
+      console.warn('[join-room] Invalid TURN_SERVERS JSON - running STUN-only:', e.message);
+    }
   } else {
-    console.warn('[join-room] TURN_STATIC_AUTH_SECRET not set - handing out STUN + fallback only');
+    console.log('[join-room] TURN_SERVERS not set - running STUN-only (direct P2P)');
   }
-  return servers;
+  return [...STUN_SERVERS, ...turnServers];
 }
 
 const app = express();
