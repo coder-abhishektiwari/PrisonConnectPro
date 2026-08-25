@@ -69,6 +69,18 @@ class LoginViewModel @Inject constructor(
         override fun onLost(network: Network) {
             _isNetworkAvailable.value = false
         }
+
+        override fun onCapabilitiesChanged(
+            network: Network,
+            capabilities: NetworkCapabilities
+        ) {
+            // CRITICAL: when the SAME network loses and regains INTERNET
+            // capability (WiFi blip), onAvailable is NOT re-fired — only this
+            // callback is. Without it the app stays "offline" forever until
+            // restarted.
+            _isNetworkAvailable.value =
+                capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        }
     }
 
     init {

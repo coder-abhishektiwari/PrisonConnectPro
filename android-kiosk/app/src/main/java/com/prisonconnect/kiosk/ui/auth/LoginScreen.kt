@@ -4,6 +4,7 @@ import androidx.camera.core.*
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -18,8 +19,11 @@ import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
@@ -839,56 +843,99 @@ fun PrisonerIdEntryLayout(
 
 @Composable
 fun NoInternetScreen(onRetry: () -> Unit = {}) {
+    // Gentle pulse animation for the icon rings — signals "we're on it".
+    val infiniteTransition = rememberInfiniteTransition(label = "netPulse")
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.55f,
+        targetValue = 0.1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1400, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "netPulseAlpha"
+    )
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.55f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1400, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "netPulseScale"
+    )
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF1A1A1A)),
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(Color(0xFF0A1628), Color(0xFF10233F), Color(0xFF0A1628))
+                )
+            ),
         contentAlignment = Alignment.Center
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Icon(
-                imageVector = Icons.Default.Wifi,
-                contentDescription = null,
-                tint = Color(0xFFF44336),
-                modifier = Modifier.size(80.dp)
-            )
+            // Pulsing rings behind the wifi-off badge
+            Box(contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier
+                        .size(150.dp)
+                        .scale(pulseScale)
+                        .alpha(pulseAlpha)
+                        .background(Color(0xFF3B82F6), CircleShape)
+                )
+                Box(
+                    modifier = Modifier
+                        .size(118.dp)
+                        .background(Color(0xFF132A4A), CircleShape)
+                )
+                Icon(
+                    imageVector = Icons.Default.WifiOff,
+                    contentDescription = null,
+                    tint = Color(0xFF7EB3FF),
+                    modifier = Modifier.size(56.dp)
+                )
+            }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
             Text(
-                text = "No Internet Connection",
-                fontSize = 32.sp,
+                text = "Connection Lost",
+                fontSize = 30.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
                 textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             Text(
-                text = "Please check your network connection\nand try again.",
-                fontSize = 18.sp,
-                color = Color.LightGray,
+                text = "The kiosk lost its internet connection.\nTrying to reconnect automatically…",
+                fontSize = 16.sp,
+                color = Color(0xFF9DB2CC),
                 textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 32.dp)
+                modifier = Modifier.padding(horizontal = 40.dp)
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(40.dp))
 
-            Button(
+            OutlinedButton(
                 onClick = onRetry,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF003366)),
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.5.dp, Color(0xFF3B82F6)),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
                 modifier = Modifier
-                    .padding(horizontal = 32.dp)
+                    .padding(horizontal = 48.dp)
                     .fillMaxWidth()
-                    .height(56.dp)
+                    .height(54.dp)
             ) {
-                Icon(Icons.Default.Refresh, contentDescription = null, tint = Color.White)
+                Icon(Icons.Default.Refresh, contentDescription = null, tint = Color(0xFF7EB3FF))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Retry", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Text("Check Again", fontSize = 16.sp, fontWeight = FontWeight.Bold)
             }
         }
     }

@@ -6,14 +6,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+
+/** Home header navy — the app's primary accent. */
+private val HeaderBlue = Color(0xFF003366)
 
 /**
  * Circular progress indicator for the kiosk design system.
+ * Plain spinner only — no surrounding track ring — in header blue.
  */
 @Composable
 fun KioskProgressIndicator(
@@ -21,8 +25,9 @@ fun KioskProgressIndicator(
 ) {
     CircularProgressIndicator(
         modifier = modifier.size(48.dp),
-        color = MaterialTheme.colorScheme.primary,
-        trackColor = MaterialTheme.colorScheme.surfaceVariant
+        color = HeaderBlue,
+        trackColor = Color.Transparent,
+        strokeWidth = 4.dp
     )
 }
 
@@ -38,14 +43,14 @@ fun KioskLinearProgress(
         LinearProgressIndicator(
             progress = progress,
             modifier = modifier,
-            color = MaterialTheme.colorScheme.primary,
-            trackColor = MaterialTheme.colorScheme.surfaceVariant
+            color = HeaderBlue,
+            trackColor = Color.Transparent
         )
     } else {
         LinearProgressIndicator(
             modifier = modifier,
-            color = MaterialTheme.colorScheme.primary,
-            trackColor = MaterialTheme.colorScheme.surfaceVariant
+            color = HeaderBlue,
+            trackColor = Color.Transparent
         )
     }
 }
