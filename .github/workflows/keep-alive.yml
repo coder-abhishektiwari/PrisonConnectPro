@@ -1,0 +1,19 @@
+# Keep-alive for Render free-tier services.
+# Render spins down idle free services; the next request then pays a ~30-60s
+# cold start (the "first call is slow" problem). This workflow pings both the
+# backend and the signaling server every 10 minutes so they stay warm.
+name: keep-alive
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch: {} # allow manual trigger
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping backend
+        run: curl -sf --max-time 30 https://prisonconnect-backend.onrender.com/health > /dev/null && echo "backend OK" || echo "backend ping failed"
+      - name: Ping signaling server
+        run: curl -sf --max-time 30 https://prisonconnect-signaling.onrender.com/api/health > /dev/null && echo "signaling OK" || echo "signaling ping failed"

@@ -153,9 +153,12 @@ export function CallPage() {
           const resp = await socketService.joinRoom(session!.roomId, peerIdRef.current);
           const peers: string[] = Array.isArray(resp?.existingPeers) ? resp.existingPeers : [];
           if (!resp?.success || peers.length === 0) {
-            // Kiosk is no longer on the call — nothing to return to.
-            goToBlank();
-            return;
+            // Kiosk not in the room RIGHT NOW — but its socket may have just
+            // blipped and it may rejoin within seconds (kiosk waits 15s in
+            // grace). Don't blank instantly; retry within this loop and only
+            // blank if it never comes back.
+            console.warn('[Call] Kiosk not in room, retrying...', attempt);
+            continue;
           }
 
           // Kiosk still waiting — rebuild the peer connection from scratch.
