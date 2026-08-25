@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate, Navigate } from 'react-router-dom';
+import { useParams, Navigate } from 'react-router-dom';
 import { ErrorState } from '@/components/States';
 import { useSession } from '@/context/SessionContext';
 import { useToast } from '@/components/Toast';
@@ -38,7 +38,6 @@ async function waitForSocket(timeoutMs: number): Promise<boolean> {
 
 export function CallPage() {
   const { linkToken } = useParams<{ linkToken: string }>();
-  const navigate = useNavigate();
   const { session, otpResult, clear } = useSession();
   const { addToast } = useToast();
 
@@ -206,17 +205,13 @@ export function CallPage() {
       wasConnectedRef.current = false;
       reconnectingRef.current = true; // stop any in-flight reconnect loop
       setEndingCall(true);
-      // Give the user a beat to see "Ending call...", then land on the lobby
-      // screen which shows "Call ended" and blanks itself after 3s.
+      // Show "Ending call..." briefly on the call screen itself, then blank.
       setTimeout(() => {
         webRtcService.close();
         socketService.leaveRoom(session!.roomId, peerIdRef.current);
         socketService.disconnect();
         joinStartedRef.current = false;
-        navigate(`/call/${linkToken}/lobby`, {
-          replace: true,
-          state: { callEnded: true },
-        });
+        goToBlank();
       }, 1500);
     };
 
