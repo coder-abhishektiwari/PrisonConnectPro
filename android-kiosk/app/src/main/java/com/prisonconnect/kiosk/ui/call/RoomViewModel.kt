@@ -112,22 +112,30 @@ class RoomViewModel @Inject constructor(
 
     fun createRoom(contactId: String, callType: String) {
         _createRoomState.value = UiState.Loading
-        // Drop any stale runtime signaling URL from a previous call; a fresh
-        // one (if the backend provides it) is set on Success below.
+        // Drop any stale runtime signaling URL/token from a previous call; a
+        // fresh one arrives with the background POST below.
         AppConfig.signalingUrlOverride = null
+        AppConfig.signalingToken = null
+
+        // OPTIMISTIC NAVIGATION: mint both ids client-side — the backend
+        // accepts caller-supplied callId/roomId — so the UI moves to the
+        // progress screen INSTANTLY while POST /calls runs in the background.
+        val callId = "CALL-" + java.util.UUID.randomUUID().toString().replace("-", "").take(8).uppercase()
+        val roomId = "ROOM-" + java.util.UUID.randomUUID().toString().replace("-", "").take(8).uppercase()
+        AppConfigBridge.lastCallId = callId
+
+        _createRoomState.value = UiState.Success(
+            CallSession(sessionId = roomId, callId = callId, contactId = contactId)
+        )
+
         viewModelScope.launch {
             val inmateId = authRepository.getInmateId() ?: Constants.KIOSK_ID
             val kioskId = authRepository.getVerifiedKiosk()?.kioskId ?: Constants.KIOSK_ID
-            callRepository.createRoom(inmateId, contactId, kioskId, callType).collect { result ->
+            callRepository.createRoom(inmateId, contactId, kioskId, callType, callId, roomId).collect { result ->
                 when (result) {
-                    is NetworkResult.Loading -> _createRoomState.value = UiState.Loading
                     is NetworkResult.Success -> {
-                        _createRoomState.value = UiState.Success(result.data)
-                        // Remember the backend call id so the progress screen
-                        // can poll family-side verification stages.
-                        AppConfigBridge.lastCallId = result.data.callId
-                        // Stash the room-bound signaling token before opening the socket
-                        // so join-room authenticates with role 'kiosk' for this room.
+                        // The signaling socket needs this backend-minted token;
+                        // WebRtcManager waits for it before joining the room.
                         AppConfig.signalingToken = result.data.signalingToken
                         // Prefer the backend-provided public signaling URL so the APK
                         // keeps working even when the deployment's tunnel URL changes.
@@ -135,12 +143,14 @@ class RoomViewModel @Inject constructor(
                             AppConfig.signalingUrlOverride = it
                             Logger.d("Using backend-provided signaling URL")
                         }
-                        Logger.d("Room setup complete: ${result.data.sessionId}")
+                        Logger.d("Background call creation complete: ${result.data.callId}")
                     }
                     is NetworkResult.Failure -> {
-                        _createRoomState.value = UiState.Error(result.error.message ?: "Failed to setup room")
+                        // Nothing to do here — the progress screen's status poll
+                        // 404s until timeout and surfaces "Call Failed" on its own.
+                        Logger.e("Background call creation failed: ${result.error.message}")
                     }
-                    is NetworkResult.Idle -> _createRoomState.value = UiState.Idle
+                    else -> {}
                 }
             }
         }

@@ -109,6 +109,10 @@ interface TrustApiService {
     @GET("calls/{callId}")
     suspend fun getCallStatus(@Path("callId") callId: String): ApiResponse<CallStatusSnapshot>
 
+    /** Finalize a call (sets endTime/duration) when it ends. */
+    @POST("calls/{callId}/end")
+    suspend fun endCall(@Path("callId") callId: String): ApiResponse<*>
+
     @POST("recordings/upload")
     suspend fun uploadRecording(@Body request: RecordingUploadRequest): ApiResponse<RecordingUploadResponse>
 

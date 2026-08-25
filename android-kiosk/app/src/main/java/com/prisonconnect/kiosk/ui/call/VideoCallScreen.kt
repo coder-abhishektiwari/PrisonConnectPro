@@ -358,6 +358,7 @@ fun VideoCallContent(
                             CallUIState.WAITING -> "Waiting for $contactName..."
                             CallUIState.RECONNECTING -> "Reconnecting..."
                             CallUIState.FAILED -> "Call Failed"
+                            CallUIState.DISCONNECTED -> "Call ended"
                             else -> "Connecting..."
                         },
                         color = Color.White,

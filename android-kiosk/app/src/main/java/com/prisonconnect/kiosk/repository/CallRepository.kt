@@ -18,7 +18,10 @@ interface CallRepository {
     fun getAvailableSlots(contactId: String): Flow<NetworkResult<List<AvailableSlot>>>
     fun bookCall(request: ScheduleRequest): Flow<NetworkResult<ScheduledCall>>
     fun cancelBooking(bookingId: String): Flow<NetworkResult<Unit>>
-    fun createRoom(inmateId: String, contactId: String, kioskId: String, callType: String): Flow<NetworkResult<CallSession>>
+    fun createRoom(
+        inmateId: String, contactId: String, kioskId: String, callType: String,
+        callId: String? = null, roomId: String? = null
+    ): Flow<NetworkResult<CallSession>>
     fun checkSlotAvailability(contactId: String): Flow<NetworkResult<Boolean>>
 
     // Signaling (pure P2P WebRTC — Socket.IO only relays SDP + ICE)
@@ -33,5 +36,8 @@ interface CallRepository {
     fun sendIceCandidate(candidate: JSONObject)
     fun getCallStatus(callId: String): Flow<NetworkResult<CallStatusSnapshot>>
     fun uploadRecording(request: RecordingUploadRequest): Flow<NetworkResult<RecordingUploadResponse>>
+
+    /** Finalize the backend call record (duration/billing) once the call ends. */
+    fun notifyCallEnded(callId: String)
     fun observeSignalingEvents(): Flow<SignalingEvent>
 }

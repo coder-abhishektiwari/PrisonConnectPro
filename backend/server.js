@@ -1411,12 +1411,17 @@ app.post('/calls', requireAuth, asyncRoute(async (req, res) => {
   await updateDb('calls.json', (calls) => ({ data: [...calls, newCall], result: newCall }));
   broadcastEvent('call-created', newCall);
 
-  // ==== FAMILY LINK SMS ====
-  // As soon as a call is initiated from the kiosk, dispatch the secure link to
-  // the family member's phone. SMS gateway failures never fail the call itself.
-  try {
-    const familyPhone = contactPhone(contact);
-    if (familyPhone) {
+  // ==== FAMILY LINK SMS (background) ====
+  // Dispatched AFTER the response is sent — SMS gateway latency must never
+  // delay call setup on the kiosk. Failures only log; they can never fail
+  // the call itself.
+  setImmediate(() => {
+    (async () => {
+      const familyPhone = contactPhone(contact);
+      if (!familyPhone) {
+        console.warn('[calls] contact has no phone number — skipping family link SMS');
+        return;
+      }
       const smsResult = await sendSms({
         phone: familyPhone,
         message: buildLinkSms(newCall),
@@ -1436,13 +1441,10 @@ app.post('/calls', requireAuth, asyncRoute(async (req, res) => {
         };
         return { data: calls, result: calls[idx] };
       });
-      newCall.sms = { sent: true, sentTo: maskedPhone(familyPhone) };
-    } else {
-      console.warn('[calls] contact has no phone number — skipping family link SMS');
-    }
-  } catch (err) {
-    console.error('[calls] family link SMS dispatch failed:', err.message);
-  }
+    })().catch((err) => {
+      console.error('[calls] family link SMS dispatch failed:', err.message);
+    });
+  });
 
   return sendSuccess(res, newCall, 201);
 }));

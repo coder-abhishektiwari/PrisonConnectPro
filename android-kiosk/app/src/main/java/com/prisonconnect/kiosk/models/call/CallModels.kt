@@ -20,7 +20,11 @@ data class CreateCallRequest(
     @SerializedName("inmateId") val inmateId: String,
     @SerializedName("contactId") val contactId: String,
     @SerializedName("kioskId") val kioskId: String,
-    @SerializedName("type") val type: String = "video"
+    @SerializedName("type") val type: String = "video",
+    /** Client-minted ids enable optimistic navigation: the backend accepts
+     *  caller-supplied values, so the UI can move on before the POST lands. */
+    @SerializedName("callId") val callId: String? = null,
+    @SerializedName("roomId") val roomId: String? = null
 )
 
 enum class CallType {

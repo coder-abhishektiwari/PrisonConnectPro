@@ -2,12 +2,14 @@ package com.prisonconnect.kiosk.ui.call
 
 import android.content.Context
 import android.media.AudioManager
+import com.prisonconnect.kiosk.config.AppConfig
 import com.prisonconnect.kiosk.core.Logger
 import com.prisonconnect.kiosk.repository.CallRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -197,8 +199,25 @@ class WebRtcManager @Inject constructor(
         callRecorder.setCallInfo(roomId)
         callRecorder.startRecording()
 
-        callRepository.initSignaling()
-        callRepository.joinRoom(roomId, peerId)
+        // Optimistic navigation: the POST /calls may still be in flight, and
+        // the signaling socket authenticates with the backend-minted token.
+        // Wait for it (max 60s) before joining — the family cannot reach the
+        // room before OTP anyway, so nothing is lost by waiting here.
+        managerScope.launch {
+            var waited = 0
+            while (gen == sessionGen && AppConfig.signalingToken.isNullOrBlank() && waited < 60_000) {
+                delay(250)
+                waited += 250
+            }
+            if (gen != sessionGen) return@launch  // session torn down while waiting
+            if (AppConfig.signalingToken.isNullOrBlank()) {
+                Logger.e("Signaling token never arrived - cannot join room")
+                _connectionState.value = PeerConnection.PeerConnectionState.FAILED
+                return@launch
+            }
+            callRepository.initSignaling()
+            callRepository.joinRoom(roomId, peerId)
+        }
     }
 
     private fun handleJoined(gen: Int, joinAck: JSONObject) {
@@ -301,10 +320,15 @@ class WebRtcManager @Inject constructor(
             }
         )
 
-        // Attach local media to the connection.
+        // Attach local media to the connection. Both tracks go into ONE stream
+        // id ("kiosk-stream"). If they were sent as separate stream ids the
+        // family browser's ontrack fires once per stream and its remoteStream
+        // gets overwritten with a single track (video), orphaning audio -> the
+        // family would see video but hear nothing. A unified stream fixes this
+        // at the source so the family holds audio AND video together.
         peerConnection?.let { pc ->
-            localVideoTrack?.let { pc.addTrack(it, listOf("kiosk-video")) }
-            localAudioTrack?.let { pc.addTrack(it, listOf("kiosk-audio")) }
+            localVideoTrack?.let { pc.addTrack(it, listOf("kiosk-stream")) }
+            localAudioTrack?.let { pc.addTrack(it, listOf("kiosk-stream")) }
         }
     }
 

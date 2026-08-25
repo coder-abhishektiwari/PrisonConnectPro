@@ -7,7 +7,11 @@ const crypto = require('crypto');
 const { Server } = require('socket.io');
 
 const PORT = parseInt(process.env.PORT || '3002', 10);
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-only-change-me';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  // Fail loudly instead of silently signing tokens with a guessable default.
+  throw new Error('JWT_SECRET env var is required for the signaling server - set it before starting');
+}
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
 
 // ---- TURN (REST API / use-auth-secret) ----

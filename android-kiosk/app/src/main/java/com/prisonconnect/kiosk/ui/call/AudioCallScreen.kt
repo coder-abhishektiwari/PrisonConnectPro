@@ -296,6 +296,7 @@ fun AudioCallContent(
                                 CallUIState.WAITING -> "Waiting for participant..."
                                 CallUIState.RECONNECTING -> "Reconnecting..."
                                 CallUIState.FAILED -> "Call Failed"
+                                CallUIState.DISCONNECTED -> "Call ended"
                                 else -> "Connecting..."
                             },
                             fontSize = if (isTablet) 20.sp else 16.sp,

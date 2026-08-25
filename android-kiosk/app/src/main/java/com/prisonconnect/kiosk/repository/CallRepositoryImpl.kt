@@ -227,6 +227,19 @@ class CallRepositoryImpl @Inject constructor(
         }
     }.flowOn(Dispatchers.IO)
 
+    override fun notifyCallEnded(callId: String) {
+        // Fire-and-forget: finalizes duration/billing on the backend. Failure
+        // (e.g. transient network) is non-fatal — the call has already ended.
+        repositoryScope.launch {
+            try {
+                apiService.endCall(callId)
+                Logger.d("Call record finalized for $callId")
+            } catch (e: Exception) {
+                Logger.w("Failed to finalize call $callId: ${e.message}")
+            }
+        }
+    }
+
     override fun getScheduledCalls(id: String): Flow<NetworkResult<List<ScheduledCall>>> = flow {
         emit(NetworkResult.Loading)
         try {
@@ -297,7 +310,10 @@ class CallRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun createRoom(inmateId: String, contactId: String, kioskId: String, callType: String): Flow<NetworkResult<CallSession>> = flow {
+    override fun createRoom(
+        inmateId: String, contactId: String, kioskId: String, callType: String,
+        callId: String?, roomId: String?
+    ): Flow<NetworkResult<CallSession>> = flow {
         emit(NetworkResult.Loading)
         try {
             val response = apiService.createCall(
@@ -305,7 +321,9 @@ class CallRepositoryImpl @Inject constructor(
                     inmateId = inmateId,
                     contactId = contactId,
                     kioskId = kioskId,
-                    type = if (callType.equals("Audio", ignoreCase = true)) "audio" else "video"
+                    type = if (callType.equals("Audio", ignoreCase = true)) "audio" else "video",
+                    callId = callId,
+                    roomId = roomId
                 )
             )
             if (response.success && response.data != null) {

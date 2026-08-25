@@ -65,6 +65,16 @@ class CallEngine @Inject constructor(
 
         /** How long a DISCONNECTED state must persist before the UI says so. */
         const val RECONNECT_DEBOUNCE_MS = 4_000L
+
+        /** Grace window before a peer-left (socket blip) actually ends the call. */
+        const val PEER_LEFT_GRACE_MS = 15_000L
+
+        /**
+         * With optimistic navigation the call record may legitimately not exist
+         * for the first seconds (POST /calls still in flight). If the status
+         * poll misses this many times in a row (~50s), creation truly failed.
+         */
+        const val POLL_FAIL_THRESHOLD = 15
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -151,17 +161,43 @@ class CallEngine @Inject constructor(
     /** Stops the session cleanly when the other side (or warden) ends it. */
     private fun observeRemoteEnd() {
         scope.launch {
+            var peerLeftGraceJob: Job? = null
             callRepository.observeSignalingEvents().collect { event ->
-                val remoteEnded = event.type == "call-ended" || event.type == "peer-left"
-                if (remoteEnded && callSessionActive) {
-                    Logger.d("Call ended remotely (${event.type}) - stopping session")
-                    callSessionActive = false
-                    pollJob?.cancel(); pollJob = null
-                    timerJob?.cancel(); timerJob = null
-                    reconnectJob?.cancel(); reconnectJob = null
-                    webRtcManager.endCall()
-                    _timerSeconds.value = 0
-                    _callState.value = CallUIState.DISCONNECTED
+                when (event.type) {
+                    // An explicit remote hang-up (or warden disconnect) is
+                    // final — end immediately, no grace.
+                    "call-ended" -> {
+                        peerLeftGraceJob?.cancel(); peerLeftGraceJob = null
+                        if (callSessionActive) {
+                            Logger.d("Call ended remotely (call-ended) - stopping session")
+                            endSession()
+                        }
+                    }
+                    // A socket blip on the OTHER side triggers peer-left well
+                    // before the P2P media path actually dies. Only end after a
+                    // grace window so a transient drop doesn't kill the call.
+                    // If the peer rejoins inside the window, cancel the pending end.
+                    "peer-left" -> {
+                        if (!callSessionActive) return@collect
+                        Logger.d("Peer left - starting ${PEER_LEFT_GRACE_MS}ms grace")
+                        peerLeftGraceJob?.cancel()
+                        peerLeftGraceJob = scope.launch {
+                            delay(PEER_LEFT_GRACE_MS)
+                            if (callSessionActive) {
+                                Logger.d("Peer did not return in grace - ending call")
+                                endSession()
+                            }
+                        }
+                    }
+                    "peer-joined" -> {
+                        // The other side came back (its socket reconnected) —
+                        // a peer-left was just a transient blip. Cancel ending.
+                        if (peerLeftGraceJob?.isActive == true) {
+                            Logger.d("Peer rejoined - cancelling peer-left grace end")
+                            peerLeftGraceJob?.cancel()
+                            peerLeftGraceJob = null
+                        }
+                    }
                 }
             }
         }
@@ -273,15 +309,31 @@ class CallEngine @Inject constructor(
     /**
      * Polls backend for the family member's journey. NO timeout — we wait as
      * long as it takes for the family to open/verify/join.
+     *
+     * With optimistic navigation the record may 404 for the first few seconds
+     * (POST /calls still in flight) — that is normal. But if it NEVER appears
+     * within [POLL_FAIL_THRESHOLD] polls, creation failed: surface "Call Failed".
      */
     private fun startFamilyPolling(callId: String?) {
         pollJob?.cancel()
         if (callId.isNullOrBlank()) return
         pollJob = scope.launch {
+            var consecutiveFailures = 0
             while (callSessionActive && _callState.value != CallUIState.CONNECTED) {
                 when (val r = callRepository.getCallStatus(callId).first()) {
-                    is NetworkResult.Success -> applySnapshot(r.data)
-                    else -> Logger.d("Call status poll unavailable, retrying...")
+                    is NetworkResult.Success -> {
+                        consecutiveFailures = 0
+                        applySnapshot(r.data)
+                    }
+                    else -> {
+                        consecutiveFailures++
+                        Logger.d("Call status poll unavailable ($consecutiveFailures/${POLL_FAIL_THRESHOLD}), retrying...")
+                        if (consecutiveFailures >= POLL_FAIL_THRESHOLD) {
+                            Logger.e("Call record never appeared - failing call")
+                            _callState.value = CallUIState.FAILED
+                            return@launch
+                        }
+                    }
                 }
                 delay(3000)
             }
@@ -326,7 +378,10 @@ class CallEngine @Inject constructor(
                     // of actual connected talk time.
                     if (_timerSeconds.value >= MAX_CALL_SECONDS) {
                         Logger.d("Max call duration (${MAX_CALL_SECONDS}s) reached - ending call")
-                        webRtcManager.endCall()
+                        // Fully tear down the session (state -> DISCONNECTED,
+                        // finalize the backend record) so the UI navigates off
+                        // instead of leaving a dead call screen.
+                        endSession()
                     }
                 }
             }
@@ -339,10 +394,24 @@ class CallEngine @Inject constructor(
     fun switchCamera() { webRtcManager.switchCamera() }
 
     fun endCall(context: Context) {
+        endSession()
+    }
+
+    /**
+     * Fully tears down an active call session: marks it inactive, cancels all
+     * background jobs, closes the WebRTC media path, finalizes the backend call
+     * record (so `POST /calls/:callId/end` persists duration/billing) and moves
+     * the UI state to DISCONNECTED so the call screen navigates away.
+     */
+    private fun endSession() {
         callSessionActive = false
         pollJob?.cancel(); pollJob = null
+        timerJob?.cancel(); timerJob = null
+        reconnectJob?.cancel(); reconnectJob = null
         webRtcManager.endCall()
         _timerSeconds.value = 0
+        _callState.value = CallUIState.DISCONNECTED
+        activeCallId?.let { callRepository.notifyCallEnded(it) }
     }
 
     fun teardownIfIdle() {

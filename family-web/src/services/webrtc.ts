@@ -225,27 +225,16 @@ class WebRtcService {
 
     this.pc.ontrack = (event) => {
       console.log('[WebRTC] Remote track received:', event.track.kind);
-      // The kiosk adds audio and video under SEPARATE stream ids
-      // (addTrack(audio,"kiosk-audio"), addTrack(video,"kiosk-video")), so
-      // ontrack fires once PER track with its own stream. If we only kept
-      // event.streams[0] we'd end up holding a single track — and, since video
-      // usually arrives last, we'd keep ONLY video -> "video shows, no sound".
-      // So we consolidate every incoming track into one canonical stream state.
+      // Always accumulate every inbound track into ONE live MediaStream. Never
+      // replace this.remoteStream with event.streams[0]: if a peer sent audio
+      // and video under separate stream ids you'd end up holding only the last
+      // track (video), orphaning audio -> "video shows, no sound". A MediaStream
+      // is live, so adding a track to the already-attached stream is reflected
+      // by the <video>/<audio> elements with no re-bind and no flicker.
       if (!this.remoteStream) {
         this.remoteStream = new MediaStream();
       }
       this.remoteStream.addTrack(event.track);
-
-      // Emit a FRESH snapshot (a NEW MediaStream object) on every ontrack. This
-      // is critical: the remote <video>/<audio> elements bind their playback to
-      // the srcObject handed to them, and many browsers silently ignore a track
-      // added ("mutated") into an already-playing stream. Giving each element a
-      // brand new object every time forces it to re-bind + re-play with the
-      // complete track list (audio AND video), closing the race where audio
-      // arrives after the video has already started playing.
-      const snapshot = new MediaStream();
-      this.remoteStream.getTracks().forEach((t) => snapshot.addTrack(t));
-      this.remoteStream = snapshot;
       this.emit('remote-stream', this.remoteStream);
     };
 
