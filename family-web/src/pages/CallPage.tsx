@@ -48,6 +48,9 @@ export function CallPage() {
   const [speakerOn, setSpeakerOn] = useState(true);
   const [callDuration, setCallDuration] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  // The live remote MediaStream object. Kept in state so the audio-sink
+  // re-attach effect can react to it arriving (not just status/speakerOn).
+  const [remoteStreamObj, setRemoteStreamObj] = useState<MediaStream | null>(null);
 
   // Auto-hiding controls: visible on any interaction, hidden after 3s idle.
   const [controlsVisible, setControlsVisible] = useState(true);
@@ -265,6 +268,21 @@ export function CallPage() {
       if (remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = stream;
       }
+      // Attach the SAME stream to the hidden <audio> sink so remote audio is
+      // audible in audio-only AND video calls (the <video> stays muted). Doing
+      // this here closes the race where the stream arrives before the
+      // status==='connected' effect runs.
+      if (audioElRef.current) {
+        if (audioElRef.current.srcObject !== stream) {
+          audioElRef.current.srcObject = stream;
+        }
+        audioElRef.current.muted = false;
+        audioElRef.current.volume = 1;
+        audioElRef.current.play().catch((e) =>
+          console.warn('[AudioDiag] audio.play() blocked on remote-stream:', e)
+        );
+      }
+      setRemoteStreamObj(stream);
     };
 
     const handleConnectionStateChange = (_event: string, data: unknown) => {
@@ -323,7 +341,7 @@ export function CallPage() {
   const audioElRef = useRef<HTMLAudioElement>(null);
   useEffect(() => {
     if (status !== 'connected') return;
-    const remote = webRtcService.getRemoteStream();
+    const remote = webRtcService.getRemoteStream() ?? remoteStreamObj;
     const local = webRtcService.getLocalStream();
     if (remote && remoteVideoRef.current && remoteVideoRef.current.srcObject !== remote) {
       remoteVideoRef.current.srcObject = remote;
@@ -352,7 +370,7 @@ export function CallPage() {
       a.volume = 1;
       a.play().catch((e) => console.warn('[AudioDiag] audio.play() blocked:', e));
     }
-  }, [status, speakerOn]);
+  }, [status, speakerOn, remoteStreamObj]);
 
   // Autoplay fallback: if the browser blocked audible playback, the first tap
   // or keypress (OTP typing counts) unlocks it — retry once.
