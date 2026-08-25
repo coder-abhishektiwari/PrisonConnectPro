@@ -52,6 +52,7 @@ export function CallPage() {
 
   // Auto-hiding controls: visible on any interaction, hidden after 3s idle.
   const [controlsVisible, setControlsVisible] = useState(true);
+  const [endingCall, setEndingCall] = useState(false);
   const controlsTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const bumpInteraction = useCallback(() => {
     setControlsVisible(true);
@@ -204,7 +205,7 @@ export function CallPage() {
       console.log('[Call] Call ended remotely');
       wasConnectedRef.current = false;
       reconnectingRef.current = true; // stop any in-flight reconnect loop
-      setStatusMessage('Ending call...');
+      setEndingCall(true);
       // Give the user a beat to see "Ending call...", then land on the lobby
       // screen which shows "Call ended" and blanks itself after 3s.
       setTimeout(() => {
@@ -577,6 +578,16 @@ export function CallPage() {
           }`}
         >
           <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+        </div>
+      )}
+
+      {/* "Ending call..." overlay when the inmate hangs up */}
+      {endingCall && (
+        <div className="absolute inset-0 z-20 bg-black/80 flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+            <p className="text-lg font-semibold text-white">Ending call...</p>
+          </div>
         </div>
       )}
 

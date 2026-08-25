@@ -464,6 +464,18 @@ class WebRtcManager @Inject constructor(
         }
     }
 
+    /** Diagnostics for one-way-audio complaints: mic track state + sender stats. */
+    fun logAudioHealth() {
+        val track = localAudioTrack
+        Logger.d(
+            "AudioHealth: localMic=${if (track == null) "MISSING" else "enabled=${track.enabled()} state=${track.state()}"}"
+        )
+        peerConnection?.senders?.forEach { sender ->
+            val t = sender.track()
+            Logger.d("AudioHealth: sender kind=${t?.kind()} enabled=${t?.enabled()} state=${t?.state()}")
+        }
+    }
+
     fun toggleVideo(enabled: Boolean) {
         localVideoTrack?.setEnabled(enabled)
     }

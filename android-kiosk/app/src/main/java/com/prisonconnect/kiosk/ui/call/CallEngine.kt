@@ -173,6 +173,9 @@ class CallEngine @Inject constructor(
                             _isSpeakerOn.value = true
                         }
                         webRtcManager.setSpeakerphoneOn(context, true)
+                        // Audio health diagnostics: proves the mic track is
+                        // live and enabled when family reports missing sound.
+                        webRtcManager.logAudioHealth()
                         startTimer()
                     }
                     PeerConnection.PeerConnectionState.CONNECTING -> {
