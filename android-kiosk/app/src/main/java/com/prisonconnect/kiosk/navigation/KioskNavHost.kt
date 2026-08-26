@@ -144,7 +144,7 @@ fun KioskNavHost(
             DashboardScreen(
                 windowSizeClass = windowSizeClass,
                 onContactClick = { contactId: String, name: String, type: String ->
-                    navController.navigate("lobby/${Uri.encode(contactId)}/${Uri.encode(name)}/Now/${Uri.encode(type)}/false/")
+                    navController.navigate("lobby/${Uri.encode(contactId)}/${Uri.encode(name)}/Now/${Uri.encode(type)}/false/-")
                 },
                 onContactDetailClick = { id: String ->
                     navController.navigate("contact_details/$id")
@@ -235,7 +235,7 @@ fun KioskNavHost(
         composable(KioskRoutes.CONTACT_LIST) {
             ContactListScreen(
                 onContactClick = { contactId: String, name: String, type: String ->
-                    navController.navigate("lobby/${Uri.encode(contactId)}/${Uri.encode(name)}/Now/${Uri.encode(type)}/false/")
+                    navController.navigate("lobby/${Uri.encode(contactId)}/${Uri.encode(name)}/Now/${Uri.encode(type)}/false/-")
                 },
                 onContactDetailClick = { id: String ->
                     navController.navigate("contact_details/$id")
@@ -252,7 +252,7 @@ fun KioskNavHost(
                     navController.navigate("schedule/${Uri.encode(id)}/${Uri.encode(name)}/${Uri.encode(type)}")
                 },
                 onInstantCall = { id: String, name: String, type: String ->
-                    navController.navigate("lobby/${Uri.encode(id)}/${Uri.encode(name)}/Now/${Uri.encode(type)}/false/")
+                    navController.navigate("lobby/${Uri.encode(id)}/${Uri.encode(name)}/Now/${Uri.encode(type)}/false/-")
                 }
             )
         }
