@@ -5,7 +5,7 @@ import com.prisonconnect.kiosk.config.AppConfig
 import com.prisonconnect.kiosk.core.Logger
 import com.prisonconnect.kiosk.models.call.*
 import com.prisonconnect.kiosk.models.common.ApiError
-import com.prisonconnect.kiosk.models.schedule.AvailableSlot
+import com.prisonconnect.kiosk.models.schedule.SlotsResponse
 import com.prisonconnect.kiosk.models.schedule.ScheduleRequest
 import com.prisonconnect.kiosk.network.NetworkResult
 import com.prisonconnect.kiosk.socket.SocketService
@@ -268,10 +268,10 @@ class CallRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun getAvailableSlots(contactId: String): Flow<NetworkResult<List<AvailableSlot>>> = flow {
+    override fun getBookedSlots(kioskId: String, date: String): Flow<NetworkResult<com.prisonconnect.kiosk.models.schedule.SlotsResponse>> = flow {
         emit(NetworkResult.Loading)
         try {
-            val response = apiService.getAvailableSlots(contactId)
+            val response = apiService.getBookedSlots(kioskId, date)
             if (response.success && response.data != null) {
                 emit(NetworkResult.Success(response.data))
             } else {
@@ -338,17 +338,6 @@ class CallRepositoryImpl @Inject constructor(
     }
 
     override fun checkSlotAvailability(contactId: String): Flow<NetworkResult<Boolean>> = flow {
-        emit(NetworkResult.Loading)
-        try {
-            val slotsResponse = apiService.getAvailableSlots(contactId)
-            if (slotsResponse.success && slotsResponse.data != null) {
-                val available = slotsResponse.data.any { it.isAvailable }
-                emit(NetworkResult.Success(available))
-            } else {
-                emit(NetworkResult.Failure(slotsResponse.error ?: ApiError("SLOT_FAILED", "Failed to check slot availability")))
-            }
-        } catch (e: Exception) {
-            emit(NetworkResult.Failure(ApiError("EXCEPTION", e.message ?: "Network exception")))
-        }
+        emit(NetworkResult.Success(true))
     }
 }

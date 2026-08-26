@@ -2017,21 +2017,31 @@ app.post('/rooms/join', requireAuth, asyncRoute(async (req, res) => {
 
 app.get('/schedule', requireAuth, asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('schedule.json')))));
 
-app.get('/schedule/slots/:contactId', requireAuth, asyncRoute(async (req, res) => {
-  // TODO: Replace with real warden-configured availability calendar.
-  // Current implementation generates next 3 days of hourly slots 9am-5pm.
-  const slots = [];
-  for (let d = 0; d < 3; d++) {
-    const date = new Date(Date.now() + d * 86400000).toISOString().slice(0, 10);
-    for (let h = 9; h < 17; h++) {
-      slots.push({
-        slotId: `SLOT-${date}-${h}`,
-        date, startTime: `${String(h).padStart(2, '0')}:00`, endTime: `${String(h + 1).padStart(2, '0')}:00`,
-        isAvailable: true
-      });
-    }
+app.get('/schedule/slots/:kioskId/:date', requireAuth, asyncRoute(async (req, res) => {
+  const { kioskId, date } = req.params;
+  if (!kioskId || !date) return sendError(res, 'INVALID_REQUEST', 'kioskId and date are required', 400);
+
+  // Verify kiosk exists and caller is in scope.
+  const kiosks = await readDb('kiosks.json');
+  const kiosk = kiosks.find((k) => k.kioskId === kioskId);
+  if (!kiosk) return sendError(res, 'INVALID_REFERENCE', 'kioskId does not exist', 422);
+  const callerKiosk = kioskScopeOf(req);
+  if (callerKiosk && kioskId !== callerKiosk) {
+    return sendError(res, 'FORBIDDEN', 'Cannot view slots for another kiosk', 403);
   }
-  return sendSuccess(res, slots);
+
+  const schedules = await readDb('schedule.json');
+  const booked = schedules.filter(
+    (s) => s.kioskId === kioskId && s.date === date && s.status !== 'cancelled'
+  ).map((s) => ({
+    scheduleId: s.scheduleId,
+    timeSlot: s.timeSlot,
+    callType: s.callType,
+    contactId: s.contactId,
+    inmateId: s.inmateId
+  }));
+
+  return sendSuccess(res, { kioskId, date, bookedSlots: booked });
 }));
 
 app.post('/schedule/book', requireAuth, asyncRoute(async (req, res) => {
@@ -2068,6 +2078,20 @@ app.post('/schedule/book', requireAuth, asyncRoute(async (req, res) => {
   const conflict = schedules.find((s) => s.inmateId === inmateId && s.date === date && s.timeSlot === timeSlot && s.status !== 'cancelled');
   if (conflict) {
     return sendError(res, 'SLOT_CONFLICT', 'This inmate already has a booking at this time', 409);
+  }
+
+  // 10-minute buffer: cannot book within 10 minutes of any existing booking on same kiosk+date.
+  const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+  const requestedMin = toMin(timeSlot.split('-')[0].trim());
+  const kioskBooked = schedules.filter(
+    (s) => s.kioskId === kioskId && s.date === date && s.status !== 'cancelled'
+  );
+  for (const b of kioskBooked) {
+    const bStart = toMin(b.timeSlot.split('-')[0].trim());
+    const bEnd = toMin(b.timeSlot.split('-')[1].trim());
+    if (requestedMin >= bStart - 9 && requestedMin <= bEnd + 9) {
+      return sendError(res, 'BUFFER_CONFLICT', `Cannot book within 10 minutes of an existing slot (${b.timeSlot})`, 409);
+    }
   }
 
   const newSchedule = {

@@ -13,7 +13,7 @@ import com.prisonconnect.kiosk.models.call.CreateCallRequest
 import com.prisonconnect.kiosk.models.call.RecordingUploadRequest
 import com.prisonconnect.kiosk.models.call.RecordingUploadResponse
 import com.prisonconnect.kiosk.models.call.CallStatusSnapshot
-import com.prisonconnect.kiosk.models.schedule.AvailableSlot
+import com.prisonconnect.kiosk.models.schedule.SlotsResponse
 import com.prisonconnect.kiosk.models.schedule.ScheduleRequest
 import com.prisonconnect.kiosk.models.wallet.WalletStatement
 import retrofit2.http.*
@@ -97,8 +97,8 @@ interface TrustApiService {
     @GET("calls/history/{id}")
     suspend fun getCallHistory(@Path("id") id: String): ApiResponse<List<CallHistory>>
 
-    @GET("schedule/slots/{contactId}")
-    suspend fun getAvailableSlots(@Path("contactId") contactId: String): ApiResponse<List<AvailableSlot>>
+    @GET("schedule/slots/{kioskId}/{date}")
+    suspend fun getBookedSlots(@Path("kioskId") kioskId: String, @Path("date") date: String): ApiResponse<com.prisonconnect.kiosk.models.schedule.SlotsResponse>
 
     @POST("schedule/book")
     suspend fun bookCall(@Body request: ScheduleRequest): ApiResponse<ScheduledCall>

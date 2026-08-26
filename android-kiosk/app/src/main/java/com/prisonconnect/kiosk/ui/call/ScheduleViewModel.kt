@@ -4,8 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.prisonconnect.kiosk.core.Constants
 import com.prisonconnect.kiosk.core.UiState
-import com.prisonconnect.kiosk.models.schedule.AvailableSlot
+import com.prisonconnect.kiosk.models.schedule.BookedSlot
 import com.prisonconnect.kiosk.models.schedule.ScheduleRequest
+import com.prisonconnect.kiosk.models.schedule.SlotsResponse
 import com.prisonconnect.kiosk.network.NetworkResult
 import com.prisonconnect.kiosk.repository.AuthRepository
 import com.prisonconnect.kiosk.repository.CallRepository
@@ -13,6 +14,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
 @HiltViewModel
@@ -21,16 +24,19 @@ class ScheduleViewModel @Inject constructor(
     private val authRepository: AuthRepository
 ) : ViewModel() {
 
-    private val _slotsState = MutableStateFlow<UiState<List<AvailableSlot>>>(UiState.Idle)
+    private val _slotsState = MutableStateFlow<UiState<SlotsResponse>>(UiState.Idle)
     val slotsState = _slotsState.asStateFlow()
 
     private val _scheduleState = MutableStateFlow<UiState<Unit>>(UiState.Idle)
     val scheduleState = _scheduleState.asStateFlow()
 
-    fun loadSlots(contactId: String) {
+    private val kioskId: String
+        get() = authRepository.getVerifiedKiosk()?.kioskId ?: Constants.KIOSK_ID
+
+    fun loadBookedSlots(date: String) {
         _slotsState.value = UiState.Loading
         viewModelScope.launch {
-            repository.getAvailableSlots(contactId).collect { result ->
+            repository.getBookedSlots(kioskId, date).collect { result ->
                 when (result) {
                     is NetworkResult.Loading -> _slotsState.value = UiState.Loading
                     is NetworkResult.Success -> _slotsState.value = UiState.Success(result.data)
@@ -45,7 +51,6 @@ class ScheduleViewModel @Inject constructor(
         _scheduleState.value = UiState.Loading
         viewModelScope.launch {
             val inmateId = authRepository.getInmateId() ?: Constants.KIOSK_ID
-            val kioskId = authRepository.getVerifiedKiosk()?.kioskId ?: Constants.KIOSK_ID
             repository.bookCall(
                 ScheduleRequest(
                     inmateId = inmateId,

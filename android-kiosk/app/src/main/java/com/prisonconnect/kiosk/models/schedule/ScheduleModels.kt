@@ -2,12 +2,18 @@ package com.prisonconnect.kiosk.models.schedule
 
 import com.google.gson.annotations.SerializedName
 
-data class AvailableSlot(
-    @SerializedName("slotId") val slotId: String,
+data class BookedSlot(
+    @SerializedName("scheduleId") val scheduleId: String,
+    @SerializedName("timeSlot") val timeSlot: String,
+    @SerializedName("callType") val callType: String,
+    @SerializedName("contactId") val contactId: String,
+    @SerializedName("inmateId") val inmateId: String
+)
+
+data class SlotsResponse(
+    @SerializedName("kioskId") val kioskId: String,
     @SerializedName("date") val date: String,
-    @SerializedName("startTime") val startTime: String,
-    @SerializedName("endTime") val endTime: String,
-    @SerializedName("isAvailable") val isAvailable: Boolean
+    @SerializedName("bookedSlots") val bookedSlots: List<BookedSlot>
 )
 
 data class ScheduleRequest(

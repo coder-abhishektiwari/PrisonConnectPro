@@ -1,7 +1,7 @@
 package com.prisonconnect.kiosk.repository
 
 import com.prisonconnect.kiosk.models.call.*
-import com.prisonconnect.kiosk.models.schedule.AvailableSlot
+import com.prisonconnect.kiosk.models.schedule.SlotsResponse
 import com.prisonconnect.kiosk.models.schedule.ScheduleRequest
 import com.prisonconnect.kiosk.network.NetworkResult
 import kotlinx.coroutines.flow.Flow
@@ -15,7 +15,7 @@ interface CallRepository {
 
     fun getScheduledCalls(id: String): Flow<NetworkResult<List<ScheduledCall>>>
     fun getCallHistory(id: String): Flow<NetworkResult<List<CallHistory>>>
-    fun getAvailableSlots(contactId: String): Flow<NetworkResult<List<AvailableSlot>>>
+    fun getBookedSlots(kioskId: String, date: String): Flow<NetworkResult<com.prisonconnect.kiosk.models.schedule.SlotsResponse>>
     fun bookCall(request: ScheduleRequest): Flow<NetworkResult<ScheduledCall>>
     fun cancelBooking(bookingId: String): Flow<NetworkResult<Unit>>
     fun createRoom(
