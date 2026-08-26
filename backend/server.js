@@ -1324,9 +1324,15 @@ app.post('/calls', requireAuth, asyncRoute(async (req, res) => {
     return sendError(res, 'INVALID_REQUEST', 'inmateId, contactId and kioskId are required', 400);
   }
 
-  const [inmates, contacts, kiosks, existingCalls] = await Promise.all([
-    readDb('inmates.json'), readDb('contacts.json'), readDb('kiosks.json'), readDb('calls.json')
+  const [inmates, contacts, kiosks, existingCalls, scheduleDocs] = await Promise.all([
+    readDb('inmates.json'), readDb('contacts.json'), readDb('kiosks.json'), readDb('calls.json'), readDb('schedule.json')
   ]);
+  // Scheduled call: reuse the link token that was already texted to the
+  // family at booking time — no duplicate link SMS, no new link.
+  const bookedSchedule = callData.scheduleId
+    ? scheduleDocs.find((s) => s.scheduleId === callData.scheduleId && s.inmateId === callData.inmateId)
+    : null;
+  const scheduledLinkToken = bookedSchedule?.linkToken || null;
 
   const inmate = inmates.find((i) => i.inmateId === callData.inmateId);
   if (!inmate) return sendError(res, 'INVALID_REFERENCE', 'inmateId does not exist', 422);
@@ -1355,8 +1361,9 @@ app.post('/calls', requireAuth, asyncRoute(async (req, res) => {
   const alreadyActive = existingCalls.find((c) => c.inmateId === callData.inmateId && c.status === 'active');
   if (alreadyActive) return sendError(res, 'CALL_IN_PROGRESS', 'Inmate already has an active call', 409);
 
-  // Family secure-call token material.
-  const linkToken = `LINK-${uuidv4().replace(/-/g, '').slice(0, 20).toUpperCase()}`;
+  // Family secure-call token material. A scheduled call reuses the token
+  // already texted at booking time; an instant call mints a fresh one.
+  const linkToken = scheduledLinkToken || `LINK-${uuidv4().replace(/-/g, '').slice(0, 20).toUpperCase()}`;
   const otp = String(Math.floor(100000 + Math.random() * 900000));
 
   const [settingsDocs, pricingDocs] = await Promise.all([readDb('settings.json'), readDb('pricing.json')]);
@@ -1435,38 +1442,43 @@ app.post('/calls', requireAuth, asyncRoute(async (req, res) => {
 
   // ==== FAMILY LINK SMS (background) ====
   // Dispatched AFTER the response is sent — SMS gateway latency must never
-  // delay call setup on the kiosk. Failures only log; they can never fail
-  // the call itself.
-  setImmediate(() => {
-    (async () => {
-      const familyPhone = contactPhone(contact);
-      if (!familyPhone) {
-        console.warn('[calls] contact has no phone number — skipping family link SMS');
-        return;
-      }
-      const smsResult = await sendSms({
-        phone: familyPhone,
-        message: buildLinkSms(newCall),
-        kind: 'link',
-        callId: newCall.callId
+  // delay call setup on the kiosk. A scheduled call already texted the link
+  // at booking time, so only OTP goes out for those (no duplicate cost).
+  // Failures only log; they can never fail the call itself.
+  if (!scheduledLinkToken) {
+    setImmediate(() => {
+      (async () => {
+        const familyPhone = contactPhone(contact);
+        if (!familyPhone) {
+          console.warn('[calls] contact has no phone number — skipping family link SMS');
+          return;
+        }
+        const smsResult = await sendSms({
+          phone: familyPhone,
+          message: buildLinkSms(newCall),
+          kind: 'link',
+          callId: newCall.callId
+        });
+        await updateDb('calls.json', (calls) => {
+          const idx = calls.findIndex((c) => c.callId === newCall.callId);
+          if (idx === -1) return { data: calls, result: null };
+          calls[idx].sms = {
+            sent: true,
+            sentTo: maskedPhone(familyPhone),
+            linkToken: newCall.linkToken,
+            linkUrl: buildCallLink(newCall.linkToken),
+            transport: smsResult.provider,
+            loggedAt: smsResult.loggedAt
+          };
+          return { data: calls, result: calls[idx] };
+        });
+      })().catch((err) => {
+        console.error('[calls] family link SMS dispatch failed:', err.message);
       });
-      await updateDb('calls.json', (calls) => {
-        const idx = calls.findIndex((c) => c.callId === newCall.callId);
-        if (idx === -1) return { data: calls, result: null };
-        calls[idx].sms = {
-          sent: true,
-          sentTo: maskedPhone(familyPhone),
-          linkToken: newCall.linkToken,
-          linkUrl: buildCallLink(newCall.linkToken),
-          transport: smsResult.provider,
-          loggedAt: smsResult.loggedAt
-        };
-        return { data: calls, result: calls[idx] };
-      });
-    })().catch((err) => {
-      console.error('[calls] family link SMS dispatch failed:', err.message);
     });
-  });
+  } else {
+    console.log(`[calls] scheduled call ${newCall.callId} — link already sent at booking, skipping link SMS`);
+  }
 
   return sendSuccess(res, newCall, 201);
 }));
@@ -2036,7 +2048,37 @@ app.post('/schedule/book', requireAuth, asyncRoute(async (req, res) => {
     inmateId, contactId, kioskId, date, timeSlot,
     callType: callType || 'video', status: 'scheduled', createdAt: new Date().toISOString()
   };
+  // Pre-mint the family link token at booking time. The SMS carries this
+  // link; when the kiosk later starts the call with this scheduleId the SAME
+  // token is reused, so the family never gets a duplicate link SMS and the
+  // link only becomes usable once the call actually exists.
+  const linkToken = `LINK-${uuidv4().replace(/-/g, '').slice(0, 20).toUpperCase()}`;
+  newSchedule.linkToken = linkToken;
   await updateDb('schedule.json', (s) => ({ data: [...s, newSchedule], result: newSchedule }));
+
+  // Notify the family member right away: who, from where, when + the link.
+  setImmediate(() => {
+    (async () => {
+      const contact = contacts.find((c) => c.contactId === contactId);
+      const familyPhone = contactPhone(contact);
+      if (!familyPhone) {
+        console.warn('[schedule] contact has no phone — skipping booking SMS');
+        return;
+      }
+      const prisons = await readDb('prisons.json');
+      const prison = prisons.find((p) => p.prisonId === inmate.prisonId || p.prisonId === kiosk.prisonId);
+      const jailName = prison?.name || 'the correctional facility';
+      const inmateName = `${inmate.firstName || ''} ${inmate.lastName || ''}`.trim() || 'An inmate';
+      const message =
+        `${inmateName} from ${jailName} has scheduled a ${newSchedule.callType} call ` +
+        `with you on ${date} at ${timeSlot}. Please don't forget to join on time. ` +
+        `Call link: ${buildCallLink(linkToken)}`;
+      await sendSms({ phone: familyPhone, message, kind: 'link', callId: newSchedule.scheduleId });
+    })().catch((err) => {
+      console.error('[schedule] booking SMS failed:', err.message);
+    });
+  });
+
   return sendSuccess(res, newSchedule, 201);
 }));
 
