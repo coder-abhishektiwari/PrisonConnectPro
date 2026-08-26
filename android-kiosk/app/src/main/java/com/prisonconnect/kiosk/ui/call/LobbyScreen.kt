@@ -149,11 +149,16 @@ fun LobbyScreen(
             )
         },
         onConfirm = {
-            viewModel.createRoom(
-                contactId = contactId,
-                callType = if (isVideo) "Video" else "Audio",
-                scheduleId = scheduleId.ifBlank { null }
-            )
+            // Scheduled calls are billed too — empty wallet blocks them as well.
+            if (balance <= 0.0) {
+                showInsufficientBalance = true
+            } else {
+                viewModel.createRoom(
+                    contactId = contactId,
+                    callType = if (isVideo) "Video" else "Audio",
+                    scheduleId = scheduleId.ifBlank { null }
+                )
+            }
         },
         onScheduleCall = onScheduleCall,
         onCallNow = {
@@ -169,7 +174,10 @@ fun LobbyScreen(
             }
         },
         onCancel = {
-            viewModel.cancelBooking("mock-booking-id")
+            // Cancel the REAL booking (the schedule entry) when we know it.
+            if (scheduleId.isNotBlank()) {
+                viewModel.cancelBooking(scheduleId)
+            }
         },
         onBack = onBack
     )
