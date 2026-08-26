@@ -1795,21 +1795,81 @@ app.post('/calls/:callId/end', requireAuth, asyncRoute(async (req, res) => {
     return sendError(res, 'NOT_FOUND', 'Call not found', 404);
   }
 
+  // Billing: a new minute is charged the moment it starts (ceiling), matching
+  // the kiosk's live cost display exactly.
+  const startMs = new Date(existing.startTime).getTime();
+  const durationSec = Math.max(0, (Date.now() - startMs) / 1000);
+  const billedMinutes = Math.ceil(durationSec / 60);
+  const ratePerMinute = Number(existing.ratePerMinute) || 0;
+  const chargeAmount = +(billedMinutes * ratePerMinute).toFixed(2);
+
   const updatedCall = await updateDb('calls.json', (calls) => {
     const idx = calls.findIndex((c) => c.callId === callId);
     if (idx === -1) return { data: calls, result: null };
-    const startMs = new Date(calls[idx].startTime).getTime();
     calls[idx] = {
       ...calls[idx],
       status: 'completed',
       endTime: new Date().toISOString(),
-      // Math.round instead of Math.floor â€” a 59s call should bill as 1 min, not 0.
-      durationMinutes: Math.round((Date.now() - startMs) / 60000)
+      durationMinutes: billedMinutes,
+      chargeAmount
     };
     return { data: calls, result: calls[idx] };
   });
 
   if (!updatedCall) return sendError(res, 'NOT_FOUND', 'Call not found', 404);
+
+  // ==== WALLET DEDUCTION ====
+  // The whole call charge is deducted from the inmate's wallet in one shot.
+  // The balance is ledger-derived and clamped at zero — it can never go
+  // negative even if the wallet could not cover the full call.
+  if (chargeAmount > 0 && updatedCall.inmateId) {
+    try {
+      const inmates = await readDb('inmates.json');
+      const inmate =
+        inmates.find((i) => i.inmateId === updatedCall.inmateId) ||
+        inmates.find((i) => i.assignedKioskId === updatedCall.inmateId) ||
+        null;
+      const wallets = await readDb('wallets.json');
+      const wallet =
+        wallets.find((w) => inmate?.walletId && w.walletId === inmate.walletId) ||
+        wallets.find((w) => w.inmateId === updatedCall.inmateId) ||
+        wallets.find((w) => w.inmateId === `INM-${updatedCall.inmateId}`) ||
+        null;
+
+      if (wallet) {
+        await updateDb('transactions.json', (all) => {
+          const tx = {
+            transactionId: `TXN-${uuidv4().substring(0, 8).toUpperCase()}`,
+            walletId: wallet.walletId,
+            inmateId: updatedCall.inmateId,
+            callId,
+            type: 'charge',
+            amount: chargeAmount,
+            currency: wallet.currency || 'INR',
+            status: 'completed',
+            description: `Call charge (${billedMinutes} min @ ₹${ratePerMinute}/min)`,
+            timestamp: new Date().toISOString()
+          };
+          return { data: [...all, tx], result: tx };
+        });
+        await updateDb('wallets.json', (all) => {
+          const idx = all.findIndex((w) => w.walletId === wallet.walletId);
+          if (idx === -1) return { data: all, result: null };
+          // Clamp at zero — never negative.
+          all[idx].balance = Math.max(0, (Number(all[idx].balance) || 0) - chargeAmount);
+          all[idx].totalSpent = (Number(all[idx].totalSpent) || 0) + chargeAmount;
+          return { data: all, result: all[idx] };
+        });
+        console.log(`[wallet] charged ₹${chargeAmount} to ${wallet.walletId} for ${callId}`);
+      } else {
+        console.warn(`[wallet] no wallet found for inmate ${updatedCall.inmateId} — charge skipped`);
+      }
+    } catch (err) {
+      // A failed deduction must never fail the call end itself.
+      console.error('[wallet] deduction failed:', err.message);
+    }
+  }
+
 
   await updateDb('recordings.json', (recordings) => {
     const idx = recordings.findIndex((r) => r.callId === callId);

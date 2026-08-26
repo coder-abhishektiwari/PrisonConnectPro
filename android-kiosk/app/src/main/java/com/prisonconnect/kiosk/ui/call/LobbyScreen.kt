@@ -6,6 +6,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DateRange
@@ -20,6 +21,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -38,6 +42,7 @@ import com.prisonconnect.kiosk.ui.theme.PrisonKioskTheme
 
 // Color Palette
 private val PrimaryNavy = Color(0xFF003366)
+private val AlertRed = Color(0xFFE53935)
 private val LightScreenBg = Color(0xFFF4F7FA)
 private val CardBorderColor = Color(0xFFE2E8F0)
 private val TextDark = Color(0xFF1E293B)
@@ -65,6 +70,37 @@ fun LobbyScreen(
     val roomStatus by viewModel.roomStatus.collectAsState()
     val remainingTime by viewModel.remainingTime.collectAsState()
     val cancelState by viewModel.cancelState.collectAsState()
+
+    // No balance -> no call. The warden/top-up flow adds money later; until
+    // then the inmate simply cannot place a call with an empty wallet.
+    var showInsufficientBalance by remember { mutableStateOf(false) }
+
+    if (showInsufficientBalance) {
+        AlertDialog(
+            onDismissRequest = { showInsufficientBalance = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, tint = AlertRed)
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text("Insufficient Balance", fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Text(
+                    "Your wallet balance is ₹${String.format("%.2f", balance)}. " +
+                        "Please recharge your wallet to make a call."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showInsufficientBalance = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy)
+                ) {
+                    Text("OK")
+                }
+            }
+        )
+    }
 
     LaunchedEffect(contactId) {
         viewModel.checkSlot(contactId)
@@ -118,10 +154,15 @@ fun LobbyScreen(
         },
         onScheduleCall = onScheduleCall,
         onCallNow = {
-            viewModel.createRoom(
-                contactId = contactId,
-                callType = if (isVideo) "Video" else "Audio"
-            )
+            // Empty wallet -> warn instead of placing a call.
+            if (balance <= 0.0) {
+                showInsufficientBalance = true
+            } else {
+                viewModel.createRoom(
+                    contactId = contactId,
+                    callType = if (isVideo) "Video" else "Audio"
+                )
+            }
         },
         onCancel = {
             viewModel.cancelBooking("mock-booking-id")
