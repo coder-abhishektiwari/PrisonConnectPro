@@ -113,6 +113,7 @@ data class CallStatusSnapshot(
     @SerializedName("callId") val callId: String? = null,
     @SerializedName("status") val status: String? = null,
     @SerializedName("linkOpenedAt") val linkOpenedAt: String? = null,
+    @SerializedName("ratePerMinute") val ratePerMinute: Double? = null,
     @SerializedName("family") val family: FamilyProgress? = null
 ) {
     data class FamilyProgress(

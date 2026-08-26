@@ -43,6 +43,7 @@ class CallViewModel @Inject constructor(
     val deviceVerifyFailed: StateFlow<Boolean> = engine.deviceVerifyFailed
     val otpVerifyFailed: StateFlow<Boolean> = engine.otpVerifyFailed
     val familyLeft: StateFlow<Boolean> = engine.familyLeft
+    val liveCost: StateFlow<Double> = engine.liveCost
 
     val eglContext: EglBase.Context
         get() = engine.eglContext

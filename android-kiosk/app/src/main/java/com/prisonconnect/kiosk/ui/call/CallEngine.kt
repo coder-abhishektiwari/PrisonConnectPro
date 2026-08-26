@@ -133,6 +133,16 @@ class CallEngine @Inject constructor(
     private val _familyLeft = MutableStateFlow(false)
     val familyLeft = _familyLeft.asStateFlow()
 
+    /** Per-minute rate for THIS call (video/audio differ) — from the call record. */
+    private val _ratePerMinute = MutableStateFlow(0.0)
+
+    /**
+     * Live billing: ceil(seconds / 60) × rate. A new minute is charged the
+     * moment it STARTS, even if it is not consumed in full.
+     */
+    private val _liveCost = MutableStateFlow(0.0)
+    val liveCost = _liveCost.asStateFlow()
+
     /** UI badge: the kiosk always records calls (KioskCallRecorder). */
     private val _isRecording = MutableStateFlow(true)
     val isRecording = _isRecording.asStateFlow()
@@ -311,6 +321,8 @@ class CallEngine @Inject constructor(
         _deviceVerifyFailed.value = false
         _otpVerifyFailed.value = false
         _familyLeft.value = false
+        _ratePerMinute.value = 0.0
+        _liveCost.value = 0.0
         _callState.value = CallUIState.WAITING
         timerJob?.cancel(); timerJob = null
         reconnectJob?.cancel(); reconnectJob = null
@@ -359,6 +371,8 @@ class CallEngine @Inject constructor(
 
     private fun applySnapshot(s: CallStatusSnapshot) {
         val fam = s.family ?: return
+        // Per-minute billing rate for this call (video ₹2.5 / audio ₹1.0 etc.).
+        s.ratePerMinute?.takeIf { it > 0 }?.let { _ratePerMinute.value = it }
         // Verification failures (wrong OTP / device mismatch) — the progress
         // screen marks these steps red until they succeed.
         _deviceVerifyFailed.value = (fam.deviceFailedAttempts ?: 0) > 0
@@ -409,6 +423,10 @@ class CallEngine @Inject constructor(
                 if (connected) {
                     delay(1000)
                     _timerSeconds.value++
+                    // Live billing: charge the new minute the moment it starts
+                    // (ceiling), even if it is not consumed in full.
+                    val billedMinutes = kotlin.math.ceil(_timerSeconds.value / 60.0).toInt()
+                    _liveCost.value = billedMinutes * _ratePerMinute.value
                     // Max call duration: the call auto-ends after 5 minutes
                     // of actual connected talk time.
                     if (_timerSeconds.value >= MAX_CALL_SECONDS) {

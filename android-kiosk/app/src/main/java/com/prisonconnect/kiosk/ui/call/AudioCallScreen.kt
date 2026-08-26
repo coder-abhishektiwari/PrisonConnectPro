@@ -66,6 +66,7 @@ fun AudioCallScreen(
     val isNetworkAvailable by viewModel.isNetworkAvailable.collectAsState()
     val isRecording by viewModel.isRecording.collectAsState()
     val inmateProfile by viewModel.inmateProfile.collectAsState()
+    val liveCost by viewModel.liveCost.collectAsState()
 
     var hasPermissions by remember {
         mutableStateOf(
@@ -127,6 +128,7 @@ fun AudioCallScreen(
             isNetworkAvailable = isNetworkAvailable,
             isRecording = isRecording,
             inmateProfile = inmateProfile,
+            liveCost = liveCost,
             onMuteToggle = { viewModel.toggleMute() },
             onSpeakerToggle = { viewModel.toggleSpeaker() },
             onEndCall = {
@@ -176,6 +178,7 @@ fun AudioCallContent(
     isNetworkAvailable: Boolean,
     isRecording: Boolean,
     inmateProfile: InmateProfile?,
+    liveCost: Double,
     onMuteToggle: () -> Unit,
     onSpeakerToggle: () -> Unit,
     onEndCall: () -> Unit
@@ -191,7 +194,8 @@ fun AudioCallContent(
         String.format("%02d:%02d", mins, secs)
     }
 
-    val currentCost = ((timerSeconds / 60) + 1) * 1.00
+    // Live billing from the engine: ceil(minutes) × actual per-minute rate.
+    val currentCost = liveCost
 
     Scaffold(
         containerColor = LightScreenBg
@@ -674,6 +678,7 @@ fun PreviewAudioCallMobile() {
             isNetworkAvailable = true,
             isRecording = true,
             inmateProfile = null,
+            liveCost = 3.00,
             onMuteToggle = {},
             onSpeakerToggle = {},
             onEndCall = {}

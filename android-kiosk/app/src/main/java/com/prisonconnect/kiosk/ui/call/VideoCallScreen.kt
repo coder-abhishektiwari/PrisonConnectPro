@@ -137,6 +137,7 @@ fun VideoCallScreen(
 
     val localTrack by viewModel.localVideoTrack.collectAsState()
     val remoteTrack by viewModel.remoteVideoTrack.collectAsState()
+    val liveCost by viewModel.liveCost.collectAsState()
 
     var hasPermissions by remember {
         mutableStateOf(
@@ -206,6 +207,7 @@ fun VideoCallScreen(
             localTrack = localTrack,
             remoteTrack = remoteTrack,
             eglContext = viewModel.eglContext,
+            liveCost = liveCost,
             onMuteToggle = { viewModel.toggleMute() },
             onVideoToggle = { viewModel.toggleCamera() },
             onSpeakerToggle = { viewModel.toggleSpeaker() },
@@ -283,6 +285,7 @@ fun VideoCallContent(
     localTrack: VideoTrack?,
     remoteTrack: VideoTrack?,
     eglContext: org.webrtc.EglBase.Context?,
+    liveCost: Double,
     onMuteToggle: () -> Unit,
     onVideoToggle: () -> Unit,
     onSpeakerToggle: () -> Unit,
@@ -311,7 +314,9 @@ fun VideoCallContent(
         String.format("%02d:%02d", mins, secs)
     }
 
-    val currentCost = ((timerSeconds / 60) + 1) * 1.00
+    // Live billing from the engine: ceil(minutes) × actual per-minute rate.
+    // ₹0.00 until the first second of connected talk time.
+    val currentCost = liveCost
 
     LaunchedEffect(lastInteractionTime) {
         delay(6000)
@@ -785,6 +790,7 @@ fun VideoCallContentMobilePreview() {
             callState = CallUIState.CONNECTED,
             isNetworkAvailable = true,
             isRecording = true,
+            liveCost = 7.50,
             inmateProfile = InmateProfile(
                 inmateId = "INM123",
                 firstName = "Rahul",

@@ -25,6 +25,7 @@ import com.prisonconnect.kiosk.ui.admin.DeviceInfoScreen
 import com.prisonconnect.kiosk.ui.admin.ManagePrisonersScreen
 import com.prisonconnect.kiosk.ui.receipt.CallSummaryScreen
 import com.prisonconnect.kiosk.ui.MainViewModel
+import com.prisonconnect.kiosk.ui.call.CallViewModel
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
@@ -331,12 +332,15 @@ fun KioskNavHost(
         composable(KioskRoutes.VIDEO_CALL) { backStackEntry ->
             val contactName = backStackEntry.arguments?.getString("contactName") ?: ""
             val roomId = backStackEntry.arguments?.getString("roomId") ?: ""
+            // Same singleton engine as the call screens — real live billing.
+            val callViewModel: CallViewModel = hiltViewModel()
+            val liveCost by callViewModel.liveCost.collectAsState()
             VideoCallScreen(
                 contactName = contactName,
                 roomId = roomId,
                 windowSizeClass = windowSizeClass,
                 onEndCall = {
-                    navController.navigate("call_summary/$contactName/10.00") {
+                    navController.navigate("call_summary/$contactName/${String.format("%.2f", liveCost)}") {
                         popUpTo(KioskRoutes.VIDEO_CALL) { inclusive = true }
                     }
                 },
@@ -346,12 +350,14 @@ fun KioskNavHost(
         composable(KioskRoutes.AUDIO_CALL) { backStackEntry ->
             val contactName = backStackEntry.arguments?.getString("contactName") ?: ""
             val roomId = backStackEntry.arguments?.getString("roomId") ?: ""
+            val callViewModel: CallViewModel = hiltViewModel()
+            val liveCost by callViewModel.liveCost.collectAsState()
             AudioCallScreen(
                 contactName = contactName,
                 roomId = roomId,
                 windowSizeClass = windowSizeClass,
                 onEndCall = {
-                    navController.navigate("call_summary/$contactName/5.00") {
+                    navController.navigate("call_summary/$contactName/${String.format("%.2f", liveCost)}") {
                         popUpTo(KioskRoutes.AUDIO_CALL) { inclusive = true }
                     }
                 },
