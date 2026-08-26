@@ -5,8 +5,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountBalanceWallet
@@ -101,55 +103,25 @@ fun WalletScreen(
                                 .padding(24.dp),
                             horizontalArrangement = Arrangement.spacedBy(20.dp)
                         ) {
-                            Column(
-                                modifier = Modifier.weight(0.7f),
-                                verticalArrangement = Arrangement.spacedBy(16.dp)
-                            ) {
-                                WalletBalanceCard(data = s.data)
-                                MoneySummaryCard(data = s.data)
-                            }
-                            WalletTransactionList(
+                            WalletSummaryCard(
                                 data = s.data,
-                                modifier = Modifier.weight(0.9f)
+                                modifier = Modifier.weight(0.8f)
+                            )
+                            WalletTransactionsCard(
+                                data = s.data,
+                                modifier = Modifier.weight(1f)
                             )
                         }
                     } else {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(16.dp),
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                                .padding(16.dp),
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
-                            item { WalletBalanceCard(data = s.data) }
-                            item { MoneySummaryCard(data = s.data) }
-                            item {
-                                Text(
-                                    "Transactions",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = PrimaryDark
-                                )
-                            }
-                            if (s.data.transactions.isEmpty()) {
-                                item {
-                                    Card(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(16.dp),
-                                        colors = CardDefaults.cardColors(containerColor = Color.White)
-                                    ) {
-                                        Text(
-                                            "No transactions yet.",
-                                            style = MaterialTheme.typography.bodyLarge,
-                                            textAlign = TextAlign.Center,
-                                            modifier = Modifier.padding(24.dp),
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                            } else {
-                                items(s.data.transactions) { tx ->
-                                    TransactionRow(tx)
-                                }
-                            }
+                            WalletSummaryCard(data = s.data)
+                            WalletTransactionsCard(data = s.data)
                         }
                     }
                 }
@@ -159,145 +131,120 @@ fun WalletScreen(
     }
 }
 
+/** Balance + Total Spent — ek hi card me side by side. */
 @Composable
-private fun WalletBalanceCard(data: WalletViewModel.WalletUiData) {
+private fun WalletSummaryCard(data: WalletViewModel.WalletUiData, modifier: Modifier = Modifier) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = PrimaryDark)
-    ) {
-        Column(modifier = Modifier.padding(24.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.AccountBalanceWallet,
-                    contentDescription = null,
-                    tint = Color(0xFFA8F5A2)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    "Jail Account Balance",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color(0xFFCFD8E3)
-                )
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = "₹${String.format("%.2f", data.balance)}",
-                style = MaterialTheme.typography.displayLarge,
-                fontWeight = FontWeight.Black,
-                color = Color.White
-            )
-            if (data.lastRecharge != null && data.lastRechargeAmount != null) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    "Last recharge ₹${String.format("%.2f", data.lastRechargeAmount)} on ${formatRechargeDate(data.lastRecharge)}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFFB0BFCE)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun MoneySummaryCard(data: WalletViewModel.WalletUiData) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
+                .padding(vertical = 20.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            SummaryItem(
-                icon = Icons.Default.RemoveCircle,
-                title = "Total Spent",
-                value = "₹${String.format("%.2f", data.totalDeducted)}",
-                valueColor = MoneyRed,
-                bg = MoneyRedBg
+            // Balance (left)
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(
+                    imageVector = Icons.Default.AccountBalanceWallet,
+                    contentDescription = null,
+                    tint = Color(0xFFA8F5A2),
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    "Balance",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFFCFD8E3)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "₹${String.format("%.2f", data.balance)}",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White
+                )
+            }
+            // Divider
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .height(56.dp)
+                    .background(Color(0xFF2A4568))
             )
+            // Total Spent (right)
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(
+                    imageVector = Icons.Default.RemoveCircle,
+                    contentDescription = null,
+                    tint = Color(0xFFFFB4AB),
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    "Total Spent",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFFCFD8E3)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "₹${String.format("%.2f", data.totalDeducted)}",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Black,
+                    color = Color(0xFFFFB4AB)
+                )
+            }
         }
     }
 }
 
+/** Transactions — simple, compact card with a capped scrollable list. */
 @Composable
-private fun SummaryItem(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    title: String,
-    value: String,
-    valueColor: Color,
-    bg: Color
-) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = valueColor,
-            modifier = Modifier
-                .size(44.dp)
-                .background(bg, CircleShape)
-                .padding(8.dp)
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = title,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = value,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            color = valueColor
-        )
-    }
-}
-
-@Composable
-private fun WalletTransactionList(
-    data: WalletViewModel.WalletUiData,
-    modifier: Modifier = Modifier
-) {
-    Column(modifier = modifier) {
-        Text(
-            "Transactions",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = PrimaryDark
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        if (data.transactions.isEmpty()) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White)
-            ) {
+private fun WalletTransactionsCard(data: WalletViewModel.WalletUiData, modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                "Transactions",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = PrimaryDark
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            if (data.transactions.isEmpty()) {
                 Text(
                     "No transactions yet.",
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(24.dp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 20.dp)
                 )
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(data.transactions) { tx ->
-                    TransactionRow(tx)
+            } else {
+                Column(
+                    modifier = Modifier
+                        .heightIn(max = 300.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    data.transactions.forEach { tx -> TransactionRow(tx) }
                 }
             }
         }
     }
 }
-
 @Composable
 private fun TransactionRow(tx: WalletTransaction) {
     val isDebit = tx.isDebit

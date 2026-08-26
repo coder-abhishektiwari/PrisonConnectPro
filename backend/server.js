@@ -1359,7 +1359,21 @@ app.post('/calls', requireAuth, asyncRoute(async (req, res) => {
   }
 
   const alreadyActive = existingCalls.find((c) => c.inmateId === callData.inmateId && c.status === 'active');
-  if (alreadyActive) return sendError(res, 'CALL_IN_PROGRESS', 'Inmate already has an active call', 409);
+  if (alreadyActive) {
+    // Stale-active sweep: a call whose entire max duration (+2 min grace) has
+    // elapsed can only be an orphan (kiosk killed mid-call, /end never ran).
+    // Finalize it — billed up to the cap, wallet charged — then proceed, so
+    // one dead record can never block every future call.
+    const maxMs = (Number(alreadyActive.maxDurationMinutes) || 15) * 60000;
+    const graceMs = 2 * 60000;
+    const startMs = new Date(alreadyActive.startTime || Date.now()).getTime();
+    if (Date.now() - startMs > maxMs + graceMs) {
+      console.warn(`[calls] sweeping stale active call ${alreadyActive.callId}`);
+      await finalizeCall(alreadyActive, startMs + maxMs);
+    } else {
+      return sendError(res, 'CALL_IN_PROGRESS', 'Inmate already has an active call', 409);
+    }
+  }
 
   // Family secure-call token material. A scheduled call reuses the token
   // already texted at booking time; an instant call mints a fresh one.
@@ -1378,7 +1392,10 @@ app.post('/calls', requireAuth, asyncRoute(async (req, res) => {
     prisonId: kiosk.prisonId || inmate.prisonId || null,
     facility: kiosk.prisonId || inmate.prisonId || null,
     type: callData.type || 'video',
-    status: 'scheduled',
+    // 'active' from the moment of creation: this is what powers the
+    // CALL_IN_PROGRESS double-call guard. /end (or the stale sweep) moves it
+    // to 'completed'.
+    status: 'active',
     startTime: callData.startTime || new Date().toISOString(),
     endTime: null, durationMinutes: 0,
     recordingEnabled: callData.recordingEnabled !== undefined ? callData.recordingEnabled : true,
@@ -1828,41 +1845,38 @@ app.get('/calls/history/:id', requireAuth, asyncRoute(async (req, res) => {
   return sendSuccess(res, history);
 }));
 
-app.post('/calls/:callId/end', requireAuth, asyncRoute(async (req, res) => {
-  const { callId } = req.params;
-
-  const existing = (await readDb('calls.json')).find((c) => c.callId === callId);
-  if (!existing || !inAdminScope(req, existing)) {
-    return sendError(res, 'NOT_FOUND', 'Call not found', 404);
-  }
-
-  // Billing: a new minute is charged the moment it starts (ceiling), matching
-  // the kiosk's live cost display exactly.
-  const startMs = new Date(existing.startTime).getTime();
-  const durationSec = Math.max(0, (Date.now() - startMs) / 1000);
+/**
+ * Complete a call record and charge the inmate's wallet in one shot (the
+ * balance is ledger-derived and clamped at zero — never negative). Shared by
+ * the /end endpoint AND the stale-active-call sweep so a kiosk killed
+ * mid-call still gets billed (capped at the max duration) and never blocks
+ * future calls with a stuck 'active' record.
+ */
+async function finalizeCall(call, requestedEndTimeMs) {
+  const startMs = new Date(call.startTime).getTime();
+  const maxMs = (Number(call.maxDurationMinutes) || 15) * 60000;
+  // A call that outlived its max duration (kiosk died) is billed only up to
+  // the cap — time after the app died must not be charged.
+  const endMs = Math.min(Math.max(requestedEndTimeMs, startMs), startMs + maxMs);
+  const durationSec = Math.max(0, (endMs - startMs) / 1000);
   const billedMinutes = Math.ceil(durationSec / 60);
-  const ratePerMinute = Number(existing.ratePerMinute) || 0;
+  const ratePerMinute = Number(call.ratePerMinute) || 0;
   const chargeAmount = +(billedMinutes * ratePerMinute).toFixed(2);
 
   const updatedCall = await updateDb('calls.json', (calls) => {
-    const idx = calls.findIndex((c) => c.callId === callId);
+    const idx = calls.findIndex((c) => c.callId === call.callId);
     if (idx === -1) return { data: calls, result: null };
     calls[idx] = {
       ...calls[idx],
       status: 'completed',
-      endTime: new Date().toISOString(),
+      endTime: new Date(endMs).toISOString(),
       durationMinutes: billedMinutes,
       chargeAmount
     };
     return { data: calls, result: calls[idx] };
   });
+  if (!updatedCall) return null;
 
-  if (!updatedCall) return sendError(res, 'NOT_FOUND', 'Call not found', 404);
-
-  // ==== WALLET DEDUCTION ====
-  // The whole call charge is deducted from the inmate's wallet in one shot.
-  // The balance is ledger-derived and clamped at zero — it can never go
-  // negative even if the wallet could not cover the full call.
   if (chargeAmount > 0 && updatedCall.inmateId) {
     try {
       const inmates = await readDb('inmates.json');
@@ -1883,7 +1897,7 @@ app.post('/calls/:callId/end', requireAuth, asyncRoute(async (req, res) => {
             transactionId: `TXN-${uuidv4().substring(0, 8).toUpperCase()}`,
             walletId: wallet.walletId,
             inmateId: updatedCall.inmateId,
-            callId,
+            callId: updated.callId,
             type: 'charge',
             amount: chargeAmount,
             currency: wallet.currency || 'INR',
@@ -1901,7 +1915,7 @@ app.post('/calls/:callId/end', requireAuth, asyncRoute(async (req, res) => {
           all[idx].totalSpent = (Number(all[idx].totalSpent) || 0) + chargeAmount;
           return { data: all, result: all[idx] };
         });
-        console.log(`[wallet] charged ₹${chargeAmount} to ${wallet.walletId} for ${callId}`);
+        console.log(`[wallet] charged ₹${chargeAmount} to ${wallet.walletId} for ${updated.callId}`);
       } else {
         console.warn(`[wallet] no wallet found for inmate ${updatedCall.inmateId} — charge skipped`);
       }
@@ -1910,6 +1924,19 @@ app.post('/calls/:callId/end', requireAuth, asyncRoute(async (req, res) => {
       console.error('[wallet] deduction failed:', err.message);
     }
   }
+  return updatedCall;
+}
+
+app.post('/calls/:callId/end', requireAuth, asyncRoute(async (req, res) => {
+  const { callId } = req.params;
+
+  const existing = (await readDb('calls.json')).find((c) => c.callId === callId);
+  if (!existing || !inAdminScope(req, existing)) {
+    return sendError(res, 'NOT_FOUND', 'Call not found', 404);
+  }
+
+  const updatedCall = await finalizeCall(existing, Date.now());
+  if (!updatedCall) return sendError(res, 'NOT_FOUND', 'Call not found', 404);
 
 
   await updateDb('recordings.json', (recordings) => {
