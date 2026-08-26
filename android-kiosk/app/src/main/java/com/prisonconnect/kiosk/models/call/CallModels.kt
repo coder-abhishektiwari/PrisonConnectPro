@@ -24,7 +24,10 @@ data class CreateCallRequest(
     /** Client-minted ids enable optimistic navigation: the backend accepts
      *  caller-supplied values, so the UI can move on before the POST lands. */
     @SerializedName("callId") val callId: String? = null,
-    @SerializedName("roomId") val roomId: String? = null
+    @SerializedName("roomId") val roomId: String? = null,
+    /** Set when the call was launched from a dashboard scheduled-call card —
+     *  the backend marks that booking completed so it leaves the list. */
+    @SerializedName("scheduleId") val scheduleId: String? = null
 )
 
 enum class CallType {

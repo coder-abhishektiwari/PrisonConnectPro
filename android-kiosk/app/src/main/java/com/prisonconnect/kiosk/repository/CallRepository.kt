@@ -20,7 +20,7 @@ interface CallRepository {
     fun cancelBooking(bookingId: String): Flow<NetworkResult<Unit>>
     fun createRoom(
         inmateId: String, contactId: String, kioskId: String, callType: String,
-        callId: String? = null, roomId: String? = null
+        callId: String? = null, roomId: String? = null, scheduleId: String? = null
     ): Flow<NetworkResult<CallSession>>
     fun checkSlotAvailability(contactId: String): Flow<NetworkResult<Boolean>>
 

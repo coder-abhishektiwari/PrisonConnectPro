@@ -110,7 +110,7 @@ class RoomViewModel @Inject constructor(
         _createRoomState.value = UiState.Idle
     }
 
-    fun createRoom(contactId: String, callType: String) {
+    fun createRoom(contactId: String, callType: String, scheduleId: String? = null) {
         _createRoomState.value = UiState.Loading
         // Drop any stale runtime signaling URL/token from a previous call; a
         // fresh one arrives with the background POST below.
@@ -131,7 +131,7 @@ class RoomViewModel @Inject constructor(
         viewModelScope.launch {
             val inmateId = authRepository.getInmateId() ?: Constants.KIOSK_ID
             val kioskId = authRepository.getVerifiedKiosk()?.kioskId ?: Constants.KIOSK_ID
-            callRepository.createRoom(inmateId, contactId, kioskId, callType, callId, roomId).collect { result ->
+            callRepository.createRoom(inmateId, contactId, kioskId, callType, callId, roomId, scheduleId).collect { result ->
                 when (result) {
                     is NetworkResult.Success -> {
                         // The signaling socket needs this backend-minted token;

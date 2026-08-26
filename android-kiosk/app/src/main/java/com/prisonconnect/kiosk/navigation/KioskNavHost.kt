@@ -49,7 +49,7 @@ object KioskRoutes {
     const val PROFILE = "profile"
     const val WALLET = "wallet"
     const val SCHEDULE = "schedule/{contactId}/{contactName}/{callType}"
-    const val LOBBY = "lobby/{contactId}/{contactName}/{time}/{callType}/{isSlotBooked}"
+    const val LOBBY = "lobby/{contactId}/{contactName}/{time}/{callType}/{isSlotBooked}/{scheduleId}"
     const val VIDEO_CALL = "video_call/{contactName}/{roomId}"
     const val AUDIO_CALL = "audio_call/{contactName}/{roomId}"
     const val CALL_SUMMARY = "call_summary/{contactName}/{total}"
@@ -143,13 +143,13 @@ fun KioskNavHost(
             DashboardScreen(
                 windowSizeClass = windowSizeClass,
                 onContactClick = { contactId: String, name: String, type: String ->
-                    navController.navigate("lobby/$contactId/$name/Now/$type/false")
+                    navController.navigate("lobby/$contactId/$name/Now/$type/false/")
                 },
                 onContactDetailClick = { id: String ->
                     navController.navigate("contact_details/$id")
                 },
                 onScheduledCallClick = { call: ScheduledCall ->
-                    navController.navigate("lobby/${call.contactId ?: ""}/${call.contactName}/${call.timeSlot}/${call.type}/true")
+                    navController.navigate("lobby/${call.contactId ?: ""}/${call.contactName}/${call.timeSlot}/${call.type}/true/${call.id}")
                 },
                 onViewAllContacts = {
                     navController.navigate(KioskRoutes.CONTACT_LIST)
@@ -234,7 +234,7 @@ fun KioskNavHost(
         composable(KioskRoutes.CONTACT_LIST) {
             ContactListScreen(
                 onContactClick = { contactId: String, name: String, type: String ->
-                    navController.navigate("lobby/$contactId/$name/Now/$type/false")
+                    navController.navigate("lobby/$contactId/$name/Now/$type/false/")
                 },
                 onContactDetailClick = { id: String ->
                     navController.navigate("contact_details/$id")
@@ -251,7 +251,7 @@ fun KioskNavHost(
                     navController.navigate("schedule/$id/$name/$type")
                 },
                 onInstantCall = { id: String, name: String, type: String ->
-                    navController.navigate("lobby/$id/$name/Now/$type/false")
+                    navController.navigate("lobby/$id/$name/Now/$type/false/")
                 }
             )
         }
@@ -292,12 +292,14 @@ fun KioskNavHost(
             val time = backStackEntry.arguments?.getString("time") ?: ""
             val type = backStackEntry.arguments?.getString("callType") ?: ""
             val isSlotBooked = backStackEntry.arguments?.getString("isSlotBooked")?.toBoolean() ?: false
+            val scheduleId = backStackEntry.arguments?.getString("scheduleId") ?: ""
             LobbyScreen(
                 contactId = contactId,
                 contactName = contactName,
                 time = time,
                 callType = type,
                 isSlotBookedForCurrentTime = isSlotBooked,
+                scheduleId = scheduleId,
                 windowSizeClass = windowSizeClass,
                 onConfirm = { roomId ->
                     navController.navigate("call_progress/$contactName/$roomId/${type == "Video"}")
@@ -317,7 +319,7 @@ fun KioskNavHost(
                 roomId = roomId,
                 isVideoCall = isVideo,
                 onConnected = {
-                    // Media is live â€” only now enter the actual call screen.
+                    // Media is live ÔÇö only now enter the actual call screen.
                     navController.navigate(
                         if (isVideo) "video_call/$contactName/$roomId"
                         else "audio_call/$contactName/$roomId"
@@ -332,7 +334,7 @@ fun KioskNavHost(
         composable(KioskRoutes.VIDEO_CALL) { backStackEntry ->
             val contactName = backStackEntry.arguments?.getString("contactName") ?: ""
             val roomId = backStackEntry.arguments?.getString("roomId") ?: ""
-            // Same singleton engine as the call screens â€” real live billing.
+            // Same singleton engine as the call screens ÔÇö real live billing.
             val callViewModel: CallViewModel = hiltViewModel()
             val liveCost by callViewModel.liveCost.collectAsState()
             VideoCallScreen(
@@ -381,3 +383,5 @@ fun KioskNavHost(
         }
     }
 }
+
+

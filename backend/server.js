@@ -1411,6 +1411,28 @@ app.post('/calls', requireAuth, asyncRoute(async (req, res) => {
   await updateDb('calls.json', (calls) => ({ data: [...calls, newCall], result: newCall }));
   broadcastEvent('call-created', newCall);
 
+  // Scheduled call launched from the dashboard: mark that booking completed so
+  // it leaves the kiosk's "My Scheduled Calls" list immediately.
+  if (callData.scheduleId) {
+    try {
+      await updateDb('schedule.json', (all) => {
+        const idx = all.findIndex(
+          (s) => s.scheduleId === callData.scheduleId && s.inmateId === callData.inmateId
+        );
+        if (idx === -1) return { data: all, result: null };
+        all[idx] = {
+          ...all[idx],
+          status: 'completed',
+          callId: newCall.callId,
+          completedAt: new Date().toISOString()
+        };
+        return { data: all, result: all[idx] };
+      });
+    } catch (err) {
+      console.warn('[calls] failed marking schedule completed:', err.message);
+    }
+  }
+
   // ==== FAMILY LINK SMS (background) ====
   // Dispatched AFTER the response is sent — SMS gateway latency must never
   // delay call setup on the kiosk. Failures only log; they can never fail
@@ -1761,7 +1783,14 @@ app.get('/calls/scheduled/:id', requireAuth, asyncRoute(async (req, res) => {
   const matches = schedules.filter((s) => s.inmateId === inmate.inmateId || s.kioskId === inmate.assignedKioskId);
   const scoped = await scopeList(req, matches);
   const contactName = (contactId) => contacts.find((c) => c.contactId === contactId)?.fullName || null;
-  return sendSuccess(res, scoped.map((s) => ({ ...s, contactName: contactName(s.contactId) })));
+  // Only live bookings: completed calls and past dates leave the list. A
+  // booking for TODAY stays visible until midnight (its slot may still be
+  // current), everything else ages out by date.
+  const today = new Date().toISOString().slice(0, 10);
+  return sendSuccess(res, scoped
+    .filter((s) => (s.status || 'scheduled') === 'scheduled' && (s.date || '') >= today)
+    .sort((a, b) => `${a.date}${a.timeSlot}`.localeCompare(`${b.date}${b.timeSlot}`))
+    .map((s) => ({ ...s, contactName: contactName(s.contactId) })));
 }));
 
 // Inmate/kiosk-scoped call history (terminal calls only) — mirrors

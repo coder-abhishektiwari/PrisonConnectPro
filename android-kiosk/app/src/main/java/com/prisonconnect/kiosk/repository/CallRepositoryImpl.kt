@@ -312,7 +312,7 @@ class CallRepositoryImpl @Inject constructor(
 
     override fun createRoom(
         inmateId: String, contactId: String, kioskId: String, callType: String,
-        callId: String?, roomId: String?
+        callId: String?, roomId: String?, scheduleId: String?
     ): Flow<NetworkResult<CallSession>> = flow {
         emit(NetworkResult.Loading)
         try {
@@ -323,7 +323,8 @@ class CallRepositoryImpl @Inject constructor(
                     kioskId = kioskId,
                     type = if (callType.equals("Audio", ignoreCase = true)) "audio" else "video",
                     callId = callId,
-                    roomId = roomId
+                    roomId = roomId,
+                    scheduleId = scheduleId?.ifBlank { null }
                 )
             )
             if (response.success && response.data != null) {

@@ -57,6 +57,7 @@ fun LobbyScreen(
     time: String,
     callType: String,
     isSlotBookedForCurrentTime: Boolean = true,
+    scheduleId: String = "",
     @Suppress("UNUSED_PARAMETER") windowSizeClass: WindowSizeClass,
     onConfirm: (String) -> Unit,
     onScheduleCall: () -> Unit = {},
@@ -143,13 +144,15 @@ fun LobbyScreen(
         onRetry = {
             viewModel.createRoom(
                 contactId = contactId,
-                callType = if (isVideo) "Video" else "Audio"
+                callType = if (isVideo) "Video" else "Audio",
+                scheduleId = scheduleId.ifBlank { null }
             )
         },
         onConfirm = {
             viewModel.createRoom(
                 contactId = contactId,
-                callType = if (isVideo) "Video" else "Audio"
+                callType = if (isVideo) "Video" else "Audio",
+                scheduleId = scheduleId.ifBlank { null }
             )
         },
         onScheduleCall = onScheduleCall,
@@ -160,7 +163,8 @@ fun LobbyScreen(
             } else {
                 viewModel.createRoom(
                     contactId = contactId,
-                    callType = if (isVideo) "Video" else "Audio"
+                    callType = if (isVideo) "Video" else "Audio",
+                    scheduleId = scheduleId.ifBlank { null }
                 )
             }
         },
