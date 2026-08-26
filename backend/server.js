@@ -2270,6 +2270,17 @@ app.patch('/prisons/:prisonId', requireAuth, requireRole('admin'), asyncRoute(as
 app.get('/subscriptions', requireAuth, requireRole('admin'), asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('subscriptions.json')))));
 app.get('/servers', requireAuth, requireRole('admin'), asyncRoute(async (req, res) => sendSuccess(res, await readDb('servers.json'))));
 app.get('/pricing', asyncRoute(async (req, res) => sendSuccess(res, await readDb('pricing.json'))));
+// Wardens set their jail's per-minute call rates (video/audio). Deep-merged so
+// a partial patch (e.g. only video rate) never wipes the rest of pricing.json.
+app.patch('/pricing', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+  const merged = await updateDb('pricing.json', (all) => {
+    const base = all.length ? { ...all[0] } : {};
+    const result = deepMerge(base, { ...req.body });
+    return { data: [result], result };
+  });
+  broadcastEvent('pricing-updated', merged.result);
+  return sendSuccess(res, merged.result);
+}));
 app.get('/storage-stats', requireAuth, requireRole('admin'), asyncRoute(async (req, res) => sendSuccess(res, await readDb('storage.json'))));
 
 // ==================== STATISTICS ====================

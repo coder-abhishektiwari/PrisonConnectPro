@@ -67,6 +67,7 @@ fun AudioCallScreen(
     val isRecording by viewModel.isRecording.collectAsState()
     val inmateProfile by viewModel.inmateProfile.collectAsState()
     val liveCost by viewModel.liveCost.collectAsState()
+    val maxCallSeconds by viewModel.maxCallSeconds.collectAsState()
 
     var hasPermissions by remember {
         mutableStateOf(
@@ -129,6 +130,7 @@ fun AudioCallScreen(
             isRecording = isRecording,
             inmateProfile = inmateProfile,
             liveCost = liveCost,
+            maxCallSeconds = maxCallSeconds,
             onMuteToggle = { viewModel.toggleMute() },
             onSpeakerToggle = { viewModel.toggleSpeaker() },
             onEndCall = {
@@ -179,14 +181,15 @@ fun AudioCallContent(
     isRecording: Boolean,
     inmateProfile: InmateProfile?,
     liveCost: Double,
+    maxCallSeconds: Int,
     onMuteToggle: () -> Unit,
     onSpeakerToggle: () -> Unit,
     onEndCall: () -> Unit
 ) {
     var showInfoDialog by remember { mutableStateOf(false) }
 
-    val maxCallDuration = 300
-    val remainingSeconds = (maxCallDuration - timerSeconds).coerceAtLeast(0)
+    // Warden-controlled max call length (from the dashboard Settings).
+    val remainingSeconds = (maxCallSeconds - timerSeconds).coerceAtLeast(0)
 
     val formatTime = { seconds: Int ->
         val mins = seconds / 60
@@ -679,6 +682,7 @@ fun PreviewAudioCallMobile() {
             isRecording = true,
             inmateProfile = null,
             liveCost = 3.00,
+            maxCallSeconds = 300,
             onMuteToggle = {},
             onSpeakerToggle = {},
             onEndCall = {}

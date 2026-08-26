@@ -114,6 +114,8 @@ data class CallStatusSnapshot(
     @SerializedName("status") val status: String? = null,
     @SerializedName("linkOpenedAt") val linkOpenedAt: String? = null,
     @SerializedName("ratePerMinute") val ratePerMinute: Double? = null,
+    /** Warden-controlled max call length in minutes (from Settings). */
+    @SerializedName("maxDurationMinutes") val maxDurationMinutes: Int? = null,
     @SerializedName("family") val family: FamilyProgress? = null
 ) {
     data class FamilyProgress(

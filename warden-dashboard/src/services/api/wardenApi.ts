@@ -156,10 +156,12 @@ export interface Schedule {
 
 export interface Settings {
   callSettings: {
-    defaultDuration: number;
-    maxDuration: number;
-    recordingEnabled: boolean;
-    autoTerminate: boolean;
+    defaultCallType?: string;
+    /** Backend key used by POST /calls — the warden-controlled max call length. */
+    maxCallDurationMinutes: number;
+    maxDuration?: number;
+    recordingEnabled?: boolean;
+    autoTerminate?: boolean;
   };
   systemSettings: {
     smsNotifications: boolean;
@@ -171,6 +173,13 @@ export interface Settings {
     lockoutDuration: number;
     sessionTimeout: number;
   };
+}
+
+export interface Pricing {
+  audio?: { ratePerMinute?: number; currency?: string };
+  video?: { ratePerMinute?: number; currency?: string };
+  tax?: Record<string, unknown>;
+  billingRules?: Record<string, unknown>;
 }
 
 export interface DashboardStats {
@@ -312,8 +321,15 @@ export const wardenApi = {
   getSettings: () =>
     apiClient.get<ApiResponse<Settings>>('/settings').then((r) => r.data?.data),
 
-  updateSettings: (settings: Settings) =>
+  updateSettings: (settings: Partial<Settings>) =>
     apiClient.patch<ApiResponse<Settings>>('/settings', settings).then((r) => r.data?.data),
+
+  // Pricing (per-minute call rates set by the warden)
+  getPricing: () =>
+    apiClient.get<ApiResponse<Pricing>>('/pricing').then((r) => r.data?.data),
+
+  updatePricing: (pricing: Partial<Pricing>) =>
+    apiClient.patch<ApiResponse<Pricing>>('/pricing', pricing).then((r) => r.data?.data),
 
   // Incidents
   getIncidents: () =>

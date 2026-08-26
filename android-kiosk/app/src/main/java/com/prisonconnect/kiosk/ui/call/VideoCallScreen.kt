@@ -138,6 +138,7 @@ fun VideoCallScreen(
     val localTrack by viewModel.localVideoTrack.collectAsState()
     val remoteTrack by viewModel.remoteVideoTrack.collectAsState()
     val liveCost by viewModel.liveCost.collectAsState()
+    val maxCallSeconds by viewModel.maxCallSeconds.collectAsState()
 
     var hasPermissions by remember {
         mutableStateOf(
@@ -208,6 +209,7 @@ fun VideoCallScreen(
             remoteTrack = remoteTrack,
             eglContext = viewModel.eglContext,
             liveCost = liveCost,
+            maxCallSeconds = maxCallSeconds,
             onMuteToggle = { viewModel.toggleMute() },
             onVideoToggle = { viewModel.toggleCamera() },
             onSpeakerToggle = { viewModel.toggleSpeaker() },
@@ -286,6 +288,7 @@ fun VideoCallContent(
     remoteTrack: VideoTrack?,
     eglContext: org.webrtc.EglBase.Context?,
     liveCost: Double,
+    maxCallSeconds: Int,
     onMuteToggle: () -> Unit,
     onVideoToggle: () -> Unit,
     onSpeakerToggle: () -> Unit,
@@ -305,8 +308,8 @@ fun VideoCallContent(
     val initialTopOffsetPx = with(density) { 110.dp.toPx().toInt() }
     var pipOffset by remember { mutableStateOf(IntOffset(0, initialTopOffsetPx)) }
 
-    val maxCallDuration = 300
-    val remainingSeconds = (maxCallDuration - timerSeconds).coerceAtLeast(0)
+    // Warden-controlled max call length (from the dashboard Settings).
+    val remainingSeconds = (maxCallSeconds - timerSeconds).coerceAtLeast(0)
 
     val formatTime = { seconds: Int ->
         val mins = seconds / 60
@@ -510,7 +513,7 @@ fun VideoCallContent(
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Text(
-                            text = "${formatTime(timerSeconds)} / 05:00",
+                            text = "${formatTime(timerSeconds)} / ${formatTime(maxCallSeconds)}",
                             color = Color.White,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
@@ -791,6 +794,7 @@ fun VideoCallContentMobilePreview() {
             isNetworkAvailable = true,
             isRecording = true,
             liveCost = 7.50,
+            maxCallSeconds = 300,
             inmateProfile = InmateProfile(
                 inmateId = "INM123",
                 firstName = "Rahul",

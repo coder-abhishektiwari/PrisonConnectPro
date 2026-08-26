@@ -143,6 +143,13 @@ class CallEngine @Inject constructor(
     private val _liveCost = MutableStateFlow(0.0)
     val liveCost = _liveCost.asStateFlow()
 
+    /**
+     * Warden-controlled max call length in seconds (from Settings on the
+     * warden dashboard). Falls back to 5 minutes until the call record loads.
+     */
+    private val _maxCallSeconds = MutableStateFlow(MAX_CALL_SECONDS)
+    val maxCallSeconds = _maxCallSeconds.asStateFlow()
+
     /** UI badge: the kiosk always records calls (KioskCallRecorder). */
     private val _isRecording = MutableStateFlow(true)
     val isRecording = _isRecording.asStateFlow()
@@ -323,6 +330,7 @@ class CallEngine @Inject constructor(
         _familyLeft.value = false
         _ratePerMinute.value = 0.0
         _liveCost.value = 0.0
+        _maxCallSeconds.value = MAX_CALL_SECONDS
         _callState.value = CallUIState.WAITING
         timerJob?.cancel(); timerJob = null
         reconnectJob?.cancel(); reconnectJob = null
@@ -373,6 +381,8 @@ class CallEngine @Inject constructor(
         val fam = s.family ?: return
         // Per-minute billing rate for this call (video ₹2.5 / audio ₹1.0 etc.).
         s.ratePerMinute?.takeIf { it > 0 }?.let { _ratePerMinute.value = it }
+        // Warden-controlled max call length.
+        s.maxDurationMinutes?.takeIf { it > 0 }?.let { _maxCallSeconds.value = it * 60 }
         // Verification failures (wrong OTP / device mismatch) — the progress
         // screen marks these steps red until they succeed.
         _deviceVerifyFailed.value = (fam.deviceFailedAttempts ?: 0) > 0
@@ -427,9 +437,10 @@ class CallEngine @Inject constructor(
                     // (ceiling), even if it is not consumed in full.
                     val billedMinutes = kotlin.math.ceil(_timerSeconds.value / 60.0).toInt()
                     _liveCost.value = billedMinutes * _ratePerMinute.value
-                    // Max call duration: the call auto-ends after 5 minutes
-                    // of actual connected talk time.
-                    if (_timerSeconds.value >= MAX_CALL_SECONDS) {
+                    // Max call duration: warden-controlled via the dashboard;
+                    // the call auto-ends when the limit of connected talk time
+                    // is reached.
+                    if (_timerSeconds.value >= _maxCallSeconds.value) {
                         Logger.d("Max call duration (${MAX_CALL_SECONDS}s) reached - ending call")
                         // Fully tear down the session (state -> DISCONNECTED,
                         // finalize the backend record) so the UI navigates off
