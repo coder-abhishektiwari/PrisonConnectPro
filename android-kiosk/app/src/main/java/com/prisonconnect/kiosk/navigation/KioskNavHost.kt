@@ -31,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.navigation.compose.currentBackStackEntryAsState
+import android.net.Uri
 
 object KioskRoutes {
     const val SPLASH = "splash"
@@ -143,13 +144,13 @@ fun KioskNavHost(
             DashboardScreen(
                 windowSizeClass = windowSizeClass,
                 onContactClick = { contactId: String, name: String, type: String ->
-                    navController.navigate("lobby/$contactId/$name/Now/$type/false/")
+                    navController.navigate("lobby/${Uri.encode(contactId)}/${Uri.encode(name)}/Now/${Uri.encode(type)}/false/")
                 },
                 onContactDetailClick = { id: String ->
                     navController.navigate("contact_details/$id")
                 },
                 onScheduledCallClick = { call: ScheduledCall ->
-                    navController.navigate("lobby/${call.contactId ?: ""}/${call.contactName}/${call.timeSlot}/${call.type}/true/${call.id}")
+                    navController.navigate("lobby/${Uri.encode(call.contactId ?: "")}/${Uri.encode(call.contactName)}/${Uri.encode(call.timeSlot)}/${Uri.encode(call.type?.name ?: "")}/true/${call.id}")
                 },
                 onViewAllContacts = {
                     navController.navigate(KioskRoutes.CONTACT_LIST)
@@ -234,7 +235,7 @@ fun KioskNavHost(
         composable(KioskRoutes.CONTACT_LIST) {
             ContactListScreen(
                 onContactClick = { contactId: String, name: String, type: String ->
-                    navController.navigate("lobby/$contactId/$name/Now/$type/false/")
+                    navController.navigate("lobby/${Uri.encode(contactId)}/${Uri.encode(name)}/Now/${Uri.encode(type)}/false/")
                 },
                 onContactDetailClick = { id: String ->
                     navController.navigate("contact_details/$id")
@@ -248,10 +249,10 @@ fun KioskNavHost(
                 contactId = contactId,
                 onBack = { navController.popBackStack() },
                 onScheduleCall = { id: String, name: String, type: String ->
-                    navController.navigate("schedule/$id/$name/$type")
+                    navController.navigate("schedule/${Uri.encode(id)}/${Uri.encode(name)}/${Uri.encode(type)}")
                 },
                 onInstantCall = { id: String, name: String, type: String ->
-                    navController.navigate("lobby/$id/$name/Now/$type/false/")
+                    navController.navigate("lobby/${Uri.encode(id)}/${Uri.encode(name)}/Now/${Uri.encode(type)}/false/")
                 }
             )
         }
@@ -302,10 +303,10 @@ fun KioskNavHost(
                 scheduleId = scheduleId,
                 windowSizeClass = windowSizeClass,
                 onConfirm = { roomId ->
-                    navController.navigate("call_progress/$contactName/$roomId/${type == "Video"}")
+                    navController.navigate("call_progress/${Uri.encode(contactName)}/$roomId/${type == "Video"}")
                 },
                 onScheduleCall = {
-                    navController.navigate("schedule/$contactId/$contactName/$type")
+                    navController.navigate("schedule/${Uri.encode(contactId)}/${Uri.encode(contactName)}/${Uri.encode(type)}")
                 },
                 onBack = { navController.popBackStack() }
             )
@@ -319,7 +320,7 @@ fun KioskNavHost(
                 roomId = roomId,
                 isVideoCall = isVideo,
                 onConnected = {
-                    // Media is live ÔÇö only now enter the actual call screen.
+                    // Media is live ï¿½ï¿½ï¿½ only now enter the actual call screen.
                     navController.navigate(
                         if (isVideo) "video_call/$contactName/$roomId"
                         else "audio_call/$contactName/$roomId"
@@ -334,7 +335,7 @@ fun KioskNavHost(
         composable(KioskRoutes.VIDEO_CALL) { backStackEntry ->
             val contactName = backStackEntry.arguments?.getString("contactName") ?: ""
             val roomId = backStackEntry.arguments?.getString("roomId") ?: ""
-            // Same singleton engine as the call screens ÔÇö real live billing.
+            // Same singleton engine as the call screens ï¿½ï¿½ï¿½ real live billing.
             val callViewModel: CallViewModel = hiltViewModel()
             val liveCost by callViewModel.liveCost.collectAsState()
             VideoCallScreen(
