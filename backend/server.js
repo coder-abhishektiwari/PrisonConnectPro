@@ -108,7 +108,7 @@ function kioskScopeOf(req) {
 function inKioskScope(req, record) {
   const kioskId = kioskScopeOf(req);
   if (!kioskId) return true; // not kiosk-bound → jail scope governs
-  return !!record && (record.assignedKioskId === kioskId || record.kioskId === kioskId || record.inmateId === kioskId);
+  return !!record && (record.assignedKioskId === kioskId || record.kioskId === kioskId);
 }
 function inAdminScope(req, record) {
   return inJailScope(req, record) && inKioskScope(req, record);
@@ -1905,7 +1905,7 @@ async function finalizeCall(call, requestedEndTimeMs) {
             transactionId: `TXN-${uuidv4().substring(0, 8).toUpperCase()}`,
             walletId: wallet.walletId,
             inmateId: updatedCall.inmateId,
-            callId: updated.callId,
+            callId: updatedCall.callId,
             type: 'charge',
             amount: chargeAmount,
             currency: wallet.currency || 'INR',
@@ -1923,7 +1923,7 @@ async function finalizeCall(call, requestedEndTimeMs) {
           all[idx].totalSpent = (Number(all[idx].totalSpent) || 0) + chargeAmount;
           return { data: all, result: all[idx] };
         });
-        console.log(`[wallet] charged ₹${chargeAmount} to ${wallet.walletId} for ${updated.callId}`);
+        console.log(`[wallet] charged ₹${chargeAmount} to ${wallet.walletId} for ${updatedCall.callId}`);
       } else {
         console.warn(`[wallet] no wallet found for inmate ${updatedCall.inmateId} — charge skipped`);
       }
@@ -3060,6 +3060,11 @@ app.get('/admin/profile/:adminId', requireAuth, requireRole('admin', 'super-admi
   const admins = await readDb('admins.json');
   const admin = admins.find((a) => a.adminId === req.params.adminId);
   if (!admin) return sendError(res, 'NOT_FOUND', 'Admin not found', 404);
+  // Non-super-admins can only view their own profile
+  const callerRole = req.auth?.role;
+  if (callerRole !== 'super-admin' && callerRole !== 'super_admin' && req.auth?.sub !== req.params.adminId) {
+    return sendError(res, 'FORBIDDEN', 'Cannot view other admin profiles', 403);
+  }
   const { password, pin, ...profile } = admin;
   return sendSuccess(res, profile);
 }));
