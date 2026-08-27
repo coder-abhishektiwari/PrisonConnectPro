@@ -1194,16 +1194,20 @@ app.post('/admin/prisoners/:prisonerId/contacts', requireAuth, requireRole('admi
   const newContact = {
     contactId: contactData.contactId || `CONT-${uuidv4().substring(0, 8).toUpperCase()}`,
     inmateId: prisonerId,
-    firstName: contactData.firstName,
-    lastName: contactData.lastName,
+    name: contactData.name,
+    fullName: contactData.name,
+    firstName: contactData.firstName || contactData.name?.split(' ')[0] || '',
+    lastName: contactData.lastName || contactData.name?.split(' ').slice(1).join(' ') || '',
+    mobileNumber: contactData.mobileNumber,
+    phoneNumber: contactData.mobileNumber || contactData.phone,
+    phone: contactData.phone || contactData.mobileNumber,
     relationship: contactData.relationship || 'family',
-    phone: contactData.phone,
     email: contactData.email,
-    address: contactData.address || {},
-    status: contactData.status || 'active',
     active: true,
-    isPrimary: contactData.isPrimary || false,
-    isApproved: contactData.isApproved !== undefined ? contactData.isApproved : true,
+    status: contactData.status || 'active',
+    verified: contactData.verified !== undefined ? contactData.verified : true,
+    approvalStatus: 'approved',
+    verificationStatus: 'verified',
     createdAt: new Date().toISOString()
   };
 
@@ -1225,7 +1229,10 @@ app.put('/admin/contacts/:contactId', requireAuth, requireRole('admin', 'warden'
   const updated = await updateDb('contacts.json', (all) => {
     const idx = all.findIndex((c) => c.contactId === contactId);
     if (idx === -1) return { data: all, result: null };
-    all[idx] = { ...all[idx], ...updates };
+    const merged = { ...all[idx], ...updates };
+    if (updates.name) { merged.fullName = updates.name; merged.firstName = updates.name.split(' ')[0]; merged.lastName = updates.name.split(' ').slice(1).join(' '); }
+    if (updates.mobileNumber) { merged.phoneNumber = updates.mobileNumber; merged.phone = updates.mobileNumber; }
+    all[idx] = merged;
     return { data: all, result: all[idx] };
   });
 
@@ -1235,9 +1242,14 @@ app.put('/admin/contacts/:contactId', requireAuth, requireRole('admin', 'warden'
 
 app.patch('/admin/contacts/:contactId/status', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const { contactId } = req.params;
-  const { status } = req.body;
+  let { status, active } = req.body;
 
-  if (!status) return sendError(res, 'INVALID_REQUEST', 'status is required', 400);
+  // Android sends { active: true/false }, backend uses { status: "active"/"inactive" }
+  if (active !== undefined && !status) {
+    status = active ? 'active' : 'inactive';
+  }
+
+  if (!status) return sendError(res, 'INVALID_REQUEST', 'status or active is required', 400);
   const allowedStatuses = ['active', 'inactive', 'suspended', 'blocked'];
   if (!allowedStatuses.includes(status)) {
     return sendError(res, 'INVALID_STATUS', `Status must be one of: ${allowedStatuses.join(', ')}`, 400);
