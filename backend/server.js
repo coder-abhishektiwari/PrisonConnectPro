@@ -854,7 +854,7 @@ app.get('/inmates', requireAuth, requireRole('admin', 'warden', 'super-admin', '
   return sendSuccess(res, inmates.filter(adminScopeFilter(req)));
 }));
 
-app.get('/inmate/profile/:id', requireAuth, asyncRoute(async (req, res) => {
+app.get('/inmate/profile/:id', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const { id } = req.params;
   const inmates = await readDb('inmates.json');
   const inmate = inmates.find((i) => (i.inmateId === id || i.assignedKioskId === id || i.prisonerNumber === id) && inAdminScope(req, i));
@@ -862,7 +862,7 @@ app.get('/inmate/profile/:id', requireAuth, asyncRoute(async (req, res) => {
   return sendSuccess(res, inmate);
 }));
 
-app.get('/inmates/:inmateId', requireAuth, asyncRoute(async (req, res) => {
+app.get('/inmates/:inmateId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const inmates = await readDb('inmates.json');
   const inmate = inmates.find((i) => i.inmateId === req.params.inmateId && inAdminScope(req, i));
   if (!inmate) return sendError(res, 'NOT_FOUND', 'Inmate not found', 404);
@@ -2259,7 +2259,7 @@ app.get('/recordings/:recordingId', requireAuth, requireRole('admin', 'warden'),
   return sendSuccess(res, recording);
 }));
 
-app.post('/recordings', requireAuth, asyncRoute(async (req, res) => {
+app.post('/recordings', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
   const { callId } = req.body;
   if (!callId) return sendError(res, 'INVALID_REQUEST', 'callId is required', 400);
   const call = (await readDb('calls.json')).find((c) => c.callId === callId);
@@ -2277,7 +2277,7 @@ app.post('/recordings', requireAuth, asyncRoute(async (req, res) => {
   return sendSuccess(res, newRecording, 201);
 }));
 
-app.post('/recordings/upload', requireAuth, asyncRoute(async (req, res) => {
+app.post('/recordings/upload', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
   const { callId, base64Data, fileName, mimeType } = req.body || {};
   if (!callId) return sendError(res, 'INVALID_REQUEST', 'callId is required', 400);
 
@@ -2487,7 +2487,7 @@ app.get('/statistics/:callId', requireAuth, asyncRoute(async (req, res) => {
   if (!inAdminScope(req, call)) return sendError(res, 'NOT_FOUND', 'Statistics not found for call', 404);
   return sendSuccess(res, callStats);
 }));
-app.patch('/statistics/:callId', requireAuth, asyncRoute(async (req, res) => {
+app.patch('/statistics/:callId', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
   const { callId } = req.params;
   const updates = req.body;
   const call = (await readDb('calls.json')).find((c) => c.callId === callId);
@@ -2646,7 +2646,7 @@ app.get('/kiosks/registration-status/:serialNumber', asyncRoute(async (req, res)
   return sendError(res, 'NOT_FOUND', 'Kiosk registration status not found', 404);
 }));
 
-app.get('/kiosks/registration-requests', requireAuth, asyncRoute(async (req, res) => {
+app.get('/kiosks/registration-requests', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const [kiosks, prisons] = await Promise.all([readDb('kiosks.json'), readDb('prisons.json')]);
   const registrationRequests = kiosks.filter((k) => k.status === 'pending' || k.authorizationStatus === 'pending');
   return sendSuccess(res, (await scopeList(req, registrationRequests)).map((k) => {
@@ -2671,7 +2671,7 @@ app.get('/kiosks/registration-requests', requireAuth, asyncRoute(async (req, res
   }));
 }));
 
-app.put('/kiosks/registration/:requestId/approve', requireAuth, asyncRoute(async (req, res) => {
+app.put('/kiosks/registration/:requestId/approve', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const { requestId } = req.params;
   const kiosk = (await readDb('kiosks.json')).find((k) => k.kioskId === requestId);
   if (!kiosk || !(await inScopeOf(req, kiosk))) {
@@ -2693,7 +2693,7 @@ app.put('/kiosks/registration/:requestId/approve', requireAuth, asyncRoute(async
   return sendSuccess(res, { success: true });
 }));
 
-app.put('/kiosks/registration/:requestId/reject', requireAuth, asyncRoute(async (req, res) => {
+app.put('/kiosks/registration/:requestId/reject', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const { requestId } = req.params;
   const kiosk = (await readDb('kiosks.json')).find((k) => k.kioskId === requestId);
   if (!kiosk || !(await inScopeOf(req, kiosk))) {
@@ -2815,7 +2815,7 @@ app.post('/kiosks/validate-setup-pin', asyncRoute(async (req, res) => {
   });
 }));
 
-app.put('/kiosks/setup-pin', requireAuth, asyncRoute(async (req, res) => {
+app.put('/kiosks/setup-pin', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const { prisonId, pin } = req.body;
   if (!prisonId || !pin) return sendError(res, 'INVALID_REQUEST', 'prisonId and pin are required', 400);
 
@@ -2844,7 +2844,7 @@ app.put('/kiosks/setup-pin', requireAuth, asyncRoute(async (req, res) => {
 
 // ==================== PIN CHANGE REQUESTS ====================
 
-app.post('/kiosks/pin-change-request', requireAuth, asyncRoute(async (req, res) => {
+app.post('/kiosks/pin-change-request', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const { prisonId, currentPin, newPin, reason } = req.body;
   if (!prisonId || !currentPin || !newPin) {
     return sendError(res, 'INVALID_REQUEST', 'prisonId, currentPin, and newPin are required', 400);
@@ -2897,7 +2897,7 @@ app.post('/kiosks/pin-change-request', requireAuth, asyncRoute(async (req, res) 
   return sendSuccess(res, changeRequest, 201);
 }));
 
-app.get('/kiosks/pin-change-requests', requireAuth, asyncRoute(async (req, res) => {
+app.get('/kiosks/pin-change-requests', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const { prisonId } = req.query;
   const prisons = await readDb('prisons.json');
   let requests = [];
@@ -2921,7 +2921,7 @@ app.get('/kiosks/pin-change-requests', requireAuth, asyncRoute(async (req, res) 
   return sendSuccess(res, requests);
 }));
 
-app.put('/kiosks/pin-change-request/:requestId/approve', requireAuth, asyncRoute(async (req, res) => {
+app.put('/kiosks/pin-change-request/:requestId/approve', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const { requestId } = req.params;
   const { comments } = req.body;
   
@@ -2969,7 +2969,7 @@ app.put('/kiosks/pin-change-request/:requestId/approve', requireAuth, asyncRoute
   return sendSuccess(res, { success: true, message: 'PIN changed successfully' });
 }));
 
-app.put('/kiosks/pin-change-request/:requestId/reject', requireAuth, asyncRoute(async (req, res) => {
+app.put('/kiosks/pin-change-request/:requestId/reject', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const { requestId } = req.params;
   const { comments } = req.body;
   
