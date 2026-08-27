@@ -119,6 +119,9 @@ interface TrustApiService {
     @DELETE("schedule/cancel/{bookingId}")
     suspend fun cancelBooking(@Path("bookingId") bookingId: String): ApiResponse<Unit>
 
+    @GET("settings")
+    suspend fun getSettings(): ApiResponse<com.google.gson.JsonObject>
+
     // ==================== ADMIN ENDPOINTS ====================
 
     // Prisoners

@@ -40,4 +40,6 @@ interface CallRepository {
     /** Finalize the backend call record (duration/billing) once the call ends. */
     fun notifyCallEnded(callId: String)
     fun observeSignalingEvents(): Flow<SignalingEvent>
+
+    suspend fun getSettings(): NetworkResult<com.google.gson.JsonObject?>
 }

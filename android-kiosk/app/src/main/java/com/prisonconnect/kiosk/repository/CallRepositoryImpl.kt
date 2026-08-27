@@ -340,4 +340,13 @@ class CallRepositoryImpl @Inject constructor(
     override fun checkSlotAvailability(contactId: String): Flow<NetworkResult<Boolean>> = flow {
         emit(NetworkResult.Success(true))
     }
+
+    override suspend fun getSettings(): NetworkResult<com.google.gson.JsonObject?> {
+        return try {
+            val response = apiService.getSettings()
+            if (response.success) NetworkResult.Success(response.data) else NetworkResult.Failure(response.error ?: ApiError("UNKNOWN", "Failed to load settings"))
+        } catch (e: Exception) {
+            NetworkResult.Failure(ApiError("EXCEPTION", e.message ?: "Network exception"))
+        }
+    }
 }

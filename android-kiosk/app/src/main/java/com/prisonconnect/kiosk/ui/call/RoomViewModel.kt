@@ -48,6 +48,9 @@ class RoomViewModel @Inject constructor(
     private val _balance = MutableStateFlow(0.0)
     val balance = _balance.asStateFlow()
 
+    private val _maxDurationMinutes = MutableStateFlow(15)
+    val maxDurationMinutes: StateFlow<Int> = _maxDurationMinutes.asStateFlow()
+
     fun startLobbyTimer(startTimeMillis: Long) {
         viewModelScope.launch {
             while (true) {
@@ -63,6 +66,11 @@ class RoomViewModel @Inject constructor(
                 delay(1000)
             }
         }
+    }
+
+    fun setReadyNow() {
+        _remainingTime.value = 0
+        _roomStatus.value = RoomStatus.READY
     }
 
     fun cancelBooking(bookingId: String) {
@@ -96,6 +104,20 @@ class RoomViewModel @Inject constructor(
                     _balance.value = result.data.credits
                 }
             }
+        }
+    }
+
+    fun loadMaxDuration() {
+        viewModelScope.launch {
+            try {
+                val response = callRepository.getSettings()
+                if (response is NetworkResult.Success) {
+                    val settings = response.data
+                    val maxDur = settings?.get("callSettings")?.asJsonObject
+                        ?.get("maxCallDurationMinutes")?.asInt ?: 15
+                    _maxDurationMinutes.value = maxDur
+                }
+            } catch (_: Exception) {}
         }
     }
 

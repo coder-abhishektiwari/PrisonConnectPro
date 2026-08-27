@@ -39,6 +39,10 @@ import com.prisonconnect.kiosk.models.call.CallSession
 import com.prisonconnect.kiosk.models.call.RoomStatus
 import com.prisonconnect.kiosk.ui.components.KioskTopBar
 import com.prisonconnect.kiosk.ui.theme.PrisonKioskTheme
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 // Color Palette
 private val PrimaryNavy = Color(0xFF003366)
@@ -56,6 +60,7 @@ fun LobbyScreen(
     contactName: String,
     time: String,
     callType: String,
+    date: String = "",
     isSlotBookedForCurrentTime: Boolean = true,
     scheduleId: String = "",
     @Suppress("UNUSED_PARAMETER") windowSizeClass: WindowSizeClass,
@@ -71,9 +76,8 @@ fun LobbyScreen(
     val roomStatus by viewModel.roomStatus.collectAsState()
     val remainingTime by viewModel.remainingTime.collectAsState()
     val cancelState by viewModel.cancelState.collectAsState()
+    val maxDurationMinutes by viewModel.maxDurationMinutes.collectAsState()
 
-    // No balance -> no call. The warden/top-up flow adds money later; until
-    // then the inmate simply cannot place a call with an empty wallet.
     var showInsufficientBalance by remember { mutableStateOf(false) }
 
     if (showInsufficientBalance) {
@@ -106,19 +110,25 @@ fun LobbyScreen(
     LaunchedEffect(contactId) {
         viewModel.checkSlot(contactId)
         viewModel.loadBalance()
-        if (isSlotBookedForCurrentTime) {
-            // Simulate start of lobby timer for scheduled call
-            viewModel.startLobbyTimer(System.currentTimeMillis() + 10000) // 10 seconds countdown
+        viewModel.loadMaxDuration()
+
+        if (isSlotBookedForCurrentTime && time.isNotBlank() && date.isNotBlank()) {
+            // Parse scheduled time (e.g., "9:00 AM-9:00 AM") and compute countdown
+            val startTimeStr = time.split("-").firstOrNull()?.trim() ?: ""
+            val scheduledTimeMillis = parseScheduledDateTime(date, startTimeStr)
+            if (scheduledTimeMillis > System.currentTimeMillis()) {
+                // Future time: countdown to actual scheduled time
+                viewModel.startLobbyTimer(scheduledTimeMillis)
+            } else {
+                // Past or current time: ready to join now
+                viewModel.setReadyNow()
+            }
         }
     }
 
     LaunchedEffect(createRoomState) {
         if (createRoomState is UiState.Success<*>) {
             val session = (createRoomState as UiState.Success<CallSession>).data
-            // Consume BEFORE navigating: this effect re-runs on every
-            // recomposition, so leaving the state as Success would re-enter
-            // the call screen each time we pop back to the lobby (e.g. after
-            // a failed call) — an infinite fail/restart loop.
             viewModel.consumeCreateRoomNavigation()
             onConfirm(session.sessionId)
         }
@@ -130,13 +140,31 @@ fun LobbyScreen(
         }
     }
 
+    // Format date for display
+    val displayDate = remember(date) {
+        if (date.isNotBlank()) {
+            try {
+                val parts = date.split("-")
+                if (parts.size == 3) {
+                    val y = parts[0].toIntOrNull() ?: parts[0]
+                    val m = parts[1].toIntOrNull() ?: 0
+                    val d = parts[2].toIntOrNull() ?: 0
+                    val months = listOf("","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
+                    "$d ${months.getOrElse(m) { "" }} $y"
+                } else date
+            } catch (_: Exception) { date }
+        } else "Today"
+    }
+
     LobbyContent(
         contactName = contactName,
         time = time,
+        date = displayDate,
         isVideoCall = isVideo,
         isSlotBookedForCurrentTime = isSlotBookedForCurrentTime,
         isSlotAvailableNow = isSlotAvailableNow,
         balance = balance,
+        maxDurationMinutes = maxDurationMinutes,
         createRoomState = createRoomState,
         roomStatus = roomStatus,
         remainingTime = remainingTime,
@@ -187,10 +215,12 @@ fun LobbyScreen(
 fun LobbyContent(
     contactName: String,
     time: String,
+    date: String = "Today",
     isVideoCall: Boolean,
     isSlotBookedForCurrentTime: Boolean,
     isSlotAvailableNow: Boolean,
     balance: Double,
+    maxDurationMinutes: Int = 15,
     createRoomState: UiState<*>,
     roomStatus: RoomStatus,
     remainingTime: Long,
@@ -319,7 +349,7 @@ fun LobbyContent(
                             Spacer(modifier = Modifier.height(10.dp))
 
                             ValidationRow("Contact Person", contactName, isTablet)
-                            ValidationRow("Date", if (isSlotBookedForCurrentTime) "28 May 2025" else "Today", isTablet)
+                            ValidationRow("Date", if (isSlotBookedForCurrentTime && date != "Today") date else "Today", isTablet)
                             ValidationRow("Time Slot", if (time.isNotEmpty() && time != "Now") time else "Current Slot (11:00 AM)", isTablet)
 
                             if (!isSlotBookedForCurrentTime) {
@@ -342,7 +372,7 @@ fun LobbyContent(
                                 if (isVideoCall) stringResource(R.string.rate_video) else stringResource(R.string.rate_audio),
                                 isTablet
                             )
-                            ValidationRow("Max Duration", "5 Minutes", isTablet)
+                            ValidationRow("Max Duration", "$maxDurationMinutes Minutes", isTablet)
 
                             Spacer(modifier = Modifier.height(14.dp))
                             HorizontalDivider(color = CardBorderColor)
@@ -377,7 +407,7 @@ fun LobbyContent(
                                     }
 
                                     Surface(
-                                        color = AccentGreenBg,
+                                        color = if (balance > 0.0) AccentGreenBg else AlertRed.copy(alpha = 0.1f),
                                         shape = RoundedCornerShape(50)
                                     ) {
                                         Row(
@@ -386,16 +416,16 @@ fun LobbyContent(
                                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                                         ) {
                                             Icon(
-                                                imageVector = Icons.Default.CheckCircle,
+                                                imageVector = if (balance > 0.0) Icons.Default.CheckCircle else Icons.Default.AccountBalanceWallet,
                                                 contentDescription = null,
-                                                tint = AccentGreen,
+                                                tint = if (balance > 0.0) AccentGreen else AlertRed,
                                                 modifier = Modifier.size(16.dp)
                                             )
                                             Text(
-                                                text = stringResource(R.string.sufficient_balance),
+                                                text = if (balance > 0.0) stringResource(R.string.sufficient_balance) else "Recharge Needed",
                                                 fontSize = if (isTablet) 12.sp else 11.sp,
                                                 fontWeight = FontWeight.Bold,
-                                                color = AccentGreen
+                                                color = if (balance > 0.0) AccentGreen else AlertRed
                                             )
                                         }
                                     }
@@ -756,5 +786,29 @@ fun PreviewLobbyMobile() {
             onCancel = {},
             onBack = {}
         )
+    }
+}
+
+/**
+ * Parse "yyyy-MM-dd" + "9:00 AM" into epoch millis.
+ * Returns 0L on any parse failure so caller can fall back to "ready now".
+ */
+private fun parseScheduledDateTime(dateStr: String, timeStr: String): Long {
+    return try {
+        val date = LocalDate.parse(dateStr, DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+        // Handle formats like "9:00 AM" or "09:00"
+        val cleanTime = timeStr.trim().replace(".", "")
+        val time = try {
+            LocalTime.parse(cleanTime, DateTimeFormatter.ofPattern("h:mm a"))
+        } catch (_: Exception) {
+            try {
+                LocalTime.parse(cleanTime, DateTimeFormatter.ofPattern("HH:mm"))
+            } catch (_: Exception) {
+                LocalTime.parse(cleanTime, DateTimeFormatter.ofPattern("h:mm"))
+            }
+        }
+        date.atTime(time).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+    } catch (_: Exception) {
+        0L
     }
 }

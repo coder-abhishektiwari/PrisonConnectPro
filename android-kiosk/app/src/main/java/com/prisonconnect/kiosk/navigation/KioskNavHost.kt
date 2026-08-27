@@ -50,7 +50,7 @@ object KioskRoutes {
     const val PROFILE = "profile"
     const val WALLET = "wallet"
     const val SCHEDULE = "schedule/{contactId}/{contactName}/{callType}"
-    const val LOBBY = "lobby/{contactId}/{contactName}/{time}/{callType}/{isSlotBooked}/{scheduleId}"
+    const val LOBBY = "lobby/{contactId}/{contactName}/{time}/{callType}/{isSlotBooked}/{scheduleId}/{date}"
     const val VIDEO_CALL = "video_call/{contactName}/{roomId}"
     const val AUDIO_CALL = "audio_call/{contactName}/{roomId}"
     const val CALL_SUMMARY = "call_summary/{contactName}/{total}"
@@ -144,13 +144,13 @@ fun KioskNavHost(
             DashboardScreen(
                 windowSizeClass = windowSizeClass,
                 onContactClick = { contactId: String, name: String, type: String ->
-                    navController.navigate("lobby/${Uri.encode(contactId)}/${Uri.encode(name)}/Now/${Uri.encode(type)}/false/-")
+                    navController.navigate("lobby/${Uri.encode(contactId)}/${Uri.encode(name)}/Now/${Uri.encode(type)}/false/-/-")
                 },
                 onContactDetailClick = { id: String ->
                     navController.navigate("contact_details/$id")
                 },
                 onScheduledCallClick = { call: ScheduledCall ->
-                    navController.navigate("lobby/${Uri.encode(call.contactId ?: "")}/${Uri.encode(call.contactName)}/${Uri.encode(call.timeSlot)}/${Uri.encode(call.type?.name ?: "")}/true/${call.id}")
+                    navController.navigate("lobby/${Uri.encode(call.contactId ?: "")}/${Uri.encode(call.contactName)}/${Uri.encode(call.timeSlot)}/${Uri.encode(call.type?.name ?: "")}/true/${call.id}/${call.date}")
                 },
                 onViewAllContacts = {
                     navController.navigate(KioskRoutes.CONTACT_LIST)
@@ -235,7 +235,7 @@ fun KioskNavHost(
         composable(KioskRoutes.CONTACT_LIST) {
             ContactListScreen(
                 onContactClick = { contactId: String, name: String, type: String ->
-                    navController.navigate("lobby/${Uri.encode(contactId)}/${Uri.encode(name)}/Now/${Uri.encode(type)}/false/-")
+                    navController.navigate("lobby/${Uri.encode(contactId)}/${Uri.encode(name)}/Now/${Uri.encode(type)}/false/-/-")
                 },
                 onContactDetailClick = { id: String ->
                     navController.navigate("contact_details/$id")
@@ -252,7 +252,7 @@ fun KioskNavHost(
                     navController.navigate("schedule/${Uri.encode(id)}/${Uri.encode(name)}/${Uri.encode(type)}")
                 },
                 onInstantCall = { id: String, name: String, type: String ->
-                    navController.navigate("lobby/${Uri.encode(id)}/${Uri.encode(name)}/Now/${Uri.encode(type)}/false/-")
+                    navController.navigate("lobby/${Uri.encode(id)}/${Uri.encode(name)}/Now/${Uri.encode(type)}/false/-/-")
                 }
             )
         }
@@ -294,11 +294,13 @@ fun KioskNavHost(
             val type = backStackEntry.arguments?.getString("callType") ?: ""
             val isSlotBooked = backStackEntry.arguments?.getString("isSlotBooked")?.toBoolean() ?: false
             val scheduleId = backStackEntry.arguments?.getString("scheduleId") ?: ""
+            val date = backStackEntry.arguments?.getString("date") ?: ""
             LobbyScreen(
                 contactId = contactId,
                 contactName = contactName,
                 time = time,
                 callType = type,
+                date = date,
                 isSlotBookedForCurrentTime = isSlotBooked,
                 scheduleId = scheduleId,
                 windowSizeClass = windowSizeClass,
