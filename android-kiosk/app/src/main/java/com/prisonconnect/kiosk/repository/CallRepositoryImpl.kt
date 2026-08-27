@@ -22,7 +22,8 @@ import javax.inject.Singleton
 @Singleton
 class CallRepositoryImpl @Inject constructor(
     private val apiService: TrustApiService,
-    private val socketService: SocketService
+    private val socketService: SocketService,
+    private val cache: com.prisonconnect.kiosk.core.ApiCache
 ) : CallRepository {
 
     private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -243,7 +244,7 @@ class CallRepositoryImpl @Inject constructor(
     override fun getScheduledCalls(id: String): Flow<NetworkResult<List<ScheduledCall>>> = flow {
         emit(NetworkResult.Loading)
         try {
-            val response = apiService.getScheduledCalls(id)
+            val response = cache.getOrFetch("calls:scheduled:$id") { apiService.getScheduledCalls(id) }
             if (response.success && response.data != null) {
                 emit(NetworkResult.Success(response.data))
             } else {
@@ -257,7 +258,7 @@ class CallRepositoryImpl @Inject constructor(
     override fun getCallHistory(id: String): Flow<NetworkResult<List<CallHistory>>> = flow {
         emit(NetworkResult.Loading)
         try {
-            val response = apiService.getCallHistory(id)
+            val response = cache.getOrFetch("calls:history:$id") { apiService.getCallHistory(id) }
             if (response.success && response.data != null) {
                 emit(NetworkResult.Success(response.data))
             } else {
@@ -271,7 +272,7 @@ class CallRepositoryImpl @Inject constructor(
     override fun getBookedSlots(kioskId: String, date: String): Flow<NetworkResult<com.prisonconnect.kiosk.models.schedule.SlotsResponse>> = flow {
         emit(NetworkResult.Loading)
         try {
-            val response = apiService.getBookedSlots(kioskId, date)
+            val response = cache.getOrFetch("schedule:slots:$kioskId:$date") { apiService.getBookedSlots(kioskId, date) }
             if (response.success && response.data != null) {
                 emit(NetworkResult.Success(response.data))
             } else {
@@ -343,7 +344,7 @@ class CallRepositoryImpl @Inject constructor(
 
     override suspend fun getSettings(): NetworkResult<com.google.gson.JsonObject?> {
         return try {
-            val response = apiService.getSettings()
+            val response = cache.getOrFetch("settings", ttlMs = 60_000L) { apiService.getSettings() }
             if (response.success) NetworkResult.Success(response.data) else NetworkResult.Failure(response.error ?: ApiError("UNKNOWN", "Failed to load settings"))
         } catch (e: Exception) {
             NetworkResult.Failure(ApiError("EXCEPTION", e.message ?: "Network exception"))

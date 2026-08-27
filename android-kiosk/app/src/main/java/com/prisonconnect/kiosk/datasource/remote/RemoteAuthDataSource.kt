@@ -3,6 +3,7 @@ package com.prisonconnect.kiosk.datasource.remote
 import android.graphics.Bitmap
 import android.util.Base64
 import com.prisonconnect.kiosk.api.TrustApiService
+import com.prisonconnect.kiosk.core.ApiCache
 import com.prisonconnect.kiosk.datasource.AuthDataSource
 import com.prisonconnect.kiosk.models.auth.*
 import com.prisonconnect.kiosk.models.common.ApiResponse
@@ -13,7 +14,8 @@ import javax.inject.Singleton
 
 @Singleton
 class RemoteAuthDataSource @Inject constructor(
-    private val apiService: TrustApiService
+    private val apiService: TrustApiService,
+    private val cache: ApiCache
 ) : AuthDataSource {
     override suspend fun login(request: LoginRequest): ApiResponse<AuthToken> =
         apiService.login(request)
@@ -57,7 +59,7 @@ class RemoteAuthDataSource @Inject constructor(
     }
 
     override suspend fun getPrisonList(): ApiResponse<List<Prison>> =
-        apiService.getPrisonList()
+        cache.getOrFetch("prisons:list", ttlMs = 60_000L) { apiService.getPrisonList() }
 
     override suspend fun validateSetupPin(request: ValidateSetupPinRequest): ApiResponse<ValidateSetupPinResponse> =
         apiService.validateSetupPin(request)
@@ -66,6 +68,6 @@ class RemoteAuthDataSource @Inject constructor(
         apiService.registerKiosk(request)
 
     override suspend fun getRegistrationStatus(serialNumber: String): ApiResponse<RegistrationStatusResponse> =
-        apiService.getRegistrationStatus(serialNumber)
+        cache.getOrFetch("registration:$serialNumber", ttlMs = 60_000L) { apiService.getRegistrationStatus(serialNumber) }
 }
 

@@ -1,6 +1,7 @@
 package com.prisonconnect.kiosk.datasource.remote
 
 import com.prisonconnect.kiosk.api.TrustApiService
+import com.prisonconnect.kiosk.core.ApiCache
 import com.prisonconnect.kiosk.datasource.InmateDataSource
 import com.prisonconnect.kiosk.models.common.ApiResponse
 import com.prisonconnect.kiosk.models.inmate.InmateBalance
@@ -11,14 +12,15 @@ import javax.inject.Singleton
 
 @Singleton
 class RemoteInmateDataSource @Inject constructor(
-    private val apiService: TrustApiService
+    private val apiService: TrustApiService,
+    private val cache: ApiCache
 ) : InmateDataSource {
     override suspend fun getProfile(id: String): ApiResponse<InmateProfile> =
-        apiService.getInmateProfile(id)
+        cache.getOrFetch("inmate:profile:$id") { apiService.getInmateProfile(id) }
 
     override suspend fun getBalance(id: String): ApiResponse<InmateBalance> =
-        apiService.getInmateBalance(id)
+        cache.getOrFetch("inmate:balance:$id") { apiService.getInmateBalance(id) }
 
     override suspend fun getWalletStatement(id: String): ApiResponse<WalletStatement> =
-        apiService.getWalletStatement(id)
+        cache.getOrFetch("inmate:wallet:$id") { apiService.getWalletStatement(id) }
 }
