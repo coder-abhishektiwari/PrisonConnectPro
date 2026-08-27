@@ -869,7 +869,7 @@ app.get('/inmates/:inmateId', requireAuth, requireRole('admin', 'warden', 'super
   return sendSuccess(res, inmate);
 }));
 
-app.post('/inmates', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
+app.post('/inmates', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const inmateData = req.body;
   const jailId = jailScopeOf(req);
   const kioskId = kioskScopeOf(req);
@@ -1051,6 +1051,10 @@ app.patch('/admin/prisoners/:prisonerId/status', requireAuth, requireRole('admin
   const { status } = req.body;
   
   if (!status) return sendError(res, 'INVALID_REQUEST', 'status is required', 400);
+  const allowedStatuses = ['active', 'inactive', 'suspended', 'released', 'transferred'];
+  if (!allowedStatuses.includes(status)) {
+    return sendError(res, 'INVALID_STATUS', `Status must be one of: ${allowedStatuses.join(', ')}`, 400);
+  }
 
   const updated = await updateDb('inmates.json', (inmates) => {
     const idx = inmates.findIndex((i) => i.inmateId === prisonerId && inAdminScope(req, i));
@@ -1226,6 +1230,10 @@ app.patch('/admin/contacts/:contactId/status', requireAuth, requireRole('admin',
   const { status } = req.body;
 
   if (!status) return sendError(res, 'INVALID_REQUEST', 'status is required', 400);
+  const allowedStatuses = ['active', 'inactive', 'suspended', 'blocked'];
+  if (!allowedStatuses.includes(status)) {
+    return sendError(res, 'INVALID_STATUS', `Status must be one of: ${allowedStatuses.join(', ')}`, 400);
+  }
 
   const [contacts, inmates] = await Promise.all([readDb('contacts.json'), readDb('inmates.json')]);
   const target = contacts.find((c) => c.contactId === contactId);
@@ -2187,15 +2195,20 @@ app.patch('/alerts/:alertId/resolve', requireAuth, asyncRoute(async (req, res) =
 
 // ==================== DEVICE ROUTES ====================
 
-app.get('/devices', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => sendSuccess(res, await readDb('devices.json'))));
+app.get('/devices', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('devices.json')))));
 app.get('/devices/:deviceId', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
   const devices = await readDb('devices.json');
   const device = devices.find((d) => d.deviceId === req.params.deviceId);
   if (!device) return sendError(res, 'NOT_FOUND', 'Device not found', 404);
+  if (!(await inScopeOf(req, device))) return sendError(res, 'FORBIDDEN', 'Device outside your scope', 403);
   return sendSuccess(res, device);
 }));
 app.patch('/devices/:deviceId/status', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
   const { status } = req.body;
+  const allowedStatuses = ['online', 'offline', 'maintenance', 'decommissioned'];
+  if (status && !allowedStatuses.includes(status)) {
+    return sendError(res, 'INVALID_STATUS', `Status must be one of: ${allowedStatuses.join(', ')}`, 400);
+  }
   const updated = await updateDb('devices.json', (devices) => {
     const idx = devices.findIndex((d) => d.deviceId === req.params.deviceId);
     if (idx === -1) return { data: devices, result: null };
@@ -2439,10 +2452,13 @@ app.patch('/prisons/:prisonId', requireAuth, requireRole('admin'), asyncRoute(as
   if (!existing || !(await inScopeOf(req, existing))) {
     return sendError(res, 'NOT_FOUND', 'Prison not found', 404);
   }
+  const IMMUTABLE_FIELDS = ['prisonId', 'setupPin', 'wardenId', 'createdAt'];
+  const patch = { ...req.body };
+  IMMUTABLE_FIELDS.forEach((f) => delete patch[f]);
   const updated = await updateDb('prisons.json', (prisons) => {
     const idx = prisons.findIndex((p) => p.prisonId === req.params.prisonId);
     if (idx === -1) return { data: prisons, result: null };
-    prisons[idx] = { ...prisons[idx], ...req.body };
+    prisons[idx] = { ...prisons[idx], ...patch };
     return { data: prisons, result: prisons[idx] };
   });
   if (!updated) return sendError(res, 'NOT_FOUND', 'Prison not found', 404);
@@ -2450,7 +2466,7 @@ app.patch('/prisons/:prisonId', requireAuth, requireRole('admin'), asyncRoute(as
 }));
 
 app.get('/subscriptions', requireAuth, requireRole('admin'), asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('subscriptions.json')))));
-app.get('/servers', requireAuth, requireRole('admin'), asyncRoute(async (req, res) => sendSuccess(res, await readDb('servers.json'))));
+app.get('/servers', requireAuth, requireRole('admin'), asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('servers.json')))));
 app.get('/pricing', asyncRoute(async (req, res) => sendSuccess(res, await readDb('pricing.json'))));
 // Wardens set their jail's per-minute call rates (video/audio). Deep-merged so
 // a partial patch (e.g. only video rate) never wipes the rest of pricing.json.
@@ -2515,6 +2531,11 @@ app.patch('/statistics/:callId', requireAuth, requireRole('admin', 'warden'), as
 app.post('/calls/:callId/control', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
   const { callId } = req.params;
   const { action, target } = req.body;
+
+  const allowedActions = ['mute', 'unmute', 'hangup', 'disable-camera', 'enable-camera'];
+  if (!action || !allowedActions.includes(action)) {
+    return sendError(res, 'INVALID_ACTION', `Action must be one of: ${allowedActions.join(', ')}`, 400);
+  }
 
   const calls = await readDb('calls.json');
   const call = calls.find((c) => c.callId === callId);
