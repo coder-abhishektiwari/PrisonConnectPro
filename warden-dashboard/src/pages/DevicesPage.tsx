@@ -13,13 +13,16 @@ export function DevicesPage() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadDevices = useCallback(async () => {
+    setLoadError(null);
     try {
       const devicesData = await wardenApi.getDevices();
       setDevices(devicesData);
     } catch (error) {
       console.error('Failed to load devices:', error);
+      setLoadError('Failed to load devices');
     } finally {
       setIsLoading(false);
     }
@@ -42,6 +45,26 @@ export function DevicesPage() {
 
   if (isLoading) {
     return <Loading message="Loading devices..." />;
+  }
+
+  if (loadError) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-neutral-900">Devices</h1>
+          <p className="text-neutral-600 mt-1">Kiosk health and hardware status</p>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm border border-neutral-200 p-12 text-center">
+          <p className="text-error mb-4">{loadError}</p>
+          <button
+            onClick={() => { setIsLoading(true); loadDevices(); }}
+            className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
   }
 
   const filteredDevices = devices.filter((device) => {

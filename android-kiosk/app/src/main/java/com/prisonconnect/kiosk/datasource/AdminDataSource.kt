@@ -15,6 +15,7 @@ interface AdminDataSource {
     suspend fun editPrisoner(prisonerId: String, request: EditPrisonerRequest): ApiResponse<Prisoner>
     suspend fun updatePrisoner(prisonerId: String, prisoner: Prisoner): ApiResponse<Prisoner>
     suspend fun updatePrisonerStatus(prisonerId: String, request: UpdatePrisonerStatusRequest): ApiResponse<Prisoner>
+    suspend fun deletePrisoner(prisonerId: String): ApiResponse<Unit>
 
     // Contacts
     suspend fun getPrisonerContacts(prisonerId: String): ApiResponse<List<VerifiedContact>>

@@ -8,7 +8,7 @@
 
 import type { AuthTokens, AuthUser } from '@/types/auth';
 
-const STORAGE_KEYS = {
+export const STORAGE_KEYS = {
   tokens: 'pc_warden_tokens',
   user: 'pc_warden_user',
 } as const;

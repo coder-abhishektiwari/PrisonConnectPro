@@ -2,9 +2,9 @@
  * SMS dispatch service.
  *
  * Two transports are supported:
- *   1. MSG91 (DLT-enabled transactional SMS + WebOTP OTP delivery)
- *   2. Console / JSONL log fallback (used when SMS_PROVIDER !== 'msg91' or
- *      when MSG91 credentials are missing / the gateway call fails).
+ *   1. Fast2SMS (OTP + transactional SMS for Indian numbers)
+ *   2. Console / JSONL log fallback (used when SMS_PROVIDER !== 'fast2sms' or
+ *      when Fast2SMS credentials are missing / the gateway call fails).
  *
  * Every outbound SMS is ALWAYS logged to `backend/logs/sms.jsonl` so that
  * the flow remains fully testable in development without spending credits.
@@ -16,11 +16,8 @@ const path = require('path');
 const LOG_DIR = path.join(__dirname, '..', 'logs');
 const LOG_FILE = path.join(LOG_DIR, 'sms.jsonl');
 
-const PROVIDER = process.env.SMS_PROVIDER || 'log'; // 'msg91' | 'log'
-const MSG91_AUTH_KEY = process.env.MSG91_AUTH_KEY;
-const MSG91_SENDER_ID = process.env.MSG91_SENDER_ID || 'PRSNCT';
-const MSG91_OTP_TEMPLATE_ID = process.env.MSG91_OTP_TEMPLATE_ID;
-const MSG91_SMS_FLOW_ID = process.env.MSG91_SMS_FLOW_ID; // DLT flow id for transaction messages
+const PROVIDER = process.env.SMS_PROVIDER || 'log'; // 'fast2sms' | 'log'
+const FAST2SMS_API_KEY = process.env.FAST2SMS_API_KEY;
 const SMS_OTP_DOMAIN = process.env.SMS_OTP_DOMAIN || ''; // e.g. 'family.example.com'
 
 function ensureLogFile() {
@@ -41,100 +38,75 @@ function consoleLog(entry) {
   console.log(`[sms:${entry.transport}:${entry.kind}] -> ${phone} :: ${message}`);
 }
 
-/** Normalize phone to MSG91 expected format (+91XXXXXXXXXX or 91XXXXXXXXXX). */
+/** Normalize phone to 10-digit Indian mobile (no country code, no +). */
 function normalizePhone(phone) {
-  let p = String(phone || '').replace(/[^\d+]/g, '');
-  if (p.startsWith('00')) p = '+' + p.slice(2);
-  if (!p.startsWith('+')) p = '+' + p;
-  return p.replace(/^(\+)91(\+)?/, '$191'); // collapse duplicate country prefixes
+  let p = String(phone || '').replace(/[^\d]/g, '');
+  // Strip country code prefix (91 or 0)
+  if (p.length === 12 && p.startsWith('91')) p = p.slice(2);
+  if (p.length === 11 && p.startsWith('0')) p = p.slice(1);
+  return p;
 }
 
-async function sendViaMsg91({ phone, message, kind }) {
-  if (!MSG91_AUTH_KEY) {
-    const err = new Error('MSG91_AUTH_KEY is not configured');
+async function sendViaFast2Sms({ phone, message, kind }) {
+  if (!FAST2SMS_API_KEY) {
+    const err = new Error('FAST2SMS_API_KEY is not configured');
     err.code = 'SMS_CONFIG';
     throw err;
   }
 
-  const country = /^\+91/.test(phone) ? '91' : (process.env.MSG91_COUNTRY || '91');
-  const mobile = phone.replace(/^\+/, '');
+  const mobile = normalizePhone(phone);
 
   if (kind === 'otp') {
-    // Parse the 6-digit code out of the WebOTP-formatted message so we can
-    // hand it to MSG91's OTP endpoint explicitly.
-    const match = (message || '').match(/\b\d{6}\b/);
-    const otp = match ? match[0] : null;
+    // Extract 6-digit OTP from message
+    const match = (message || '').match(/\b(\d{6})\b/);
+    const otp = match ? match[1] : null;
 
-    if (!MSG91_OTP_TEMPLATE_ID) {
-      const err = new Error('MSG91_OTP_TEMPLATE_ID is not configured');
-      err.code = 'SMS_CONFIG';
-      throw err;
-    }
-
-    const params = new URLSearchParams({
-      template_id: MSG91_OTP_TEMPLATE_ID,
-      mobile,
-      authkey: MSG91_AUTH_KEY,
-      otp_expiry: String(process.env.SMS_OTP_EXPIRY_MINUTES || 5)
-    });
-    if (otp) params.set('otp', otp);
-    if (SMS_OTP_DOMAIN) params.set('var', SMS_OTP_DOMAIN);
-
-    const res = await fetch(`https://control.msg91.com/api/v5/otp?${params.toString()}`, { method: 'POST' });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok || (body.type !== 'success' && body.message !== 'Success')) {
-      const err = new Error(`MSG91 OTP send failed: ${res.status} ${JSON.stringify(body)}`);
-      err.code = 'SMS_GATEWAY';
-      err.details = body;
-      throw err;
-    }
-    return { provider: 'msg91', messageId: body.messageId || null, kind };
-  }
-
-  // Non-OTP transactional message via MSG91 flow / sendhttp API.
-  if (MSG91_SMS_FLOW_ID) {
-    const res = await fetch('https://control.msg91.com/api/v5/flow/', {
+    const res = await fetch('https://www.fast2sms.com/dev/otp', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', authkey: MSG91_AUTH_KEY },
+      headers: {
+        'authorization': FAST2SMS_API_KEY,
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify({
-        flow_id: MSG91_SMS_FLOW_ID,
-        sender: MSG91_SENDER_ID,
-        mobiles: mobile,
-        VAR1: message,
-        route: 4,
-        country
-      })
+        variables_values: otp || '',
+        route: 'otp',
+        numbers: mobile,
+      }),
     });
+
     const body = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      const err = new Error(`MSG91 flow send failed: ${res.status} ${JSON.stringify(body)}`);
+    if (!res.ok || body.return !== true) {
+      const err = new Error(`Fast2SMS OTP failed: ${res.status} ${JSON.stringify(body)}`);
       err.code = 'SMS_GATEWAY';
       err.details = body;
       throw err;
     }
-    return { provider: 'msg91', messageId: body.messageId || null, kind };
+    return { provider: 'fast2sms', messageId: body.request_id || null, kind };
   }
 
-  const res = await fetch('https://api.msg91.com/api/sendhttp.php', {
+  // Transactional / link SMS via bulk v3 route
+  const res = await fetch('https://www.fast2sms.com/dev/bulkV2', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      authkey: MSG91_AUTH_KEY,
-      mobiles: mobile,
+    headers: {
+      'authorization': FAST2SMS_API_KEY,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
       message,
-      sender: MSG91_SENDER_ID,
-      route: '4',
-      country
-    }).toString()
+      route: 'v3',
+      language: 'english',
+      numbers: mobile,
+    }),
   });
-  const body = await res.text().catch(() => '');
-  if (!/^\d{6}$/.test(body.trim())) {
-    const err = new Error(`MSG91 sendhttp failed: ${res.status} ${body}`);
+
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || body.return !== true) {
+    const err = new Error(`Fast2SMS bulk failed: ${res.status} ${JSON.stringify(body)}`);
     err.code = 'SMS_GATEWAY';
     err.details = body;
     throw err;
   }
-  return { provider: 'msg91', messageId: body.trim(), kind };
+  return { provider: 'fast2sms', messageId: body.request_id || null, kind };
 }
 
 /**
@@ -146,10 +118,6 @@ async function sendViaMsg91({ phone, message, kind }) {
  */
 function buildOtpMessage(otp, purpose) {
   const label = purpose || 'verification';
-  // WebOTP requires the OTP + origin as the LAST line: "@<domain> <code>".
-  // The origin must match the family-web page origin served over HTTPS (or
-  // localhost/127.0.0.1 in dev). Without a configured domain the code still
-  // appears on the final line so log-based testing can read it back.
   if (SMS_OTP_DOMAIN) {
     return `Your PrisonConnect ${label} code is ${otp}.\n\n@${SMS_OTP_DOMAIN} ${otp}`;
   }
@@ -174,17 +142,17 @@ async function sendSms({ phone, message, kind = 'generic', callId = null }) {
     transport: 'log'
   };
 
-  if (PROVIDER === 'msg91') {
+  if (PROVIDER === 'fast2sms') {
     try {
-      const result = await sendViaMsg91({ phone: entry.phone, message, kind });
-      entry.transport = 'msg91';
+      const result = await sendViaFast2Sms({ phone: entry.phone, message, kind });
+      entry.transport = 'fast2sms';
       entry.messageId = result.messageId || null;
       entry.gatewayOk = true;
     } catch (err) {
-      entry.transport = 'msg91_logged_fallback';
+      entry.transport = 'fast2sms_logged_fallback';
       entry.gatewayOk = false;
       entry.gatewayError = err.message;
-      console.error(`[sms] MSG91 failed (fallback to log): ${err.message}`);
+      console.error(`[sms] Fast2SMS failed (fallback to log): ${err.message}`);
     }
   }
 

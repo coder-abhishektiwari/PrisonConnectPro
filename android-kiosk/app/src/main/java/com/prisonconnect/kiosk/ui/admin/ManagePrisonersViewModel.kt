@@ -33,6 +33,9 @@ class ManagePrisonersViewModel @Inject constructor(
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
+    private val _deletingPrisonerId = MutableStateFlow<String?>(null)
+    val deletingPrisonerId: StateFlow<String?> = _deletingPrisonerId.asStateFlow()
+
     init {
         loadPrisoners()
     }
@@ -157,9 +160,20 @@ class ManagePrisonersViewModel @Inject constructor(
 
     fun deletePrisoner(prisonerId: String) {
         viewModelScope.launch {
-            // For now, just remove from local list
-            // Backend DELETE endpoint exists but we'll use it when needed
-            _prisoners.value = _prisoners.value.filter { it.inmateId != prisonerId }
+            _deletingPrisonerId.value = prisonerId
+            adminRepository.deletePrisoner(prisonerId).collect { result ->
+                when (result) {
+                    is NetworkResult.Success -> {
+                        _prisoners.value = _prisoners.value.filter { it.inmateId != prisonerId }
+                        _deletingPrisonerId.value = null
+                    }
+                    is NetworkResult.Failure -> {
+                        _error.value = result.error.message ?: "Failed to delete prisoner"
+                        _deletingPrisonerId.value = null
+                    }
+                    else -> {}
+                }
+            }
         }
     }
 }

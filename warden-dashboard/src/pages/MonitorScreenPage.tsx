@@ -2,8 +2,11 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card } from '@/components/Card';
 import { Loading } from '@/components/States';
+import { ToastContainer } from '@/components/ToastContainer';
 import { wardenApi } from '@/services/api/wardenApi';
 import { useWardenSocket } from '@/hooks/useWardenSocket';
+import { useToast } from '@/hooks/useToast';
+import { getStoredUser } from '@/services/auth/tokenStorage';
 import type {
   ActiveCall,
   Inmate,
@@ -14,6 +17,8 @@ import type {
   CallStatistics,
   Incident,
   SecurityStatus,
+  Settings,
+  Pricing,
 } from '@/services/api/wardenApi';
 
 interface TimelineEvent {
@@ -61,14 +66,18 @@ export function MonitorScreenPage() {
   });
   const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
   const [incidents, setIncidents] = useState<Incident[]>([]);
-  const [toast, setToast] = useState<string | null>(null);
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const [pricing, setPricing] = useState<Pricing | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const { toasts, success, error: toastError, removeToast } = useToast();
+  const storedUser = getStoredUser();
 
   // Incident form state
   const [incidentForm, setIncidentForm] = useState({
     category: 'security',
     severity: 'medium',
     remarks: '',
-    officerName: 'warden-001',
+    officerName: storedUser?.name || '',
   });
 
   // Control states (UI only)
@@ -83,8 +92,9 @@ export function MonitorScreenPage() {
 
   const loadMonitorData = useCallback(async () => {
     if (!callId) return;
+    setLoadError(null);
     try {
-      const [calls, inmates, contacts, wallets, recordings, devices, stats, incidentsData] = await Promise.all([
+      const [calls, inmates, contacts, wallets, recordings, devices, stats, incidentsData, settingsData, pricingData] = await Promise.all([
         wardenApi.getActiveCalls(),
         wardenApi.getInmates(),
         wardenApi.getContacts(),
@@ -93,7 +103,12 @@ export function MonitorScreenPage() {
         wardenApi.getDevices(),
         wardenApi.getStatistics(),
         wardenApi.getIncidents(),
+        wardenApi.getSettings(),
+        wardenApi.getPricing(),
       ]);
+
+      setSettings(settingsData ?? null);
+      setPricing(pricingData ?? null);
 
       const foundCall = calls.find((c) => c.callId === callId) || null;
       setCall(foundCall);
@@ -108,8 +123,9 @@ export function MonitorScreenPage() {
       }
 
       setIncidents(incidentsData.filter((i) => i.callId === callId));
-    } catch (error) {
-      console.error('Failed to load monitor data:', error);
+    } catch (err) {
+      console.error('Failed to load monitor data:', err);
+      setLoadError('Failed to load monitor data. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -228,16 +244,11 @@ export function MonitorScreenPage() {
     () => { loadMonitorData(); }
   );
 
-  const showToast = (message: string) => {
-    setToast(message);
-    setTimeout(() => setToast(null), 3000);
-  };
-
   if (isLoading) {
     return <Loading message="Loading monitor screen..." />;
   }
 
-  if (!call) {
+  if (!call && !loadError) {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
@@ -252,6 +263,33 @@ export function MonitorScreenPage() {
         <Card>
           <div className="text-center py-12">
             <p className="text-neutral-600">Call not found or no longer active</p>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-bold text-neutral-900">Monitor Screen</h1>
+          <button
+            onClick={() => navigate('/monitoring/live')}
+            className="px-4 py-2 bg-neutral-200 text-neutral-900 rounded-lg text-sm hover:bg-neutral-300"
+          >
+            Back to Live Monitoring
+          </button>
+        </div>
+        <Card>
+          <div className="text-center py-12">
+            <p className="text-error mb-4">{loadError}</p>
+            <button
+              onClick={() => { setIsLoading(true); loadMonitorData(); }}
+              className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700"
+            >
+              Retry
+            </button>
           </div>
         </Card>
       </div>
@@ -281,10 +319,12 @@ export function MonitorScreenPage() {
     return `${mbs.toFixed(1)} MB`;
   };
 
-  // Calculate call charges (mock: ₹2 per minute)
-  const ratePerMinute = 2;
+  // Calculate call charges from dynamic pricing + settings
+  const ratePerMinute = call.type === 'video'
+    ? (Number(pricing?.video?.ratePerMinute) || 2.5)
+    : (Number(pricing?.audio?.ratePerMinute) || 1.0);
   const callCharges = call.durationMinutes * ratePerMinute;
-  const maxDuration = 30;
+  const maxDuration = Number(settings?.callSettings?.maxCallDurationMinutes) || 15;
   const timeRemaining = Math.max(0, maxDuration - call.durationMinutes);
 
   // Security status (mock - derived from device and call data)
@@ -300,13 +340,14 @@ export function MonitorScreenPage() {
     developerMode: 'disabled',
   };
 
-  // Call control handlers (UI only - update mock backend)
+  // Call control handlers
   const handleControl = async (action: string, target?: string) => {
     try {
       await wardenApi.sendCallControl(call.callId, action, target);
-      showToast(`Action sent: ${action}`);
-    } catch (error) {
-      console.error('Failed to send control:', error);
+      success(`Action sent: ${action}`);
+    } catch (err) {
+      console.error('Failed to send control:', err);
+      toastError(`Failed to send ${action} command`);
     }
   };
 
@@ -330,9 +371,11 @@ export function MonitorScreenPage() {
     if (recording) {
       try {
         await wardenApi.stopRecording(recording.recordingId);
-        showToast('Recording paused');
-      } catch (error) {
-        console.error('Failed to pause recording:', error);
+        success('Recording paused');
+      } catch (err) {
+        console.error('Failed to pause recording:', err);
+        toastError('Failed to pause recording');
+        setControls((p) => ({ ...p, recordingPaused: false }));
       }
     }
   };
@@ -342,9 +385,11 @@ export function MonitorScreenPage() {
     if (recording) {
       try {
         await wardenApi.startRecording(recording.recordingId);
-        showToast('Recording resumed');
-      } catch (error) {
-        console.error('Failed to resume recording:', error);
+        success('Recording resumed');
+      } catch (err) {
+        console.error('Failed to resume recording:', err);
+        toastError('Failed to resume recording');
+        setControls((p) => ({ ...p, recordingPaused: true }));
       }
     }
   };
@@ -352,10 +397,11 @@ export function MonitorScreenPage() {
   const handleForceDisconnect = async () => {
     try {
       await wardenApi.endCall(call.callId);
-      showToast('Call force disconnected');
+      success('Call force disconnected');
       navigate('/monitoring/live');
-    } catch (error) {
-      console.error('Failed to force disconnect:', error);
+    } catch (err) {
+      console.error('Failed to force disconnect:', err);
+      toastError('Failed to disconnect call');
     }
   };
 
@@ -364,6 +410,10 @@ export function MonitorScreenPage() {
   };
 
   const handleCreateIncident = async () => {
+    if (!incidentForm.remarks.trim()) {
+      toastError('Please enter remarks for the incident');
+      return;
+    }
     try {
       const newIncident = await wardenApi.createIncident({
         ...incidentForm,
@@ -372,9 +422,10 @@ export function MonitorScreenPage() {
       });
       setIncidents((prev) => [newIncident, ...prev]);
       setIncidentForm({ ...incidentForm, remarks: '' });
-      showToast(`Incident ${newIncident.incidentId} created`);
-    } catch (error) {
-      console.error('Failed to create incident:', error);
+      success(`Incident ${newIncident.incidentId} created`);
+    } catch (err) {
+      console.error('Failed to create incident:', err);
+      toastError('Failed to create incident');
     }
   };
 
@@ -646,7 +697,7 @@ export function MonitorScreenPage() {
               <div className="space-y-1 text-sm">
                 <div className="flex justify-between">
                   <span className="text-neutral-500">Facility</span>
-                  <span className="font-medium text-neutral-900">{inmate?.facility || 'Central Prison'}</span>
+                  <span className="font-medium text-neutral-900">{inmate?.facility || inmate?.prisonId || 'Unknown'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-neutral-500">Cell Block</span>
@@ -745,7 +796,7 @@ export function MonitorScreenPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-neutral-500">Retention Policy</span>
-                <span className="font-medium text-neutral-900">{recording?.retentionDays || 365} days</span>
+                <span className="font-medium text-neutral-900">{recording?.retentionDays || 'N/A'} {recording?.retentionDays ? 'days' : ''}</span>
               </div>
               <div className="border-t border-neutral-200 pt-2 mt-2">
                 <button
@@ -912,11 +963,7 @@ export function MonitorScreenPage() {
       </div>
 
       {/* Toast */}
-      {toast && (
-        <div className="fixed bottom-4 right-4 bg-neutral-900 text-white px-4 py-3 rounded-lg shadow-lg text-sm z-50">
-          {toast}
-        </div>
-      )}
+      <ToastContainer toasts={toasts} onDismiss={removeToast} />
     </div>
   );
 }

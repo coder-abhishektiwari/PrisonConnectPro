@@ -31,6 +31,9 @@ class RemoteAdminDataSource @Inject constructor(
     override suspend fun updatePrisonerStatus(prisonerId: String, request: UpdatePrisonerStatusRequest): ApiResponse<Prisoner> =
         apiService.updatePrisonerStatus(prisonerId, request)
 
+    override suspend fun deletePrisoner(prisonerId: String): ApiResponse<Unit> =
+        apiService.deletePrisoner(prisonerId)
+
     override suspend fun getPrisonerContacts(prisonerId: String): ApiResponse<List<VerifiedContact>> =
         apiService.getPrisonerContacts(prisonerId)
 

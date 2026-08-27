@@ -90,7 +90,7 @@ export function ForgotPasswordPage() {
           </svg>
           <div className="space-y-1">
             <p>{successMessage}</p>
-            {mockResetToken && (
+            {import.meta.env.DEV && mockResetToken && (
               <div className="mt-2 p-2 bg-success-50 border border-success-200 rounded-lg">
                 <p className="text-[11px] text-success-600 font-medium mb-1">
                   Mock Development Token:

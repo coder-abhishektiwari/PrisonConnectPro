@@ -85,6 +85,20 @@ class AdminRepositoryImpl @Inject constructor(
         }
     }
 
+    override fun deletePrisoner(prisonerId: String): Flow<NetworkResult<Unit>> = flow {
+        emit(NetworkResult.Loading)
+        try {
+            val response = dataSource.deletePrisoner(prisonerId)
+            if (response.success) {
+                emit(NetworkResult.Success(Unit))
+            } else {
+                emit(NetworkResult.Failure(response.error ?: ApiError("UNKNOWN", "Unknown error")))
+            }
+        } catch (e: Exception) {
+            emit(NetworkResult.Failure(ApiError("EXCEPTION", e.message ?: "Network exception")))
+        }
+    }
+
     override fun getPrisonerContacts(prisonerId: String): Flow<NetworkResult<List<VerifiedContact>>> = flow {
         emit(NetworkResult.Loading)
         try {

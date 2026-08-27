@@ -41,6 +41,8 @@ fun AddPrisonerScreen(
     onComplete: () -> Unit,
     viewModel: AddPrisonerViewModel = hiltViewModel()
 ) {
+    val registrationState by viewModel.registrationState.collectAsState()
+
     AddPrisonerContent(
         windowWidthSizeClass = windowSizeClass.widthSizeClass,
         onBackClick = onBackClick,
@@ -52,7 +54,8 @@ fun AddPrisonerScreen(
                 sentenceStart, sentenceEnd, sentenceDetails, pin,
                 face, finger, rfid
             )
-        }
+        },
+        registrationState = registrationState
     )
 }
 
@@ -61,7 +64,8 @@ fun AddPrisonerContent(
     windowWidthSizeClass: WindowWidthSizeClass,
     onBackClick: () -> Unit,
     onComplete: () -> Unit,
-    onRegister: (String, String, String, String, String, String, String, String, String, String, String, String, String, String?, String?, String?) -> Unit
+    onRegister: (String, String, String, String, String, String, String, String, String, String, String, String, String, String?, String?, String?) -> Unit,
+    registrationState: AddPrisonerViewModel.RegistrationState = AddPrisonerViewModel.RegistrationState.Idle
 ) {
     var currentStep by remember { mutableStateOf(PrisonerRegistrationStep.PERSONAL_INFO) }
     var progress by remember { mutableStateOf(0.25f) }
@@ -84,6 +88,14 @@ fun AddPrisonerContent(
     var faceTemplate by remember { mutableStateOf("") }
     var fingerprintTemplate by remember { mutableStateOf("") }
     var rfidTag by remember { mutableStateOf("") }
+
+    // Navigate to COMPLETE on success
+    LaunchedEffect(registrationState) {
+        if (registrationState is AddPrisonerViewModel.RegistrationState.Success) {
+            currentStep = PrisonerRegistrationStep.COMPLETE
+            progress = 1.0f
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -197,6 +209,33 @@ fun AddPrisonerContent(
                     }
                 }
 
+                // Show error message
+                if (registrationState is AddPrisonerViewModel.RegistrationState.Error) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Error,
+                                contentDescription = null,
+                                tint = Color(0xFFD32F2F),
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = (registrationState as AddPrisonerViewModel.RegistrationState.Error).message,
+                                color = Color(0xFFD32F2F),
+                                fontSize = 14.sp
+                            )
+                        }
+                    }
+                }
+
                 // Navigation Buttons
                 if (currentStep != PrisonerRegistrationStep.COMPLETE) {
                     Row(
@@ -214,7 +253,8 @@ fun AddPrisonerContent(
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(56.dp),
-                                shape = RoundedCornerShape(12.dp)
+                                shape = RoundedCornerShape(12.dp),
+                                enabled = registrationState !is AddPrisonerViewModel.RegistrationState.Loading
                             ) {
                                 Icon(Icons.Default.ArrowBack, contentDescription = null)
                                 Spacer(modifier = Modifier.width(8.dp))
@@ -225,14 +265,14 @@ fun AddPrisonerContent(
                         Button(
                             onClick = {
                                 if (currentStep == PrisonerRegistrationStep.BIOMETRIC_DATA) {
+                                    // Validate PIN match before submitting
+                                    if (pin != confirmPin) return@Button
                                     onRegister(
                                         firstName, lastName, mobileNumber, dateOfBirth, gender,
                                         prisonerNumber, cellBlock, cellNumber, securityLevel,
                                         sentenceStart, sentenceEnd, sentenceDetails, pin,
                                         faceTemplate, fingerprintTemplate, rfidTag
                                     )
-                                    currentStep = PrisonerRegistrationStep.COMPLETE
-                                    progress = 1.0f
                                 } else {
                                     currentStep = PrisonerRegistrationStep.values()[currentStep.ordinal + 1]
                                     progress += 0.25f
@@ -242,16 +282,25 @@ fun AddPrisonerContent(
                                 .weight(1f)
                                 .height(56.dp),
                             shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF003366))
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF003366)),
+                            enabled = registrationState !is AddPrisonerViewModel.RegistrationState.Loading
                         ) {
-                            Text(
-                                text = if (currentStep == PrisonerRegistrationStep.BIOMETRIC_DATA) "Complete" else "Next",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            if (currentStep != PrisonerRegistrationStep.BIOMETRIC_DATA) {
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Icon(Icons.Default.ArrowForward, contentDescription = null)
+                            if (registrationState is AddPrisonerViewModel.RegistrationState.Loading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text(
+                                    text = if (currentStep == PrisonerRegistrationStep.BIOMETRIC_DATA) "Complete" else "Next",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                if (currentStep != PrisonerRegistrationStep.BIOMETRIC_DATA) {
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Icon(Icons.Default.ArrowForward, contentDescription = null)
+                                }
                             }
                         }
                     }
@@ -814,7 +863,8 @@ fun PreviewAddPrisonerMobile() {
             windowWidthSizeClass = WindowWidthSizeClass.Compact,
             onBackClick = {},
             onComplete = {},
-            onRegister = { _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> }
+            onRegister = { _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> },
+            registrationState = AddPrisonerViewModel.RegistrationState.Idle
         )
     }
 }

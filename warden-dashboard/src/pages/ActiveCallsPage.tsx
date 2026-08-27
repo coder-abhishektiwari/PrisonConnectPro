@@ -22,6 +22,7 @@ export function ActiveCallsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedCall, setSelectedCall] = useState<ActiveCall | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [confirmForceEnd, setConfirmForceEnd] = useState<ActiveCall | null>(null);
 
   const loadCalls = useCallback(async () => {
     try {
@@ -91,11 +92,12 @@ export function ActiveCallsPage() {
 
   const handleForceEnd = async (call: ActiveCall) => {
     try {
-      await wardenApi.updateCall(call.callId, { status: 'completed', endTime: new Date().toISOString() });
-      showToast(`Call ${call.callId} force ended (UI only)`);
+      await wardenApi.endCall(call.callId);
+      showToast(`Call ${call.callId} force ended`);
       loadCalls();
     } catch (error) {
       console.error('Failed to force end call:', error);
+      showToast('Failed to end call');
     }
   };
 
@@ -227,9 +229,9 @@ export function ActiveCallsPage() {
                           >
                             Monitor
                           </button>
-                          <button
-                            onClick={() => handleForceEnd(call)}
-                            className="px-2 py-1 bg-error text-white rounded-md text-xs hover:bg-error-700"
+                           <button
+                             onClick={() => setConfirmForceEnd(call)}
+                             className="px-2 py-1 bg-error text-white rounded-md text-xs hover:bg-error-700"
                           >
                             Force End
                           </button>
@@ -278,6 +280,38 @@ export function ActiveCallsPage() {
 
       {/* Call Details Drawer */}
       <CallDetailsDrawer call={selectedCall} onClose={() => setSelectedCall(null)} />
+
+      {/* Force End Confirmation Dialog */}
+      {confirmForceEnd && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-sm w-full mx-4 shadow-xl">
+            <h3 className="text-lg font-bold text-neutral-900 mb-2">Force End Call?</h3>
+            <p className="text-sm text-neutral-600 mb-4">
+              This will immediately disconnect the active call <strong>{confirmForceEnd.callId}</strong> between{' '}
+              <strong>{confirmForceEnd.inmateName || confirmForceEnd.inmateId}</strong> and{' '}
+              <strong>{confirmForceEnd.familyMemberName || confirmForceEnd.contactId}</strong>.
+              This action cannot be undone.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setConfirmForceEnd(null)}
+                className="px-4 py-2 bg-neutral-100 text-neutral-900 rounded-lg text-sm hover:bg-neutral-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  handleForceEnd(confirmForceEnd);
+                  setConfirmForceEnd(null);
+                }}
+                className="px-4 py-2 bg-error text-white rounded-lg text-sm hover:bg-error-700 font-medium"
+              >
+                Force End
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toast */}
       {toast && (

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { Card } from '@/components/Card';
 import { Loading } from '@/components/States';
@@ -11,25 +11,44 @@ import type { CallHistoryItem } from '@/services/api/wardenApi';
 export function CallHistoryPage() {
   const { inmateId } = useParams<{ inmateId: string }>();
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [calls, setCalls] = useState<CallHistoryItem[]>([]);
 
-  useEffect(() => {
-    const loadCalls = async () => {
-      try {
-        const callHistory = await wardenApi.getCallHistory();
-        setCalls(callHistory);
-      } catch (error) {
-        console.error('Failed to load call history:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+  const loadCalls = useCallback(async () => {
+    try {
+      setLoadError(null);
+      const callHistory = await wardenApi.getCallHistory();
+      setCalls(callHistory);
+    } catch (error) {
+      console.error('Failed to load call history:', error);
+      setLoadError('Failed to load call history');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
+  useEffect(() => {
     loadCalls();
-  }, [inmateId]);
+  }, [loadCalls, inmateId]);
 
   if (isLoading) {
     return <Loading message="Loading call history..." />;
+  }
+
+  if (loadError) {
+    return (
+      <Card>
+        <div className="text-center py-12">
+          <p className="text-error mb-4">{loadError}</p>
+          <button
+            onClick={() => { setIsLoading(true); loadCalls(); }}
+            className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      </Card>
+    );
   }
 
   const formatDuration = (minutes: number) => {

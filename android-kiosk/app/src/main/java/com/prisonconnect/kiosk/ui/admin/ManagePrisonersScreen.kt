@@ -32,20 +32,51 @@ fun ManagePrisonersScreen(
 ) {
     val prisoners by viewModel.prisoners.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    val error by viewModel.error.collectAsState()
+    val deletingPrisonerId by viewModel.deletingPrisonerId.collectAsState()
+    var showDeleteDialog by remember { mutableStateOf<Pair<String, String>?>(null) }
 
     // Refresh list when screen becomes visible
     LaunchedEffect(Unit) {
         viewModel.refreshPrisoners()
     }
 
+    if (showDeleteDialog != null) {
+        val (prisonerId, prisonerName) = showDeleteDialog!!
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = null },
+            title = { Text("Delete Prisoner") },
+            text = { Text("Are you sure you want to delete $prisonerName? This action cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deletePrisoner(prisonerId)
+                        showDeleteDialog = null
+                    }
+                ) {
+                    Text("Delete", color = Color(0xFFD32F2F))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     ManagePrisonersContent(
         prisoners = viewModel.getFilteredPrisoners(),
         searchQuery = searchQuery,
+        isLoading = isLoading,
+        error = error,
+        deletingPrisonerId = deletingPrisonerId,
         onBackClick = onBackClick,
         onPrisonerClick = onPrisonerClick,
         onManageContactsClick = onManageContactsClick,
         onSearchQueryChange = { viewModel.updateSearchQuery(it) },
-        onDeleteClick = { prisonerId -> viewModel.deletePrisoner(prisonerId) }
+        onDeleteClick = { prisonerId, prisonerName -> showDeleteDialog = Pair(prisonerId, prisonerName) }
     )
 }
 
@@ -53,11 +84,14 @@ fun ManagePrisonersScreen(
 fun ManagePrisonersContent(
     prisoners: List<Prisoner>,
     searchQuery: String,
+    isLoading: Boolean = false,
+    error: String? = null,
+    deletingPrisonerId: String? = null,
     onBackClick: () -> Unit,
     onPrisonerClick: (String) -> Unit,
     onManageContactsClick: (String) -> Unit,
     onSearchQueryChange: (String) -> Unit,
-    onDeleteClick: (String) -> Unit
+    onDeleteClick: (String, String) -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -112,8 +146,45 @@ fun ManagePrisonersContent(
                 }
             }
 
+            // Error Banner
+            if (error != null) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Error,
+                            contentDescription = null,
+                            tint = Color(0xFFD32F2F),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = error ?: "",
+                            color = Color(0xFFD32F2F),
+                            fontSize = 14.sp,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+
             // Prisoners List
-            if (prisoners.isEmpty()) {
+            if (isLoading) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = Color(0xFF003366))
+                }
+            } else if (prisoners.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -144,9 +215,10 @@ fun ManagePrisonersContent(
                     items(prisoners) { prisoner ->
                         PrisonerCard(
                             prisoner = prisoner,
+                            isDeleting = deletingPrisonerId == prisoner.inmateId,
                             onClick = { onPrisonerClick(prisoner.inmateId) },
                             onManageContactsClick = { onManageContactsClick(prisoner.inmateId) },
-                            onDeleteClick = { onDeleteClick(prisoner.inmateId) }
+                            onDeleteClick = { onDeleteClick(prisoner.inmateId, prisoner.displayName) }
                         )
                     }
                 }
@@ -158,6 +230,7 @@ fun ManagePrisonersContent(
 @Composable
 private fun PrisonerCard(
     prisoner: Prisoner,
+    isDeleting: Boolean = false,
     onClick: () -> Unit,
     onManageContactsClick: () -> Unit,
     onDeleteClick: () -> Unit
@@ -215,12 +288,23 @@ private fun PrisonerCard(
                             tint = Color(0xFF003366)
                         )
                     }
-                    IconButton(onClick = onDeleteClick) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "Delete",
-                            tint = Color(0xFFD32F2F)
-                        )
+                    IconButton(
+                        onClick = onDeleteClick,
+                        enabled = !isDeleting
+                    ) {
+                        if (isDeleting) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.dp,
+                                color = Color(0xFFD32F2F)
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Delete",
+                                tint = Color(0xFFD32F2F)
+                            )
+                        }
                     }
                 }
             }
@@ -312,7 +396,7 @@ fun PreviewManagePrisonersMobile() {
             onBackClick = {},
             onPrisonerClick = {},
             onManageContactsClick = {},
-            onDeleteClick = {},
+            onDeleteClick = { _, _ -> },
             onSearchQueryChange = {}
         )
     }

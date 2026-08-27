@@ -1,1 +1,13 @@
-[]
+[
+  {
+    "transactionId": "TXN-RECHARGE-001",
+    "walletId": "WALLET-001",
+    "inmateId": "100101",
+    "type": "recharge",
+    "amount": 100,
+    "currency": "INR",
+    "status": "success",
+    "description": "Admin recharge for testing",
+    "timestamp": "2026-08-27T10:00:00Z"
+  }
+]

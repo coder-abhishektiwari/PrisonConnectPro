@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Card } from '@/components/Card';
 import { Loading } from '@/components/States';
+import { ToastContainer } from '@/components/ToastContainer';
 import { wardenApi } from '@/services/api/wardenApi';
 import { useWardenSocket } from '@/hooks/useWardenSocket';
+import { useToast } from '@/hooks/useToast';
 import type { Recording } from '@/services/api/wardenApi';
 
 /**
@@ -13,13 +15,17 @@ export function RecordingCenterPage() {
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const { toasts, success, error: toastError, removeToast } = useToast();
 
   const loadRecordings = useCallback(async () => {
+    setLoadError(null);
     try {
       const recordingsData = await wardenApi.getRecordings();
       setRecordings(recordingsData);
-    } catch (error) {
-      console.error('Failed to load recordings:', error);
+    } catch (err) {
+      console.error('Failed to load recordings:', err);
+      setLoadError('Failed to load recordings');
     } finally {
       setIsLoading(false);
     }
@@ -162,7 +168,7 @@ export function RecordingCenterPage() {
                     <td className="py-3 px-4 text-sm text-neutral-900">{formatSize(recording.size)}</td>
                     <td className="py-3 px-4">
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-600">
-                        {recording.encryption || 'AES-256-GCM'}
+                        {recording.encryption || 'N/A'}
                       </span>
                     </td>
                     <td className="py-3 px-4 text-sm text-neutral-900">
@@ -186,8 +192,14 @@ export function RecordingCenterPage() {
                         {recording.status === 'recording' && (
                           <button
                             onClick={async () => {
-                              await wardenApi.stopRecording(recording.recordingId);
-                              loadRecordings();
+                              try {
+                                await wardenApi.stopRecording(recording.recordingId);
+                                success('Recording stopped');
+                                loadRecordings();
+                              } catch (err) {
+                                console.error('Failed to stop recording:', err);
+                                toastError('Failed to stop recording');
+                              }
                             }}
                             className="px-3 py-1 bg-error text-white rounded-md text-sm hover:bg-error-700"
                           >
@@ -203,6 +215,9 @@ export function RecordingCenterPage() {
           </div>
         )}
       </Card>
+
+      {/* Toast */}
+      <ToastContainer toasts={toasts} onDismiss={removeToast} />
     </div>
   );
 }

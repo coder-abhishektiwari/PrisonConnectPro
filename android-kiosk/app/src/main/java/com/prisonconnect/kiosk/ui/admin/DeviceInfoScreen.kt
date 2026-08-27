@@ -201,14 +201,14 @@ fun DeviceInfoContent(
                                     color = Color(0xFF0B2240)
                                 )
                                 Text(
-                                    text = "Version 1.0.0",
+                                    text = "Version ${com.prisonconnect.kiosk.BuildConfig.VERSION_NAME}",
                                     fontSize = 14.sp,
                                     color = Color(0xFF687A8F)
                                 )
                             }
                         }
                         Text(
-                            text = "© 2024 PrisonConnect. All rights reserved.",
+                            text = "© 2025 PrisonConnect. All rights reserved.",
                             fontSize = 12.sp,
                             color = Color(0xFF687A8F),
                             textAlign = TextAlign.Center,

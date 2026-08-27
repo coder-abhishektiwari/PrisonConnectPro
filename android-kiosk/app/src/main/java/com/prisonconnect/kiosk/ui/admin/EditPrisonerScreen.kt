@@ -93,6 +93,27 @@ fun EditPrisonerForm(
     var sentenceDetails by remember { mutableStateOf(prisoner.sentenceDetails ?: "") }
     var status by remember { mutableStateOf(prisoner.status) }
     var active by remember { mutableStateOf(prisoner.active) }
+    var showSaveDialog by remember { mutableStateOf(false) }
+
+    if (showSaveDialog) {
+        AlertDialog(
+            onDismissRequest = { showSaveDialog = false },
+            title = { Text("Save Changes") },
+            text = { Text("Are you sure you want to save these changes?") },
+            confirmButton = {
+                TextButton(onClick = { showSaveDialog = false }) {
+                    Text("Cancel")
+                }
+                TextButton(onClick = {
+                    showSaveDialog = false
+                    onUpdate(fullName, mobileNumber, cellBlock, securityLevel, sentenceDetails, status, active)
+                }) {
+                    Text("Save", color = Color(0xFF003366))
+                }
+            },
+            dismissButton = {}
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -187,9 +208,7 @@ fun EditPrisonerForm(
         }
 
         Button(
-            onClick = {
-                onUpdate(fullName, mobileNumber, cellBlock, securityLevel, sentenceDetails, status, active)
-            },
+            onClick = { showSaveDialog = true },
             modifier = Modifier.fillMaxWidth().height(56.dp),
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF003366))

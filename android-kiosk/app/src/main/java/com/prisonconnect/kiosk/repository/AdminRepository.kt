@@ -15,6 +15,7 @@ interface AdminRepository {
     fun createPrisoner(request: CreatePrisonerRequest): Flow<NetworkResult<Prisoner>>
     fun editPrisoner(prisonerId: String, request: EditPrisonerRequest): Flow<NetworkResult<Prisoner>>
     fun updatePrisonerStatus(prisonerId: String, request: UpdatePrisonerStatusRequest): Flow<NetworkResult<Prisoner>>
+    fun deletePrisoner(prisonerId: String): Flow<NetworkResult<Unit>>
 
     // Contacts
     fun getPrisonerContacts(prisonerId: String): Flow<NetworkResult<List<VerifiedContact>>>

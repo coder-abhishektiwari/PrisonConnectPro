@@ -422,6 +422,24 @@ export const wardenApi = {
 
   updateSetupPin: (prisonId: string, pin: string) =>
     apiClient.put<ApiResponse<{ success: boolean }>>('/kiosks/setup-pin', { prisonId, pin }).then((r) => r.data?.data ?? { success: false }),
+
+  // User Management
+  getWardens: () =>
+    apiClient.get<ApiResponse<any[]>>('/wardens').then((r) => r.data?.data ?? []),
+
+  getWarden: (wardenId: string) =>
+    apiClient.get<ApiResponse<any>>(`/wardens/${wardenId}`).then((r) => r.data?.data),
+
+  // Prisons
+  getPrisons: () =>
+    apiClient.get<ApiResponse<any[]>>('/prisons').then((r) => r.data?.data ?? []),
+
+  getPrison: (prisonId: string) =>
+    apiClient.get<ApiResponse<any>>(`/prisons/${prisonId}`).then((r) => r.data?.data),
+
+  // Subscriptions
+  getSubscriptions: () =>
+    apiClient.get<ApiResponse<any[]>>('/subscriptions').then((r) => r.data?.data ?? []),
 };
 
 export interface KioskRegistrationRequestItem {

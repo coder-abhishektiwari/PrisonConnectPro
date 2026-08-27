@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { wardenApi, KioskRegistrationRequestItem } from '@/services/api/wardenApi';
+import { ToastContainer } from '@/components/ToastContainer';
+import { useToast } from '@/hooks/useToast';
 import {
   CheckCircleIcon,
   XCircleIcon,
@@ -18,14 +20,18 @@ export const KioskRegistrationPage: React.FC = () => {
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const { toasts, success, error: toastError, removeToast } = useToast();
 
   const fetchRequests = async () => {
+    setLoadError(null);
     try {
       setLoading(true);
       const data = await wardenApi.getKioskRegistrationRequests();
       setRequests(data);
     } catch (err) {
       console.error('Failed to fetch registration requests:', err);
+      setLoadError('Failed to load registration requests');
     } finally {
       setLoading(false);
     }
@@ -39,9 +45,11 @@ export const KioskRegistrationPage: React.FC = () => {
     try {
       setActionLoading(requestId);
       await wardenApi.approveKioskRegistration(requestId);
+      success('Device registration approved');
       await fetchRequests();
     } catch (err) {
-      alert('Failed to approve request.');
+      console.error('Failed to approve request:', err);
+      toastError('Failed to approve request');
     } finally {
       setActionLoading(null);
     }
@@ -52,9 +60,11 @@ export const KioskRegistrationPage: React.FC = () => {
     try {
       setActionLoading(requestId);
       await wardenApi.rejectKioskRegistration(requestId);
+      success('Device registration rejected');
       await fetchRequests();
     } catch (err) {
-      alert('Failed to reject request.');
+      console.error('Failed to reject request:', err);
+      toastError('Failed to reject request');
     } finally {
       setActionLoading(null);
     }
@@ -314,6 +324,9 @@ export const KioskRegistrationPage: React.FC = () => {
           ))}
         </div>
       )}
+
+      {/* Toast */}
+      <ToastContainer toasts={toasts} onDismiss={removeToast} />
     </div>
   );
 };

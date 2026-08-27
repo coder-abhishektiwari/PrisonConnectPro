@@ -854,8 +854,15 @@ app.get('/inmates', requireAuth, requireRole('admin', 'warden', 'super-admin', '
   return sendSuccess(res, inmates.filter(adminScopeFilter(req)));
 }));
 
-app.get('/inmate/profile/:id', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+app.get('/inmate/profile/:id', requireAuth, asyncRoute(async (req, res) => {
   const { id } = req.params;
+  const role = String(req.auth?.role || '').toLowerCase().replace(/[-_]/g, '');
+
+  // Inmates can only access their own profile
+  if (role === 'inmate' && req.auth.inmateId !== id) {
+    return sendError(res, 'FORBIDDEN', 'Inmates can only view their own profile', 403);
+  }
+
   const inmates = await readDb('inmates.json');
   const inmate = inmates.find((i) => (i.inmateId === id || i.assignedKioskId === id || i.prisonerNumber === id) && inAdminScope(req, i));
   if (!inmate) return sendError(res, 'NOT_FOUND', 'Inmate not found', 404);
@@ -1691,7 +1698,7 @@ app.post('/calls/link/:linkToken/heartbeat', asyncRoute(async (req, res) => {
 // local stack (SMS_PROVIDER=log). Never enabled in production or with real SMS.
 app.get('/calls/:linkToken/otp', asyncRoute(async (req, res) => {
   const { linkToken } = req.params;
-  if (process.env.NODE_ENV === 'production' || (process.env.SMS_PROVIDER || '').toLowerCase() === 'msg91') {
+  if (process.env.NODE_ENV === 'production' || (process.env.SMS_PROVIDER || '').toLowerCase() === 'fast2sms') {
     return sendError(res, 'FORBIDDEN', 'OTP debug endpoint is disabled', 403);
   }
   const calls = await readDb('calls.json');
@@ -2413,8 +2420,8 @@ app.get('/incidents/:incidentId', requireAuth, requireRole('admin', 'warden'), a
 
 // ==================== PRISONS / VENDOR ====================
 
-app.get('/prisons', requireAuth, requireRole('admin'), asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('prisons.json')))));
-app.get('/prisons/:prisonId', requireAuth, requireRole('admin'), asyncRoute(async (req, res) => {
+app.get('/prisons', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('prisons.json')))));
+app.get('/prisons/:prisonId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const prisons = await readDb('prisons.json');
   const prison = prisons.find((p) => p.prisonId === req.params.prisonId);
   if (!prison || !(await inScopeOf(req, prison))) return sendError(res, 'NOT_FOUND', 'Prison not found', 404);
@@ -2465,7 +2472,7 @@ app.patch('/prisons/:prisonId', requireAuth, requireRole('admin'), asyncRoute(as
   return sendSuccess(res, updated);
 }));
 
-app.get('/subscriptions', requireAuth, requireRole('admin'), asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('subscriptions.json')))));
+app.get('/subscriptions', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('subscriptions.json')))));
 app.get('/servers', requireAuth, requireRole('admin'), asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('servers.json')))));
 app.get('/pricing', asyncRoute(async (req, res) => sendSuccess(res, await readDb('pricing.json'))));
 // Wardens set their jail's per-minute call rates (video/audio). Deep-merged so
@@ -3138,8 +3145,8 @@ app.use('/admin', requireAuth, adminRouter);
 
 // ==================== WARDENS ====================
 
-app.get('/wardens', requireAuth, requireRole('admin'), asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('wardens.json')))));
-app.get('/wardens/:wardenId', requireAuth, requireRole('admin'), asyncRoute(async (req, res) => {
+app.get('/wardens', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('wardens.json')))));
+app.get('/wardens/:wardenId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const wardens = await readDb('wardens.json');
   const warden = wardens.find((w) => w.wardenId === req.params.wardenId);
   if (!warden || !(await inScopeOf(req, warden))) return sendError(res, 'NOT_FOUND', 'Warden not found', 404);

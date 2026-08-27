@@ -150,6 +150,9 @@ interface TrustApiService {
         @Body request: UpdatePrisonerStatusRequest
     ): ApiResponse<Prisoner>
 
+    @DELETE("admin/prisoners/{prisonerId}")
+    suspend fun deletePrisoner(@Path("prisonerId") prisonerId: String): ApiResponse<Unit>
+
     // Contacts
     @GET("admin/prisoners/{prisonerId}/contacts")
     suspend fun getPrisonerContacts(@Path("prisonerId") prisonerId: String): ApiResponse<List<VerifiedContact>>

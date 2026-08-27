@@ -17,6 +17,10 @@ import { ReportsPage } from '@/pages/ReportsPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { DevicesPage } from '@/pages/DevicesPage';
 import { KioskRegistrationPage } from '@/pages/KioskRegistrationPage';
+import { PricingPage } from '@/pages/PricingPage';
+import { UsersPage } from '@/pages/UsersPage';
+import { PrisonsPage } from '@/pages/PrisonsPage';
+import { SubscriptionsPage } from '@/pages/SubscriptionsPage';
 import { RequireAuth, RedirectIfAuthenticated } from '@/components/auth/RouteGuards';
 
 /**
@@ -81,10 +85,10 @@ export const router = createBrowserRouter([
       { path: RoutePaths.devices, element: <DevicesPage /> },
       { path: RoutePaths.kioskRegistrations, element: <KioskRegistrationPage /> },
       { path: RoutePaths.reports, element: <ReportsPage /> },
-      { path: RoutePaths.users, element: <div className="p-6"><h1 className="text-2xl font-bold">Users - Coming Soon</h1></div> },
-      { path: RoutePaths.pricing, element: <div className="p-6"><h1 className="text-2xl font-bold">Pricing - Coming Soon</h1></div> },
-      { path: RoutePaths.subscriptions, element: <div className="p-6"><h1 className="text-2xl font-bold">Subscriptions - Coming Soon</h1></div> },
-      { path: RoutePaths.prisons, element: <div className="p-6"><h1 className="text-2xl font-bold">Prisons - Coming Soon</h1></div> },
+      { path: RoutePaths.users, element: <UsersPage /> },
+      { path: RoutePaths.pricing, element: <PricingPage /> },
+      { path: RoutePaths.subscriptions, element: <SubscriptionsPage /> },
+      { path: RoutePaths.prisons, element: <PrisonsPage /> },
       { path: RoutePaths.settings, element: <SettingsPage /> },
       { path: '*', element: <Navigate to="/dashboard" replace /> },
     ],

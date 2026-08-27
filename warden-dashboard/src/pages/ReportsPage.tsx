@@ -9,15 +9,18 @@ import type { Report } from '@/services/api/wardenApi';
  */
 export function ReportsPage() {
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [reports, setReports] = useState<Report[]>([]);
   const [typeFilter, setTypeFilter] = useState('all');
 
   const loadReports = useCallback(async () => {
     try {
+      setLoadError(null);
       const reportsData = await wardenApi.getReports();
       setReports(reportsData);
     } catch (error) {
       console.error('Failed to load reports:', error);
+      setLoadError('Failed to load reports');
     } finally {
       setIsLoading(false);
     }
@@ -29,6 +32,22 @@ export function ReportsPage() {
 
   if (isLoading) {
     return <Loading message="Loading reports..." />;
+  }
+
+  if (loadError) {
+    return (
+      <Card>
+        <div className="text-center py-12">
+          <p className="text-error mb-4">{loadError}</p>
+          <button
+            onClick={() => { setIsLoading(true); loadReports(); }}
+            className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      </Card>
+    );
   }
 
   const formatDate = (dateString: string) => {

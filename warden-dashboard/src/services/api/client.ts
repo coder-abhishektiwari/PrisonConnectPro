@@ -1,6 +1,6 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import { env } from '@/config/env';
-import { getStoredTokens, persistAuth } from '@/services/auth/tokenStorage';
+import { getStoredTokens, persistAuth, STORAGE_KEYS } from '@/services/auth/tokenStorage';
 import type { ApiError } from '@/types/api';
 
 interface FailedQueueItem {
@@ -68,8 +68,8 @@ apiClient.interceptors.response.use(
         const storedTokens = getStoredTokens();
         if (!storedTokens) {
           // No tokens available, clear auth and reject
-          localStorage.removeItem('pc_warden_tokens');
-          localStorage.removeItem('pc_warden_user');
+          localStorage.removeItem(STORAGE_KEYS.tokens);
+          localStorage.removeItem(STORAGE_KEYS.user);
           return Promise.reject(error);
         }
 
@@ -95,8 +95,8 @@ apiClient.interceptors.response.use(
         isRefreshing = false;
         processQueue(refreshError as Error, null);
         // Clear auth state
-        localStorage.removeItem('pc_warden_tokens');
-        localStorage.removeItem('pc_warden_user');
+        localStorage.removeItem(STORAGE_KEYS.tokens);
+        localStorage.removeItem(STORAGE_KEYS.user);
         return Promise.reject(refreshError);
       }
     }

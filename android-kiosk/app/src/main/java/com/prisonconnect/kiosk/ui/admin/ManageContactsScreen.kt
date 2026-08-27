@@ -164,19 +164,50 @@ fun AddContactDialog(
     var name by remember { mutableStateOf("") }
     var mobile by remember { mutableStateOf("") }
     var relation by remember { mutableStateOf("") }
+    var nameError by remember { mutableStateOf(false) }
+    var mobileError by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Add Verified Contact") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Full Name") })
-                OutlinedTextField(value = mobile, onValueChange = { mobile = it }, label = { Text("Mobile Number") })
-                OutlinedTextField(value = relation, onValueChange = { relation = it }, label = { Text("Relationship") })
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it; nameError = false },
+                    label = { Text("Full Name *") },
+                    isError = nameError,
+                    singleLine = true
+                )
+                if (nameError) {
+                    Text("Name is required", color = Color(0xFFD32F2F), fontSize = 12.sp)
+                }
+                OutlinedTextField(
+                    value = mobile,
+                    onValueChange = { mobile = it; mobileError = false },
+                    label = { Text("Mobile Number *") },
+                    isError = mobileError,
+                    singleLine = true
+                )
+                if (mobileError) {
+                    Text("Mobile number is required", color = Color(0xFFD32F2F), fontSize = 12.sp)
+                }
+                OutlinedTextField(
+                    value = relation,
+                    onValueChange = { relation = it },
+                    label = { Text("Relationship") },
+                    singleLine = true
+                )
             }
         },
         confirmButton = {
-            Button(onClick = { onConfirm(name, mobile, relation) }) { Text("Add") }
+            Button(onClick = {
+                nameError = name.isBlank()
+                mobileError = mobile.isBlank()
+                if (!nameError && !mobileError) {
+                    onConfirm(name.trim(), mobile.trim(), relation.trim())
+                }
+            }) { Text("Add") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }

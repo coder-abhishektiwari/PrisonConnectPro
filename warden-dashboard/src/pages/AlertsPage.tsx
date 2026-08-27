@@ -1,8 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Card } from '@/components/Card';
 import { Loading } from '@/components/States';
+import { ToastContainer } from '@/components/ToastContainer';
 import { wardenApi } from '@/services/api/wardenApi';
 import { useWardenSocket } from '@/hooks/useWardenSocket';
+import { useToast } from '@/hooks/useToast';
+import { getStoredUser } from '@/services/auth/tokenStorage';
 import type { Alert } from '@/services/api/wardenApi';
 
 /**
@@ -13,13 +16,18 @@ export function AlertsPage() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [severityFilter, setSeverityFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
+  const { toasts, success, error: toastError, removeToast } = useToast();
 
   const loadAlerts = useCallback(async () => {
+    setLoadError(null);
     try {
       const alertsData = await wardenApi.getAlerts();
       setAlerts(alertsData);
-    } catch (error) {
-      console.error('Failed to load alerts:', error);
+    } catch (err) {
+      console.error('Failed to load alerts:', err);
+      setLoadError('Failed to load alerts');
     } finally {
       setIsLoading(false);
     }
@@ -39,6 +47,28 @@ export function AlertsPage() {
 
   if (isLoading) {
     return <Loading message="Loading alerts..." />;
+  }
+
+  if (loadError) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-neutral-900">Alerts</h1>
+          <p className="text-neutral-600 mt-1">Real-time threat alerts and system events</p>
+        </div>
+        <Card>
+          <div className="text-center py-12">
+            <p className="text-error mb-4">{loadError}</p>
+            <button
+              onClick={() => { setIsLoading(true); loadAlerts(); }}
+              className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700"
+            >
+              Retry
+            </button>
+          </div>
+        </Card>
+      </div>
+    );
   }
 
   const getSeverityColor = (severity: string) => {
@@ -86,13 +116,19 @@ export function AlertsPage() {
   };
 
   const handleResolve = async (alertId: string) => {
+    setResolvingId(alertId);
     try {
-      await wardenApi.resolveAlert(alertId, 'warden-001');
+      const user = getStoredUser();
+      await wardenApi.resolveAlert(alertId, user?.id || 'unknown');
       setAlerts((prev) => prev.map((alert) => 
         alert.alertId === alertId ? { ...alert, resolved: true } : alert
       ));
-    } catch (error) {
-      console.error('Failed to resolve alert:', error);
+      success('Alert resolved');
+    } catch (err) {
+      console.error('Failed to resolve alert:', err);
+      toastError('Failed to resolve alert');
+    } finally {
+      setResolvingId(null);
     }
   };
 
@@ -173,9 +209,10 @@ export function AlertsPage() {
                   {!alert.resolved && (
                     <button 
                       onClick={() => handleResolve(alert.alertId)}
-                      className="px-3 py-1 bg-primary-600 text-white rounded-md text-sm hover:bg-primary-700"
+                      disabled={resolvingId === alert.alertId}
+                      className="px-3 py-1 bg-primary-600 text-white rounded-md text-sm hover:bg-primary-700 disabled:opacity-50"
                     >
-                      Resolve
+                      {resolvingId === alert.alertId ? 'Resolving...' : 'Resolve'}
                     </button>
                   )}
                   <button className="px-3 py-1 bg-neutral-200 text-neutral-900 rounded-md text-sm hover:bg-neutral-300">
@@ -187,6 +224,9 @@ export function AlertsPage() {
           ))}
         </div>
       )}
+
+      {/* Toast */}
+      <ToastContainer toasts={toasts} onDismiss={removeToast} />
     </div>
   );
 }

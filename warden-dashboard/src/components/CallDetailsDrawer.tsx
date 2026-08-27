@@ -106,7 +106,7 @@ export function CallDetailsDrawer({ call, onClose }: CallDetailsDrawerProps) {
                     <p className="font-semibold text-neutral-900">
                       {inmate ? `${inmate.firstName} ${inmate.lastName}` : call.inmateName || call.inmateId}
                     </p>
-                    <p className="text-sm text-neutral-600">{inmate?.facility || 'Central Prison'}</p>
+                    <p className="text-sm text-neutral-600">{inmate?.facility || inmate?.prisonId || 'Unknown'}</p>
                     <p className="text-sm text-neutral-600">
                       {inmate?.cellBlock || 'Unknown'} • {inmate?.securityLevel || 'Unknown'} security
                     </p>

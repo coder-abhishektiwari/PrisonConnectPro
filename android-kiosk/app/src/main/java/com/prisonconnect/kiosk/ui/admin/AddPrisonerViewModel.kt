@@ -53,8 +53,12 @@ class AddPrisonerViewModel @Inject constructor(
             dateOfBirth = dateOfBirth.ifBlank { null },
             gender = gender.ifBlank { null },
             cellBlock = cellBlock.ifBlank { null },
+            cellNumber = cellNumber.ifBlank { null },
             securityLevel = securityLevel.ifBlank { null },
+            sentenceStart = sentenceStart.ifBlank { null },
+            sentenceEnd = sentenceEnd.ifBlank { null },
             sentenceDetails = sentenceDetails.ifBlank { null },
+            pin = pin.ifBlank { null },
             faceTemplate = faceTemplate?.ifBlank { null },
             fingerprintTemplate = fingerprintTemplate?.ifBlank { null },
             rfidTag = rfidTag?.ifBlank { null }

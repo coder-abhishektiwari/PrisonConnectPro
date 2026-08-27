@@ -27,8 +27,10 @@ export function DashboardPage() {
   const [activeCalls, setActiveCalls] = useState<ActiveCall[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadStats = useCallback(async () => {
+    setLoadError(null);
     try {
       const [dashboardStats, calls, alertsData, devicesData] = await Promise.all([
         wardenApi.getDashboardStats(),
@@ -42,6 +44,7 @@ export function DashboardPage() {
       setDevices(devicesData ?? []);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
+      setLoadError('Failed to load dashboard data');
     } finally {
       setIsLoading(false);
     }
@@ -74,6 +77,26 @@ export function DashboardPage() {
               <div className="h-3 bg-neutral-200 rounded w-20"></div>
             </div>
           ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-neutral-900">Operations Console</h1>
+          <p className="text-neutral-600 mt-1">Real-time monitoring dashboard</p>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm border border-neutral-200 p-12 text-center">
+          <p className="text-error mb-4">{loadError}</p>
+          <button
+            onClick={() => { setIsLoading(true); loadStats(); }}
+            className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700"
+          >
+            Retry
+          </button>
         </div>
       </div>
     );

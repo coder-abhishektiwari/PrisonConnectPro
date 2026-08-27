@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { Card } from '@/components/Card';
 import { Loading } from '@/components/States';
@@ -11,31 +11,50 @@ import type { Inmate, Device } from '@/services/api/wardenApi';
 export function InmateDetailsPage() {
   const { inmateId } = useParams<{ inmateId: string }>();
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [inmate, setInmate] = useState<Inmate | null>(null);
   const [devices, setDevices] = useState<Device[]>([]);
 
-  useEffect(() => {
-    const loadInmateDetails = async () => {
-      try {
-        const [inmates, devicesData] = await Promise.all([
-          wardenApi.getInmates(),
-          wardenApi.getDevices(),
-        ]);
-        const foundInmate = inmates.find((i) => i.inmateId === inmateId) || inmates[0] || null;
-        setInmate(foundInmate);
-        setDevices(devicesData);
-      } catch (error) {
-        console.error('Failed to load inmate details:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadInmateDetails();
+  const loadInmateDetails = useCallback(async () => {
+    try {
+      setLoadError(null);
+      const [inmates, devicesData] = await Promise.all([
+        wardenApi.getInmates(),
+        wardenApi.getDevices(),
+      ]);
+      const foundInmate = inmates.find((i) => i.inmateId === inmateId) || inmates[0] || null;
+      setInmate(foundInmate);
+      setDevices(devicesData);
+    } catch (error) {
+      console.error('Failed to load inmate details:', error);
+      setLoadError('Failed to load inmate details');
+    } finally {
+      setIsLoading(false);
+    }
   }, [inmateId]);
+
+  useEffect(() => {
+    loadInmateDetails();
+  }, [loadInmateDetails]);
 
   if (isLoading) {
     return <Loading message="Loading inmate details..." />;
+  }
+
+  if (loadError) {
+    return (
+      <Card>
+        <div className="text-center py-12">
+          <p className="text-error mb-4">{loadError}</p>
+          <button
+            onClick={() => { setIsLoading(true); loadInmateDetails(); }}
+            className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      </Card>
+    );
   }
 
   if (!inmate) {

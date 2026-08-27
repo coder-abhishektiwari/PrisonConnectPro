@@ -3,6 +3,7 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Loading } from '@/components/States';
 import { wardenApi } from '@/services/api/wardenApi';
+import { getStoredUser } from '@/services/auth/tokenStorage';
 import type { Settings, Pricing } from '@/services/api/wardenApi';
 
 /**
@@ -17,6 +18,10 @@ export function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [loadError, setLoadError] = useState(false);
+
+  // Get prisonId from logged-in warden's profile
+  const storedUser = getStoredUser();
+  const prisonId = storedUser?.prisonId || '';
 
   useEffect(() => {
     const load = async () => {
@@ -185,7 +190,7 @@ export function SettingsPage() {
           <div className="space-y-4">
             <p className="text-sm text-neutral-600">
               Configure the 6-digit Setup PIN required for first-time hardware
-              provisioning of kiosks at PRISON-001 (Central Prison Facility).
+              provisioning of kiosks at {prisonId}.
             </p>
             <div className="max-w-xs">
               <label className="block text-sm font-medium text-neutral-700 mb-1">
@@ -194,13 +199,17 @@ export function SettingsPage() {
               <input
                 type="text"
                 maxLength={6}
-                defaultValue="123456"
+                placeholder="Enter 6-digit PIN"
                 onChange={async (e) => {
                   if (e.target.value.length === 6) {
                     try {
-                      await wardenApi.updateSetupPin('PRISON-001', e.target.value);
+                      await wardenApi.updateSetupPin(prisonId, e.target.value);
+                      setSaveMessage('Setup PIN updated successfully');
+                      setTimeout(() => setSaveMessage(null), 3000);
                     } catch (err) {
                       console.error('Failed to update PIN', err);
+                      setSaveMessage('Failed to update PIN');
+                      setTimeout(() => setSaveMessage(null), 3000);
                     }
                   }
                 }}
