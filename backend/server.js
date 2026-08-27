@@ -1412,6 +1412,7 @@ app.post('/calls', requireAuth, asyncRoute(async (req, res) => {
     // to 'completed'.
     status: 'active',
     startTime: callData.startTime || new Date().toISOString(),
+    mediaConnectedAt: null,  // Set when WebRTC media actually connects — billing starts from here
     endTime: null, durationMinutes: 0,
     recordingEnabled: callData.recordingEnabled !== undefined ? callData.recordingEnabled : true,
     recordingStatus: 'not_recording',
@@ -1801,6 +1802,11 @@ app.patch('/calls/:callId', requireAuth, asyncRoute(async (req, res) => {
       }
 
       calls[idx] = { ...calls[idx], ...updates };
+
+      // Track when WebRTC media actually connects — billing starts from here, not from startTime
+      if (updates.iceState === 'connected' && !calls[idx].mediaConnectedAt) {
+        calls[idx].mediaConnectedAt = new Date().toISOString();
+      }
       return { data: calls, result: calls[idx] };
     });
 
@@ -1870,13 +1876,23 @@ app.get('/calls/history/:id', requireAuth, asyncRoute(async (req, res) => {
 async function finalizeCall(call, requestedEndTimeMs) {
   const startMs = new Date(call.startTime).getTime();
   const maxMs = (Number(call.maxDurationMinutes) || 15) * 60000;
+
+  // Billing starts from media connection, NOT from call creation.
+  // If media never connected (family left in lobby), charge is 0.
+  const billingStartMs = call.mediaConnectedAt
+    ? new Date(call.mediaConnectedAt).getTime()
+    : startMs;
+  const neverConnected = !call.mediaConnectedAt;
+
   // A call that outlived its max duration (kiosk died) is billed only up to
   // the cap — time after the app died must not be charged.
-  const endMs = Math.min(Math.max(requestedEndTimeMs, startMs), startMs + maxMs);
-  const durationSec = Math.max(0, (endMs - startMs) / 1000);
+  const endMs = neverConnected
+    ? billingStartMs  // No charge if never connected
+    : Math.min(Math.max(requestedEndTimeMs, billingStartMs), billingStartMs + maxMs);
+  const durationSec = Math.max(0, (endMs - billingStartMs) / 1000);
   const billedMinutes = Math.ceil(durationSec / 60);
   const ratePerMinute = Number(call.ratePerMinute) || 0;
-  const chargeAmount = +(billedMinutes * ratePerMinute).toFixed(2);
+  const chargeAmount = neverConnected ? 0 : +(billedMinutes * ratePerMinute).toFixed(2);
 
   const updatedCall = await updateDb('calls.json', (calls) => {
     const idx = calls.findIndex((c) => c.callId === call.callId);
