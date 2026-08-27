@@ -1165,7 +1165,7 @@ app.get('/contacts/:id', requireAuth, asyncRoute(async (req, res) => {
   if (inmate && !(await inScopeOf(req, inmate))) {
     return sendError(res, 'NOT_FOUND', 'Inmate not found in your kiosk/jail', 404);
   }
-  const scoped = inmate ? contacts.filter((c) => c.inmateId === inmate.inmateId || c.inmateId === `INM-${inmate.inmateId}`) : [];
+  const scoped = inmate ? contacts.filter((c) => (c.inmateId === inmate.inmateId || c.inmateId === `INM-${inmate.inmateId}`) && c.active !== false) : [];
   return sendSuccess(res, scoped);
 }));
 
@@ -1251,7 +1251,7 @@ app.patch('/admin/contacts/:contactId/status', requireAuth, requireRole('admin',
   const updated = await updateDb('contacts.json', (all) => {
     const idx = all.findIndex((c) => c.contactId === contactId);
     if (idx === -1) return { data: all, result: null };
-    all[idx] = { ...all[idx], status };
+    all[idx] = { ...all[idx], status, active: status === 'active' || status === 'suspended' };
     return { data: all, result: all[idx] };
   });
 
