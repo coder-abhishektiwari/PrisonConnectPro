@@ -1201,6 +1201,7 @@ app.post('/admin/prisoners/:prisonerId/contacts', requireAuth, requireRole('admi
     email: contactData.email,
     address: contactData.address || {},
     status: contactData.status || 'active',
+    active: true,
     isPrimary: contactData.isPrimary || false,
     isApproved: contactData.isApproved !== undefined ? contactData.isApproved : true,
     createdAt: new Date().toISOString()
