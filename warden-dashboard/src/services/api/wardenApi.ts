@@ -1,5 +1,6 @@
 import { apiClient } from './client';
 import type { ApiResponse } from '@/types/api';
+import { cachedGet, invalidateCache } from './cache';
 
 export interface ActiveCall {
   callId: string;
@@ -240,116 +241,143 @@ export interface SecurityStatus {
 export const wardenApi = {
   // Active Calls
   getActiveCalls: () =>
-    apiClient.get<ApiResponse<ActiveCall[]>>('/calls/active').then((r) => r.data?.data ?? []),
+    cachedGet('calls:active', () => apiClient.get<ApiResponse<ActiveCall[]>>('/calls/active').then((r) => r.data?.data ?? [])),
 
   // All Calls
   getAllCalls: () =>
-    apiClient.get<ApiResponse<ActiveCall[]>>('/calls').then((r) => r.data?.data ?? []),
+    cachedGet('calls:all', () => apiClient.get<ApiResponse<ActiveCall[]>>('/calls').then((r) => r.data?.data ?? [])),
 
   // Call by ID
   getCall: (callId: string) =>
-    apiClient.get<ApiResponse<ActiveCall>>(`/calls/${callId}`).then((r) => r.data?.data),
+    cachedGet(`calls:${callId}`, () => apiClient.get<ApiResponse<ActiveCall>>(`/calls/${callId}`).then((r) => r.data?.data)),
 
   // Update Call
   updateCall: (callId: string, updates: Partial<ActiveCall>) =>
-    apiClient.patch<ApiResponse<ActiveCall>>(`/calls/${callId}`, updates).then((r) => r.data?.data),
+    apiClient.patch<ApiResponse<ActiveCall>>(`/calls/${callId}`, updates).then((r) => {
+      invalidateCache('calls:active', 'calls:all', `calls:${callId}`);
+      return r.data?.data;
+    }),
 
   // Call History
   getCallHistory: () =>
-    apiClient.get<ApiResponse<CallHistoryItem[]>>('/calls/history').then((r) => r.data?.data ?? []),
+    cachedGet('calls:history', () => apiClient.get<ApiResponse<CallHistoryItem[]>>('/calls/history').then((r) => r.data?.data ?? [])),
 
   // Recordings
   getRecordings: () =>
-    apiClient.get<ApiResponse<Recording[]>>('/recordings').then((r) => r.data?.data ?? []),
+    cachedGet('recordings', () => apiClient.get<ApiResponse<Recording[]>>('/recordings').then((r) => r.data?.data ?? [])),
 
   getRecording: (recordingId: string) =>
-    apiClient.get<ApiResponse<Recording>>(`/recordings/${recordingId}`).then((r) => r.data?.data),
+    cachedGet(`recordings:${recordingId}`, () => apiClient.get<ApiResponse<Recording>>(`/recordings/${recordingId}`).then((r) => r.data?.data)),
 
   startRecording: (recordingId: string) =>
-    apiClient.post<ApiResponse<Recording>>(`/recordings/${recordingId}/start`).then((r) => r.data?.data),
+    apiClient.post<ApiResponse<Recording>>(`/recordings/${recordingId}/start`).then((r) => {
+      invalidateCache('recordings');
+      return r.data?.data;
+    }),
 
   stopRecording: (recordingId: string) =>
-    apiClient.post<ApiResponse<Recording>>(`/recordings/${recordingId}/stop`).then((r) => r.data?.data),
+    apiClient.post<ApiResponse<Recording>>(`/recordings/${recordingId}/stop`).then((r) => {
+      invalidateCache('recordings');
+      return r.data?.data;
+    }),
 
   // Alerts
   getAlerts: () =>
-    apiClient.get<ApiResponse<Alert[]>>('/alerts').then((r) => r.data?.data ?? []),
+    cachedGet('alerts', () => apiClient.get<ApiResponse<Alert[]>>('/alerts').then((r) => r.data?.data ?? [])),
 
   resolveAlert: (alertId: string, resolvedBy: string) =>
-    apiClient.patch<ApiResponse<Alert>>(`/alerts/${alertId}/resolve`, { resolvedBy }).then((r) => r.data?.data),
+    apiClient.patch<ApiResponse<Alert>>(`/alerts/${alertId}/resolve`, { resolvedBy }).then((r) => {
+      invalidateCache('alerts');
+      return r.data?.data;
+    }),
 
   // Devices
   getDevices: () =>
-    apiClient.get<ApiResponse<Device[]>>('/devices').then((r) => r.data?.data ?? []),
+    cachedGet('devices', () => apiClient.get<ApiResponse<Device[]>>('/devices').then((r) => r.data?.data ?? [])),
 
   getDevice: (deviceId: string) =>
-    apiClient.get<ApiResponse<Device>>(`/devices/${deviceId}`).then((r) => r.data?.data),
+    cachedGet(`devices:${deviceId}`, () => apiClient.get<ApiResponse<Device>>(`/devices/${deviceId}`).then((r) => r.data?.data)),
 
   updateDeviceStatus: (deviceId: string, status: string) =>
-    apiClient.patch<ApiResponse<Device>>(`/devices/${deviceId}/status`, { status }).then((r) => r.data?.data),
+    apiClient.patch<ApiResponse<Device>>(`/devices/${deviceId}/status`, { status }).then((r) => {
+      invalidateCache('devices');
+      return r.data?.data;
+    }),
 
   // Reports
   getReports: () =>
-    apiClient.get<ApiResponse<Report[]>>('/reports').then((r) => r.data?.data ?? []),
+    cachedGet('reports', () => apiClient.get<ApiResponse<Report[]>>('/reports').then((r) => r.data?.data ?? [])),
 
   getReport: (reportId: string) =>
-    apiClient.get<ApiResponse<Report>>(`/reports/${reportId}`).then((r) => r.data?.data),
+    cachedGet(`reports:${reportId}`, () => apiClient.get<ApiResponse<Report>>(`/reports/${reportId}`).then((r) => r.data?.data)),
 
   // Inmates
   getInmates: () =>
-    apiClient.get<ApiResponse<Inmate[]>>('/inmates').then((r) => r.data?.data ?? []),
+    cachedGet('inmates', () => apiClient.get<ApiResponse<Inmate[]>>('/inmates').then((r) => r.data?.data ?? [])),
 
   getInmate: (inmateId: string) =>
-    apiClient.get<ApiResponse<Inmate>>(`/inmates/${inmateId}`).then((r) => r.data?.data),
+    cachedGet(`inmates:${inmateId}`, () => apiClient.get<ApiResponse<Inmate>>(`/inmates/${inmateId}`).then((r) => r.data?.data)),
 
   // Contacts
   getContacts: () =>
-    apiClient.get<ApiResponse<Contact[]>>('/contacts').then((r) => r.data?.data ?? []),
+    cachedGet('contacts', () => apiClient.get<ApiResponse<Contact[]>>('/contacts').then((r) => r.data?.data ?? [])),
 
   // Wallets
   getWallets: () =>
-    apiClient.get<ApiResponse<Wallet[]>>('/wallets').then((r) => r.data?.data ?? []),
+    cachedGet('wallets', () => apiClient.get<ApiResponse<Wallet[]>>('/wallets').then((r) => r.data?.data ?? [])),
 
   getWallet: (inmateId: string) =>
-    apiClient.get<ApiResponse<Wallet>>(`/wallets/${inmateId}`).then((r) => r.data?.data),
+    cachedGet(`wallets:${inmateId}`, () => apiClient.get<ApiResponse<Wallet>>(`/wallets/${inmateId}`).then((r) => r.data?.data)),
 
   // Schedule
   getSchedule: () =>
-    apiClient.get<ApiResponse<Schedule[]>>('/schedule').then((r) => r.data?.data ?? []),
+    cachedGet('schedule', () => apiClient.get<ApiResponse<Schedule[]>>('/schedule').then((r) => r.data?.data ?? [])),
 
   // Settings
   getSettings: () =>
-    apiClient.get<ApiResponse<Settings>>('/settings').then((r) => r.data?.data),
+    cachedGet('settings', () => apiClient.get<ApiResponse<Settings>>('/settings').then((r) => r.data?.data), 60_000),
 
   updateSettings: (settings: Partial<Settings>) =>
-    apiClient.patch<ApiResponse<Settings>>('/settings', settings).then((r) => r.data?.data),
+    apiClient.patch<ApiResponse<Settings>>('/settings', settings).then((r) => {
+      invalidateCache('settings');
+      return r.data?.data;
+    }),
 
   // Pricing (per-minute call rates set by the warden)
   getPricing: () =>
-    apiClient.get<ApiResponse<Pricing>>('/pricing').then((r) => r.data?.data),
+    cachedGet('pricing', () => apiClient.get<ApiResponse<Pricing>>('/pricing').then((r) => r.data?.data), 60_000),
 
   updatePricing: (pricing: Partial<Pricing>) =>
-    apiClient.patch<ApiResponse<Pricing>>('/pricing', pricing).then((r) => r.data?.data),
+    apiClient.patch<ApiResponse<Pricing>>('/pricing', pricing).then((r) => {
+      invalidateCache('pricing');
+      return r.data?.data;
+    }),
 
   // Incidents
   getIncidents: () =>
-    apiClient.get<ApiResponse<Incident[]>>('/incidents').then((r) => r.data?.data ?? []),
+    cachedGet('incidents', () => apiClient.get<ApiResponse<Incident[]>>('/incidents').then((r) => r.data?.data ?? [])),
 
   createIncident: (incident: Partial<Incident>) =>
-    apiClient.post<ApiResponse<Incident>>('/incidents', incident).then((r) => r.data?.data),
+    apiClient.post<ApiResponse<Incident>>('/incidents', incident).then((r) => {
+      invalidateCache('incidents');
+      return r.data?.data;
+    }),
 
   getIncident: (incidentId: string) =>
-    apiClient.get<ApiResponse<Incident>>(`/incidents/${incidentId}`).then((r) => r.data?.data),
+    cachedGet(`incidents:${incidentId}`, () => apiClient.get<ApiResponse<Incident>>(`/incidents/${incidentId}`).then((r) => r.data?.data)),
 
   // Statistics
   getStatistics: () =>
-    apiClient.get<ApiResponse<CallStatistics[]>>('/statistics').then((r) => r.data?.data ?? []),
+    cachedGet('statistics', () => apiClient.get<ApiResponse<CallStatistics[]>>('/statistics').then((r) => r.data?.data ?? [])),
 
   getCallStatistics: (callId: string) =>
-    apiClient.get<ApiResponse<CallStatistics>>(`/statistics/${callId}`).then((r) => r.data?.data),
+    cachedGet(`statistics:${callId}`, () => apiClient.get<ApiResponse<CallStatistics>>(`/statistics/${callId}`).then((r) => r.data?.data)),
 
   updateCallStatistics: (callId: string, updates: Partial<CallStatistics>) =>
-    apiClient.patch<ApiResponse<CallStatistics>>(`/statistics/${callId}`, updates).then((r) => r.data?.data),
+    apiClient.patch<ApiResponse<CallStatistics>>(`/statistics/${callId}`, updates).then((r) => {
+      invalidateCache('statistics', `statistics:${callId}`);
+      return r.data?.data;
+    }),
 
   // Call Control
   sendCallControl: (callId: string, action: string, target?: string) =>
@@ -409,37 +437,46 @@ export const wardenApi = {
 
   // Kiosk Registration & Authorization
   getKioskRegistrationRequests: () =>
-    apiClient.get<ApiResponse<KioskRegistrationRequestItem[]>>('/kiosks/registration-requests').then((r) => r.data?.data ?? []),
+    cachedGet('kiosks:registration', () => apiClient.get<ApiResponse<KioskRegistrationRequestItem[]>>('/kiosks/registration-requests').then((r) => r.data?.data ?? [])),
 
   approveKioskRegistration: (requestId: string) =>
-    apiClient.put<ApiResponse<{ success: boolean }>>(`/kiosks/registration/${requestId}/approve`).then((r) => r.data?.data ?? { success: false }),
+    apiClient.put<ApiResponse<{ success: boolean }>>(`/kiosks/registration/${requestId}/approve`).then((r) => {
+      invalidateCache('kiosks:registration');
+      return r.data?.data ?? { success: false };
+    }),
 
   rejectKioskRegistration: (requestId: string) =>
-    apiClient.put<ApiResponse<{ success: boolean }>>(`/kiosks/registration/${requestId}/reject`).then((r) => r.data?.data ?? { success: false }),
+    apiClient.put<ApiResponse<{ success: boolean }>>(`/kiosks/registration/${requestId}/reject`).then((r) => {
+      invalidateCache('kiosks:registration');
+      return r.data?.data ?? { success: false };
+    }),
 
   getSetupPin: (prisonId: string) =>
-    apiClient.get<ApiResponse<SetupPinData>>(`/kiosks/setup-pin/${prisonId}`).then((r) => r.data?.data),
+    cachedGet(`kiosks:pin:${prisonId}`, () => apiClient.get<ApiResponse<SetupPinData>>(`/kiosks/setup-pin/${prisonId}`).then((r) => r.data?.data)),
 
   updateSetupPin: (prisonId: string, pin: string) =>
-    apiClient.put<ApiResponse<{ success: boolean }>>('/kiosks/setup-pin', { prisonId, pin }).then((r) => r.data?.data ?? { success: false }),
+    apiClient.put<ApiResponse<{ success: boolean }>>('/kiosks/setup-pin', { prisonId, pin }).then((r) => {
+      invalidateCache(`kiosks:pin:${prisonId}`);
+      return r.data?.data ?? { success: false };
+    }),
 
   // User Management
   getWardens: () =>
-    apiClient.get<ApiResponse<any[]>>('/wardens').then((r) => r.data?.data ?? []),
+    cachedGet('wardens', () => apiClient.get<ApiResponse<any[]>>('/wardens').then((r) => r.data?.data ?? [])),
 
   getWarden: (wardenId: string) =>
-    apiClient.get<ApiResponse<any>>(`/wardens/${wardenId}`).then((r) => r.data?.data),
+    cachedGet(`wardens:${wardenId}`, () => apiClient.get<ApiResponse<any>>(`/wardens/${wardenId}`).then((r) => r.data?.data)),
 
   // Prisons
   getPrisons: () =>
-    apiClient.get<ApiResponse<any[]>>('/prisons').then((r) => r.data?.data ?? []),
+    cachedGet('prisons', () => apiClient.get<ApiResponse<any[]>>('/prisons').then((r) => r.data?.data ?? [])),
 
   getPrison: (prisonId: string) =>
-    apiClient.get<ApiResponse<any>>(`/prisons/${prisonId}`).then((r) => r.data?.data),
+    cachedGet(`prisons:${prisonId}`, () => apiClient.get<ApiResponse<any>>(`/prisons/${prisonId}`).then((r) => r.data?.data)),
 
   // Subscriptions
   getSubscriptions: () =>
-    apiClient.get<ApiResponse<any[]>>('/subscriptions').then((r) => r.data?.data ?? []),
+    cachedGet('subscriptions', () => apiClient.get<ApiResponse<any[]>>('/subscriptions').then((r) => r.data?.data ?? [])),
 };
 
 export interface KioskRegistrationRequestItem {

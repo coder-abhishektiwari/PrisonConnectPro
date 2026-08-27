@@ -24,6 +24,7 @@ import {
   isTokenExpired,
   persistAuth,
 } from '@/services/auth/tokenStorage';
+import { clearCache } from '@/services/api/cache';
 
 /**
  * Auth Context Value
@@ -277,6 +278,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
       clearAuth();
+      clearCache();
     } finally {
       setIsLoading(false);
     }
