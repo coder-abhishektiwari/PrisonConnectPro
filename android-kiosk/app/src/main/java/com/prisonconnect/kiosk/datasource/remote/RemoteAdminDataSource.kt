@@ -48,6 +48,9 @@ class RemoteAdminDataSource @Inject constructor(
     override suspend fun updateContactStatus(contactId: String, request: UpdateContactStatusRequest): ApiResponse<VerifiedContact> =
         apiService.updateContactStatus(contactId, request).also { cache.invalidatePrefix("admin:contacts") }
 
+    override suspend fun deleteContact(contactId: String): ApiResponse<Unit> =
+        apiService.deleteContact(contactId).also { cache.invalidatePrefix("admin:contacts") }
+
     override suspend fun getPrisonerBiometrics(prisonerId: String): ApiResponse<List<BiometricRegistration>> =
         cache.getOrFetch("admin:biometrics:$prisonerId") { apiService.getPrisonerBiometrics(prisonerId) }
 

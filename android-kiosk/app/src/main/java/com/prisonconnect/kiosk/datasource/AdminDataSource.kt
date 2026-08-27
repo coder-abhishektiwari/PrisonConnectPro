@@ -22,6 +22,7 @@ interface AdminDataSource {
     suspend fun createContact(prisonerId: String, request: CreateContactRequest): ApiResponse<VerifiedContact>
     suspend fun updateContact(contactId: String, request: UpdateContactRequest): ApiResponse<VerifiedContact>
     suspend fun updateContactStatus(contactId: String, request: UpdateContactStatusRequest): ApiResponse<VerifiedContact>
+    suspend fun deleteContact(contactId: String): ApiResponse<Unit>
 
     // Biometrics
     suspend fun getPrisonerBiometrics(prisonerId: String): ApiResponse<List<BiometricRegistration>>

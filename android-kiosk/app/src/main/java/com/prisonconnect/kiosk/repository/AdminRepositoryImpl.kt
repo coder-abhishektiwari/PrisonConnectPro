@@ -155,6 +155,20 @@ class AdminRepositoryImpl @Inject constructor(
         }
     }
 
+    override fun deleteContact(contactId: String): Flow<NetworkResult<Unit>> = flow {
+        emit(NetworkResult.Loading)
+        try {
+            val response = dataSource.deleteContact(contactId)
+            if (response.success) {
+                emit(NetworkResult.Success(Unit))
+            } else {
+                emit(NetworkResult.Failure(response.error ?: ApiError("UNKNOWN", "Unknown error")))
+            }
+        } catch (e: Exception) {
+            emit(NetworkResult.Failure(ApiError("EXCEPTION", e.message ?: "Network exception")))
+        }
+    }
+
     override fun getPrisonerBiometrics(prisonerId: String): Flow<NetworkResult<List<BiometricRegistration>>> = flow {
         emit(NetworkResult.Loading)
         try {

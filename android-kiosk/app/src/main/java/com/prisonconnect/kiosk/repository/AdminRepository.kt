@@ -22,6 +22,7 @@ interface AdminRepository {
     fun createContact(prisonerId: String, request: CreateContactRequest): Flow<NetworkResult<VerifiedContact>>
     fun updateContact(contactId: String, request: UpdateContactRequest): Flow<NetworkResult<VerifiedContact>>
     fun updateContactStatus(contactId: String, request: UpdateContactStatusRequest): Flow<NetworkResult<VerifiedContact>>
+    fun deleteContact(contactId: String): Flow<NetworkResult<Unit>>
 
     // Biometrics
     fun getPrisonerBiometrics(prisonerId: String): Flow<NetworkResult<List<BiometricRegistration>>>

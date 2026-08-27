@@ -175,6 +175,9 @@ interface TrustApiService {
         @Body request: UpdateContactStatusRequest
     ): ApiResponse<VerifiedContact>
 
+    @DELETE("admin/contacts/{contactId}")
+    suspend fun deleteContact(@Path("contactId") contactId: String): ApiResponse<Unit>
+
     // Biometrics
     @GET("admin/prisoners/{prisonerId}/biometrics")
     suspend fun getPrisonerBiometrics(@Path("prisonerId") prisonerId: String): ApiResponse<List<BiometricRegistration>>

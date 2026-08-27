@@ -1259,6 +1259,21 @@ app.patch('/admin/contacts/:contactId/status', requireAuth, requireRole('admin',
   return sendSuccess(res, updated.result);
 }));
 
+app.delete('/admin/contacts/:contactId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+  const { contactId } = req.params;
+  const [contacts, inmates] = await Promise.all([readDb('contacts.json'), readDb('inmates.json')]);
+  const target = contacts.find((c) => c.contactId === contactId);
+  if (!target) return sendError(res, 'NOT_FOUND', 'Contact not found', 404);
+  const owner = inmates.find((i) => i.inmateId === target.inmateId && inAdminScope(req, i));
+  if (!owner) return sendError(res, 'NOT_FOUND', 'Contact not found in your kiosk', 404);
+
+  const deleted = await updateDb('contacts.json', (all) => {
+    const filtered = all.filter((c) => c.contactId !== contactId);
+    return { data: filtered, result: { deleted: true, contactId } };
+  });
+  return sendSuccess(res, deleted.result);
+}));
+
 // ==================== CALL ROUTES ====================
 
 app.get('/calls', requireAuth, asyncRoute(async (req, res) => {
