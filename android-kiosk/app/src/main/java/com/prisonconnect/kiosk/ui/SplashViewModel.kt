@@ -38,7 +38,11 @@ class SplashViewModel @Inject constructor(
     val navigationEvent = _navigationEvent.asSharedFlow()
 
     init {
-        startVerification()
+        // Always start at login — clear auth tokens but keep kiosk registration
+        launch {
+            sessionManager.clearAuthOnly()
+            startVerification()
+        }
     }
 
     fun startVerification() {

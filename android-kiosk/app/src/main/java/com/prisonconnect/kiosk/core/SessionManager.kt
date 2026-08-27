@@ -122,6 +122,25 @@ class SessionManager @Inject constructor(
         }
     }
 
+    /**
+     * Clear only auth tokens — keep kiosk registration info.
+     */
+    suspend fun clearAuthOnly() {
+        context.dataStore.edit { prefs ->
+            prefs.remove(KEY_ACCESS_TOKEN)
+            prefs.remove(KEY_REFRESH_TOKEN)
+            prefs.remove(KEY_TOKEN_EXPIRES_IN)
+            prefs.remove(KEY_TOKEN_STORED_AT)
+            prefs.remove(KEY_ADMIN_ID)
+            prefs.remove(KEY_ADMIN_EMPLOYEE_ID)
+            prefs.remove(KEY_ADMIN_NAME)
+            prefs.remove(KEY_ADMIN_EMAIL)
+            prefs.remove(KEY_ADMIN_ROLE)
+            prefs.remove(KEY_INMATE_ID)
+            prefs.remove(KEY_INMATE_NAME)
+        }
+    }
+
     // ==================== KIOSK INFO ====================
 
     /**

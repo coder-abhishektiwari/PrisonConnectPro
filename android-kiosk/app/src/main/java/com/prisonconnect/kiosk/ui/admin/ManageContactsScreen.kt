@@ -37,6 +37,14 @@ fun ManageContactsScreen(
     var showDeleteConfirm by remember { mutableStateOf<VerifiedContact?>(null) }
     var snackbarMessage by remember { mutableStateOf<String?>(null) }
 
+    // Auto-dismiss snackbar after 3 seconds
+    LaunchedEffect(snackbarMessage) {
+        if (snackbarMessage != null) {
+            kotlinx.coroutines.delay(3000L)
+            snackbarMessage = null
+        }
+    }
+
     LaunchedEffect(prisonerId) {
         viewModel.loadContacts(prisonerId)
     }
@@ -83,11 +91,9 @@ fun ManageContactsScreen(
         },
         snackbarHost = {
             snackbarMessage?.let { msg ->
-                Snackbar(
-                    action = {
-                        TextButton(onClick = { snackbarMessage = null }) { Text("OK") }
-                    }
-                ) { Text(msg) }
+                Snackbar {
+                    Text(msg)
+                }
             }
         },
         containerColor = Color(0xFFF5F7FA)
