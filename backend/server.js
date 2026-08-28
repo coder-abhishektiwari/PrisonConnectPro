@@ -1533,7 +1533,8 @@ app.post('/calls', requireAuth, asyncRoute(async (req, res) => {
           phone: familyPhone,
           message: buildLinkSms(newCall),
           kind: 'link',
-          callId: newCall.callId
+          callId: newCall.callId,
+          templateVars: linkTemplateVars(newCall.inmateName, buildCallLink(newCall.linkToken))
         });
         await updateDb('calls.json', (calls) => {
           const idx = calls.findIndex((c) => c.callId === newCall.callId);
@@ -1696,15 +1697,14 @@ app.post('/calls/:linkToken/send-otp', asyncRoute(async (req, res) => {
     return { data: all, result: all[idx] };
   });
 
-  const { sendSms } = require('./lib/sms');
-  const { buildOtpMessage } = require('./lib/sms');
   let smsResult = null;
   try {
     smsResult = await sendSms({
       phone: familyPhone,
-      message: buildOtpMessage(otp, 'call'),
+      message: `OTP ${otp} for call ${call.callId}`,
       kind: 'otp',
-      callId: call.callId
+      callId: call.callId,
+      templateVars: otpTemplateVars(otp)
     });
   } catch (err) {
     console.error('[otp] send failed:', err.message);
@@ -2195,7 +2195,13 @@ app.post('/schedule/book', requireAuth, asyncRoute(async (req, res) => {
         `${inmateName} from ${jailName} has scheduled a ${newSchedule.callType} call ` +
         `with you on ${date} at ${timeSlot}. Please don't forget to join on time. ` +
         `Call link: ${buildCallLink(linkToken)}`;
-      await sendSms({ phone: familyPhone, message, kind: 'link', callId: newSchedule.scheduleId });
+      await sendSms({
+        phone: familyPhone,
+        message,
+        kind: 'link',
+        callId: newSchedule.scheduleId,
+        templateVars: linkTemplateVars(inmateName, buildCallLink(linkToken))
+      });
     })().catch((err) => {
       console.error('[schedule] booking SMS failed:', err.message);
     });
@@ -3226,13 +3232,18 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Quick SMS test — call GET /test-sms?phone=XXXXXXXXXX to send a test OTP
+// DLT SMS test — call GET /test-sms?phone=XXXXXXXXXX to send a test OTP
 app.get('/test-sms', asyncRoute(async (req, res) => {
-  const { sendSms, buildOtpMessage } = require('./lib/sms');
   const phone = req.query.phone;
   if (!phone) return sendError(res, 'BAD_REQUEST', 'Add ?phone=XXXXXXXXXX (10 digit)');
   try {
-    const result = await sendSms({ phone, message: buildOtpMessage('123456', 'test'), kind: 'otp', callId: 'TEST' });
+    const result = await sendSms({
+      phone,
+      message: 'Test OTP 123456',
+      kind: 'otp',
+      callId: 'TEST',
+      templateVars: otpTemplateVars('123456')
+    });
     return sendSuccess(res, result);
   } catch (err) {
     return sendError(res, 'SMS_FAILED', err.message);

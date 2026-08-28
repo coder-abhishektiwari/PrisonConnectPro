@@ -151,12 +151,6 @@ function buildLinkSms(call) {
   return `[PrisonConnect] You have an incoming video call from ${call.inmateName || 'an inmate'}. Open this secure link to join: ${link}`;
 }
 
-/** Build the WebOTP-formatted OTP SMS message. */
-function buildOtpSms(call) {
-  const { buildOtpMessage } = require('./sms');
-  return buildOtpMessage(call.otp, 'call');
-}
-
 module.exports = {
   normalizePhone,
   maskedPhone,
@@ -166,6 +160,5 @@ module.exports = {
   registerOrVerifyFingerprint,
   deviceRegisteredForCall,
   buildLinkSms,
-  buildOtpSms,
   FAMILY_WEB_URL
 };

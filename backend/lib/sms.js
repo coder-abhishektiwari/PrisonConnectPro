@@ -1,10 +1,12 @@
 /**
- * SMS dispatch service.
+ * SMS dispatch service — DLT-compliant Fast2SMS integration.
  *
- * Two transports are supported:
- *   1. Fast2SMS (OTP + transactional SMS for Indian numbers)
- *   2. Console / JSONL log fallback (used when SMS_PROVIDER !== 'fast2sms' or
- *      when Fast2SMS credentials are missing / the gateway call fails).
+ * All SMS (OTP + call link) are sent via the official DLT route
+ * (POST /dev/bulkV2, route: "dlt").  Quick-SMS fallback is intentionally
+ * removed per requirements.
+ *
+ * DLT templates use {#var#} placeholders; the caller supplies the actual
+ * values through the `templateVars` parameter on `sendSms()`.
  *
  * Every outbound SMS is ALWAYS logged to `backend/logs/sms.jsonl` so that
  * the flow remains fully testable in development without spending credits.
@@ -16,11 +18,22 @@ const path = require('path');
 const LOG_DIR = path.join(__dirname, '..', 'logs');
 const LOG_FILE = path.join(LOG_DIR, 'sms.jsonl');
 
-const PROVIDER = process.env.SMS_PROVIDER || 'log'; // 'fast2sms' | 'log'
+// ─── ENV configuration ────────────────────────────────────────────────────────
+const PROVIDER = process.env.SMS_PROVIDER || 'log';
 const FAST2SMS_API_KEY = process.env.FAST2SMS_API_KEY;
-const SMS_OTP_DOMAIN = process.env.SMS_OTP_DOMAIN || ''; // e.g. 'family.example.com'
+const FAST2SMS_SENDER_ID = process.env.FAST2SMS_SENDER_ID || '';
+const FAST2SMS_ENTITY_ID = process.env.FAST2SMS_ENTITY_ID || '';
+const FAST2SMS_OTP_TEMPLATE_ID = process.env.FAST2SMS_OTP_TEMPLATE_ID || '';
+const FAST2SMS_LINK_TEMPLATE_ID = process.env.FAST2SMS_LINK_TEMPLATE_ID || '';
+const SMS_OTP_DOMAIN = process.env.SMS_OTP_DOMAIN || '';
 
-console.log(`[sms] provider=${PROVIDER} hasKey=${!!FAST2SMS_API_KEY} domain=${SMS_OTP_DOMAIN || '(none)'}`);
+console.log(
+  `[sms] provider=${PROVIDER} hasKey=${!!FAST2SMS_API_KEY} ` +
+  `sender=${FAST2SMS_SENDER_ID || '(none)'} entity=${FAST2SMS_ENTITY_ID || '(none)'} ` +
+  `otpTpl=${FAST2SMS_OTP_TEMPLATE_ID || '(none)'} linkTpl=${FAST2SMS_LINK_TEMPLATE_ID || '(none)'}`
+);
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function ensureLogFile() {
   if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
@@ -43,98 +56,175 @@ function consoleLog(entry) {
 /** Normalize phone to 10-digit Indian mobile (no country code, no +). */
 function normalizePhone(phone) {
   let p = String(phone || '').replace(/[^\d]/g, '');
-  // Strip country code prefix (91 or 0)
   if (p.length === 12 && p.startsWith('91')) p = p.slice(2);
   if (p.length === 11 && p.startsWith('0')) p = p.slice(1);
   return p;
 }
 
-async function sendViaFast2Sms({ phone, message, kind }) {
+// ─── DLT SMS sender ───────────────────────────────────────────────────────────
+
+/**
+ * Send SMS via Fast2SMS DLT route.
+ *
+ * @param {object} opts
+ * @param {string}   opts.phone           10-digit mobile
+ * @param {string|number} opts.templateId DLT Message_ID (numeric string or int)
+ * @param {string[]} opts.templateVars    Pipe-separated values for {#var#} placeholders
+ * @returns {Promise<{provider: string, messageId: string|null}>}
+ */
+async function sendViaDlt({ phone, templateId, templateVars }) {
   if (!FAST2SMS_API_KEY) {
-    const err = new Error('FAST2SMS_API_KEY is not configured');
-    err.code = 'SMS_CONFIG';
-    throw err;
+    throw new Error('FAST2SMS_API_KEY is not configured');
+  }
+  if (!FAST2SMS_SENDER_ID) {
+    throw new Error('FAST2SMS_SENDER_ID is not configured — add it in Render env');
+  }
+  if (!templateId) {
+    throw new Error('DLT Template ID (message) is not configured');
   }
 
   const mobile = normalizePhone(phone);
-  console.log(`[sms] fast2sms kind=${kind} phone=${mobile} msgLen=${(message||'').length}`);
+  const varsJoined = (templateVars || []).join('|');
 
-  // Quick SMS route (no DLT needed, ₹0.20/SMS) — works for both OTP and link messages.
+  const payload = {
+    sender_id: FAST2SMS_SENDER_ID,
+    message: Number(templateId),
+    variables_values: varsJoined,
+    route: 'dlt',
+    numbers: mobile,
+  };
+
+  // entity_id is optional — include only when set
+  if (FAST2SMS_ENTITY_ID) {
+    payload.entity_id = FAST2SMS_ENTITY_ID;
+  }
+
+  console.log(
+    `[sms] dlt send phone=${mobile} tplId=${templateId} ` +
+    `vars="${varsJoined}" sender=${FAST2SMS_SENDER_ID}`
+  );
+
   const res = await fetch('https://www.fast2sms.com/dev/bulkV2', {
     method: 'POST',
     headers: {
       'authorization': FAST2SMS_API_KEY,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      message,
-      route: 'q',
-      language: 'english',
-      numbers: mobile,
-    }),
+    body: JSON.stringify(payload),
   });
 
   const body = await res.json().catch(() => ({}));
-  console.log(`[sms] fast2sms bulk response: status=${res.status} return=${body.return} body=`, JSON.stringify(body));
+  console.log(`[sms] dlt response: status=${res.status} return=${body.return} body=`, JSON.stringify(body));
+
   if (!res.ok || body.return !== true) {
-    const err = new Error(`Fast2SMS bulk failed: ${res.status} ${JSON.stringify(body)}`);
+    const err = new Error(`Fast2SMS DLT failed: ${res.status} ${JSON.stringify(body)}`);
     err.code = 'SMS_GATEWAY';
     err.details = body;
     throw err;
   }
-  return { provider: 'fast2sms', messageId: body.request_id || null, kind };
+
+  return { provider: 'fast2sms', messageId: body.request_id || null };
+}
+
+// ─── Template variable builders ────────────────────────────────────────────────
+
+/**
+ * Build template variables for the OTP DLT template.
+ * Expected DLT template: "Your PrisonConnect verification code is {#var#}. …"
+ *
+ * @param {string|number} otp  6-digit OTP
+ * @returns {string[]}        Array for pipe-join
+ */
+function otpTemplateVars(otp) {
+  return [String(otp)];
 }
 
 /**
- * Build a WebOTP-compatible OTP message.
- * Format required by the WebOTP API: the code must be on the last line
- * together with `@domain`, e.g.:
- *   "Your PrisonConnect verification code is 123456."
- *   "123456 @family.example.com"
+ * Build template variables for the call-link DLT template.
+ * Expected DLT template:
+ *   "[PrisonConnect] You have an incoming video call from {#var#}.
+ *    Open this secure link to join: {#var#}"
+ *
+ * @param {string} inmateName
+ * @param {string} linkUrl
+ * @returns {string[]}
  */
-function buildOtpMessage(otp, purpose) {
-  const label = purpose || 'verification';
-  if (SMS_OTP_DOMAIN) {
-    return `Your PrisonConnect ${label} code is ${otp}.\n\n@${SMS_OTP_DOMAIN} ${otp}`;
-  }
-  return `Your PrisonConnect ${label} code is ${otp}. ${otp}`;
+function linkTemplateVars(inmateName, linkUrl) {
+  return [inmateName || 'an inmate', linkUrl];
 }
+
+// ─── Public send interface ─────────────────────────────────────────────────────
 
 /**
  * Send an SMS.
- * @param {object} opts
- * @param {string} opts.phone     Recipient phone (any common format).
- * @param {string} opts.message   Message body.
- * @param {string} [opts.kind]    'otp' | 'link' | 'generic' — influences transport.
- * @param {string} [opts.callId]  Optional audit reference.
+ *
+ * @param {object}   opts
+ * @param {string}   opts.phone         Recipient 10-digit mobile.
+ * @param {string}   opts.message       Human-readable text (used for logging only).
+ * @param {string}   [opts.kind]        'otp' | 'link' | 'generic' — selects the DLT template.
+ * @param {string}   [opts.callId]      Audit reference.
+ * @param {string[]} [opts.templateVars] Pipe-separated values for {#var#} in the DLT template.
  * @returns {Promise<{provider: string, loggedAt: string, messageId?: string|null}>}
  */
-async function sendSms({ phone, message, kind = 'generic', callId = null }) {
+async function sendSms({ phone, message, kind = 'generic', callId = null, templateVars }) {
   const entry = {
     kind,
     phone: normalizePhone(phone),
     message,
     callId,
-    transport: 'log'
+    transport: 'log',
   };
 
   if (PROVIDER === 'fast2sms') {
-    try {
-      const result = await sendViaFast2Sms({ phone: entry.phone, message, kind });
-      entry.transport = 'fast2sms';
-      entry.messageId = result.messageId || null;
-      entry.gatewayOk = true;
-    } catch (err) {
-      entry.transport = 'fast2sms_logged_fallback';
+    // Select the DLT template ID based on message kind
+    const templateId = kind === 'otp'
+      ? FAST2SMS_OTP_TEMPLATE_ID
+      : FAST2SMS_LINK_TEMPLATE_ID;
+
+    if (!templateId) {
+      const errMsg = `No DLT template ID for kind="${kind}" — set FAST2SMS_OTP_TEMPLATE_ID or FAST2SMS_LINK_TEMPLATE_ID`;
+      entry.transport = 'fast2sms_error';
       entry.gatewayOk = false;
-      entry.gatewayError = err.message;
-      console.error(`[sms] Fast2SMS failed (fallback to log): ${err.message}`);
+      entry.gatewayError = errMsg;
+      console.error(`[sms] ${errMsg}`);
+    } else if (!templateVars || !templateVars.length) {
+      const errMsg = `templateVars required for DLT SMS (kind="${kind}")`;
+      entry.transport = 'fast2sms_error';
+      entry.gatewayOk = false;
+      entry.gatewayError = errMsg;
+      console.error(`[sms] ${errMsg}`);
+    } else {
+      try {
+        const result = await sendViaDlt({
+          phone: entry.phone,
+          templateId,
+          templateVars,
+        });
+        entry.transport = 'fast2sms';
+        entry.messageId = result.messageId || null;
+        entry.gatewayOk = true;
+      } catch (err) {
+        entry.transport = 'fast2sms_logged_fallback';
+        entry.gatewayOk = false;
+        entry.gatewayError = err.message;
+        console.error(`[sms] Fast2SMS DLT failed (logged): ${err.message}`);
+      }
     }
   }
 
   appendLog(entry);
   consoleLog(entry);
-  return { provider: entry.transport, loggedAt: new Date().toISOString(), messageId: entry.messageId || null };
+  return {
+    provider: entry.transport,
+    loggedAt: new Date().toISOString(),
+    messageId: entry.messageId || null,
+  };
 }
 
-module.exports = { sendSms, buildOtpMessage, normalizePhone, PROVIDER, FAST2SMS_API_KEY };
+module.exports = {
+  sendSms,
+  otpTemplateVars,
+  linkTemplateVars,
+  normalizePhone,
+  PROVIDER,
+};
