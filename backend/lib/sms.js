@@ -20,6 +20,8 @@ const PROVIDER = process.env.SMS_PROVIDER || 'log'; // 'fast2sms' | 'log'
 const FAST2SMS_API_KEY = process.env.FAST2SMS_API_KEY;
 const SMS_OTP_DOMAIN = process.env.SMS_OTP_DOMAIN || ''; // e.g. 'family.example.com'
 
+console.log(`[sms] provider=${PROVIDER} hasKey=${!!FAST2SMS_API_KEY} domain=${SMS_OTP_DOMAIN || '(none)'}`);
+
 function ensureLogFile() {
   if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
 }
@@ -55,6 +57,7 @@ async function sendViaFast2Sms({ phone, message, kind }) {
   }
 
   const mobile = normalizePhone(phone);
+  console.log(`[sms] fast2sms kind=${kind} phone=${mobile} msgLen=${(message||'').length}`);
 
   if (kind === 'otp') {
     // Extract 6-digit OTP from message
@@ -75,6 +78,7 @@ async function sendViaFast2Sms({ phone, message, kind }) {
     });
 
     const body = await res.json().catch(() => ({}));
+    console.log(`[sms] fast2sms otp response: status=${res.status} return=${body.return} body=`, JSON.stringify(body));
     if (!res.ok || body.return !== true) {
       const err = new Error(`Fast2SMS OTP failed: ${res.status} ${JSON.stringify(body)}`);
       err.code = 'SMS_GATEWAY';
@@ -100,6 +104,7 @@ async function sendViaFast2Sms({ phone, message, kind }) {
   });
 
   const body = await res.json().catch(() => ({}));
+  console.log(`[sms] fast2sms bulk response: status=${res.status} return=${body.return} body=`, JSON.stringify(body));
   if (!res.ok || body.return !== true) {
     const err = new Error(`Fast2SMS bulk failed: ${res.status} ${JSON.stringify(body)}`);
     err.code = 'SMS_GATEWAY';
