@@ -1244,7 +1244,7 @@ app.put('/admin/contacts/:contactId', requireAuth, requireRole('admin', 'warden'
   });
 
   if (!updated) return sendError(res, 'NOT_FOUND', 'Contact not found', 404);
-  return sendSuccess(res, updated.result);
+  return sendSuccess(res, updated);
 }));
 
 app.patch('/admin/contacts/:contactId/status', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
@@ -1280,7 +1280,7 @@ app.patch('/admin/contacts/:contactId/status', requireAuth, requireRole('admin',
   });
 
   if (!updated) return sendError(res, 'NOT_FOUND', 'Contact not found', 404);
-  return sendSuccess(res, updated.result);
+  return sendSuccess(res, updated);
 }));
 
 app.delete('/admin/contacts/:contactId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
