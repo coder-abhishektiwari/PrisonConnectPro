@@ -59,8 +59,7 @@ async function sendViaFast2Sms({ phone, message, kind }) {
   const mobile = normalizePhone(phone);
   console.log(`[sms] fast2sms kind=${kind} phone=${mobile} msgLen=${(message||'').length}`);
 
-  // Quick SMS route (no DLT registration needed) — works for both OTP and link messages.
-  // Old /dev/otp endpoint returns 404; everything goes through bulkV2 now.
+  // DLT-registered route — works for both OTP and link messages.
   const res = await fetch('https://www.fast2sms.com/dev/bulkV2', {
     method: 'POST',
     headers: {
@@ -69,7 +68,7 @@ async function sendViaFast2Sms({ phone, message, kind }) {
     },
     body: JSON.stringify({
       message,
-      route: 'q',
+      route: 'v3',
       language: 'english',
       numbers: mobile,
     }),
