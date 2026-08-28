@@ -284,6 +284,7 @@ fun AddContactDialog(
                     value = mobile,
                     onValueChange = { mobile = it; mobileError = false },
                     label = { Text("Mobile Number *") },
+                    placeholder = { Text("+91XXXXXXXXXX") },
                     isError = mobileError,
                     singleLine = true
                 )
@@ -340,6 +341,7 @@ fun EditContactDialog(
                     value = mobile,
                     onValueChange = { mobile = it; mobileError = false },
                     label = { Text("Mobile Number *") },
+                    placeholder = { Text("+91XXXXXXXXXX") },
                     isError = mobileError,
                     singleLine = true
                 )

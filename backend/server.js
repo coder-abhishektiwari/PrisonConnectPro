@@ -1222,9 +1222,16 @@ app.put('/admin/contacts/:contactId', requireAuth, requireRole('admin', 'warden'
   const [contacts, inmates] = await Promise.all([readDb('contacts.json'), readDb('inmates.json')]);
   const target = contacts.find((c) => c.contactId === contactId);
   if (!target) return sendError(res, 'NOT_FOUND', 'Contact not found', 404);
-  // Contact belongs to the jail of its inmate; scope the update to the admin's kiosk/jail.
-  const owner = inmates.find((i) => i.inmateId === target.inmateId && inAdminScope(req, i));
-  if (!owner) return sendError(res, 'NOT_FOUND', 'Contact not found in your kiosk', 404);
+
+  // Resolve owner inmate (try both formats)
+  const owner = inmates.find((i) => i.inmateId === target.inmateId) ||
+                inmates.find((i) => `INM-${i.inmateId}` === target.inmateId);
+  if (!owner) return sendError(res, 'NOT_FOUND', 'Inmate not found for this contact', 404);
+
+  // Scope check (kiosk admin can only edit their own kiosk's contacts)
+  if (!inAdminScope(req, owner)) {
+    return sendError(res, 'FORBIDDEN', 'Contact not in your kiosk scope', 403);
+  }
 
   const updated = await updateDb('contacts.json', (all) => {
     const idx = all.findIndex((c) => c.contactId === contactId);
@@ -1258,8 +1265,12 @@ app.patch('/admin/contacts/:contactId/status', requireAuth, requireRole('admin',
   const [contacts, inmates] = await Promise.all([readDb('contacts.json'), readDb('inmates.json')]);
   const target = contacts.find((c) => c.contactId === contactId);
   if (!target) return sendError(res, 'NOT_FOUND', 'Contact not found', 404);
-  const owner = inmates.find((i) => i.inmateId === target.inmateId && inAdminScope(req, i));
-  if (!owner) return sendError(res, 'NOT_FOUND', 'Contact not found in your kiosk', 404);
+  const owner = inmates.find((i) => i.inmateId === target.inmateId) ||
+                inmates.find((i) => `INM-${i.inmateId}` === target.inmateId);
+  if (!owner) return sendError(res, 'NOT_FOUND', 'Inmate not found for this contact', 404);
+  if (!inAdminScope(req, owner)) {
+    return sendError(res, 'FORBIDDEN', 'Contact not in your kiosk scope', 403);
+  }
 
   const updated = await updateDb('contacts.json', (all) => {
     const idx = all.findIndex((c) => c.contactId === contactId);
@@ -1277,8 +1288,12 @@ app.delete('/admin/contacts/:contactId', requireAuth, requireRole('admin', 'ward
   const [contacts, inmates] = await Promise.all([readDb('contacts.json'), readDb('inmates.json')]);
   const target = contacts.find((c) => c.contactId === contactId);
   if (!target) return sendError(res, 'NOT_FOUND', 'Contact not found', 404);
-  const owner = inmates.find((i) => i.inmateId === target.inmateId && inAdminScope(req, i));
-  if (!owner) return sendError(res, 'NOT_FOUND', 'Contact not found in your kiosk', 404);
+  const owner = inmates.find((i) => i.inmateId === target.inmateId) ||
+                inmates.find((i) => `INM-${i.inmateId}` === target.inmateId);
+  if (!owner) return sendError(res, 'NOT_FOUND', 'Inmate not found for this contact', 404);
+  if (!inAdminScope(req, owner)) {
+    return sendError(res, 'FORBIDDEN', 'Contact not in your kiosk scope', 403);
+  }
 
   const deleted = await updateDb('contacts.json', (all) => {
     const filtered = all.filter((c) => c.contactId !== contactId);
