@@ -3212,7 +3212,18 @@ app.get('/wardens/:wardenId', requireAuth, requireRole('admin', 'warden', 'super
 // ==================== HEALTH CHECK ====================
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: Date.now(), version: '2.0.0-real' });
+  const { PROVIDER, FAST2SMS_API_KEY } = require('./lib/sms');
+  res.json({
+    status: 'ok',
+    timestamp: Date.now(),
+    version: '2.0.0-real',
+    sms: {
+      provider: PROVIDER || process.env.SMS_PROVIDER || 'log',
+      hasApiKey: !!process.env.FAST2SMS_API_KEY,
+      apiKeyPrefix: (process.env.FAST2SMS_API_KEY || '').substring(0, 4),
+      domain: process.env.SMS_OTP_DOMAIN || '(none)',
+    }
+  });
 });
 
 // ==================== ERROR HANDLER ====================

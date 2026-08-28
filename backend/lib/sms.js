@@ -166,4 +166,4 @@ async function sendSms({ phone, message, kind = 'generic', callId = null }) {
   return { provider: entry.transport, loggedAt: new Date().toISOString(), messageId: entry.messageId || null };
 }
 
-module.exports = { sendSms, buildOtpMessage, normalizePhone };
+module.exports = { sendSms, buildOtpMessage, normalizePhone, PROVIDER, FAST2SMS_API_KEY };
