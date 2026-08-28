@@ -59,36 +59,8 @@ async function sendViaFast2Sms({ phone, message, kind }) {
   const mobile = normalizePhone(phone);
   console.log(`[sms] fast2sms kind=${kind} phone=${mobile} msgLen=${(message||'').length}`);
 
-  if (kind === 'otp') {
-    // Extract 6-digit OTP from message
-    const match = (message || '').match(/\b(\d{6})\b/);
-    const otp = match ? match[1] : null;
-
-    const res = await fetch('https://www.fast2sms.com/dev/otp', {
-      method: 'POST',
-      headers: {
-        'authorization': FAST2SMS_API_KEY,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        variables_values: otp || '',
-        route: 'otp',
-        numbers: mobile,
-      }),
-    });
-
-    const body = await res.json().catch(() => ({}));
-    console.log(`[sms] fast2sms otp response: status=${res.status} return=${body.return} body=`, JSON.stringify(body));
-    if (!res.ok || body.return !== true) {
-      const err = new Error(`Fast2SMS OTP failed: ${res.status} ${JSON.stringify(body)}`);
-      err.code = 'SMS_GATEWAY';
-      err.details = body;
-      throw err;
-    }
-    return { provider: 'fast2sms', messageId: body.request_id || null, kind };
-  }
-
-  // Transactional / link SMS via bulk v3 route
+  // Quick SMS route (no DLT registration needed) — works for both OTP and link messages.
+  // Old /dev/otp endpoint returns 404; everything goes through bulkV2 now.
   const res = await fetch('https://www.fast2sms.com/dev/bulkV2', {
     method: 'POST',
     headers: {
@@ -97,7 +69,7 @@ async function sendViaFast2Sms({ phone, message, kind }) {
     },
     body: JSON.stringify({
       message,
-      route: 'v3',
+      route: 'q',
       language: 'english',
       numbers: mobile,
     }),
