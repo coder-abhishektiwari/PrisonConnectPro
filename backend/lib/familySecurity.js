@@ -148,7 +148,8 @@ async function deviceRegisteredForCall(call) {
 /** Build the SMS message for the initial call-link SMS. */
 function buildLinkSms(call) {
   const link = buildCallLink(call.linkToken);
-  return `[PrisonConnect] You have an incoming video call from ${call.inmateName || 'an inmate'}. Open this secure link to join: ${link}`;
+  const callType = call.type || 'video';
+  return `[PrisonConnect] You have an incoming ${callType} call from ${call.inmateName || 'an inmate'}. Open this secure link to join: ${link}`;
 }
 
 module.exports = {

@@ -142,15 +142,16 @@ function otpTemplateVars(otp) {
 /**
  * Build template variables for the call-link DLT template.
  * Expected DLT template:
- *   "[PrisonConnect] You have an incoming video call from {#var#}.
+ *   "[PrisonConnect] You have an incoming {#var#} call from {#var#}.
  *    Open this secure link to join: {#var#}"
  *
+ * @param {string} callType    'video' | 'audio'
  * @param {string} inmateName
  * @param {string} linkUrl
  * @returns {string[]}
  */
-function linkTemplateVars(inmateName, linkUrl) {
-  return [inmateName || 'an inmate', linkUrl];
+function linkTemplateVars(callType, inmateName, linkUrl) {
+  return [callType || 'video', inmateName || 'an inmate', linkUrl];
 }
 
 // ─── Public send interface ─────────────────────────────────────────────────────

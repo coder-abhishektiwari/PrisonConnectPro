@@ -1534,7 +1534,7 @@ app.post('/calls', requireAuth, asyncRoute(async (req, res) => {
           message: buildLinkSms(newCall),
           kind: 'link',
           callId: newCall.callId,
-          templateVars: linkTemplateVars(newCall.inmateName, buildCallLink(newCall.linkToken))
+          templateVars: linkTemplateVars(newCall.type, newCall.inmateName, buildCallLink(newCall.linkToken))
         });
         await updateDb('calls.json', (calls) => {
           const idx = calls.findIndex((c) => c.callId === newCall.callId);
@@ -2200,7 +2200,7 @@ app.post('/schedule/book', requireAuth, asyncRoute(async (req, res) => {
         message,
         kind: 'link',
         callId: newSchedule.scheduleId,
-        templateVars: linkTemplateVars(inmateName, buildCallLink(linkToken))
+        templateVars: linkTemplateVars(newSchedule.callType, inmateName, buildCallLink(linkToken))
       });
     })().catch((err) => {
       console.error('[schedule] booking SMS failed:', err.message);
