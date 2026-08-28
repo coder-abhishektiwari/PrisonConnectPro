@@ -46,6 +46,7 @@ android {
         val turnTlsUrl = appProp("TURN_TLS_URL", "turns:tissues-cafeteria.tun.ply.gg:5349")
         val turnUsername = appProp("TURN_USERNAME", "turnuser")
         val turnCredential = appProp("TURN_CREDENTIAL", "turnpass")
+        val autoLogoutMs = appProp("AUTO_LOGOUT_TIMEOUT_MS", "120000")
 
         buildConfigField("String", "KIOSK_ID", "\"$kioskId\"")
         buildConfigField("String", "TRUST_API_HOST", "\"$trustApiHost\"")
@@ -55,6 +56,7 @@ android {
         buildConfigField("String", "TURN_TLS_URL", "\"$turnTlsUrl\"")
         buildConfigField("String", "TURN_USERNAME", "\"$turnUsername\"")
         buildConfigField("String", "TURN_CREDENTIAL", "\"$turnCredential\"")
+        buildConfigField("long", "AUTO_LOGOUT_TIMEOUT_MS", "${autoLogoutMs}L")
 
         ndk {
             abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64"))

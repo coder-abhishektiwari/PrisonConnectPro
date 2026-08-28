@@ -14,6 +14,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
+import com.prisonconnect.kiosk.BuildConfig
 import com.prisonconnect.kiosk.core.SessionManager
 import com.prisonconnect.kiosk.navigation.KioskNavHost
 import com.prisonconnect.kiosk.ui.theme.PrisonKioskTheme
@@ -32,7 +33,7 @@ class MainActivity : FragmentActivity() {
     @Inject lateinit var sessionManager: SessionManager
 
     private var inactivityJob: Job? = null
-    private val INACTIVITY_TIMEOUT_MS = 60_000L // 1 minute
+    private val AUTO_LOGOUT_TIMEOUT_MS = BuildConfig.AUTO_LOGOUT_TIMEOUT_MS
 
     @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -68,11 +69,17 @@ class MainActivity : FragmentActivity() {
     private fun resetInactivityTimer() {
         inactivityJob?.cancel()
         inactivityJob = lifecycleScope.launch {
-            delay(INACTIVITY_TIMEOUT_MS)
-            // Silent auto-logout
-            sessionManager.clearAuthOnly()
-            // Force restart to splash
-            recreate()
+            // Only start timer if user is actually logged in
+            val hasSession = sessionManager.hasValidSession()
+            if (!hasSession) return@launch
+
+            delay(AUTO_LOGOUT_TIMEOUT_MS)
+            // Re-check session before logout (user may have logged in during delay)
+            val stillLoggedIn = sessionManager.hasValidSession()
+            if (stillLoggedIn) {
+                sessionManager.clearAuthOnly()
+                recreate()
+            }
         }
     }
 
