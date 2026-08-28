@@ -59,7 +59,7 @@ async function sendViaFast2Sms({ phone, message, kind }) {
   const mobile = normalizePhone(phone);
   console.log(`[sms] fast2sms kind=${kind} phone=${mobile} msgLen=${(message||'').length}`);
 
-  // DLT-registered route — works for both OTP and link messages.
+  // Quick SMS route (no DLT needed, ₹0.20/SMS) — works for both OTP and link messages.
   const res = await fetch('https://www.fast2sms.com/dev/bulkV2', {
     method: 'POST',
     headers: {
@@ -68,7 +68,7 @@ async function sendViaFast2Sms({ phone, message, kind }) {
     },
     body: JSON.stringify({
       message,
-      route: 'v3',
+      route: 'q',
       language: 'english',
       numbers: mobile,
     }),
