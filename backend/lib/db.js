@@ -123,6 +123,11 @@ function withMutex(filename, task) {
   return run;
 }
 
+// In-memory cache for readDb — avoids repeated full-table scans.
+// Invalidated on every updateDb call for that collection.
+const readCache = new Map();
+const CACHE_TTL_MS = 10_000; // 10 seconds
+
 async function readAll(reg) {
   const table = reg.table;
   const { rows } = await pool.query(`SELECT data FROM ${table}`);
@@ -143,16 +148,31 @@ async function readSingleton(reg, id) {
 /** Read a collection. Returns an array of documents (or a single object for singleton configs). */
 function readDb(filename) {
   const reg = registryFor(filename);
-  return withMutex(normalizeFilename(filename), async () => {
+  const key = normalizeFilename(filename);
+
+  // Return cached data if fresh
+  const cached = readCache.get(key);
+  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+    return Promise.resolve(cached.data);
+  }
+
+  return withMutex(key, async () => {
+    let data;
     if (reg.singleton) {
       const id = reg.singletonId || filename.replace('.json', '');
       const value = await readSingleton(reg, id);
-      if (value) return value;
-      // Seed defaults so users see a coherent config even before first write.
-      const defaults = { pricing: { audio: 0, video: 0, tax: 0, billingRules: {} }, settings: { callSettings: {}, systemSettings: {}, securitySettings: {} }, storage: { total: 0, used: 0, available: 0, retentionDays: 30, encryption: true } };
-      return defaults[filename.replace('.json', '')] || {};
+      if (value) {
+        data = value;
+      } else {
+        // Seed defaults so users see a coherent config even before first write.
+        const defaults = { pricing: { audio: 0, video: 0, tax: 0, billingRules: {} }, settings: { callSettings: {}, systemSettings: {}, securitySettings: {} }, storage: { total: 0, used: 0, available: 0, retentionDays: 30, encryption: true } };
+        data = defaults[filename.replace('.json', '')] || {};
+      }
+    } else {
+      data = await readAll(reg);
     }
-    return readAll(reg);
+    readCache.set(key, { data, ts: Date.now() });
+    return data;
   });
 }
 
@@ -233,6 +253,8 @@ function updateDb(filename, mutator) {
         }
       }
       await client.query('COMMIT');
+      // Invalidate read cache so next readDb gets fresh data
+      readCache.delete(normalizeFilename(filename));
       return result;
     } catch (err) {
       await client.query('ROLLBACK');
