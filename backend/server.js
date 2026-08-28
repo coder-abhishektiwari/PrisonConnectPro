@@ -3212,7 +3212,7 @@ app.get('/wardens/:wardenId', requireAuth, requireRole('admin', 'warden', 'super
 // ==================== HEALTH CHECK ====================
 
 app.get('/health', (req, res) => {
-  const { PROVIDER, FAST2SMS_API_KEY } = require('./lib/sms');
+  const { PROVIDER } = require('./lib/sms');
   res.json({
     status: 'ok',
     timestamp: Date.now(),
@@ -3225,6 +3225,19 @@ app.get('/health', (req, res) => {
     }
   });
 });
+
+// Quick SMS test — call GET /test-sms?phone=XXXXXXXXXX to send a test OTP
+app.get('/test-sms', asyncRoute(async (req, res) => {
+  const { sendSms, buildOtpMessage } = require('./lib/sms');
+  const phone = req.query.phone;
+  if (!phone) return sendError(res, 'BAD_REQUEST', 'Add ?phone=XXXXXXXXXX (10 digit)');
+  try {
+    const result = await sendSms({ phone, message: buildOtpMessage('123456', 'test'), kind: 'otp', callId: 'TEST' });
+    return sendSuccess(res, result);
+  } catch (err) {
+    return sendError(res, 'SMS_FAILED', err.message);
+  }
+}));
 
 // ==================== ERROR HANDLER ====================
 app.use((err, req, res, next) => {
