@@ -35,6 +35,9 @@ class MainActivity : FragmentActivity() {
     private var inactivityJob: Job? = null
     private val AUTO_LOGOUT_TIMEOUT_MS = BuildConfig.AUTO_LOGOUT_TIMEOUT_MS
 
+    /** Set by KioskNavHost when lobby/call screens are active — timer skips logout. */
+    @Volatile var isInCall: Boolean = false
+
     @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -74,6 +77,8 @@ class MainActivity : FragmentActivity() {
             if (!hasSession) return@launch
 
             delay(AUTO_LOGOUT_TIMEOUT_MS)
+            // Skip logout during active call/lobby
+            if (isInCall) return@launch
             // Re-check session before logout (user may have logged in during delay)
             val stillLoggedIn = sessionManager.hasValidSession()
             if (stillLoggedIn) {

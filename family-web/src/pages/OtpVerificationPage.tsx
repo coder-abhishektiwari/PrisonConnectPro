@@ -145,6 +145,13 @@ export function OtpVerificationPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [linkToken]);
 
+  // Auto-submit when 6 digits are entered (manual or WebOTP)
+  useEffect(() => {
+    if (otp.length === 6 && !submittingRef.current && !loading) {
+      handleSubmit(otp);
+    }
+  }, [otp, loading]);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 to-neutral-100 flex items-center justify-center p-4">
       <div className="max-w-md w-full">
@@ -165,14 +172,9 @@ export function OtpVerificationPage() {
           </div>
 
           {/* Auto-filled from the SMS when WebOTP is available; also editable by hand
-              (e.g. log-based SMS where the code is communicated out-of-band). */}
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleSubmit(otp);
-            }}
-            className="space-y-6"
-          >
+              (e.g. log-based SMS where the code is communicated out-of-band).
+              Auto-submits when 6 digits are entered. */}
+          <div className="space-y-6">
             <Input
               label="One-Time Password"
               type="text"
@@ -187,10 +189,10 @@ export function OtpVerificationPage() {
               className="text-center text-2xl tracking-widest font-mono"
             />
 
-            <Button size="lg" className="w-full" type="submit" disabled={loading || !otp}>
-              {loading ? 'Verifying...' : otp ? 'Verify OTP' : 'Waiting for OTP...'}
-            </Button>
-          </form>
+            {loading && (
+              <p className="text-center text-primary-600 font-medium">Verifying...</p>
+            )}
+          </div>
 
           <div className="mt-6 text-center space-y-2">
             <button

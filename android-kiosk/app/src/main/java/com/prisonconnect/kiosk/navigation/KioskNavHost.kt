@@ -30,8 +30,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.compose.currentBackStackEntryAsState
 import android.net.Uri
+import com.prisonconnect.kiosk.MainActivity
 
 object KioskRoutes {
     const val SPLASH = "splash"
@@ -64,6 +66,15 @@ fun KioskNavHost(
 ) {
     val isDeviceAuthorized by viewModel.isDeviceAuthorized.collectAsState()
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
+    val context = LocalContext.current
+
+    // Tell MainActivity to skip auto-logout during lobby/call
+    LaunchedEffect(currentRoute) {
+        val activity = context as? MainActivity
+        activity?.isInCall = currentRoute in listOf(
+            KioskRoutes.LOBBY, KioskRoutes.VIDEO_CALL, KioskRoutes.AUDIO_CALL
+        )
+    }
 
     LaunchedEffect(isDeviceAuthorized) {
         if (!isDeviceAuthorized && currentRoute != KioskRoutes.UNAUTHORIZED && currentRoute != KioskRoutes.SPLASH && currentRoute != KioskRoutes.REGISTRATION) {
