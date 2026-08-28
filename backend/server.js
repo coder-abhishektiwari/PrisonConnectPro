@@ -1563,14 +1563,13 @@ app.post('/calls', requireAuth, asyncRoute(async (req, res) => {
 
 app.get('/calls/link/:linkToken', asyncRoute(async (req, res) => {
   const { linkToken } = req.params;
-  const calls = await readDb('calls.json');
+  const [calls, inmates, contacts] = await Promise.all([readDb('calls.json'), readDb('inmates.json'), readDb('contacts.json')]);
   const call = calls.find((c) => c.linkToken === linkToken);
   if (!call) return sendError(res, 'NOT_FOUND', 'Invalid or expired call link', 404);
   if (call.status === 'completed' || call.status === 'cancelled') {
     return sendError(res, 'CALL_ENDED', 'This call has already ended', 410);
   }
 
-  const [inmates, contacts] = await Promise.all([readDb('inmates.json'), readDb('contacts.json')]);
   const inmate = inmates.find((i) => i.inmateId === call.inmateId);
   const contact = contacts.find((c) => c.contactId === call.contactId);
 
@@ -1607,7 +1606,7 @@ app.get('/calls/link/:linkToken', asyncRoute(async (req, res) => {
 app.post('/calls/:linkToken/device-verification', asyncRoute(async (req, res) => {
   const { linkToken } = req.params;
   const body = req.body || {};
-  const calls = await readDb('calls.json');
+  const [calls, contacts] = await Promise.all([readDb('calls.json'), readDb('contacts.json')]);
   const call = calls.find((c) => c.linkToken === linkToken);
   if (!call) return sendError(res, 'NOT_FOUND', 'Invalid or expired call link', 404);
 
@@ -1618,7 +1617,6 @@ app.post('/calls/:linkToken/device-verification', asyncRoute(async (req, res) =>
     return sendError(res, 'INVALID_REQUEST', 'Device fingerprint is required', 400);
   }
 
-  const contacts = await readDb('contacts.json');
   const contact = contacts.find((c) => c.contactId === call.contactId);
   const familyPhone = contactPhone(contact);
 
@@ -1666,7 +1664,7 @@ app.post('/calls/:linkToken/device-verification', asyncRoute(async (req, res) =>
 
 app.post('/calls/:linkToken/send-otp', asyncRoute(async (req, res) => {
   const { linkToken } = req.params;
-  const calls = await readDb('calls.json');
+  const [calls, contacts] = await Promise.all([readDb('calls.json'), readDb('contacts.json')]);
   const call = calls.find((c) => c.linkToken === linkToken);
   if (!call) return sendError(res, 'NOT_FOUND', 'Invalid or expired call link', 404);
   if (call.status === 'completed' || call.status === 'cancelled') {
@@ -1681,7 +1679,6 @@ app.post('/calls/:linkToken/send-otp', asyncRoute(async (req, res) => {
     return sendError(res, 'DEVICE_VERIFICATION_REQUIRED', 'Device verification is required before sending the OTP', 403);
   }
 
-  const contacts = await readDb('contacts.json');
   const contact = contacts.find((c) => c.contactId === call.contactId);
   const familyPhone = contactPhone(contact);
   if (!familyPhone) return sendError(res, 'NO_PHONE', 'Family phone number is not registered', 400);

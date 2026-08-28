@@ -51,12 +51,9 @@ export function LinkVerificationPage() {
   useEffect(() => {
     if (!session || !linkToken) return;
     const next = session.deviceRegistered ? `/call/${linkToken}/device` : `/call/${linkToken}/otp`;
-    const t = setTimeout(() => navigate(next, { replace: true }), 400);
-    return () => clearTimeout(t);
+    navigate(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);
-
-  if (loading) return <Loading message="Checking your secure link..." />;
 
   if (loading) return <Loading message="Checking your secure link..." />;
 
