@@ -12,7 +12,7 @@ const { signAccessToken, verifyToken, hashSecret, verifySecret } = require('./li
 const { createSession } = require('./lib/sessions');
 const { getStatement, resolveInmate } = require('./lib/jail-account');
 const { requireAuth, requireRole, requirePermission } = require('./middleware/auth');
-const { sendSms } = require('./lib/sms');
+const { sendSms, otpTemplateVars, linkTemplateVars, scheduledTemplateVars } = require('./lib/sms');
 const {
   maskedPhone,
   contactPhone,
@@ -1529,12 +1529,15 @@ app.post('/calls', requireAuth, asyncRoute(async (req, res) => {
           console.warn('[calls] contact has no phone number — skipping family link SMS');
           return;
         }
+        const prisons = await readDb('prisons.json');
+        const prison = prisons.find((p) => p.prisonId === (kiosk.prisonId || inmate.prisonId));
+        const jailName = prison?.name || 'the correctional facility';
         const smsResult = await sendSms({
           phone: familyPhone,
           message: buildLinkSms(newCall),
           kind: 'link',
           callId: newCall.callId,
-          templateVars: linkTemplateVars(newCall.type, newCall.inmateName, buildCallLink(newCall.linkToken))
+          templateVars: linkTemplateVars(newCall.inmateName, buildCallLink(newCall.linkToken))
         });
         await updateDb('calls.json', (calls) => {
           const idx = calls.findIndex((c) => c.callId === newCall.callId);
@@ -2191,16 +2194,18 @@ app.post('/schedule/book', requireAuth, asyncRoute(async (req, res) => {
       const prison = prisons.find((p) => p.prisonId === inmate.prisonId || p.prisonId === kiosk.prisonId);
       const jailName = prison?.name || 'the correctional facility';
       const inmateName = `${inmate.firstName || ''} ${inmate.lastName || ''}`.trim() || 'An inmate';
+      const familyMemberName = contact.fullName || contact.name || 'Dear Member';
+      const time = timeSlot.split('-')[0].trim();
       const message =
-        `${inmateName} from ${jailName} has scheduled a ${newSchedule.callType} call ` +
-        `with you on ${date} at ${timeSlot}. Please don't forget to join on time. ` +
-        `Call link: ${buildCallLink(linkToken)}`;
+        `Dear ${familyMemberName}, ${inmateName} has scheduled a ${newSchedule.callType} on ${date} at ${time}. ` +
+        `Click the secure link below to join the call: ${buildCallLink(linkToken)} ` +
+        `Please do not share this link with anyone.`;
       await sendSms({
         phone: familyPhone,
         message,
-        kind: 'link',
+        kind: 'scheduled',
         callId: newSchedule.scheduleId,
-        templateVars: linkTemplateVars(newSchedule.callType, inmateName, buildCallLink(linkToken))
+        templateVars: scheduledTemplateVars(familyMemberName, inmateName, newSchedule.callType, date, time, buildCallLink(linkToken))
       });
     })().catch((err) => {
       console.error('[schedule] booking SMS failed:', err.message);

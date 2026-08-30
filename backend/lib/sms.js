@@ -1,11 +1,11 @@
 /**
  * SMS dispatch service — DLT-compliant Fast2SMS integration.
  *
- * All SMS (OTP + call link) are sent via the official DLT route
+ * All SMS (OTP + call link + scheduled) are sent via the official DLT route
  * (POST /dev/bulkV2, route: "dlt").  Quick-SMS fallback is intentionally
  * removed per requirements.
  *
- * DLT templates use {#var#} placeholders; the caller supplies the actual
+ * DLT templates use {#VAR#} placeholders; the caller supplies the actual
  * values through the `templateVars` parameter on `sendSms()`.
  *
  * Every outbound SMS is ALWAYS logged to `backend/logs/sms.jsonl` so that
@@ -25,12 +25,14 @@ const FAST2SMS_SENDER_ID = process.env.FAST2SMS_SENDER_ID || '';
 const FAST2SMS_ENTITY_ID = process.env.FAST2SMS_ENTITY_ID || '';
 const FAST2SMS_OTP_TEMPLATE_ID = process.env.FAST2SMS_OTP_TEMPLATE_ID || '';
 const FAST2SMS_LINK_TEMPLATE_ID = process.env.FAST2SMS_LINK_TEMPLATE_ID || '';
+const FAST2SMS_SCHEDULED_TEMPLATE_ID = process.env.FAST2SMS_SCHEDULED_TEMPLATE_ID || '';
 const SMS_OTP_DOMAIN = process.env.SMS_OTP_DOMAIN || '';
 
 console.log(
   `[sms] provider=${PROVIDER} hasKey=${!!FAST2SMS_API_KEY} ` +
   `sender=${FAST2SMS_SENDER_ID || '(none)'} entity=${FAST2SMS_ENTITY_ID || '(none)'} ` +
-  `otpTpl=${FAST2SMS_OTP_TEMPLATE_ID || '(none)'} linkTpl=${FAST2SMS_LINK_TEMPLATE_ID || '(none)'}`
+  `otpTpl=${FAST2SMS_OTP_TEMPLATE_ID || '(none)'} linkTpl=${FAST2SMS_LINK_TEMPLATE_ID || '(none)'} ` +
+  `schedTpl=${FAST2SMS_SCHEDULED_TEMPLATE_ID || '(none)'}`
 );
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -69,7 +71,7 @@ function normalizePhone(phone) {
  * @param {object} opts
  * @param {string}   opts.phone           10-digit mobile
  * @param {string|number} opts.templateId DLT Message_ID (numeric string or int)
- * @param {string[]} opts.templateVars    Pipe-separated values for {#var#} placeholders
+ * @param {string[]} opts.templateVars    Pipe-separated values for {#VAR#} placeholders
  * @returns {Promise<{provider: string, messageId: string|null}>}
  */
 async function sendViaDlt({ phone, templateId, templateVars }) {
@@ -94,7 +96,6 @@ async function sendViaDlt({ phone, templateId, templateVars }) {
     numbers: mobile,
   };
 
-  // entity_id is optional — include only when set
   if (FAST2SMS_ENTITY_ID) {
     payload.entity_id = FAST2SMS_ENTITY_ID;
   }
@@ -129,29 +130,65 @@ async function sendViaDlt({ phone, templateId, templateVars }) {
 // ─── Template variable builders ────────────────────────────────────────────────
 
 /**
- * Build template variables for the OTP DLT template.
- * Expected DLT template: "Your PrisonConnect verification code is {#var#}. …"
+ * Call Link SMS — 2 variables.
  *
- * @param {string|number} otp  6-digit OTP
- * @returns {string[]}        Array for pipe-join
- */
-function otpTemplateVars(otp) {
-  return [String(otp)];
-}
-
-/**
- * Build template variables for the call-link DLT template.
- * Expected DLT template:
- *   "[PrisonConnect] You have an incoming {#var#} call from {#var#}.
- *    Open this secure link to join: {#var#}"
+ * Template:
+ *   "Dear {#VAR#},
+ *    Your secure video call with DSS Solutions has been scheduled.
+ *    Click the secure link below to join your video call: {#VAR#}
+ *    This link is valid for one session only. Please do not share it with anyone.
+ *    Regards, DSS Solutions"
  *
- * @param {string} callType    'video' | 'audio'
  * @param {string} inmateName
  * @param {string} linkUrl
  * @returns {string[]}
  */
-function linkTemplateVars(callType, inmateName, linkUrl) {
-  return [callType || 'video', inmateName || 'an inmate', linkUrl];
+function linkTemplateVars(inmateName, linkUrl) {
+  return [inmateName || 'an inmate', linkUrl];
+}
+
+/**
+ * OTP SMS — 2 variables (same OTP twice: display + WebOTP).
+ *
+ * Template:
+ *   "Your OTP to join the call is {#VAR#}. Do not share this OTP with anyone.
+ *    @prisonconnect-familyweb.onrender.com #{#VAR#}"
+ *
+ * @param {string|number} otp
+ * @returns {string[]}
+ */
+function otpTemplateVars(otp) {
+  const code = String(otp);
+  return [code, code];
+}
+
+/**
+ * Scheduled Call SMS — 6 variables.
+ *
+ * Template:
+ *   "Dear {#VAR#},
+ *    {#VAR#} has scheduled a {#VAR#} on {#VAR#} at {#VAR#}.
+ *    Click the secure link below to join the call: {#VAR#}
+ *    Please do not share this link with anyone. This link is valid for one time only.
+ *    Regards, DSS Solutions"
+ *
+ * @param {string} familyMemberName
+ * @param {string} inmateName
+ * @param {string} callType
+ * @param {string} date
+ * @param {string} time       24hr format time
+ * @param {string} linkUrl
+ * @returns {string[]}
+ */
+function scheduledTemplateVars(familyMemberName, inmateName, callType, date, time, linkUrl) {
+  return [
+    familyMemberName || 'Dear Member',
+    inmateName || 'An inmate',
+    callType || 'video',
+    date || '',
+    time || '',
+    linkUrl,
+  ];
 }
 
 // ─── Public send interface ─────────────────────────────────────────────────────
@@ -162,9 +199,9 @@ function linkTemplateVars(callType, inmateName, linkUrl) {
  * @param {object}   opts
  * @param {string}   opts.phone         Recipient 10-digit mobile.
  * @param {string}   opts.message       Human-readable text (used for logging only).
- * @param {string}   [opts.kind]        'otp' | 'link' | 'generic' — selects the DLT template.
+ * @param {string}   [opts.kind]        'otp' | 'link' | 'scheduled' | 'generic' — selects the DLT template.
  * @param {string}   [opts.callId]      Audit reference.
- * @param {string[]} [opts.templateVars] Pipe-separated values for {#var#} in the DLT template.
+ * @param {string[]} [opts.templateVars] Values for {#VAR#} in the DLT template.
  * @returns {Promise<{provider: string, loggedAt: string, messageId?: string|null}>}
  */
 async function sendSms({ phone, message, kind = 'generic', callId = null, templateVars }) {
@@ -177,13 +214,15 @@ async function sendSms({ phone, message, kind = 'generic', callId = null, templa
   };
 
   if (PROVIDER === 'fast2sms') {
-    // Select the DLT template ID based on message kind
-    const templateId = kind === 'otp'
-      ? FAST2SMS_OTP_TEMPLATE_ID
-      : FAST2SMS_LINK_TEMPLATE_ID;
+    const templateMap = {
+      otp: FAST2SMS_OTP_TEMPLATE_ID,
+      link: FAST2SMS_LINK_TEMPLATE_ID,
+      scheduled: FAST2SMS_SCHEDULED_TEMPLATE_ID,
+    };
+    const templateId = templateMap[kind] || FAST2SMS_LINK_TEMPLATE_ID;
 
     if (!templateId) {
-      const errMsg = `No DLT template ID for kind="${kind}" — set FAST2SMS_OTP_TEMPLATE_ID or FAST2SMS_LINK_TEMPLATE_ID`;
+      const errMsg = `No DLT template ID for kind="${kind}" — set FAST2SMS_OTP_TEMPLATE_ID, FAST2SMS_LINK_TEMPLATE_ID, or FAST2SMS_SCHEDULED_TEMPLATE_ID`;
       entry.transport = 'fast2sms_error';
       entry.gatewayOk = false;
       entry.gatewayError = errMsg;
@@ -226,6 +265,7 @@ module.exports = {
   sendSms,
   otpTemplateVars,
   linkTemplateVars,
+  scheduledTemplateVars,
   normalizePhone,
   PROVIDER,
 };

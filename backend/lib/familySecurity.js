@@ -145,11 +145,10 @@ async function deviceRegisteredForCall(call) {
   return { registered: !!fingerprintFor(contact, phone), maskedPhone: maskedPhone(phone) };
 }
 
-/** Build the SMS message for the initial call-link SMS. */
+/** Build the SMS message for logging (actual SMS comes from DLT template). */
 function buildLinkSms(call) {
   const link = buildCallLink(call.linkToken);
-  const callType = call.type || 'video';
-  return `[PrisonConnect] You have an incoming ${callType} call from ${call.inmateName || 'an inmate'}. Open this secure link to join: ${link}`;
+  return `Dear ${call.inmateName || 'an inmate'}, Your secure video call with DSS Solutions has been scheduled. Link: ${link}`;
 }
 
 module.exports = {
