@@ -143,12 +143,12 @@ async function sendViaDlt({ phone, templateId, templateVars }) {
  *    This link is valid for one session only. Please do not share it with anyone.
  *    Regards, DSS Solutions"
  *
- * @param {string} inmateName
- * @param {string} linkUrl
+ * @param {string} familyMemberName  Name of the person receiving the SMS
+ * @param {string} linkUrl           Full call link URL
  * @returns {string[]}
  */
-function linkTemplateVars(inmateName, linkUrl) {
-  return [inmateName || 'an inmate', linkUrl];
+function linkTemplateVars(familyMemberName, linkUrl) {
+  return [familyMemberName || 'Dear Member', linkUrl];
 }
 
 /**

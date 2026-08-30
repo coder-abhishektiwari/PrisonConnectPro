@@ -1533,12 +1533,13 @@ app.post('/calls', requireAuth, asyncRoute(async (req, res) => {
         const prisons = await readDb('prisons.json');
         const prison = prisons.find((p) => p.prisonId === (kiosk.prisonId || inmate.prisonId));
         const jailName = prison?.name || 'the correctional facility';
+        const familyMemberName = contact.fullName || contact.name || 'Dear Member';
         const smsResult = await sendSms({
           phone: familyPhone,
           message: buildLinkSms(newCall),
           kind: 'link',
           callId: newCall.callId,
-          templateVars: linkTemplateVars(newCall.inmateName, buildCallLink(newCall.linkToken))
+          templateVars: linkTemplateVars(familyMemberName, buildCallLink(newCall.linkToken))
         });
         await updateDb('calls.json', (calls) => {
           const idx = calls.findIndex((c) => c.callId === newCall.callId);
