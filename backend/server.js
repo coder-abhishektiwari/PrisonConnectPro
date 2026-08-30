@@ -19,7 +19,8 @@ const {
   registerOrVerifyFingerprint,
   deviceRegisteredForCall,
   buildLinkSms,
-  buildCallLink
+  buildCallLink,
+  shortenUrl
 } = require('./lib/familySecurity');
 const { saveUploadedRecording } = require('./lib/recorder');
 
@@ -1435,7 +1436,7 @@ app.post('/calls', requireAuth, asyncRoute(async (req, res) => {
 
   // Family secure-call token material. A scheduled call reuses the token
   // already texted at booking time; an instant call mints a fresh one.
-  const linkToken = scheduledLinkToken || `LINK-${uuidv4().replace(/-/g, '').slice(0, 20).toUpperCase()}`;
+  const linkToken = scheduledLinkToken || `L-${uuidv4().replace(/-/g, '').slice(0, 10).toUpperCase()}`;
   const otp = String(Math.floor(100000 + Math.random() * 900000));
 
   const [settingsDocs, pricingDocs] = await Promise.all([readDb('settings.json'), readDb('pricing.json')]);
@@ -1534,12 +1535,14 @@ app.post('/calls', requireAuth, asyncRoute(async (req, res) => {
         const prison = prisons.find((p) => p.prisonId === (kiosk.prisonId || inmate.prisonId));
         const jailName = prison?.name || 'the correctional facility';
         const familyMemberName = contact.fullName || contact.name || 'Dear Member';
+        const fullLink = buildCallLink(newCall.linkToken);
+        const shortLink = await shortenUrl(fullLink);
         const smsResult = await sendSms({
           phone: familyPhone,
           message: buildLinkSms(newCall),
           kind: 'link',
           callId: newCall.callId,
-          templateVars: linkTemplateVars(familyMemberName, buildCallLink(newCall.linkToken))
+          templateVars: linkTemplateVars(familyMemberName, shortLink)
         });
         await updateDb('calls.json', (calls) => {
           const idx = calls.findIndex((c) => c.callId === newCall.callId);
@@ -1548,7 +1551,8 @@ app.post('/calls', requireAuth, asyncRoute(async (req, res) => {
             sent: true,
             sentTo: maskedPhone(familyPhone),
             linkToken: newCall.linkToken,
-            linkUrl: buildCallLink(newCall.linkToken),
+            linkUrl: shortLink,
+            fullLinkUrl: fullLink,
             transport: smsResult.provider,
             loggedAt: smsResult.loggedAt
           };
@@ -2179,7 +2183,7 @@ app.post('/schedule/book', requireAuth, asyncRoute(async (req, res) => {
   // link; when the kiosk later starts the call with this scheduleId the SAME
   // token is reused, so the family never gets a duplicate link SMS and the
   // link only becomes usable once the call actually exists.
-  const linkToken = `LINK-${uuidv4().replace(/-/g, '').slice(0, 20).toUpperCase()}`;
+  const linkToken = `L-${uuidv4().replace(/-/g, '').slice(0, 10).toUpperCase()}`;
   newSchedule.linkToken = linkToken;
   await updateDb('schedule.json', (s) => ({ data: [...s, newSchedule], result: newSchedule }));
 
@@ -2198,16 +2202,18 @@ app.post('/schedule/book', requireAuth, asyncRoute(async (req, res) => {
       const inmateName = `${inmate.firstName || ''} ${inmate.lastName || ''}`.trim() || 'An inmate';
       const familyMemberName = contact.fullName || contact.name || 'Dear Member';
       const time = timeSlot.split('-')[0].trim();
+      const fullLink = buildCallLink(linkToken);
+      const shortLink = await shortenUrl(fullLink);
       const message =
         `Dear ${familyMemberName}, ${inmateName} has scheduled a ${newSchedule.callType} on ${date} at ${time}. ` +
-        `Click the secure link below to join the call: ${buildCallLink(linkToken)} ` +
+        `Click the secure link below to join the call: ${shortLink} ` +
         `Please do not share this link with anyone.`;
       await sendSms({
         phone: familyPhone,
         message,
         kind: 'scheduled',
         callId: newSchedule.scheduleId,
-        templateVars: scheduledTemplateVars(familyMemberName, inmateName, newSchedule.callType, date, time, buildCallLink(linkToken))
+        templateVars: scheduledTemplateVars(familyMemberName, inmateName, newSchedule.callType, date, time, shortLink)
       });
     })().catch((err) => {
       console.error('[schedule] booking SMS failed:', err.message);

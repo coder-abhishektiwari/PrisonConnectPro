@@ -61,7 +61,7 @@ export function DeviceVerificationPage() {
         setDeviceVerified(true);
         // Returning device -> OTP. First call to this number -> straight to
         // the call screen (the lobby was only ever a redirect hop).
-        navigate(session.deviceRegistered ? `/call/${linkToken}/otp` : `/call/${linkToken}/call`, { replace: true });
+        navigate(session.deviceRegistered ? `/c/${linkToken}/otp` : `/c/${linkToken}/call`, { replace: true });
       } else {
         setDeviceVerified(false);
         setError('We could not confirm this is your registered phone.');

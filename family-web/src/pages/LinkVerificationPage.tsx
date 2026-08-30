@@ -50,7 +50,7 @@ export function LinkVerificationPage() {
   // Fully automatic: verified link flows straight into the next step.
   useEffect(() => {
     if (!session || !linkToken) return;
-    const next = session.deviceRegistered ? `/call/${linkToken}/device` : `/call/${linkToken}/otp`;
+    const next = session.deviceRegistered ? `/c/${linkToken}/device` : `/c/${linkToken}/otp`;
     navigate(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);

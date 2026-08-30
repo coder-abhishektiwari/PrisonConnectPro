@@ -9,11 +9,11 @@ import { RouteGuard } from '@/components/RouteGuard';
 import { SessionProvider } from '@/context/SessionContext';
 
 export const RoutePaths = {
-  linkVerification: '/call/:linkToken',
-  deviceVerification: '/call/:linkToken/device',
-  otpVerification: '/call/:linkToken/otp',
-  lobby: '/call/:linkToken/lobby',
-  call: '/call/:linkToken/call',
+  linkVerification: '/c/:linkToken',
+  deviceVerification: '/c/:linkToken/device',
+  otpVerification: '/c/:linkToken/otp',
+  lobby: '/c/:linkToken/lobby',
+  call: '/c/:linkToken/call',
 } as const;
 
 function Home() {

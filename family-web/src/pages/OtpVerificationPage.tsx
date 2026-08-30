@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Input } from '@/components/Input';
 import { callApi } from '@/services/api';
 import { useSession } from '@/context/SessionContext';
 import { useToast } from '@/components/Toast';
@@ -21,9 +20,7 @@ export function OtpVerificationPage() {
   const abortRef = useRef<AbortController | null>(null);
   const submittingRef = useRef(false);
 
-  // Warm up camera/mic NOW (while the user types the OTP) so the call page
-  // doesn't pay the getUserMedia cost after verification. If permission was
-  // never granted the prompt appears here instead of delaying the call.
+  // Warm up camera/mic NOW so the call page doesn't pay the getUserMedia cost.
   useEffect(() => {
     navigator.mediaDevices?.getUserMedia({ video: true, audio: true })
       .then((s) => s.getTracks().forEach((t) => t.stop()))
@@ -31,7 +28,6 @@ export function OtpVerificationPage() {
   }, []);
 
   const listenForOtp = useCallback(() => {
-    // Abort any previous listener so we don't double-dispatch.
     abortRef.current?.abort();
     if (!('credentials' in navigator)) return;
 
@@ -40,19 +36,17 @@ export function OtpVerificationPage() {
 
     (async () => {
       try {
-      // WebOTP API (`otp` transport) is not part of the default TS DOM lib.
-      const options = {
-        otp: { transport: ['sms'] as const },
-        signal: controller.signal,
-      } as unknown as CredentialRequestOptions;
-      const cred = await navigator.credentials.get(options);
-      if (cred && (cred as any).code) {
-        const code = (cred as any).code;
-        setOtp(code);
-        handleSubmit(code);
-      }
+        const options = {
+          otp: { transport: ['sms'] as const },
+          signal: controller.signal,
+        } as unknown as CredentialRequestOptions;
+        const cred = await navigator.credentials.get(options);
+        if (cred && (cred as any).code) {
+          const code = (cred as any).code;
+          setOtp(code);
+          handleSubmit(code);
+        }
       } catch (err) {
-        // Aborted by a resend — a fresh listener is armed by the caller.
         if ((err as any)?.name !== 'AbortError') {
           console.warn('[otp] WebOTP read interrupted:', err);
         }
@@ -69,12 +63,9 @@ export function OtpVerificationPage() {
     try {
       const result = await callApi.sendOtp(linkToken);
       setPhoneMasked(result.phoneMasked);
-      // WebOTP delivers asynchronously from the SMS — re-arm the credential read.
       listenForOtp();
       setWaitingForSms(false);
-      // Dev/demo stack (SMS_PROVIDER=log): the OTP is in backend/logs/sms.jsonl,
-      // never reachable via WebOTP on a desktop browser, so pull it from the
-      // dev-only backend endpoint and verify automatically.
+      // Dev/demo: auto-fill from backend log
       if (import.meta.env.DEV && session) {
         try {
           const dev = await callApi.getDevOtp(linkToken);
@@ -95,10 +86,7 @@ export function OtpVerificationPage() {
 
   const handleSubmit = async (code: string) => {
     if (submittingRef.current) return;
-    if (code.length !== 6 || !linkToken || !session) {
-      setError('Please enter a valid 6-digit OTP.');
-      return;
-    }
+    if (code.length !== 6 || !linkToken || !session) return;
 
     submittingRef.current = true;
     setLoading(true);
@@ -108,13 +96,10 @@ export function OtpVerificationPage() {
       const result = await callApi.verifyOtp(linkToken, code);
       setOtpResult(result);
       addToast('OTP verified successfully.', 'success');
-      // First-time call: collect + register the device fingerprint next.
-      // Returning call: fingerprint already matched — skip the lobby entirely
-      // and head straight into the call screen (saves a hop).
       if (session.deviceRegistered) {
-        navigate(`/call/${linkToken}/call`);
+        navigate(`/c/${linkToken}/call`);
       } else {
-        navigate(`/call/${linkToken}/device`);
+        navigate(`/c/${linkToken}/device`);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'OTP verification failed.';
@@ -144,12 +129,15 @@ export function OtpVerificationPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [linkToken]);
 
-  // Auto-submit when 6 digits are entered (manual or WebOTP)
+  // Auto-submit when 6 digits arrive via WebOTP
   useEffect(() => {
     if (otp.length === 6 && !submittingRef.current && !loading) {
       handleSubmit(otp);
     }
   }, [otp, loading]);
+
+  const otpDigits = otp.split('');
+  while (otpDigits.length < 6) otpDigits.push('');
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 to-neutral-100 flex items-center justify-center p-4">
@@ -161,35 +149,52 @@ export function OtpVerificationPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
               </svg>
             </div>
-            <h1 className="text-2xl font-bold text-neutral-900 mb-2">Auto OTP Verification</h1>
+            <h1 className="text-2xl font-bold text-neutral-900 mb-2">OTP Verification</h1>
             <p className="text-neutral-600">
-              Verifying the SIM in this phone against the number we sent the link to.
-              {phoneMasked && (
-                <span className="block font-medium text-neutral-800 mt-1">Target number: {phoneMasked}</span>
-              )}
+              {phoneMasked
+                ? <>Sending OTP to <span className="font-medium text-neutral-800">{phoneMasked}</span></>
+                : 'Sending OTP...'
+              }
             </p>
           </div>
 
-          {/* Auto-filled from the SMS when WebOTP is available; also editable by hand
-              (e.g. log-based SMS where the code is communicated out-of-band).
-              Auto-submits when 6 digits are entered. */}
           <div className="space-y-6">
-            <Input
-              label="One-Time Password"
-              type="text"
-              inputMode="numeric"
-              maxLength={6}
-              autoComplete="one-time-code"
-              value={otp}
-              onChange={setOtp}
-              placeholder={waitingForSms ? 'Waiting for SMS…' : '000000'}
-              error={error || undefined}
-              disabled={!phoneMasked}
-              className="text-center text-2xl tracking-widest font-mono"
-            />
+            {/* Visual OTP display — auto-filled by WebOTP, no manual input */}
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 mb-2 text-center">One-Time Password</label>
+              <div className="flex justify-center gap-3">
+                {otpDigits.map((d, i) => (
+                  <div
+                    key={i}
+                    className={`w-12 h-14 flex items-center justify-center text-2xl font-mono font-bold rounded-xl border-2 transition-all ${
+                      d
+                        ? 'border-primary-500 bg-primary-50 text-primary-700'
+                        : waitingForSms
+                          ? 'border-neutral-200 bg-neutral-50 text-neutral-300 animate-pulse'
+                          : 'border-neutral-200 bg-white text-neutral-300'
+                    }`}
+                  >
+                    {d || ''}
+                  </div>
+                ))}
+              </div>
+              {error && (
+                <p className="mt-2 text-sm text-red-600 text-center">{error}</p>
+              )}
+            </div>
 
             {loading && (
               <p className="text-center text-primary-600 font-medium">Verifying...</p>
+            )}
+
+            {waitingForSms && !loading && (
+              <div className="flex items-center justify-center gap-2 text-neutral-500">
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                <span className="text-sm">Waiting for SMS auto-read...</span>
+              </div>
             )}
           </div>
 
@@ -200,10 +205,10 @@ export function OtpVerificationPage() {
               disabled={resendCooldown > 0 || !phoneMasked}
               className="text-primary-600 font-medium hover:text-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Didn't receive the code? Resend SMS"}
+              {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Didn't receive? Resend SMS"}
             </button>
             <p className="text-xs text-neutral-400">
-              If the code is read automatically it fills in by itself — otherwise type the 6-digit code you received.
+              OTP will be read automatically from your SMS. Make sure you're using Chrome on Android.
             </p>
           </div>
         </div>

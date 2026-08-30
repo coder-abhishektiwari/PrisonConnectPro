@@ -22,6 +22,8 @@ const LOG_FILE = path.join(LOG_DIR, 'sms.jsonl');
 const PROVIDER = process.env.SMS_PROVIDER || 'log';
 const FAST2SMS_API_KEY = process.env.FAST2SMS_API_KEY;
 const FAST2SMS_SENDER_ID = process.env.FAST2SMS_SENDER_ID || '';
+const FAST2SMS_SENDER_ID_OTP = process.env.FAST2SMS_SENDER_ID_OTP || FAST2SMS_SENDER_ID;
+const FAST2SMS_SENDER_ID_LINK = process.env.FAST2SMS_SENDER_ID_LINK || FAST2SMS_SENDER_ID;
 const FAST2SMS_ENTITY_ID = process.env.FAST2SMS_ENTITY_ID || '';
 const FAST2SMS_OTP_TEMPLATE_ID = process.env.FAST2SMS_OTP_TEMPLATE_ID || '';
 const FAST2SMS_LINK_TEMPLATE_ID = process.env.FAST2SMS_LINK_TEMPLATE_ID || '';
@@ -30,7 +32,8 @@ const SMS_OTP_DOMAIN = process.env.SMS_OTP_DOMAIN || '';
 
 console.log(
   `[sms] provider=${PROVIDER} hasKey=${!!FAST2SMS_API_KEY} ` +
-  `sender=${FAST2SMS_SENDER_ID || '(none)'} entity=${FAST2SMS_ENTITY_ID || '(none)'} ` +
+  `senderOtp=${FAST2SMS_SENDER_ID_OTP || '(none)'} senderLink=${FAST2SMS_SENDER_ID_LINK || '(none)'} ` +
+  `entity=${FAST2SMS_ENTITY_ID || '(none)'} ` +
   `otpTpl=${FAST2SMS_OTP_TEMPLATE_ID || '(none)'} linkTpl=${FAST2SMS_LINK_TEMPLATE_ID || '(none)'} ` +
   `schedTpl=${FAST2SMS_SCHEDULED_TEMPLATE_ID || '(none)'}`
 );
@@ -76,13 +79,15 @@ function normalizePhone(phone) {
  * @param {string}   opts.phone           10-digit mobile
  * @param {string|number} opts.templateId DLT Message_ID (numeric string or int)
  * @param {string[]} opts.templateVars    Pipe-separated values for {#VAR#} placeholders
+ * @param {string}   [opts.senderId]      Override sender ID (e.g. different for OTP vs link)
  * @returns {Promise<{provider: string, messageId: string|null}>}
  */
-async function sendViaDlt({ phone, templateId, templateVars }) {
+async function sendViaDlt({ phone, templateId, templateVars, senderId }) {
   if (!FAST2SMS_API_KEY) {
     throw new Error('FAST2SMS_API_KEY is not configured');
   }
-  if (!FAST2SMS_SENDER_ID) {
+  const effectiveSenderId = senderId || FAST2SMS_SENDER_ID;
+  if (!effectiveSenderId) {
     throw new Error('FAST2SMS_SENDER_ID is not configured — add it in Render env');
   }
   if (!templateId) {
@@ -93,7 +98,7 @@ async function sendViaDlt({ phone, templateId, templateVars }) {
   const varsJoined = (templateVars || []).join('|');
 
   const payload = {
-    sender_id: FAST2SMS_SENDER_ID,
+    sender_id: effectiveSenderId,
     message: Number(templateId),
     variables_values: varsJoined,
     route: 'dlt',
@@ -106,7 +111,7 @@ async function sendViaDlt({ phone, templateId, templateVars }) {
 
   console.log(
     `[sms] dlt send phone=${mobile} tplId=${templateId} ` +
-    `vars="${varsJoined}" sender=${FAST2SMS_SENDER_ID}`
+    `vars="${varsJoined}" sender=${effectiveSenderId}`
   );
 
   const res = await fetch('https://www.fast2sms.com/dev/bulkV2', {
@@ -264,10 +269,12 @@ async function sendSms({ phone, message, kind = 'generic', callId = null, templa
       console.error(`[sms] ${errMsg}`);
     } else {
       try {
+        const senderIdForKind = kind === 'otp' ? FAST2SMS_SENDER_ID_OTP : FAST2SMS_SENDER_ID_LINK;
         const result = await sendViaDlt({
           phone: entry.phone,
           templateId,
           templateVars,
+          senderId: senderIdForKind,
         });
         entry.transport = 'fast2sms';
         entry.messageId = result.messageId || null;

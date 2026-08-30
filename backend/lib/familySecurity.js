@@ -43,7 +43,29 @@ function maskedPhone(phone) {
 
 /** Build the clickable family-web link for a call. */
 function buildCallLink(linkToken) {
-  return `${FAMILY_WEB_URL}/call/${encodeURIComponent(linkToken)}`;
+  return `${FAMILY_WEB_URL}/c/${encodeURIComponent(linkToken)}`;
+}
+
+/**
+ * Shorten a URL using TinyURL's free API.
+ * Returns the short URL on success, or the original URL on failure.
+ */
+async function shortenUrl(url) {
+  try {
+    const res = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(url)}`);
+    if (res.ok) {
+      const shortUrl = (await res.text()).trim();
+      if (shortUrl && shortUrl.startsWith('http')) {
+        console.log(`[family] shortened: ${url} → ${shortUrl}`);
+        return shortUrl;
+      }
+    }
+    console.warn(`[family] tinyurl failed (${res.status}), using original URL`);
+    return url;
+  } catch (err) {
+    console.warn(`[family] tinyurl error: ${err.message}, using original URL`);
+    return url;
+  }
 }
 
 const LOOKUP_KEYS = ['contactId', 'phone', 'phoneNumber', 'fullName'];
@@ -157,6 +179,7 @@ module.exports = {
   normalizePhone,
   maskedPhone,
   buildCallLink,
+  shortenUrl,
   contactPhone,
   fingerprintFor,
   registerOrVerifyFingerprint,

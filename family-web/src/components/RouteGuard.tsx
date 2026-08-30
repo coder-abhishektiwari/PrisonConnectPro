@@ -44,7 +44,7 @@ export function RouteGuard({ require, children }: GuardProps) {
   if (!session) return <>{children}</>;
 
   const next = nextStepFor(require, session.deviceRegistered, !!otpResult, deviceVerified);
-  if (next) return <Navigate to={`/call/${linkToken}${next}`} replace />;
+  if (next) return <Navigate to={`/c/${linkToken}${next}`} replace />;
 
   return <>{children}</>;
 }
