@@ -51,8 +51,12 @@ function appendLog(entry) {
 }
 
 function consoleLog(entry) {
-  const { phone, message } = entry;
-  console.log(`[sms:${entry.transport}:${entry.kind}] -> ${phone} :: ${message}`);
+  const { phone, message, kind } = entry;
+  console.log(`[sms:${entry.transport}:${kind}] -> ${phone}`);
+  console.log(`[sms:${kind}:message] ${message}`);
+  if (entry.templateVars) {
+    console.log(`[sms:${kind}:vars] ${JSON.stringify(entry.templateVars)}`);
+  }
 }
 
 /** Normalize phone to 10-digit Indian mobile (no country code, no +). */
@@ -194,6 +198,22 @@ function scheduledTemplateVars(familyMemberName, inmateName, callType, date, tim
 // ─── Public send interface ─────────────────────────────────────────────────────
 
 /**
+ * Preview what the SMS will look like (for logging/debugging).
+ */
+function previewSms(kind, vars) {
+  if (kind === 'link' && vars.length >= 2) {
+    return `Dear ${vars[0]}, Your secure video call with DSS Solutions has been scheduled. Click the secure link below to join your video call: ${vars[1]} This link is valid for one session only.`;
+  }
+  if (kind === 'otp' && vars.length >= 1) {
+    return `Your OTP to join the call is ${vars[0]}. Do not share this OTP with anyone. @prisonconnect-familyweb.onrender.com #${vars[1] || vars[0]}`;
+  }
+  if (kind === 'scheduled' && vars.length >= 6) {
+    return `Dear ${vars[0]}, ${vars[1]} has scheduled a ${vars[2]} on ${vars[3]} at ${vars[4]}. Click the secure link below to join the call: ${vars[5]} Please do not share this link with anyone.`;
+  }
+  return null;
+}
+
+/**
  * Send an SMS.
  *
  * @param {object}   opts
@@ -210,10 +230,19 @@ async function sendSms({ phone, message, kind = 'generic', callId = null, templa
     phone: normalizePhone(phone),
     message,
     callId,
+    templateVars,
     transport: 'log',
   };
 
   if (PROVIDER === 'fast2sms') {
+    // Log preview of what the family member will receive
+    const preview = previewSms(kind, templateVars || []);
+    if (preview) {
+      console.log(`[sms:${kind}:preview] >>> FAMILY MEMBER WILL RECEIVE:`);
+      console.log(`[sms:${kind}:preview] ${preview}`);
+    }
+    console.log(`[sms:${kind}:vars] variables_values = "${(templateVars || []).join('|')}"`);
+
     const templateMap = {
       otp: FAST2SMS_OTP_TEMPLATE_ID,
       link: FAST2SMS_LINK_TEMPLATE_ID,

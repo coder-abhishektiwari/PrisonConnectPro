@@ -16,6 +16,8 @@ const { readDb, updateDb } = require('./db');
 
 const FAMILY_WEB_URL = (process.env.FAMILY_WEB_URL || '').replace(/\/+$/, '');
 
+console.log(`[family] FAMILY_WEB_URL="${FAMILY_WEB_URL}"`);
+
 if (!FAMILY_WEB_URL) {
   throw new Error('FAMILY_WEB_URL env var is required - set it to the public family-web base URL (e.g. https://family-web.onrender.com) before starting the server');
 }
