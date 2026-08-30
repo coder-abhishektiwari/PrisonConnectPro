@@ -71,8 +71,10 @@ fun KioskNavHost(
     // Tell MainActivity to skip auto-logout during lobby/call
     LaunchedEffect(currentRoute) {
         val activity = context as? MainActivity
-        activity?.isInCall = currentRoute in listOf(
-            KioskRoutes.LOBBY, KioskRoutes.VIDEO_CALL, KioskRoutes.AUDIO_CALL
+        activity?.isInCall = currentRoute != null && (
+            currentRoute!!.startsWith("lobby") ||
+            currentRoute!!.startsWith("video_call") ||
+            currentRoute!!.startsWith("audio_call")
         )
     }
 
