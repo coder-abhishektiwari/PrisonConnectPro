@@ -26,11 +26,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.prisonconnect.kiosk.R
+import com.prisonconnect.kiosk.ui.theme.AccentGold
+import com.prisonconnect.kiosk.ui.theme.LightNavy
+import com.prisonconnect.kiosk.ui.theme.PrimaryNavy
 import com.prisonconnect.kiosk.ui.theme.PrisonKioskTheme
 
-private val PrimaryNavy = Color(0xFF003366)
-private val LightNavy = Color(0xFF004080)
-private val AccentGold = Color(0xFFFFC107)
 private val TextWhiteAlpha = Color(0xB3FFFFFF)
 
 @Composable

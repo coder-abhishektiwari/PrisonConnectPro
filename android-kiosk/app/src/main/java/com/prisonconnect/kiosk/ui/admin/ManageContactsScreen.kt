@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.prisonconnect.kiosk.models.admin.VerifiedContact
 import com.prisonconnect.kiosk.network.NetworkResult
+import com.prisonconnect.kiosk.ui.components.ConfirmDeleteDialog
 import com.prisonconnect.kiosk.ui.components.KioskLoadingState
 import com.prisonconnect.kiosk.ui.components.KioskTopBar
 
@@ -157,22 +158,14 @@ fun ManageContactsScreen(
 
     // Delete Confirmation
     showDeleteConfirm?.let { contact ->
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = null },
-            title = { Text("Delete Contact") },
-            text = { Text("Are you sure you want to delete ${contact.displayName}?") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        viewModel.deleteContact(contact.contactId, prisonerId)
-                        showDeleteConfirm = null
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
-                ) { Text("Delete") }
+        ConfirmDeleteDialog(
+            title = "Delete Contact",
+            message = "Are you sure you want to delete ${contact.displayName}?",
+            onConfirm = {
+                viewModel.deleteContact(contact.contactId, prisonerId)
+                showDeleteConfirm = null
             },
-            dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = null }) { Text("Cancel") }
-            }
+            onDismiss = { showDeleteConfirm = null }
         )
     }
 }

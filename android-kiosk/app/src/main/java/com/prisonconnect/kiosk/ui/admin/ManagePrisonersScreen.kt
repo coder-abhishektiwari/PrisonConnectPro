@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.prisonconnect.kiosk.models.admin.Prisoner
+import com.prisonconnect.kiosk.ui.components.ConfirmDeleteDialog
 import com.prisonconnect.kiosk.ui.components.KioskTopBar
 import com.prisonconnect.kiosk.ui.theme.PrisonKioskTheme
 
@@ -44,25 +45,14 @@ fun ManagePrisonersScreen(
 
     if (showDeleteDialog != null) {
         val (prisonerId, prisonerName) = showDeleteDialog!!
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = null },
-            title = { Text("Delete Prisoner") },
-            text = { Text("Are you sure you want to delete $prisonerName? This action cannot be undone.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        viewModel.deletePrisoner(prisonerId)
-                        showDeleteDialog = null
-                    }
-                ) {
-                    Text("Delete", color = Color(0xFFD32F2F))
-                }
+        ConfirmDeleteDialog(
+            title = "Delete Prisoner",
+            message = "Are you sure you want to delete $prisonerName? This action cannot be undone.",
+            onConfirm = {
+                viewModel.deletePrisoner(prisonerId)
+                showDeleteDialog = null
             },
-            dismissButton = {
-                TextButton(onClick = { showDeleteDialog = null }) {
-                    Text("Cancel")
-                }
-            }
+            onDismiss = { showDeleteDialog = null }
         )
     }
 

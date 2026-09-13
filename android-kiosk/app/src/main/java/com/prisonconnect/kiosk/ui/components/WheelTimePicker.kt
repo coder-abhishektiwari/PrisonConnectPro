@@ -15,12 +15,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.prisonconnect.kiosk.ui.theme.DividerColor
+import com.prisonconnect.kiosk.ui.theme.PrimaryNavy
+import com.prisonconnect.kiosk.ui.theme.SelectedBg
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
-private val PrimaryNavy = Color(0xFF003366)
-private val SelectedBg = Color(0xFFE8EDF4)
-private val DividerColor = Color(0xFFCBD5E1)
 
 @Composable
 fun WheelTimePicker(

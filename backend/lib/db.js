@@ -205,7 +205,7 @@ function updateDb(filename, mutator) {
       return [id, true];
     }));
 
-    const { data: nextData, result } = mutator(currentDocs);
+    const { data: nextData, result } = await mutator(currentDocs);
 
     const client = await pool.connect();
     try {
@@ -316,6 +316,10 @@ async function transact(specs) {
       }
     }
     await client.query('COMMIT');
+    // Invalidate read cache for all affected collections.
+    for (const { filename } of specs) {
+      readCache.delete(normalizeFilename(filename));
+    }
     return results;
   } catch (err) {
     await client.query('ROLLBACK');

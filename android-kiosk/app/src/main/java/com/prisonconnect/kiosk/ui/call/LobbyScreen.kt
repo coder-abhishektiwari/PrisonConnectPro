@@ -38,21 +38,19 @@ import com.prisonconnect.kiosk.core.UiState
 import com.prisonconnect.kiosk.models.call.CallSession
 import com.prisonconnect.kiosk.models.call.RoomStatus
 import com.prisonconnect.kiosk.ui.components.KioskTopBar
+import com.prisonconnect.kiosk.ui.theme.AccentGreen
+import com.prisonconnect.kiosk.ui.theme.AccentGreenBg
+import com.prisonconnect.kiosk.ui.theme.AlertRed
+import com.prisonconnect.kiosk.ui.theme.BorderColor
+import com.prisonconnect.kiosk.ui.theme.LightBg
+import com.prisonconnect.kiosk.ui.theme.PrimaryNavy
 import com.prisonconnect.kiosk.ui.theme.PrisonKioskTheme
+import com.prisonconnect.kiosk.ui.theme.TextDark
+import com.prisonconnect.kiosk.ui.theme.TextGray
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-
-// Color Palette
-private val PrimaryNavy = Color(0xFF003366)
-private val AlertRed = Color(0xFFE53935)
-private val LightScreenBg = Color(0xFFF4F7FA)
-private val CardBorderColor = Color(0xFFE2E8F0)
-private val TextDark = Color(0xFF1E293B)
-private val TextGray = Color(0xFF64748B)
-private val AccentGreen = Color(0xFF2E7D32)
-private val AccentGreenBg = Color(0xFFE8F5E9)
 
 @Composable
 fun LobbyScreen(
@@ -236,7 +234,7 @@ fun LobbyContent(
 
     Scaffold(
         topBar = { KioskTopBar( title = if (isVideoCall) "Video Call" else "Audio Call", showBackButton = true, onBackClick = onBack) },
-        containerColor = LightScreenBg
+        containerColor = LightBg
     ) { padding ->
         BoxWithConstraints(
             modifier = Modifier
@@ -345,7 +343,7 @@ fun LobbyContent(
                             }
 
                             Spacer(modifier = Modifier.height(14.dp))
-                            HorizontalDivider(color = CardBorderColor)
+                            HorizontalDivider(color = BorderColor)
                             Spacer(modifier = Modifier.height(10.dp))
 
                             ValidationRow("Contact Person", contactName, isTablet)
@@ -375,12 +373,12 @@ fun LobbyContent(
                             ValidationRow("Max Duration", "$maxDurationMinutes Minutes", isTablet)
 
                             Spacer(modifier = Modifier.height(14.dp))
-                            HorizontalDivider(color = CardBorderColor)
+                            HorizontalDivider(color = BorderColor)
                             Spacer(modifier = Modifier.height(16.dp))
 
                             Surface(
                                 modifier = Modifier.fillMaxWidth(),
-                                color = LightScreenBg,
+                                color = LightBg,
                                 shape = RoundedCornerShape(14.dp)
                             ) {
                                 Row(
@@ -470,7 +468,7 @@ fun LobbyContent(
                                 modifier = Modifier.fillMaxWidth(),
                                 color = Color.White,
                                 shape = RoundedCornerShape(12.dp),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, CardBorderColor)
+                                border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
                             ) {
                                 Row(
                                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),

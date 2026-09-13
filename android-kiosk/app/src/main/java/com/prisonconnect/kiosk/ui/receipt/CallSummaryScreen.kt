@@ -26,24 +26,29 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.prisonconnect.kiosk.R
 import com.prisonconnect.kiosk.ui.components.KioskTopBar
+import com.prisonconnect.kiosk.ui.theme.LightBg
+import com.prisonconnect.kiosk.ui.theme.PrimaryNavy
 import com.prisonconnect.kiosk.ui.theme.PrisonKioskTheme
+import com.prisonconnect.kiosk.ui.theme.SuccessGreen
+import com.prisonconnect.kiosk.ui.theme.TextDark
+import com.prisonconnect.kiosk.ui.theme.TextGray
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
-private val PrimaryNavy = Color(0xFF003366)
-private val LightBg = Color(0xFFF4F7FA)
-private val SuccessGreen = Color(0xFF4CAF50)
-private val TextDark = Color(0xFF1E293B)
-private val TextGray = Color(0xFF64748B)
 
 @Composable
 fun CallSummaryScreen(
     contactName: String,
     duration: String,
     totalCharged: String,
+    callType: String = "video",
     @Suppress("UNUSED_PARAMETER") windowSizeClass: WindowSizeClass,
     onBackToHome: () -> Unit,
     viewModel: SummaryViewModel = hiltViewModel()
 ) {
     val inmateProfile by viewModel.inmateProfile.collectAsState()
+    val balance by viewModel.balance.collectAsState()
 
     CallSummaryContent(
         inmateName = inmateProfile?.let { "${it.firstName} ${it.lastName}" } ?: "N/A",
@@ -51,6 +56,8 @@ fun CallSummaryScreen(
         contactName = contactName,
         duration = duration,
         totalCharged = totalCharged,
+        callType = callType,
+        remainingBalance = balance,
         onPrintReceipt = { viewModel.onPrintReceipt() },
         onBackToHome = onBackToHome
     )
@@ -63,6 +70,8 @@ fun CallSummaryContent(
     contactName: String,
     duration: String,
     totalCharged: String,
+    callType: String = "video",
+    remainingBalance: Double = 0.0,
     onPrintReceipt: () -> Unit,
     onBackToHome: () -> Unit
 ) {
@@ -149,9 +158,9 @@ fun CallSummaryContent(
                         ReceiptRow("Inmate ID", inmateId, isTablet = isTablet)
                         ReceiptRow("Inmate Name", inmateName, isTablet = isTablet)
                         ReceiptRow("Contact Person", contactName, isTablet = isTablet)
-                        ReceiptRow("Date", "27 May 2025", isTablet = isTablet)
+                        ReceiptRow("Date", LocalDate.now().format(DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH)), isTablet = isTablet)
                         ReceiptRow("Duration", "$duration Min", isTablet = isTablet)
-                        ReceiptRow("Call Type", "Video", isTablet = isTablet)
+                        ReceiptRow("Call Type", callType.replaceFirstChar { it.uppercase() }, isTablet = isTablet)
 
                         HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Color(0xFFE2E8F0))
 
@@ -163,7 +172,7 @@ fun CallSummaryContent(
                         )
                         ReceiptRow(
                             label = stringResource(R.string.remaining_balance),
-                            value = "₹40.00",
+                            value = "₹${String.format("%.2f", remainingBalance)}",
                             isTablet = isTablet
                         )
 
@@ -337,8 +346,10 @@ fun PreviewCallSummaryMobile() {
             inmateName = "RAHUL KUMAR",
             inmateId = "INM123456",
             contactName = "Suresh Kumar",
-            duration = "5:00",
+            duration = "5",
             totalCharged = "10.00",
+            callType = "video",
+            remainingBalance = 40.0,
             onPrintReceipt = {},
             onBackToHome = {}
         )

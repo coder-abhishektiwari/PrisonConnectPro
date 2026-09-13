@@ -22,8 +22,6 @@ const LOG_FILE = path.join(LOG_DIR, 'sms.jsonl');
 const PROVIDER = process.env.SMS_PROVIDER || 'log';
 const FAST2SMS_API_KEY = process.env.FAST2SMS_API_KEY;
 const FAST2SMS_SENDER_ID = process.env.FAST2SMS_SENDER_ID || '';
-const FAST2SMS_SENDER_ID_OTP = process.env.FAST2SMS_SENDER_ID_OTP || FAST2SMS_SENDER_ID;
-const FAST2SMS_SENDER_ID_LINK = process.env.FAST2SMS_SENDER_ID_LINK || FAST2SMS_SENDER_ID;
 const FAST2SMS_ENTITY_ID = process.env.FAST2SMS_ENTITY_ID || '';
 const FAST2SMS_OTP_TEMPLATE_ID = process.env.FAST2SMS_OTP_TEMPLATE_ID || '';
 const FAST2SMS_LINK_TEMPLATE_ID = process.env.FAST2SMS_LINK_TEMPLATE_ID || '';
@@ -32,7 +30,7 @@ const SMS_OTP_DOMAIN = process.env.SMS_OTP_DOMAIN || '';
 
 console.log(
   `[sms] provider=${PROVIDER} hasKey=${!!FAST2SMS_API_KEY} ` +
-  `senderOtp=${FAST2SMS_SENDER_ID_OTP || '(none)'} senderLink=${FAST2SMS_SENDER_ID_LINK || '(none)'} ` +
+  `sender=${FAST2SMS_SENDER_ID || '(none)'} ` +
   `entity=${FAST2SMS_ENTITY_ID || '(none)'} ` +
   `otpTpl=${FAST2SMS_OTP_TEMPLATE_ID || '(none)'} linkTpl=${FAST2SMS_LINK_TEMPLATE_ID || '(none)'} ` +
   `schedTpl=${FAST2SMS_SCHEDULED_TEMPLATE_ID || '(none)'}`
@@ -269,7 +267,7 @@ async function sendSms({ phone, message, kind = 'generic', callId = null, templa
       console.error(`[sms] ${errMsg}`);
     } else {
       try {
-        const senderIdForKind = kind === 'otp' ? FAST2SMS_SENDER_ID_OTP : FAST2SMS_SENDER_ID_LINK;
+        const senderIdForKind = FAST2SMS_SENDER_ID;
         const result = await sendViaDlt({
           phone: entry.phone,
           templateId,

@@ -48,20 +48,20 @@ import com.prisonconnect.kiosk.models.inmate.InmateProfile
 import com.prisonconnect.kiosk.models.call.ScheduledCall
 import com.prisonconnect.kiosk.ui.components.KioskErrorState
 import com.prisonconnect.kiosk.ui.components.KioskLoadingState
+import com.prisonconnect.kiosk.ui.theme.ActionButtonBg
+import com.prisonconnect.kiosk.ui.theme.GreenActiveBg
+import com.prisonconnect.kiosk.ui.theme.GreenActiveText
+import com.prisonconnect.kiosk.ui.theme.GreenAccentBorder
+import com.prisonconnect.kiosk.ui.theme.HomeNavGreen
+import com.prisonconnect.kiosk.ui.theme.PrimaryDarkNavy
+import com.prisonconnect.kiosk.ui.theme.PrimaryNavy
 import com.prisonconnect.kiosk.ui.theme.PrisonKioskTheme
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.*
 
-// --- Color Palette ---
-private val HeaderBlue = Color(0xFF003366)
-private val TextDarkBlue = Color(0xFF0B2240)
+// --- Color Palette (TextGray kept local — different shade from theme) ---
 private val TextGray = Color(0xFF687A8F)
-private val GreenActiveBg = Color(0xFFE8F5E9)
-private val GreenActiveText = Color(0xFF2E7D32)
-private val GreenAccentBorder = Color(0xFF1B5E20)
-private val ActionButtonBg = Color(0xFFF0F4F8)
-private val HomeNavGreen = Color(0xFFA8F5A2)
 
 @Composable
 fun DashboardScreen(
@@ -154,7 +154,7 @@ fun ScheduleTabContent(
             text = "MY SCHEDULED CALLS",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
-            color = TextDarkBlue,
+            color = PrimaryDarkNavy,
             modifier = Modifier.padding(bottom = 16.dp)
         )
 
@@ -191,12 +191,12 @@ fun HistoryTabContent(
                 text = "CALL HISTORY",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = TextDarkBlue
+                color = PrimaryDarkNavy
             )
             TextButton(onClick = onRefresh) {
-                Icon(Icons.Default.Refresh, contentDescription = null, tint = HeaderBlue, modifier = Modifier.size(18.dp))
+                Icon(Icons.Default.Refresh, contentDescription = null, tint = PrimaryNavy, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Refresh", color = HeaderBlue)
+                Text("Refresh", color = PrimaryNavy)
             }
         }
 
@@ -229,7 +229,7 @@ fun CallHistoryCard(call: CallHistory) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
-                color = HeaderBlue.copy(alpha = 0.1f),
+                color = PrimaryNavy.copy(alpha = 0.1f),
                 shape = CircleShape,
                 modifier = Modifier.size(48.dp)
             ) {
@@ -237,7 +237,7 @@ fun CallHistoryCard(call: CallHistory) {
                     Icon(
                         imageVector = if (call.type == CallType.VIDEO) Icons.Default.Videocam else Icons.Default.Call,
                         contentDescription = null,
-                        tint = HeaderBlue
+                        tint = PrimaryNavy
                     )
                 }
             }
@@ -248,7 +248,7 @@ fun CallHistoryCard(call: CallHistory) {
                 Text(
                     text = call.contactName.orEmpty(),
                     fontWeight = FontWeight.Bold,
-                    color = TextDarkBlue
+                    color = PrimaryDarkNavy
                 )
                 Text(
                     text = formatCallDate(call.startTime) + " • " + formatCallDuration(call),
@@ -319,7 +319,7 @@ fun ScheduledCallCard(call: ScheduledCall, onClick: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
-                color = HeaderBlue.copy(alpha = 0.1f),
+                color = PrimaryNavy.copy(alpha = 0.1f),
                 shape = CircleShape,
                 modifier = Modifier.size(48.dp)
             ) {
@@ -327,7 +327,7 @@ fun ScheduledCallCard(call: ScheduledCall, onClick: () -> Unit) {
                     Icon(
                         imageVector = if (call.type == CallType.VIDEO) Icons.Default.Videocam else Icons.Default.Call,
                         contentDescription = null,
-                        tint = HeaderBlue
+                        tint = PrimaryNavy
                     )
                 }
             }
@@ -335,7 +335,7 @@ fun ScheduledCallCard(call: ScheduledCall, onClick: () -> Unit) {
             Spacer(modifier = Modifier.width(16.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = call.contactName.orEmpty(), fontWeight = FontWeight.Bold, color = TextDarkBlue)
+                Text(text = call.contactName.orEmpty(), fontWeight = FontWeight.Bold, color = PrimaryDarkNavy)
                 Text(text = "${call.date.orEmpty()} • ${call.timeSlot.orEmpty()}", fontSize = 12.sp, color = TextGray)
             }
 
@@ -389,11 +389,11 @@ fun DashboardContent(
                     text = "APPROVED CONTACTS",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = TextDarkBlue,
+                    color = PrimaryDarkNavy,
                     letterSpacing = 0.8.sp
                 )
                 TextButton(onClick = onViewAllContacts) {
-                    Text("View All", color = HeaderBlue)
+                    Text("View All", color = PrimaryNavy)
                 }
             }
         }
@@ -443,14 +443,14 @@ fun WalletDetailCard(balance: InmateBalance?, onClick: () -> Unit) {
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text("BALANCE", style = MaterialTheme.typography.labelSmall, color = TextGray)
-                Text("₹${String.format("%.2f", balance?.credits ?: 0.0)}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = HeaderBlue)
+                Text("₹${String.format("%.2f", balance?.credits ?: 0.0)}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = PrimaryNavy)
             }
             VerticalDivider(modifier = Modifier.height(40.dp).padding(horizontal = 24.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text("TOTAL SPENT", style = MaterialTheme.typography.labelSmall, color = TextGray)
                 Text("₹${String.format("%.2f", balance?.totalSpent ?: 0.0)}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             }
-            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Open wallet", tint = HeaderBlue)
+            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Open wallet", tint = PrimaryNavy)
         }
     }
 }
@@ -499,7 +499,7 @@ private fun InmateProfileCard(
                         text = "${inmateProfile.firstName.orEmpty()} ${inmateProfile.lastName.orEmpty()}",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
-                        color = TextDarkBlue,
+                        color = PrimaryDarkNavy,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false)
@@ -598,7 +598,7 @@ private fun ContactCardItem(
                             text = contact.fullName.orEmpty(),
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp,
-                            color = TextDarkBlue,
+                            color = PrimaryDarkNavy,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -634,10 +634,10 @@ private fun ContactCardItem(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = onCallClick, colors = IconButtonDefaults.iconButtonColors(containerColor = ActionButtonBg)) {
-                        Icon(Icons.Default.Call, contentDescription = null, tint = HeaderBlue)
+                        Icon(Icons.Default.Call, contentDescription = null, tint = PrimaryNavy)
                     }
                     IconButton(onClick = onVideoClick, colors = IconButtonDefaults.iconButtonColors(containerColor = ActionButtonBg)) {
-                        Icon(Icons.Default.Videocam, contentDescription = null, tint = HeaderBlue)
+                        Icon(Icons.Default.Videocam, contentDescription = null, tint = PrimaryNavy)
                     }
                 }
             }
@@ -655,7 +655,7 @@ private fun KioskTopHeader(
     val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
     val dateFormat = SimpleDateFormat("h:mm a  •  d MMM yyyy", Locale.getDefault())
 
-    Surface(color = HeaderBlue, modifier = Modifier.fillMaxWidth()) {
+    Surface(color = PrimaryNavy, modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -763,7 +763,7 @@ private fun BottomNavItem(
                 Icon(
                     imageVector = icon,
                     contentDescription = label,
-                    tint = if (selected) TextDarkBlue else TextGray,
+                    tint = if (selected) PrimaryDarkNavy else TextGray,
                     modifier = Modifier.size(22.dp)
                 )
             }
@@ -772,7 +772,7 @@ private fun BottomNavItem(
             text = label,
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
-            color = if (selected) TextDarkBlue else TextGray
+            color = if (selected) PrimaryDarkNavy else TextGray
         )
     }
 }

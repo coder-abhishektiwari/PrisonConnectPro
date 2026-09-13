@@ -4,6 +4,7 @@ import androidx.lifecycle.viewModelScope
 import com.prisonconnect.kiosk.core.BaseViewModel
 import com.prisonconnect.kiosk.core.Constants
 import com.prisonconnect.kiosk.core.Logger
+import com.prisonconnect.kiosk.models.inmate.InmateBalance
 import com.prisonconnect.kiosk.models.inmate.InmateProfile
 import com.prisonconnect.kiosk.network.NetworkResult
 import com.prisonconnect.kiosk.repository.AuthRepository
@@ -23,8 +24,12 @@ class SummaryViewModel @Inject constructor(
     private val _inmateProfile = MutableStateFlow<InmateProfile?>(null)
     val inmateProfile = _inmateProfile.asStateFlow()
 
+    private val _balance = MutableStateFlow(0.0)
+    val balance = _balance.asStateFlow()
+
     init {
         loadProfile()
+        loadBalance()
     }
 
     private fun loadProfile() {
@@ -33,6 +38,17 @@ class SummaryViewModel @Inject constructor(
             inmateRepository.getProfile(inmateId).collect { result ->
                 if (result is NetworkResult.Success) {
                     _inmateProfile.value = result.data
+                }
+            }
+        }
+    }
+
+    private fun loadBalance() {
+        viewModelScope.launch {
+            val inmateId = authRepository.getInmateId() ?: Constants.KIOSK_ID
+            inmateRepository.getBalance(inmateId).collect { result ->
+                if (result is NetworkResult.Success) {
+                    _balance.value = result.data.credits
                 }
             }
         }

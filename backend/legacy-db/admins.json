@@ -2,18 +2,15 @@
   {
     "adminId": "ADMIN-001",
     "employeeId": "empsa001",
-    "name": "Amit Patel",
-    "email": "amit.patel@prisonconnect.io",
-    "role": "super_admin",
+    "name": "Abhishek",
+    "email": "abhishek@prisonconnect.com",
+    "role": "kiosk_admin",
     "permissions": [
-      "full_access",
-      "manage_prisons",
-      "manage_kiosks",
-      "manage_wardens",
-      "manage_subscriptions",
-      "view_all_data",
-      "manage_billing",
-      "manage_inmates"
+      "manage_inmates",
+      "manage_contacts",
+      "view_calls",
+      "view_schedule",
+      "manage_alerts"
     ],
     "status": "active",
     "password": "admin123",
@@ -33,14 +30,13 @@
     "employeeId": "empsa002",
     "name": "Neha Gupta",
     "email": "neha.gupta@prisonconnect.io",
-    "role": "super_admin",
+    "role": "kiosk_admin",
     "permissions": [
-      "full_access",
-      "manage_prisons",
-      "manage_kiosks",
-      "view_all_data",
-      "manage_billing",
-      "manage_inmates"
+      "manage_inmates",
+      "manage_contacts",
+      "view_calls",
+      "view_schedule",
+      "manage_alerts"
     ],
     "status": "active",
     "password": "admin123",
@@ -60,12 +56,13 @@
     "employeeId": "empsa003",
     "name": "Sanjay Malhotra",
     "email": "sanjay.malhotra@prisonconnect.io",
-    "role": "super_admin",
+    "role": "kiosk_admin",
     "permissions": [
-      "view_all_data",
-      "manage_reports",
-      "manage_alerts",
-      "manage_inmates"
+      "manage_inmates",
+      "manage_contacts",
+      "view_calls",
+      "view_schedule",
+      "manage_alerts"
     ],
     "status": "active",
     "password": "admin123",

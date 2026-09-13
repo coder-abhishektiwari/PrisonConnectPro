@@ -55,7 +55,7 @@ object KioskRoutes {
     const val LOBBY = "lobby/{contactId}/{contactName}/{time}/{callType}/{isSlotBooked}/{scheduleId}/{date}"
     const val VIDEO_CALL = "video_call/{contactName}/{roomId}"
     const val AUDIO_CALL = "audio_call/{contactName}/{roomId}"
-    const val CALL_SUMMARY = "call_summary/{contactName}/{total}"
+    const val CALL_SUMMARY = "call_summary/{contactName}/{total}/{duration}/{callType}"
 }
 
 @Composable
@@ -350,15 +350,17 @@ fun KioskNavHost(
         composable(KioskRoutes.VIDEO_CALL) { backStackEntry ->
             val contactName = backStackEntry.arguments?.getString("contactName") ?: ""
             val roomId = backStackEntry.arguments?.getString("roomId") ?: ""
-            // Same singleton engine as the call screens ��� real live billing.
+            // Same singleton engine as the call screens — real live billing.
             val callViewModel: CallViewModel = hiltViewModel()
             val liveCost by callViewModel.liveCost.collectAsState()
+            val timerSeconds by callViewModel.timerSeconds.collectAsState()
             VideoCallScreen(
                 contactName = contactName,
                 roomId = roomId,
                 windowSizeClass = windowSizeClass,
                 onEndCall = {
-                    navController.navigate("call_summary/$contactName/${String.format("%.2f", liveCost)}") {
+                    val duration = (timerSeconds / 60).toString()
+                    navController.navigate("call_summary/$contactName/${String.format("%.2f", liveCost)}/$duration/video") {
                         popUpTo(KioskRoutes.VIDEO_CALL) { inclusive = true }
                     }
                 },
@@ -370,12 +372,14 @@ fun KioskNavHost(
             val roomId = backStackEntry.arguments?.getString("roomId") ?: ""
             val callViewModel: CallViewModel = hiltViewModel()
             val liveCost by callViewModel.liveCost.collectAsState()
+            val timerSeconds by callViewModel.timerSeconds.collectAsState()
             AudioCallScreen(
                 contactName = contactName,
                 roomId = roomId,
                 windowSizeClass = windowSizeClass,
                 onEndCall = {
-                    navController.navigate("call_summary/$contactName/${String.format("%.2f", liveCost)}") {
+                    val duration = (timerSeconds / 60).toString()
+                    navController.navigate("call_summary/$contactName/${String.format("%.2f", liveCost)}/$duration/audio") {
                         popUpTo(KioskRoutes.AUDIO_CALL) { inclusive = true }
                     }
                 },
@@ -385,10 +389,13 @@ fun KioskNavHost(
         composable(KioskRoutes.CALL_SUMMARY) { backStackEntry ->
             val contactName = backStackEntry.arguments?.getString("contactName") ?: ""
             val total = backStackEntry.arguments?.getString("total") ?: "0.00"
+            val duration = backStackEntry.arguments?.getString("duration") ?: "0"
+            val callType = backStackEntry.arguments?.getString("callType") ?: "video"
             CallSummaryScreen(
                 contactName = contactName,
-                duration = "5",
+                duration = duration,
                 totalCharged = total,
+                callType = callType,
                 windowSizeClass = windowSizeClass,
                 onBackToHome = {
                     navController.navigate(KioskRoutes.DASHBOARD) {

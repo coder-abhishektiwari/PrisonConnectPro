@@ -35,14 +35,14 @@ import com.prisonconnect.kiosk.core.UiState
 import com.prisonconnect.kiosk.models.wallet.WalletTransaction
 import com.prisonconnect.kiosk.ui.components.KioskErrorState
 import com.prisonconnect.kiosk.ui.components.KioskLoadingState
+import com.prisonconnect.kiosk.ui.theme.MoneyGreen
+import com.prisonconnect.kiosk.ui.theme.MoneyGreenBg
+import com.prisonconnect.kiosk.ui.theme.MoneyRed
+import com.prisonconnect.kiosk.ui.theme.MoneyRedBg
+import com.prisonconnect.kiosk.ui.theme.PrimaryDarkNavy
 import java.text.SimpleDateFormat
 import java.util.*
 
-private val MoneyGreen = Color(0xFF1B5E20)
-private val MoneyGreenBg = Color(0xFFE8F5E9)
-private val MoneyRed = Color(0xFFC62828)
-private val MoneyRedBg = Color(0xFFFFEBEE)
-private val PrimaryDark = Color(0xFF0B2240)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -137,7 +137,7 @@ private fun WalletSummaryCard(data: WalletViewModel.WalletUiData, modifier: Modi
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = PrimaryDark)
+        colors = CardDefaults.cardColors(containerColor = PrimaryDarkNavy)
     ) {
         Row(
             modifier = Modifier
@@ -219,7 +219,7 @@ private fun WalletTransactionsCard(data: WalletViewModel.WalletUiData, modifier:
                 "Transactions",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = PrimaryDark
+                color = PrimaryDarkNavy
             )
             Spacer(modifier = Modifier.height(10.dp))
             if (data.transactions.isEmpty()) {
@@ -280,7 +280,7 @@ private fun TransactionRow(tx: WalletTransaction) {
                     text = tx.displayDescription,
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = PrimaryDark,
+                    color = PrimaryDarkNavy,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )

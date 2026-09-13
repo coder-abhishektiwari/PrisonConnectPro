@@ -36,18 +36,17 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.prisonconnect.kiosk.models.inmate.InmateProfile
 import com.prisonconnect.kiosk.ui.components.KioskButton
 import com.prisonconnect.kiosk.ui.components.KioskProgressIndicator
+import com.prisonconnect.kiosk.ui.theme.AccentGreen
+import com.prisonconnect.kiosk.ui.theme.AlertRed
+import com.prisonconnect.kiosk.ui.theme.ControlBtnBg
+import com.prisonconnect.kiosk.ui.theme.LightBg
+import com.prisonconnect.kiosk.ui.theme.PrimaryNavy
 import com.prisonconnect.kiosk.ui.theme.PrisonKioskTheme
+import com.prisonconnect.kiosk.ui.theme.TextDark
+import com.prisonconnect.kiosk.ui.theme.TextGray
+import com.prisonconnect.kiosk.ui.theme.WarningOrange
 import kotlinx.coroutines.delay
 
-// --- Color Palette ---
-private val LightScreenBg = Color(0xFFF4F7FA)
-private val TextDark = Color(0xFF1E293B)
-private val TextGray = Color(0xFF64748B)
-private val PrimaryBlue = Color(0xFF003366)
-private val AlertRed = Color(0xFFE53935)
-private val AccentGreen = Color(0xFF2E7D32)
-private val ControlBtnBg = Color(0xFFF1F5F9)
-private val WarningOrange = Color(0xFFF59E0B)
 
 @Composable
 fun AudioCallScreen(
@@ -146,7 +145,7 @@ fun AudioPermissionDeniedUI(onRetry: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(LightScreenBg),
+            .background(LightBg),
         contentAlignment = Alignment.Center
     ) {
         Card(
@@ -201,7 +200,7 @@ fun AudioCallContent(
     val currentCost = liveCost
 
     Scaffold(
-        containerColor = LightScreenBg
+        containerColor = LightBg
     ) { padding ->
         BoxWithConstraints(
             modifier = Modifier
@@ -248,7 +247,7 @@ fun AudioCallContent(
                         modifier = Modifier
                             .size(if (isTablet) 200.dp else 120.dp)
                             .clip(CircleShape)
-                            .border(4.dp, PrimaryBlue.copy(alpha = 0.15f), CircleShape),
+                            .border(4.dp, PrimaryNavy.copy(alpha = 0.15f), CircleShape),
                         color = Color.White,
                         shadowElevation = 8.dp
                     ) {
@@ -257,7 +256,7 @@ fun AudioCallContent(
                                 imageVector = Icons.Default.Person,
                                 contentDescription = null,
                                 modifier = Modifier.size(if (isTablet) 120.dp else 70.dp),
-                                tint = PrimaryBlue
+                                tint = PrimaryNavy
                             )
                         }
                     }
@@ -365,7 +364,7 @@ fun AudioCallContent(
                             icon = if (isSpeakerOn) Icons.Default.VolumeUp else Icons.Default.VolumeOff,
                             label = "Speaker",
                             isActive = isSpeakerOn,
-                            activeColor = PrimaryBlue,
+                            activeColor = PrimaryNavy,
                             isTablet = isTablet,
                             onClick = onSpeakerToggle
                         )
@@ -374,7 +373,7 @@ fun AudioCallContent(
                             icon = Icons.Default.Info,
                             label = "Call Info",
                             isActive = showInfoDialog,
-                            activeColor = PrimaryBlue,
+                            activeColor = PrimaryNavy,
                             isTablet = isTablet,
                             onClick = { showInfoDialog = true }
                         )
@@ -422,7 +421,7 @@ fun AudioCallContent(
                                     Icon(
                                         imageVector = Icons.Default.Info,
                                         contentDescription = null,
-                                        tint = PrimaryBlue,
+                                        tint = PrimaryNavy,
                                         modifier = Modifier.size(if (isTablet) 28.dp else 22.dp)
                                     )
                                     Text(
@@ -448,7 +447,7 @@ fun AudioCallContent(
 
                             // Inmate Detail
                             Surface(
-                                color = LightScreenBg,
+                                color = LightBg,
                                 shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
@@ -478,7 +477,7 @@ fun AudioCallContent(
                                         text = formatTime(remainingSeconds),
                                         fontSize = if (isTablet) 26.sp else 20.sp,
                                         fontWeight = FontWeight.Black,
-                                        color = if (remainingSeconds <= 60) AlertRed else PrimaryBlue
+                                        color = if (remainingSeconds <= 60) AlertRed else PrimaryNavy
                                     )
                                 }
 
@@ -514,7 +513,7 @@ fun AudioCallContent(
                                     .fillMaxWidth()
                                     .height(if (isTablet) 52.dp else 44.dp),
                                 shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy)
                             ) {
                                 Text(
                                     text = "Close",
@@ -564,7 +563,7 @@ private fun ConnectionQualityBadge(isTablet: Boolean) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
-            .background(PrimaryBlue.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
+            .background(PrimaryNavy.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
             .padding(horizontal = 8.dp, vertical = 4.dp)
     ) {
         Icon(

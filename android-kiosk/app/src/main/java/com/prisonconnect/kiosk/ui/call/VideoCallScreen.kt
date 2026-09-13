@@ -46,21 +46,21 @@ import com.prisonconnect.kiosk.models.inmate.InmateProfile
 import com.prisonconnect.kiosk.models.inmate.InmateStatus
 import com.prisonconnect.kiosk.ui.components.KioskButton
 import com.prisonconnect.kiosk.ui.components.KioskProgressIndicator
+import com.prisonconnect.kiosk.ui.theme.AlertRed
+import com.prisonconnect.kiosk.ui.theme.PrimaryBlue
 import com.prisonconnect.kiosk.ui.theme.PrisonKioskTheme
+import com.prisonconnect.kiosk.ui.theme.TextDark
+import com.prisonconnect.kiosk.ui.theme.TextGray
+import com.prisonconnect.kiosk.ui.theme.WarningOrange
 import kotlinx.coroutines.delay
 import org.webrtc.RendererCommon
 import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoTrack
 import kotlin.math.roundToInt
 
-// Color Tokens
+// Color Tokens (AccentGreen kept local — different shade from theme)
 private val DarkControlsBg = Color(0xD90F172A)
-private val AlertRed = Color(0xFFE53935)
 private val AccentGreen = Color(0xFF10B981)
-private val TextDark = Color(0xFF1E293B)
-private val TextGray = Color(0xFF64748B)
-private val PrimaryBlue = Color(0xFF0284C7)
-private val WarningOrange = Color(0xFFF59E0B)
 
 /**
  * Compose wrapper around a WebRTC [SurfaceViewRenderer] that renders a

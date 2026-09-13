@@ -29,17 +29,17 @@ import com.prisonconnect.kiosk.models.schedule.BookedSlot
 import com.prisonconnect.kiosk.models.schedule.SlotsResponse
 import com.prisonconnect.kiosk.ui.components.KioskTopBar
 import com.prisonconnect.kiosk.ui.components.WheelTimePicker
+import com.prisonconnect.kiosk.ui.theme.BorderColor
+import com.prisonconnect.kiosk.ui.theme.DangerBg
+import com.prisonconnect.kiosk.ui.theme.DangerRed
+import com.prisonconnect.kiosk.ui.theme.LightBg
+import com.prisonconnect.kiosk.ui.theme.PrimaryNavy
+import com.prisonconnect.kiosk.ui.theme.TextDark
+import com.prisonconnect.kiosk.ui.theme.TextGray
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-private val PrimaryNavy = Color(0xFF003366)
-private val LightBg = Color(0xFFF4F7FA)
-private val TextDark = Color(0xFF1E293B)
-private val TextGray = Color(0xFF64748B)
-private val BorderColor = Color(0xFFE2E8F0)
-private val DangerRed = Color(0xFFDC2626)
-private val DangerBg = Color(0xFFFFF1F2)
 
 @Composable
 fun ScheduleCallScreen(

@@ -1,0 +1,90 @@
+{
+  // Cloudflare Workers configuration for PrisonConnect backend
+  // WARNING: This backend uses Express, Socket.IO, pg (PostgreSQL TCP), filesystem ops,
+  //          and TensorFlow.js WASM -- all of which are NOT COMPATIBLE with Workers.
+  //          This config is provided as a starting point for migration work.
+  //
+  // Entry point: backend/server.js (the Express app entry point)
+  // To make this work, the backend MUST be rewritten to use Workers-compatible
+  // patterns (fetch handler, itty-router/hono, Hyperdrive, R2, etc.)
+
+  "name": "prisonconnect-backend",
+  "main": "server.js",
+  "compatibility_date": "2025-09-01",
+
+  // Enable Node.js compatibility flags required by this backend
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Cloudflare Workers cannot bind to ports; this is ignored by Workers
+  // but kept for local `wrangler dev` compatibility
+  "port": 59354,
+
+  // Environment variables (sourced from backend/.env for development)
+  "vars": {
+    "CORS_ORIGIN": "*",
+    "ROOM_MAX_PARTICIPANTS": "2",
+    "ACCESS_TOKEN_TTL": "1h",
+    "REFRESH_TOKEN_TTL": "7d",
+    "FACE_MATCH_THRESHOLD": "0.5",
+    "FACE_LIVENESS_THRESHOLD": "0.5",
+    "SIGNALING_URL": "http://127.0.0.1:3002",
+    "SMS_PROVIDER": "log",
+    "SMS_OTP_DOMAIN": "127.0.0.1",
+    "AUTO_LOGOUT_TIMEOUT_MS": "120000",
+    "JSON_BODY_LIMIT": "10mb"
+  },
+
+  // Secrets (set via `wrangler secret put <NAME>`, do NOT commit real values)
+  // "secrets": {
+  //   "JWT_SECRET": "",
+  //   "DATABASE_URL": "",
+  //   "FAMILY_WEB_URL": "",
+  //   "MEDIA_API_KEY": "",
+  //   "FAST2SMS_API_KEY": "",
+  //   "FAST2SMS_SENDER_ID": "",
+  //   "FAST2SMS_SENDER_ID_OTP": "",
+  //   "FAST2SMS_SENDER_ID_LINK": "",
+  //   "FAST2SMS_ENTITY_ID": "",
+  //   "FAST2SMS_OTP_TEMPLATE_ID": "",
+  //   "FAST2SMS_LINK_TEMPLATE_ID": "",
+  //   "FAST2SMS_SCHEDULED_TEMPLATE_ID": "",
+  //   "JAIL_ACCOUNT_API_URL": "",
+  //   "SEED_SRC_DIR": "",
+  //   "FORCE_SEED": "",
+  //   "DATABASE_SSL": "",
+  //   "SMS_OTP_EXPIRY_MINUTES": "",
+  //   "JAIL_ACCOUNT_TIMEOUT_MS": "",
+  //   "REFRESH_TOKEN_TTL_DAYS": "",
+  //   "SIGNALING_PUBLIC_URL": ""
+  // },
+
+  // Static assets served by the Worker (wasm/ and human-models/ for face recognition)
+  // NOTE: Workers have no filesystem; these must be bundled or uploaded to R2
+  // "r2_buckets": [
+  //   {
+  //     "binding": "MODELS_BUCKET",
+  //     "bucket_name": "prisonconnect-models"
+  //   }
+  // ],
+
+  // Durable Objects for stateful features (replaces in-memory Map/mutex/cache)
+  // "durable_objects": {
+  //   "bindings": [
+  //     {
+  //       "name": "ROOM_STATE",
+  //       "class_name": "RoomState"
+  //     }
+  //   ]
+  // },
+
+  // Worker build configuration
+  "build": {
+    "command": "echo 'No build step needed'"
+  },
+
+  // Development server settings
+  "dev": {
+    "port": 59354,
+    "local_protocol": "http"
+  }
+}
