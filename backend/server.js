@@ -244,9 +244,13 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 3000;
 
 async function autoSeed() {
+  if (!process.env.DATABASE_URL) {
+    console.warn('[startup] DATABASE_URL not set — skipping auto-seed');
+    return;
+  }
   try {
     const { Pool } = require('pg');
-    const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 2 });
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 2, connectionTimeoutMillis: 5000 });
     const { rows } = await pool.query("SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'");
     const tableCount = parseInt(rows[0].count, 10);
     await pool.end();

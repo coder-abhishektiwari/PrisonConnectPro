@@ -20,7 +20,7 @@ const { Pool } = require('pg');
 
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
-  throw new Error('DATABASE_URL env var is required — set it in backend/.env');
+  console.warn('[db] DATABASE_URL not set — database features disabled');
 }
 
 function getPoolConfig(url) {
@@ -50,11 +50,13 @@ function getPoolConfig(url) {
   return config;
 }
 
-const pool = new Pool(getPoolConfig(DATABASE_URL));
+const pool = DATABASE_URL ? new Pool(getPoolConfig(DATABASE_URL)) : null;
 
-pool.on('error', (err) => {
-  console.error('[db] unexpected pool error:', err.message);
-});
+if (pool) {
+  pool.on('error', (err) => {
+    console.error('[db] unexpected pool error:', err.message);
+  });
+}
 
 /** Map JSON-DB filename => registration for the relational layer. */
 const REGISTRY = {
@@ -147,6 +149,7 @@ async function readSingleton(reg, id) {
 
 /** Read a collection. Returns an array of documents (or a single object for singleton configs). */
 function readDb(filename) {
+  if (!pool) return Promise.resolve([]);
   const reg = registryFor(filename);
   const key = normalizeFilename(filename);
 
@@ -182,6 +185,7 @@ function readDb(filename) {
  * PostgreSQL transaction; throwing aborts the write (nothing is persisted).
  */
 function updateDb(filename, mutator) {
+  if (!pool) return Promise.resolve({ data: [], result: null });
   const reg = registryFor(filename);
   return withMutex(normalizeFilename(filename), async () => {
     // Load current documents.
@@ -267,6 +271,7 @@ function updateDb(filename, mutator) {
 
 /** Run several updateDb calls atomically across collections. */
 async function transact(specs) {
+  if (!pool) throw new Error('DATABASE_URL not configured');
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -330,10 +335,12 @@ async function transact(specs) {
 }
 
 async function query(text, params) {
+  if (!pool) throw new Error('DATABASE_URL not configured');
   return pool.query(text, params);
 }
 
 async function ping() {
+  if (!pool) return false;
   const { rows } = await pool.query('SELECT 1 AS ok');
   return rows[0].ok === 1;
 }
