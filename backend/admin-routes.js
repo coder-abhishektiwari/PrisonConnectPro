@@ -1,8 +1,102 @@
 const express = require('express');
+const { v4: uuidv4 } = require('uuid');
 const router = express.Router();
 const { readDb, updateDb } = require('./lib/db');
 const { hashSecret } = require('./lib/auth');
 const { requireRole } = require('./middleware/auth');
+const { inAdminScope, adminScopeFilter } = require('./lib/scoping');
+
+// ==================== PRISONER ROUTES (must be before /:adminId) ====================
+
+router.get('/prisoners', requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), async (req, res) => {
+  const inmates = await readDb('inmates.json');
+  return res.json({ success: true, data: inmates.filter(adminScopeFilter(req)) });
+});
+
+router.get('/prisoners/:prisonerId', requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), async (req, res) => {
+  const inmates = await readDb('inmates.json');
+  const inmate = inmates.find((i) => i.inmateId === req.params.prisonerId && inAdminScope(req, i));
+  if (!inmate) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Prisoner not found' } });
+  return res.json({ success: true, data: inmate });
+});
+
+router.post('/prisoners', requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), async (req, res) => {
+  const inmateData = req.body;
+  const record = {
+    ...inmateData,
+    inmateId: inmateData.inmateId || `INM-${uuidv4().substring(0, 8).toUpperCase()}`,
+    status: inmateData.status || 'active',
+    createdAt: new Date().toISOString()
+  };
+  const updated = await updateDb('inmates.json', (inmates) => ({ data: [...inmates, record], result: record }));
+  return res.status(201).json({ success: true, data: updated.result });
+});
+
+router.put('/prisoners/:prisonerId', requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), async (req, res) => {
+  const updates = { ...req.body };
+  delete updates.inmateId; delete updates.createdAt;
+  const updated = await updateDb('inmates.json', (inmates) => {
+    const idx = inmates.findIndex((i) => i.inmateId === req.params.prisonerId && inAdminScope(req, i));
+    if (idx === -1) return { data: inmates, result: null };
+    inmates[idx] = { ...inmates[idx], ...updates };
+    return { data: inmates, result: inmates[idx] };
+  });
+  if (!updated) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Prisoner not found' } });
+  return res.json({ success: true, data: updated });
+});
+
+router.patch('/prisoners/:prisonerId/status', requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), async (req, res) => {
+  const { prisonerId } = req.params;
+  const { status } = req.body;
+  if (!status) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'status is required' } });
+  const updated = await updateDb('inmates.json', (inmates) => {
+    const idx = inmates.findIndex((i) => i.inmateId === prisonerId && inAdminScope(req, i));
+    if (idx === -1) return { data: inmates, result: null };
+    inmates[idx] = { ...inmates[idx], status };
+    return { data: inmates, result: inmates[idx] };
+  });
+  if (!updated) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Prisoner not found' } });
+  return res.json({ success: true, data: updated });
+});
+
+router.delete('/prisoners/:prisonerId', requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), async (req, res) => {
+  const deleted = await updateDb('inmates.json', (inmates) => {
+    const idx = inmates.findIndex((i) => i.inmateId === req.params.prisonerId && inAdminScope(req, i));
+    if (idx === -1) return { data: inmates, result: null };
+    const [removed] = inmates.splice(idx, 1);
+    return { data: inmates, result: removed };
+  });
+  if (!deleted) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Prisoner not found' } });
+  return res.json({ success: true, data: { message: 'Prisoner deleted', prisonerId: req.params.prisonerId } });
+});
+
+// ==================== PRISONER CONTACTS ====================
+
+router.get('/prisoners/:prisonerId/contacts', requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), async (req, res) => {
+  const inmates = await readDb('inmates.json');
+  if (!inmates.find((i) => i.inmateId === req.params.prisonerId && inAdminScope(req, i))) {
+    return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Prisoner not found' } });
+  }
+  const contacts = await readDb('contacts.json');
+  return res.json({ success: true, data: contacts.filter((c) => c.inmateId === req.params.prisonerId) });
+});
+
+router.post('/prisoners/:prisonerId/contacts', requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), async (req, res) => {
+  const inmates = await readDb('inmates.json');
+  if (!inmates.find((i) => i.inmateId === req.params.prisonerId && inAdminScope(req, i))) {
+    return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Prisoner not found' } });
+  }
+  const contactData = req.body;
+  const newContact = {
+    contactId: contactData.contactId || `CONT-${uuidv4().substring(0, 8).toUpperCase()}`,
+    inmateId: req.params.prisonerId,
+    ...contactData,
+    status: contactData.status || 'pending',
+    createdAt: new Date().toISOString()
+  };
+  const updated = await updateDb('contacts.json', (contacts) => ({ data: [...contacts, newContact], result: newContact }));
+  return res.status(201).json({ success: true, data: updated.result });
+});
 
 // Kiosk-aware scope: principals with a kioskId claim only manage their own
 // kiosk's prisoners; others fall back to jail scope.
