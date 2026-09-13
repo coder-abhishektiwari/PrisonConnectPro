@@ -55,6 +55,7 @@ import com.prisonconnect.kiosk.ui.theme.GreenAccentBorder
 import com.prisonconnect.kiosk.ui.theme.HomeNavGreen
 import com.prisonconnect.kiosk.ui.theme.PrimaryDarkNavy
 import com.prisonconnect.kiosk.ui.theme.PrimaryNavy
+import com.prisonconnect.kiosk.ui.theme.TextDark
 import com.prisonconnect.kiosk.ui.theme.PrisonKioskTheme
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
@@ -67,18 +68,31 @@ private val TextGray = Color(0xFF687A8F)
 fun DashboardScreen(
     windowSizeClass: WindowSizeClass,
     onContactClick: (contactId: String, name: String, type: String) -> Unit,
-    onContactDetailClick: (String) -> Unit,
     onScheduledCallClick: (ScheduledCall) -> Unit,
-    onViewAllContacts: () -> Unit,
-    onViewHistory: () -> Unit,
-    onProfileClick: () -> Unit,
     onWalletClick: () -> Unit,
     onLogoutClick: () -> Unit,
+    onScheduleCall: (contactId: String, contactName: String) -> Unit,
+    onStartCall: (contactId: String, contactName: String, roomId: String, isVideo: Boolean) -> Unit,
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val dashboardState by viewModel.dashboardState.collectAsState()
     val jailBalance by viewModel.jailBalance.collectAsState()
     var currentTab by remember { mutableIntStateOf(0) }
+
+    var showLobbyDialog by remember { mutableStateOf(false) }
+    var lobbyContactId by remember { mutableStateOf("") }
+    var lobbyContactName by remember { mutableStateOf("") }
+    var lobbyCallType by remember { mutableStateOf("Video") }
+    var lobbyScheduleId by remember { mutableStateOf("") }
+
+    var showScheduleDetailDialog by remember { mutableStateOf(false) }
+    var detailScheduleId by remember { mutableStateOf("") }
+    var detailContactId by remember { mutableStateOf("") }
+    var detailContactName by remember { mutableStateOf("") }
+    var detailDate by remember { mutableStateOf("") }
+    var detailTimeSlot by remember { mutableStateOf("") }
+    var detailCallType by remember { mutableStateOf("Video") }
+    var detailStatus by remember { mutableStateOf("") }
 
     var currentTime by remember { mutableStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
@@ -117,16 +131,26 @@ fun DashboardScreen(
                         0 -> DashboardContent(
                             windowWidthSizeClass = windowSizeClass.widthSizeClass,
                             data = state.data,
-                            onContactClick = onContactClick,
-                            onContactDetailClick = onContactDetailClick,
-                            onScheduledCallClick = onScheduledCallClick,
-                            onProfileClick = onProfileClick,
-                            onWalletClick = onWalletClick,
-                            onViewAllContacts = onViewAllContacts
+                            onContactClick = { id, name, type ->
+                                lobbyContactId = id
+                                lobbyContactName = name
+                                lobbyCallType = type
+                                showLobbyDialog = true
+                            },
+                            onWalletClick = onWalletClick
                         )
                         1 -> ScheduleTabContent(
                             scheduledCalls = state.data.scheduledCalls,
-                            onCallClick = onScheduledCallClick
+                            onCallClick = { call ->
+                                detailScheduleId = call.id
+                                detailContactId = call.contactId ?: ""
+                                detailContactName = call.contactName ?: ""
+                                detailDate = call.date
+                                detailTimeSlot = call.timeSlot
+                                detailCallType = call.type?.name ?: "Video"
+                                detailStatus = call.status ?: "booked"
+                                showScheduleDetailDialog = true
+                            }
                         )
                         2 -> HistoryTabContent(
                             callHistory = state.data.callHistory,
@@ -137,6 +161,40 @@ fun DashboardScreen(
                 else -> Unit
             }
         }
+    }
+
+    if (showLobbyDialog) {
+        com.prisonconnect.kiosk.ui.call.CallLobbyDialog(
+            contactId = lobbyContactId,
+            contactName = lobbyContactName,
+            callType = lobbyCallType,
+            scheduleId = lobbyScheduleId,
+            onDismiss = { showLobbyDialog = false; lobbyScheduleId = "" },
+            onSchedule = { id, name ->
+                showLobbyDialog = false; lobbyScheduleId = ""
+                onScheduleCall(id, name)
+            },
+            onStartCall = { id, name, roomId, isVideo ->
+                showLobbyDialog = false; lobbyScheduleId = ""
+                onStartCall(id, name, roomId, isVideo)
+            }
+        )
+    }
+
+    if (showScheduleDetailDialog) {
+        com.prisonconnect.kiosk.ui.call.ScheduleDetailDialog(
+            contactId = detailContactId,
+            contactName = detailContactName,
+            date = detailDate,
+            timeSlot = detailTimeSlot,
+            callType = detailCallType,
+            status = detailStatus,
+            onDismiss = { showScheduleDetailDialog = false },
+            onStartCall = { contactId, roomId, isVideo ->
+                showScheduleDetailDialog = false
+                onStartCall(contactId, detailContactName, roomId, isVideo)
+            }
+        )
     }
 }
 
@@ -163,7 +221,10 @@ fun ScheduleTabContent(
                 Text("No scheduled calls found", color = TextGray)
             }
         } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)
+            ) {
                 items(scheduledCalls) { call ->
                     ScheduledCallCard(call = call, onClick = { onCallClick(call) })
                 }
@@ -207,7 +268,10 @@ fun HistoryTabContent(
                 Text("No call history yet", color = TextGray)
             }
         } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)
+            ) {
                 items(callHistory) { call ->
                     CallHistoryCard(call = call)
                 }
@@ -349,11 +413,7 @@ fun DashboardContent(
     windowWidthSizeClass: WindowWidthSizeClass,
     data: DashboardViewModel.DashboardData,
     onContactClick: (contactId: String, name: String, type: String) -> Unit,
-    onContactDetailClick: (String) -> Unit,
-    onScheduledCallClick: (ScheduledCall) -> Unit,
-    onProfileClick: () -> Unit,
-    onWalletClick: () -> Unit,
-    onViewAllContacts: () -> Unit
+    onWalletClick: () -> Unit
 ) {
     LazyColumn(
         modifier = Modifier
@@ -362,12 +422,9 @@ fun DashboardContent(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp)
     ) {
-        // 1. Profile Card
+        // 1. Profile Card (non-clickable — no profile screen)
         item {
-            InmateProfileCard(
-                inmateProfile = data.profile,
-                onClick = onProfileClick
-            )
+            InmateProfileCard(inmateProfile = data.profile)
         }
 
         // 2. Wallet Card (tap to open wallet screen)
@@ -380,22 +437,13 @@ fun DashboardContent(
 
         // 3. Section Header
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "APPROVED CONTACTS",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = PrimaryDarkNavy,
-                    letterSpacing = 0.8.sp
-                )
-                TextButton(onClick = onViewAllContacts) {
-                    Text("View All", color = PrimaryNavy)
-                }
-            }
+            Text(
+                text = "APPROVED CONTACTS",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = PrimaryDarkNavy,
+                letterSpacing = 0.8.sp
+            )
         }
 
         // 4. Contacts List
@@ -409,7 +457,7 @@ fun DashboardContent(
                     Text(
                         text = "No approved contacts found",
                         modifier = Modifier.padding(24.dp),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        textAlign = TextAlign.Center,
                         color = TextGray
                     )
                 }
@@ -418,7 +466,6 @@ fun DashboardContent(
             items(data.contacts) { contact ->
                 ContactCardItem(
                     contact = contact,
-                    onClick = { onContactDetailClick(contact.id) },
                     onCallClick = { onContactClick(contact.id, contact.fullName, "Audio") },
                     onVideoClick = { onContactClick(contact.id, contact.fullName, "Video") }
                 )
@@ -448,7 +495,7 @@ fun WalletDetailCard(balance: InmateBalance?, onClick: () -> Unit) {
             VerticalDivider(modifier = Modifier.height(40.dp).padding(horizontal = 24.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text("TOTAL SPENT", style = MaterialTheme.typography.labelSmall, color = TextGray)
-                Text("₹${String.format("%.2f", balance?.totalSpent ?: 0.0)}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("₹${String.format("%.2f", balance?.totalSpent ?: 0.0)}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = PrimaryNavy)
             }
             Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Open wallet", tint = PrimaryNavy)
         }
@@ -457,11 +504,9 @@ fun WalletDetailCard(balance: InmateBalance?, onClick: () -> Unit) {
 
 @Composable
 private fun InmateProfileCard(
-    inmateProfile: InmateProfile,
-    onClick: () -> Unit
+    inmateProfile: InmateProfile
 ) {
     Card(
-        onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -549,12 +594,10 @@ private fun InmateProfileCard(
 @Composable
 private fun ContactCardItem(
     contact: Contact,
-    onClick: () -> Unit,
     onCallClick: () -> Unit,
     onVideoClick: () -> Unit
 ) {
     Surface(
-        onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         color = Color.White,
@@ -891,11 +934,7 @@ fun PreviewDashboardMobile() {
                     callHistory = emptyList()
                 ),
                 onContactClick = { _, _, _ -> },
-                onContactDetailClick = {},
-                onScheduledCallClick = {},
-                onProfileClick = {},
-                onWalletClick = {},
-                onViewAllContacts = {}
+                onWalletClick = {}
             )
         }
     }

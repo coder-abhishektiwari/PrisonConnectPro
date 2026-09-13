@@ -35,11 +35,14 @@ import com.prisonconnect.kiosk.core.UiState
 import com.prisonconnect.kiosk.models.wallet.WalletTransaction
 import com.prisonconnect.kiosk.ui.components.KioskErrorState
 import com.prisonconnect.kiosk.ui.components.KioskLoadingState
+import com.prisonconnect.kiosk.ui.theme.LightBg
 import com.prisonconnect.kiosk.ui.theme.MoneyGreen
 import com.prisonconnect.kiosk.ui.theme.MoneyGreenBg
 import com.prisonconnect.kiosk.ui.theme.MoneyRed
 import com.prisonconnect.kiosk.ui.theme.MoneyRedBg
 import com.prisonconnect.kiosk.ui.theme.PrimaryDarkNavy
+import com.prisonconnect.kiosk.ui.theme.PrimaryNavy
+import com.prisonconnect.kiosk.ui.theme.TextDark
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -59,30 +62,35 @@ fun WalletScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text("My Wallet", fontWeight = FontWeight.Bold)
                         Text(
-                            "Jail account balance",
+                            text = "My Wallet",
+                            fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = Color.White
                         )
                     }
                 },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = Color.White
+                        )
                     }
                 },
                 actions = {
                     IconButton(onClick = { viewModel.loadWallet() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Refresh",
+                            tint = Color.White
+                        )
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.White
-                )
+                }
             )
         },
-        containerColor = Color(0xFFF4F6F9)
+        containerColor = LightBg
     ) { paddingValues ->
         Box(
             modifier = Modifier
@@ -137,7 +145,7 @@ private fun WalletSummaryCard(data: WalletViewModel.WalletUiData, modifier: Modi
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = PrimaryDarkNavy)
+        colors = CardDefaults.cardColors(containerColor = TextDark)
     ) {
         Row(
             modifier = Modifier
@@ -159,8 +167,7 @@ private fun WalletSummaryCard(data: WalletViewModel.WalletUiData, modifier: Modi
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     "Balance",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFFCFD8E3)
+                    style = MaterialTheme.typography.bodySmall
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
@@ -191,8 +198,7 @@ private fun WalletSummaryCard(data: WalletViewModel.WalletUiData, modifier: Modi
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     "Total Spent",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFFCFD8E3)
+                    style = MaterialTheme.typography.bodySmall
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(

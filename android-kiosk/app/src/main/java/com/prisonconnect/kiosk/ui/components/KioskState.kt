@@ -102,10 +102,6 @@ fun KioskErrorState(
     }
 }
 
-/**
- * Universal full-screen loading state for the kiosk design system.
- * Used on every screen while data is being fetched.
- */
 @Composable
 fun KioskLoadingState(
     modifier: androidx.compose.ui.Modifier = Modifier,
@@ -116,14 +112,9 @@ fun KioskLoadingState(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Box(
-            modifier = Modifier
-                .size(96.dp)
-                .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            KioskProgressIndicator()
-        }
+        // Direct Progress Indicator without solid background Box
+        KioskProgressIndicator()
+        
         if (!label.isNullOrBlank()) {
             Text(
                 text = label,

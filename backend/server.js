@@ -149,7 +149,7 @@ app.get('/admin/profile/:adminId', requireAuth, requireRole('admin', 'super-admi
 }));
 
 // ==================== BIOMETRICS ====================
-app.get('/admin/prisoners/:prisonerId/biometrics', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+app.get('/admin/prisoners/:prisonerId/biometrics', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const { prisonerId } = req.params;
   const inmates = await readDb('inmates.json');
   const inmate = inmates.find((i) => i.inmateId === prisonerId && inAdminScope(req, i));
@@ -198,7 +198,7 @@ app.delete('/admin/biometrics/:biometricId', requireAuth, requireRole('admin', '
   return sendSuccess(res, { message: 'Biometric deleted successfully', biometricId, prisonerId });
 }));
 
-// ==================== INMATE SELF-SERVICE (used by Android kiosk) ====================
+// ==================== INMATE SELF-SERVICE (dashboard data) ====================
 const { getStatement, resolveInmate } = require('./lib/jail-account');
 
 app.get('/inmate/profile/:inmateId', requireAuth, asyncRoute(async (req, res) => {

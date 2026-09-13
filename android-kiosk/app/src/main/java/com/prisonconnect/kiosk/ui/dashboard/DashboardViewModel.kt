@@ -20,6 +20,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
 @HiltViewModel
@@ -77,7 +82,17 @@ class DashboardViewModel @Inject constructor(
                 val p = (profile as? NetworkResult.Success)?.data
                 val b = (balance as? NetworkResult.Success)?.data
                 val c = (contacts as? NetworkResult.Success)?.data?.filter { it.isApproved } ?: emptyList()
-                val s = (calls as? NetworkResult.Success)?.data ?: emptyList()
+                val s = (calls as? NetworkResult.Success)?.data
+                    ?.filter { call ->
+                        val startTimeStr = call.timeSlot.split("-").firstOrNull()?.trim() ?: ""
+                        val scheduledMillis = parseScheduleDateTime(call.date, startTimeStr)
+                        val cutoff = System.currentTimeMillis() - 10 * 60 * 1000
+                        if (scheduledMillis > 0) scheduledMillis > cutoff else true
+                    }
+                    ?.sortedBy { call ->
+                        val startTimeStr = call.timeSlot.split("-").firstOrNull()?.trim() ?: ""
+                        parseScheduleDateTime(call.date, startTimeStr).let { if (it > 0) it else Long.MAX_VALUE }
+                    } ?: emptyList()
                 val h = (history as? NetworkResult.Success)?.data ?: emptyList()
 
                 if (p != null) {
@@ -125,6 +140,28 @@ class DashboardViewModel @Inject constructor(
         viewModelScope.launch {
             authRepository.logout().collect { }
         }
+    }
+
+    private fun parseScheduleDateTime(dateStr: String, timeStr: String): Long {
+        return try {
+            val date = LocalDate.parse(dateStr, DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+            val time = parseTimeFlexible(timeStr)
+            if (time != null) {
+                LocalDateTime.of(date, time).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            } else 0L
+        } catch (_: Exception) {
+            0L
+        }
+    }
+
+    private fun parseTimeFlexible(timeStr: String): LocalTime? {
+        val formats = listOf("h:mm a", "HH:mm", "h:mma", "HH:mm:ss")
+        for (fmt in formats) {
+            try {
+                return LocalTime.parse(timeStr, DateTimeFormatter.ofPattern(fmt, java.util.Locale.ENGLISH))
+            } catch (_: Exception) { }
+        }
+        return null
     }
 
     data class DashboardData(

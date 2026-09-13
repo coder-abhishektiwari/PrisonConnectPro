@@ -1,22 +1,13 @@
 package com.prisonconnect.kiosk.ui.call
 
+import android.R
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Gavel
-import androidx.compose.material.icons.filled.PhoneInTalk
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.*
-import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -27,786 +18,153 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.prisonconnect.kiosk.R
 import com.prisonconnect.kiosk.core.UiState
-import com.prisonconnect.kiosk.models.call.CallSession
-import com.prisonconnect.kiosk.models.call.RoomStatus
-import com.prisonconnect.kiosk.ui.components.KioskTopBar
-import com.prisonconnect.kiosk.ui.theme.AccentGreen
-import com.prisonconnect.kiosk.ui.theme.AccentGreenBg
-import com.prisonconnect.kiosk.ui.theme.AlertRed
 import com.prisonconnect.kiosk.ui.theme.BorderColor
 import com.prisonconnect.kiosk.ui.theme.LightBg
+import com.prisonconnect.kiosk.ui.theme.PrimaryDarkNavy
 import com.prisonconnect.kiosk.ui.theme.PrimaryNavy
-import com.prisonconnect.kiosk.ui.theme.PrisonKioskTheme
-import com.prisonconnect.kiosk.ui.theme.TextDark
 import com.prisonconnect.kiosk.ui.theme.TextGray
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
+import com.prisonconnect.kiosk.ui.theme.White
 
 @Composable
-fun LobbyScreen(
+fun CallLobbyDialog(
     contactId: String,
     contactName: String,
-    time: String,
-    callType: String,
-    date: String = "",
-    isSlotBookedForCurrentTime: Boolean = true,
+    callType: String = "Video",
     scheduleId: String = "",
-    @Suppress("UNUSED_PARAMETER") windowSizeClass: WindowSizeClass,
-    onConfirm: (String) -> Unit,
-    onScheduleCall: () -> Unit = {},
-    onBack: () -> Unit,
+    onDismiss: () -> Unit,
+    onSchedule: (contactId: String, contactName: String) -> Unit,
+    onStartCall: (contactId: String, contactName: String, roomId: String, isVideo: Boolean) -> Unit,
     viewModel: RoomViewModel = hiltViewModel()
 ) {
+    val balance by viewModel.balance.collectAsState()
+    val maxDurationMinutes by viewModel.maxDurationMinutes.collectAsState()
     val createRoomState by viewModel.createRoomState.collectAsState()
     val isVideo = callType.equals("Video", ignoreCase = true)
-    val isSlotAvailableNow by viewModel.isSlotAvailable.collectAsState()
-    val balance by viewModel.balance.collectAsState()
-    val roomStatus by viewModel.roomStatus.collectAsState()
-    val remainingTime by viewModel.remainingTime.collectAsState()
-    val cancelState by viewModel.cancelState.collectAsState()
-    val maxDurationMinutes by viewModel.maxDurationMinutes.collectAsState()
-
-    var showInsufficientBalance by remember { mutableStateOf(false) }
-
-    if (showInsufficientBalance) {
-        AlertDialog(
-            onDismissRequest = { showInsufficientBalance = false },
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, tint = AlertRed)
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text("Insufficient Balance", fontWeight = FontWeight.Bold)
-                }
-            },
-            text = {
-                Text(
-                    "Your wallet balance is ₹${String.format("%.2f", balance)}. " +
-                        "Please recharge your wallet to make a call."
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = { showInsufficientBalance = false },
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy)
-                ) {
-                    Text("OK")
-                }
-            }
-        )
-    }
+    val ratePerMin = if (isVideo) 2 else 1
+    val isSufficient = balance >= ratePerMin
 
     LaunchedEffect(contactId) {
-        viewModel.checkSlot(contactId)
         viewModel.loadBalance()
         viewModel.loadMaxDuration()
-
-        if (isSlotBookedForCurrentTime && time.isNotBlank() && date.isNotBlank()) {
-            // Parse scheduled time (e.g., "9:00 AM-9:00 AM") and compute countdown
-            val startTimeStr = time.split("-").firstOrNull()?.trim() ?: ""
-            val scheduledTimeMillis = parseScheduledDateTime(date, startTimeStr)
-            if (scheduledTimeMillis > System.currentTimeMillis()) {
-                // Future time: countdown to actual scheduled time
-                viewModel.startLobbyTimer(scheduledTimeMillis)
-            } else {
-                // Past or current time: ready to join now
-                viewModel.setReadyNow()
-            }
-        }
+        viewModel.consumeCreateRoomNavigation()
     }
 
     LaunchedEffect(createRoomState) {
-        if (createRoomState is UiState.Success<*>) {
-            val session = (createRoomState as UiState.Success<CallSession>).data
-            viewModel.consumeCreateRoomNavigation()
-            onConfirm(session.sessionId)
+        val s = createRoomState
+        if (s is UiState.Success) {
+            val session = s.data
+            onStartCall(contactId, contactName, session.sessionId, isVideo)
         }
     }
 
-    LaunchedEffect(cancelState) {
-        if (cancelState is UiState.Success) {
-            onBack()
-        }
-    }
-
-    // Format date for display
-    val displayDate = remember(date) {
-        if (date.isNotBlank()) {
-            try {
-                val parts = date.split("-")
-                if (parts.size == 3) {
-                    val y = parts[0].toIntOrNull() ?: parts[0]
-                    val m = parts[1].toIntOrNull() ?: 0
-                    val d = parts[2].toIntOrNull() ?: 0
-                    val months = listOf("","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
-                    "$d ${months.getOrElse(m) { "" }} $y"
-                } else date
-            } catch (_: Exception) { date }
-        } else "Today"
-    }
-
-    LobbyContent(
-        contactName = contactName,
-        time = time,
-        date = displayDate,
-        isVideoCall = isVideo,
-        isSlotBookedForCurrentTime = isSlotBookedForCurrentTime,
-        isSlotAvailableNow = isSlotAvailableNow,
-        balance = balance,
-        maxDurationMinutes = maxDurationMinutes,
-        createRoomState = createRoomState,
-        roomStatus = roomStatus,
-        remainingTime = remainingTime,
-        cancelState = cancelState,
-        onRetry = {
-            viewModel.createRoom(
-                contactId = contactId,
-                callType = if (isVideo) "Video" else "Audio",
-                scheduleId = scheduleId.ifBlank { null }
-            )
-        },
-        onConfirm = {
-            // Scheduled calls are billed too — empty wallet blocks them as well.
-            if (balance <= 0.0) {
-                showInsufficientBalance = true
-            } else {
-                viewModel.createRoom(
-                    contactId = contactId,
-                    callType = if (isVideo) "Video" else "Audio",
-                    scheduleId = scheduleId.ifBlank { null }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(24.dp),
+        containerColor = Color.White,
+        title = {
+            Column {
+                Text(
+                    text = contactName,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = PrimaryDarkNavy
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = if (isVideo) "Video calls ₹2/min, Max duration $maxDurationMinutes min"
+                    else "Audio calls ₹1/min, Max duration $maxDurationMinutes min",
+                    fontSize = 12.sp,
+                    color = TextGray
                 )
             }
         },
-        onScheduleCall = onScheduleCall,
-        onCallNow = {
-            // Empty wallet -> warn instead of placing a call.
-            if (balance <= 0.0) {
-                showInsufficientBalance = true
-            } else {
-                viewModel.createRoom(
-                    contactId = contactId,
-                    callType = if (isVideo) "Video" else "Audio",
-                    scheduleId = scheduleId.ifBlank { null }
-                )
-            }
-        },
-        onCancel = {
-            // Cancel the REAL booking (the schedule entry) when we know it.
-            if (scheduleId.isNotBlank()) {
-                viewModel.cancelBooking(scheduleId)
-            }
-        },
-        onBack = onBack
-    )
-}
-
-@Composable
-fun LobbyContent(
-    contactName: String,
-    time: String,
-    date: String = "Today",
-    isVideoCall: Boolean,
-    isSlotBookedForCurrentTime: Boolean,
-    isSlotAvailableNow: Boolean,
-    balance: Double,
-    maxDurationMinutes: Int = 15,
-    createRoomState: UiState<*>,
-    roomStatus: RoomStatus,
-    remainingTime: Long,
-    cancelState: UiState<Unit>,
-    onRetry: () -> Unit,
-    onConfirm: () -> Unit,
-    onScheduleCall: () -> Unit,
-    onCallNow: () -> Unit,
-    onCancel: () -> Unit,
-    onBack: () -> Unit
-) {
-    val callTypeTitle = if (isVideoCall) "Video Call" else "Audio Call"
-
-    Scaffold(
-        topBar = { KioskTopBar( title = if (isVideoCall) "Video Call" else "Audio Call", showBackButton = true, onBackClick = onBack) },
-        containerColor = LightBg
-    ) { padding ->
-        BoxWithConstraints(
-            modifier = Modifier
-                .padding(padding)
-                .fillMaxSize()
-        ) {
-            val isTablet = maxWidth >= 600.dp
-            val horizontalPadding = if (isTablet) 36.dp else 16.dp
-
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = horizontalPadding, vertical = 20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth(if (isTablet) 0.85f else 1f)
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = if (isSufficient) Color(0xFF2E7D32) else Color(0xFFC62828),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
                     Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Surface(
-                            color = PrimaryNavy.copy(alpha = 0.1f),
-                            shape = CircleShape,
-                            modifier = Modifier.size(if (isTablet) 48.dp else 40.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = if (isVideoCall) Icons.Default.Videocam else Icons.Default.Call,
-                                    contentDescription = null,
-                                    tint = PrimaryNavy,
-                                    modifier = Modifier.size(if (isTablet) 26.dp else 22.dp)
-                                )
-                            }
-                        }
-
-                        Column {
-                            Text(
-                                text = "$callTypeTitle Lobby",
-                                fontSize = if (isTablet) 24.sp else 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = TextDark
-                            )
-                            Text(
-                                text = "Verify details before starting or scheduling your call",
-                                fontSize = if (isTablet) 14.sp else 12.sp,
-                                color = TextGray
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(20.dp))
-
-                    if (isSlotBookedForCurrentTime) {
-                        StatusBanner(roomStatus, remainingTime, isTablet)
-                        Spacer(modifier = Modifier.height(16.dp))
-                    }
-
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(20.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(if (isTablet) 24.dp else 18.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "BOOKING DETAILS",
-                                    fontSize = if (isTablet) 13.sp else 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextGray,
-                                    letterSpacing = 0.5.sp
-                                )
-
-                                Surface(
-                                    color = PrimaryNavy.copy(alpha = 0.08f),
-                                    shape = RoundedCornerShape(50)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = if (isVideoCall) Icons.Default.Videocam else Icons.Default.Call,
-                                            contentDescription = null,
-                                            tint = PrimaryNavy,
-                                            modifier = Modifier.size(14.dp)
-                                        )
-                                        Text(
-                                            text = callTypeTitle,
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = PrimaryNavy
-                                        )
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(14.dp))
-                            HorizontalDivider(color = BorderColor)
-                            Spacer(modifier = Modifier.height(10.dp))
-
-                            ValidationRow("Contact Person", contactName, isTablet)
-                            ValidationRow("Date", if (isSlotBookedForCurrentTime && date != "Today") date else "Today", isTablet)
-                            ValidationRow("Time Slot", if (time.isNotEmpty() && time != "Now") time else "Current Slot (11:00 AM)", isTablet)
-
-                            if (!isSlotBookedForCurrentTime) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text("Slot Status", fontSize = if (isTablet) 14.sp else 12.sp, color = TextGray)
-                                    Text(
-                                        text = if (isSlotAvailableNow) "AVAILABLE" else "BUSY / TAKEN",
-                                        fontSize = if (isTablet) 15.sp else 13.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isSlotAvailableNow) AccentGreen else Color.Red
-                                    )
-                                }
-                            }
-                            ValidationRow(
-                                "Call Rate",
-                                if (isVideoCall) stringResource(R.string.rate_video) else stringResource(R.string.rate_audio),
-                                isTablet
-                            )
-                            ValidationRow("Max Duration", "$maxDurationMinutes Minutes", isTablet)
-
-                            Spacer(modifier = Modifier.height(14.dp))
-                            HorizontalDivider(color = BorderColor)
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                color = LightBg,
-                                shape = RoundedCornerShape(14.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column {
-                                        Text(
-                                            text = stringResource(R.string.jail_bank_balance),
-                                            fontSize = if (isTablet) 13.sp else 11.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = TextGray
-                                        )
-                                        Spacer(modifier = Modifier.height(2.dp))
-                                        Text(
-                                            text = "₹${String.format("%.2f", balance)}",
-                                            fontSize = if (isTablet) 24.sp else 20.sp,
-                                            fontWeight = FontWeight.Black,
-                                            color = PrimaryNavy
-                                        )
-                                    }
-
-                                    Surface(
-                                        color = if (balance > 0.0) AccentGreenBg else AlertRed.copy(alpha = 0.1f),
-                                        shape = RoundedCornerShape(50)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                        ) {
-                                            Icon(
-                                                imageVector = if (balance > 0.0) Icons.Default.CheckCircle else Icons.Default.AccountBalanceWallet,
-                                                contentDescription = null,
-                                                tint = if (balance > 0.0) AccentGreen else AlertRed,
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                            Text(
-                                                text = if (balance > 0.0) stringResource(R.string.sufficient_balance) else "Recharge Needed",
-                                                fontSize = if (isTablet) 12.sp else 11.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = if (balance > 0.0) AccentGreen else AlertRed
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // Rules Section
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Gavel,
-                            contentDescription = null,
-                            tint = PrimaryNavy,
-                            modifier = Modifier.size(20.dp)
+                        Text(
+                            text = "Wallet Balance",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White
                         )
                         Text(
-                            text = stringResource(R.string.call_rules),
-                            fontSize = if (isTablet) 18.sp else 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextDark
+                            text = "₹${String.format("%.2f", balance)}",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White
                         )
                     }
+                }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider(color = BorderColor)
 
-                    val rules = listOf(
-                        stringResource(R.string.rule_max_duration),
-                        stringResource(R.string.rule_monitored),
-                        stringResource(R.string.rule_prohibited),
-                        stringResource(R.string.rule_billing)
+                val isCreatingRoom = createRoomState is UiState.Loading
+
+                Button(
+                    onClick = { onSchedule(contactId, contactName) },
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryNavy),
+                    border = androidx.compose.foundation.BorderStroke(1.5.dp, PrimaryNavy)
+                ) {
+                    Icon(Icons.Default.DateRange, contentDescription = null, tint = PrimaryNavy)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (isVideo) "Schedule Video Call" else "Schedule Audio Call",
+                        fontWeight = FontWeight.Bold, fontSize = 14.sp
                     )
+                }
 
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        rules.forEach { rule ->
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                color = Color.White,
-                                shape = RoundedCornerShape(12.dp),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Security,
-                                        contentDescription = null,
-                                        tint = PrimaryNavy,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Text(
-                                        text = rule,
-                                        fontSize = if (isTablet) 14.sp else 12.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = TextDark
-                                    )
-                                }
-                            }
+                if (isVideo) {
+                    Button(
+                        onClick = { viewModel.createRoom(contactId, "Video", scheduleId.ifBlank { null }) },
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
+                        enabled = !isCreatingRoom && isSufficient
+                    ) {
+                        if (isCreatingRoom) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Default.Videocam, contentDescription = null, tint = Color.White)
                         }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Video Call", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.White)
                     }
-
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    // Action Buttons
-                    if (!isSlotBookedForCurrentTime) {
-                        CallNowActions(
-                            onScheduleCall,
-                            onCallNow,
-                            isSlotAvailableNow,
-                            isVideoCall,
-                            isTablet,
-                            createRoomState = createRoomState
-                        )
-                    } else {
-                        ScheduledCallActions(
-                            roomStatus = roomStatus,
-                            createRoomState = createRoomState,
-                            cancelState = cancelState,
-                            onConfirm = onConfirm,
-                            onRetry = onRetry,
-                            onCancel = onCancel,
-                            isTablet = isTablet
-                        )
+                } else {
+                    Button(
+                        onClick = { viewModel.createRoom(contactId, "Audio", scheduleId.ifBlank { null }) },
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
+                        enabled = !isCreatingRoom && isSufficient
+                    ) {
+                        if (isCreatingRoom) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Default.Call, contentDescription = null, tint = Color.White)
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Audio Call", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.White)
                     }
-
-                    Spacer(modifier = Modifier.height(20.dp))
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun StatusBanner(status: RoomStatus, remainingTime: Long, isTablet: Boolean) {
-    val seconds = (remainingTime / 1000) % 60
-    val minutes = (remainingTime / (1000 * 60)) % 60
-    val timeString = String.format("%02d:%02d", minutes, seconds)
-
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = when(status) {
-            RoomStatus.READY -> AccentGreenBg
-            else -> PrimaryNavy.copy(alpha = 0.05f)
         },
-        shape = RoundedCornerShape(12.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, if(status == RoomStatus.READY) AccentGreen else PrimaryNavy.copy(alpha = 0.2f))
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = when(status) {
-                        RoomStatus.WAITING_FOR_FAMILY -> "WAITING FOR FAMILY MEMBER"
-                        RoomStatus.READY -> "READY TO JOIN"
-                        RoomStatus.EXPIRED -> "SESSION EXPIRED"
-                        RoomStatus.TIMEOUT -> "SESSION TIMED OUT"
-                        else -> "PREPARING LOBBY"
-                    },
-                    fontSize = if(isTablet) 14.sp else 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if(status == RoomStatus.READY) AccentGreen else PrimaryNavy
-                )
-                if (status == RoomStatus.WAITING_FOR_FAMILY) {
-                    Text(
-                        text = "Call starts in $timeString",
-                        fontSize = if(isTablet) 20.sp else 16.sp,
-                        fontWeight = FontWeight.Black,
-                        color = PrimaryNavy
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CallNowActions(
-    onScheduleCall: () -> Unit,
-    onCallNow: () -> Unit,
-    isSlotAvailableNow: Boolean,
-    isVideoCall: Boolean,
-    isTablet: Boolean,
-    createRoomState: UiState<*>
-) {
-    val isStarting = createRoomState is UiState.Loading
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        OutlinedButton(
-            onClick = onScheduleCall,
-            enabled = !isStarting,
-            modifier = Modifier
-                .weight(1f)
-                .height(if (isTablet) 56.dp else 50.dp),
-            shape = RoundedCornerShape(14.dp),
-            border = androidx.compose.foundation.BorderStroke(1.5.dp, PrimaryNavy)
-        ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(Icons.Default.DateRange, contentDescription = null, tint = PrimaryNavy)
-                Text(
-                    text = "Schedule Call",
-                    fontSize = if (isTablet) 15.sp else 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = PrimaryNavy
-                )
-            }
-        }
-
-        Button(
-            onClick = onCallNow,
-            enabled = isSlotAvailableNow && !isStarting,
-            modifier = Modifier
-                .weight(1f)
-                .height(if (isTablet) 56.dp else 50.dp),
-            shape = RoundedCornerShape(14.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = PrimaryNavy,
-                disabledContainerColor = PrimaryNavy.copy(alpha = 0.5f)
-            ),
-            elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
-        ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (isStarting) {
-                    CircularProgressIndicator(
-                        color = Color.White,
-                        strokeWidth = 2.5.dp,
-                        modifier = Modifier.size(22.dp)
-                    )
-                    Text(
-                        text = "Connecting...",
-                        fontSize = if (isTablet) 15.sp else 13.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                } else {
-                    Icon(
-                        imageVector = if (isVideoCall) Icons.Default.Videocam else Icons.Default.PhoneInTalk,
-                        contentDescription = null
-                    )
-                    Text(
-                        text = "Call Now",
-                        fontSize = if (isTablet) 15.sp else 13.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ScheduledCallActions(
-    roomStatus: RoomStatus,
-    createRoomState: UiState<*>,
-    cancelState: UiState<Unit>,
-    onConfirm: () -> Unit,
-    onRetry: () -> Unit,
-    onCancel: () -> Unit,
-    isTablet: Boolean
-) {
-    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (roomStatus == RoomStatus.READY) {
-            Button(
-                onClick = onConfirm,
-                enabled = createRoomState !is UiState.Loading,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(if (isTablet) 56.dp else 48.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy)
-            ) {
-                if (createRoomState is UiState.Loading) {
-                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
-                } else {
-                    Text(
-                        text = "Join Room Now",
-                        fontSize = if (isTablet) 16.sp else 14.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-        } else if (roomStatus == RoomStatus.WAITING_FOR_FAMILY) {
-            Button(
-                onClick = {},
-                enabled = false,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(if (isTablet) 56.dp else 48.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(disabledContainerColor = Color.LightGray)
-            ) {
-                Text("Waiting for start time...", color = Color.Gray)
-            }
-        }
-
-        OutlinedButton(
-            onClick = onCancel,
-            enabled = cancelState !is UiState.Loading,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(if (isTablet) 56.dp else 48.dp),
-            shape = RoundedCornerShape(14.dp),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Color.Red)
-        ) {
-            if (cancelState is UiState.Loading) {
-                CircularProgressIndicator(color = Color.Red, modifier = Modifier.size(24.dp))
-            } else {
-                Text("Cancel Booking", fontWeight = FontWeight.Bold)
-            }
-        }
-    }
-}
-
-@Composable
-fun ValidationRow(label: String, value: String, isTablet: Boolean) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 5.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = label,
-            fontSize = if (isTablet) 14.sp else 12.sp,
-            color = TextGray
-        )
-        Text(
-            text = value,
-            fontSize = if (isTablet) 15.sp else 13.sp,
-            fontWeight = FontWeight.Bold,
-            color = TextDark
-        )
-    }
-}
-
-//@Preview(name = "Tablet View", device = "spec:width=1280dp,height=800dp,orientation=portrait", showBackground = true)
-//@Composable
-//fun PreviewLobbyTablet() {
-//    PrisonKioskTheme {
-//        LobbyContent(
-//            contactName = "Suresh Kumar (Brother)",
-//            time = "11:00 AM - 11:30 AM",
-//            isVideoCall = true,
-//            isSlotBookedForCurrentTime = true,
-//            isSlotAvailableNow = true,
-//            balance = 50.00,
-//            createRoomState = UiState.Idle,
-//            roomStatus = RoomStatus.WAITING_FOR_FAMILY,
-//            remainingTime = 300000,
-//            cancelState = UiState.Idle,
-//            onRetry = {},
-//            onConfirm = {},
-//            onScheduleCall = {},
-//            onCallNow = {},
-//            onCancel = {},
-//            onBack = {}
-//        )
-//    }
-//}
-
-@Preview(name = "Mobile View", device = "spec:width=360dp,height=800dp", showBackground = true)
-@Composable
-fun PreviewLobbyMobile() {
-    PrisonKioskTheme {
-        LobbyContent(
-            contactName = "Suresh Kumar (Brother)",
-            time = "11:00 AM - 11:30 AM",
-            isVideoCall = true,
-            isSlotBookedForCurrentTime = true,
-            isSlotAvailableNow = true,
-            balance = 50.00,
-            createRoomState = UiState.Idle,
-            roomStatus = RoomStatus.WAITING_FOR_FAMILY,
-            remainingTime = 300000,
-            cancelState = UiState.Idle,
-            onRetry = {},
-            onConfirm = {},
-            onScheduleCall = {},
-            onCallNow = {},
-            onCancel = {},
-            onBack = {}
-        )
-    }
-}
-
-/**
- * Parse "yyyy-MM-dd" + "9:00 AM" into epoch millis.
- * Returns 0L on any parse failure so caller can fall back to "ready now".
- */
-private fun parseScheduledDateTime(dateStr: String, timeStr: String): Long {
-    return try {
-        val date = LocalDate.parse(dateStr, DateTimeFormatter.ofPattern("yyyy-MM-dd"))
-        // Handle formats like "9:00 AM" or "09:00"
-        val cleanTime = timeStr.trim().replace(".", "")
-        val time = try {
-            LocalTime.parse(cleanTime, DateTimeFormatter.ofPattern("h:mm a"))
-        } catch (_: Exception) {
-            try {
-                LocalTime.parse(cleanTime, DateTimeFormatter.ofPattern("HH:mm"))
-            } catch (_: Exception) {
-                LocalTime.parse(cleanTime, DateTimeFormatter.ofPattern("h:mm"))
-            }
-        }
-        date.atTime(time).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-    } catch (_: Exception) {
-        0L
-    }
+        confirmButton = {},
+        dismissButton = {}
+    )
 }

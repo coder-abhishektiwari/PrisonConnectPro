@@ -119,11 +119,11 @@ router.post('/admin', requireAuth, requireRole('admin', 'warden', 'super-admin',
 router.put('/admin/:inmateId', requireAuth, requireRole('admin', 'warden'), asyncRoute(inmateUpdateHandler));
 router.delete('/admin/:inmateId', requireAuth, requireRole('admin', 'warden'), asyncRoute(inmateDeleteHandler));
 
-router.get('/admin/prisoners', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(inmateListHandler));
-router.get('/admin/prisoners/:prisonerId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(inmateGetHandler));
-router.post('/admin/prisoners', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(inmateCreateHandler));
-router.put('/admin/prisoners/:prisonerId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(inmateUpdateHandler));
-router.patch('/admin/prisoners/:prisonerId/status', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+router.get('/admin/prisoners', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), asyncRoute(inmateListHandler));
+router.get('/admin/prisoners/:prisonerId', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), asyncRoute(inmateGetHandler));
+router.post('/admin/prisoners', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), asyncRoute(inmateCreateHandler));
+router.put('/admin/prisoners/:prisonerId', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), asyncRoute(inmateUpdateHandler));
+router.patch('/admin/prisoners/:prisonerId/status', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const { prisonerId } = req.params;
   const { status } = req.body;
   if (!status) return sendError(res, 'INVALID_REQUEST', 'status is required', 400);
@@ -138,7 +138,7 @@ router.patch('/admin/prisoners/:prisonerId/status', requireAuth, requireRole('ad
   if (!updated) return sendError(res, 'NOT_FOUND', 'Prisoner not found', 404);
   return sendSuccess(res, updated);
 }));
-router.delete('/admin/prisoners/:prisonerId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(inmateDeleteHandler));
+router.delete('/admin/prisoners/:prisonerId', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), asyncRoute(inmateDeleteHandler));
 
 // ==================== INMATE ROUTES (parameterized — LAST) ====================
 

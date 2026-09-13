@@ -41,7 +41,6 @@ import com.prisonconnect.kiosk.core.UiState
 import com.prisonconnect.kiosk.hardware.FaceAuthProcessor
 import com.prisonconnect.kiosk.ui.components.KioskTopBar
 import com.prisonconnect.kiosk.ui.theme.PrisonKioskTheme
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.concurrent.Executors
 import kotlin.time.Duration.Companion.milliseconds
@@ -59,6 +58,18 @@ fun LoginScreen(
     val uiState by viewModel.uiState.collectAsState()
     val faceQuality by viewModel.faceQuality.collectAsState()
     val isNetworkAvailable by viewModel.isNetworkAvailable.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    var lastErrorShown by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(uiState) {
+        val msg = (uiState as? UiState.Error)?.message
+        if (msg != null && msg != lastErrorShown) {
+            lastErrorShown = msg
+            snackbarHostState.showSnackbar(msg)
+        }
+        if (uiState !is UiState.Error) lastErrorShown = null
+    }
 
     LaunchedEffect(Unit) {
         viewModel.navigationEvent.collect { event ->
@@ -76,6 +87,7 @@ fun LoginScreen(
     } else {
         Scaffold(
             topBar = { KioskTopBar(title = "PRISON KIOSK LOGIN", isOnline = true) },
+            snackbarHost = { SnackbarHost(snackbarHostState) },
             containerColor = AppleGray
         ) { padding ->
             Box(
@@ -228,7 +240,6 @@ fun AdminUsernameEntryLayout(
     onCancel: () -> Unit
 ) {
     var username by remember { mutableStateOf("") }
-    val error = (uiState as? UiState.Error)?.message
 
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
@@ -262,10 +273,6 @@ fun AdminUsernameEntryLayout(
         )
 
         Spacer(modifier = Modifier.height(24.dp))
-
-        if (error != null) {
-            Text(error, color = ErrorRed, fontWeight = FontWeight.Medium, modifier = Modifier.padding(bottom = 16.dp))
-        }
 
         Button(
             onClick = {
@@ -615,7 +622,6 @@ fun PinEntryLayout(
     onCancel: () -> Unit
 ) {
     var pin by remember { mutableStateOf("") }
-    val error = (uiState as? UiState.Error)?.message
 
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
@@ -641,11 +647,6 @@ fun PinEntryLayout(
 
         Spacer(modifier = Modifier.height(48.dp))
 
-        if (error != null) {
-            Text(error, color = ErrorRed, fontWeight = FontWeight.Medium, modifier = Modifier.padding(bottom = 24.dp))
-            LaunchedEffect(error) { delay(1500.milliseconds); pin = "" }
-        }
-
         IPhoneKeypad(
             onNumberClick = { if (pin.length < 6) { pin += it; if (pin.length == 6) onPinSubmit(pin) } },
             onDeleteClick = { if (pin.isNotEmpty()) pin = pin.dropLast(1) }
@@ -666,7 +667,6 @@ fun AdminPinEntryLayout(
     onCancel: () -> Unit
 ) {
     var password by remember { mutableStateOf("") }
-    val error = (uiState as? UiState.Error)?.message
 
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
@@ -701,14 +701,10 @@ fun AdminPinEntryLayout(
             keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                 keyboardType = androidx.compose.ui.text.input.KeyboardType.Password
             ),
-            isError = error != null
+            isError = uiState is UiState.Error
         )
 
         Spacer(modifier = Modifier.height(24.dp))
-
-        if (error != null) {
-            Text(error, color = ErrorRed, fontWeight = FontWeight.Medium, modifier = Modifier.padding(bottom = 16.dp))
-        }
 
         Button(
             onClick = {
@@ -742,7 +738,6 @@ fun PrisonerIdEntryLayout(
     onCancel: () -> Unit
 ) {
     var prisonerId by remember { mutableStateOf("") }
-    val error = (uiState as? UiState.Error)?.message
 
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
@@ -791,10 +786,6 @@ fun PrisonerIdEntryLayout(
         }
 
         Spacer(modifier = Modifier.height(48.dp))
-
-        if (error != null) {
-            Text(error, color = ErrorRed, fontWeight = FontWeight.Medium, modifier = Modifier.padding(bottom = 16.dp))
-        }
 
         IPhoneKeypad(
             onNumberClick = {

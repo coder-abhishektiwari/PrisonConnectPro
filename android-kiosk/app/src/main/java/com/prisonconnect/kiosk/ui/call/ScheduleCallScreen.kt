@@ -3,10 +3,6 @@ package com.prisonconnect.kiosk.ui.call
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -21,25 +17,23 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.prisonconnect.kiosk.core.UiState
 import com.prisonconnect.kiosk.models.schedule.BookedSlot
 import com.prisonconnect.kiosk.models.schedule.SlotsResponse
 import com.prisonconnect.kiosk.ui.components.KioskTopBar
 import com.prisonconnect.kiosk.ui.components.WheelTimePicker
-import com.prisonconnect.kiosk.ui.theme.BorderColor
-import com.prisonconnect.kiosk.ui.theme.DangerBg
-import com.prisonconnect.kiosk.ui.theme.DangerRed
-import com.prisonconnect.kiosk.ui.theme.LightBg
-import com.prisonconnect.kiosk.ui.theme.PrimaryNavy
-import com.prisonconnect.kiosk.ui.theme.TextDark
-import com.prisonconnect.kiosk.ui.theme.TextGray
+import com.prisonconnect.kiosk.ui.theme.*
+import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
+import java.time.ZoneId
+import java.time.YearMonth
 import java.time.format.DateTimeFormatter
-import java.util.Locale
+import java.time.temporal.TemporalAdjusters
 
+private enum class ScheduleStep { DATE, TIME, CONFIRM }
 
 @Composable
 fun ScheduleCallScreen(
@@ -55,69 +49,24 @@ fun ScheduleCallScreen(
     val scheduleState by viewModel.scheduleState.collectAsState()
     val slotsState by viewModel.slotsState.collectAsState()
 
-    // Load slots for today on first render
-    LaunchedEffect(Unit) {
-        val today = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
-        viewModel.loadBookedSlots(today)
-    }
-
-    ScheduleCallContent(
-        contactId = contactId,
-        contactName = contactName,
-        initialCallType = initialCallType,
-        scheduleState = scheduleState,
-        slotsState = slotsState,
-        onDateSelected = { date -> viewModel.loadBookedSlots(date) },
-        onConfirmBooking = { date, time, type ->
-            viewModel.scheduleCall(contactId, date, time, type)
-        },
-        onBackToHome = onBackToHome,
-        onBack = onBack
-    )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ScheduleCallContent(
-    contactId: String,
-    contactName: String,
-    initialCallType: String,
-    scheduleState: UiState<Unit>,
-    slotsState: UiState<SlotsResponse>,
-    onDateSelected: (String) -> Unit,
-    onConfirmBooking: (String, String, String) -> Unit,
-    onBackToHome: () -> Unit,
-    onBack: () -> Unit
-) {
-    val today = remember { LocalDate.now() }
-    val formatter = remember { DateTimeFormatter.ofPattern("yyyy-MM-dd") }
-    val displayFormatter = remember { DateTimeFormatter.ofPattern("EEE, MMM d") }
-
-    // Date options: Today, Tomorrow, +2 more days, + More (calendar)
-    val dateOptions = remember(today) {
-        (0..3).map { today.plusDays(it.toLong()) }
-    }
-
-    var selectedDateIndex by remember { mutableIntStateOf(0) }
-    var selectedDate by remember { mutableStateOf(today.format(formatter)) }
-    var selectedCallType by remember { mutableStateOf(if (initialCallType.equals("Audio", true)) "Audio" else "Video") }
+    var currentStep by remember { mutableStateOf(ScheduleStep.DATE) }
+    var selectedDate by remember { mutableStateOf(LocalDate.now()) }
+    var selectedTimeLabel by remember { mutableStateOf("") }
     var selectedHour by remember { mutableIntStateOf(9) }
     var selectedMinute by remember { mutableIntStateOf(0) }
     var selectedIsPm by remember { mutableStateOf(false) }
-    var showCalendar by remember { mutableStateOf(false) }
-    var showSuccessDialog by remember { mutableStateOf(false) }
-    var showConflictDialog by remember { mutableStateOf(false) }
-    var conflictMessage by remember { mutableStateOf("") }
-    var calendarSelectedDate by remember { mutableStateOf(today) }
+    var selectedCallType by remember { mutableStateOf(if (initialCallType.equals("Audio", true)) "Audio" else "Video") }
 
-    val bookedSlots = remember(slotsState) {
-        when (slotsState) {
-            is UiState.Success -> slotsState.data.bookedSlots
+    val dateFmt = remember { DateTimeFormatter.ofPattern("yyyy-MM-dd") }
+
+    val localSlotsState = slotsState
+    val bookedSlots = remember(localSlotsState) {
+        when (localSlotsState) {
+            is UiState.Success -> localSlotsState.data.bookedSlots
             else -> emptyList()
         }
     }
 
-    // Check if selected time conflicts with booked slots (10-min buffer)
     val hasConflict = remember(selectedHour, selectedMinute, selectedIsPm, bookedSlots) {
         val toMin = selectedHour * 60 + selectedMinute
         bookedSlots.any { slot ->
@@ -130,74 +79,32 @@ fun ScheduleCallContent(
         }
     }
 
-    LaunchedEffect(scheduleState) {
-        if (scheduleState is UiState.Success) {
-            showSuccessDialog = true
-        }
-    }
-
-    if (showSuccessDialog) {
-        FullScreenSuccessDialog(onGoHome = onBackToHome)
-    }
-
-    if (showConflictDialog) {
-        AlertDialog(
-            onDismissRequest = { showConflictDialog = false },
-            icon = { Icon(Icons.Default.Warning, contentDescription = null, tint = DangerRed) },
-            title = { Text("Time Conflict", fontWeight = FontWeight.Bold) },
-            text = { Text(conflictMessage) },
-            confirmButton = {
-                TextButton(onClick = { showConflictDialog = false }) {
-                    Text("OK", color = PrimaryNavy, fontWeight = FontWeight.Bold)
-                }
-            },
-            containerColor = Color.White
-        )
-    }
-
-    // Calendar dialog
-    if (showCalendar) {
-        val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = calendarSelectedDate.toEpochDay() * 86400000L
-        )
-        DatePickerDialog(
-            onDismissRequest = { showCalendar = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    datePickerState.selectedDateMillis?.let { millis ->
-                        val picked = LocalDate.ofEpochDay(millis / 86400000L)
-                        if (!picked.isBefore(today)) {
-                            calendarSelectedDate = picked
-                            selectedDate = picked.format(formatter)
-                            onDateSelected(selectedDate)
-                            showCalendar = false
-                        }
-                    }
-                }) { Text("OK", color = PrimaryNavy) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showCalendar = false }) { Text("Cancel") }
-            }
-        ) {
-            DatePicker(state = datePickerState)
-        }
-    }
-
     Scaffold(
-        topBar = { KioskTopBar(title = "Schedule Call", showBackButton = true, onBackClick = onBack) },
+        topBar = {
+            KioskTopBar(
+                title = "Schedule Call",
+                showBackButton = true,
+                onBackClick = {
+                    when (currentStep) {
+                        ScheduleStep.TIME -> currentStep = ScheduleStep.DATE
+                        ScheduleStep.CONFIRM -> currentStep = ScheduleStep.TIME
+                        ScheduleStep.DATE -> onBack()
+                    }
+                }
+            )
+        },
         containerColor = LightBg
     ) { padding ->
         Column(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .padding(horizontal = 16.dp)
         ) {
-            // Header
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.padding(bottom = 12.dp)
+                modifier = Modifier.padding(bottom = 8.dp, top = 8.dp)
             ) {
                 Surface(
                     color = PrimaryNavy.copy(alpha = 0.1f),
@@ -210,357 +117,374 @@ fun ScheduleCallContent(
                 }
                 Column {
                     Text("Schedule for $contactName", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextDark)
-                    Text(
-                        if (selectedCallType == "Video") "Video Call" else "Audio Call",
-                        fontSize = 12.sp, color = TextGray
-                    )
+                    Text(if (selectedCallType == "Video") "Video Call" else "Audio Call", fontSize = 12.sp, color = TextGray)
                 }
             }
 
-            // Scrollable content
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState())
-            ) {
-                // === DATE SELECTOR ===
-                Text("Select Date", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextDark)
-                Spacer(modifier = Modifier.height(8.dp))
+            StepIndicator(currentStep)
+            Spacer(modifier = Modifier.height(16.dp))
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    dateOptions.forEachIndexed { index, date ->
-                        val isSelected = selectedDate == date.format(formatter)
-                        val label = when (index) {
-                            0 -> "Today"
-                            1 -> "Tomorrow"
-                            else -> date.format(displayFormatter)
+            Box(modifier = Modifier.weight(1f)) {
+                when (currentStep) {
+                    ScheduleStep.DATE -> DateStep(
+                        selectedDate = selectedDate,
+                        onDateSelected = { date ->
+                            selectedDate = date
+                            viewModel.loadBookedSlots(date.format(dateFmt))
+                            currentStep = ScheduleStep.TIME
                         }
-                        Surface(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable {
-                                    selectedDateIndex = index
-                                    selectedDate = date.format(formatter)
-                                    onDateSelected(selectedDate)
-                                },
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (isSelected) PrimaryNavy else Color.White,
-                            border = if (isSelected) null else BorderStroke(1.dp, BorderColor)
-                        ) {
-                            Box(
-                                modifier = Modifier.padding(vertical = 10.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = label,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isSelected) Color.White else TextDark,
-                                    textAlign = TextAlign.Center
-                                )
-                            }
+                    )
+                    ScheduleStep.TIME -> TimeStep(
+                        selectedHour = selectedHour,
+                        selectedMinute = selectedMinute,
+                        selectedIsPm = selectedIsPm,
+                        hasConflict = hasConflict,
+                        onTimeChanged = { h, m, pm -> selectedHour = h; selectedMinute = m; selectedIsPm = pm },
+                        onConfirmTime = {
+                            selectedTimeLabel = formatTimeDisplay(selectedHour, selectedMinute, selectedIsPm)
+                            currentStep = ScheduleStep.CONFIRM
+                        }
+                    )
+                    ScheduleStep.CONFIRM -> ConfirmStep(
+                        selectedDate = selectedDate,
+                        selectedTime = selectedTimeLabel,
+                        selectedCallType = selectedCallType,
+                        hasConflict = hasConflict,
+                        scheduleState = scheduleState,
+                        onBook = { viewModel.scheduleCall(contactId, selectedDate.format(dateFmt), "$selectedTimeLabel-$selectedTimeLabel", selectedCallType) },
+                        onGoHome = onBackToHome,
+                        onBackToTime = { currentStep = ScheduleStep.TIME }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StepIndicator(currentStep: ScheduleStep) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        val steps = listOf(ScheduleStep.DATE to "Date", ScheduleStep.TIME to "Time", ScheduleStep.CONFIRM to "Confirm")
+        steps.forEachIndexed { index, (step, label) ->
+            val isActive = currentStep.ordinal >= step.ordinal
+            val isCurrent = currentStep == step
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Surface(
+                    modifier = Modifier.size(32.dp),
+                    shape = CircleShape,
+                    color = if (isActive) PrimaryNavy else BorderColor
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        if (isActive && !isCurrent) {
+                            Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                        } else {
+                            Text("${index + 1}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = if (isActive) Color.White else Color.Gray)
                         }
                     }
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(label, fontSize = 11.sp, fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal, color = if (isActive) PrimaryNavy else TextGray)
+            }
+            if (index < steps.lastIndex) {
+                Surface(
+                    modifier = Modifier.weight(1f).padding(horizontal = 4.dp).height(2.dp),
+                    color = if (currentStep.ordinal > step.ordinal) PrimaryNavy else BorderColor
+                ) {}
+            }
+        }
+    }
+}
 
-                    // More button (opens calendar)
-                    Surface(
-                        modifier = Modifier
-                            .clickable { calendarSelectedDate = today; showCalendar = true },
-                        shape = RoundedCornerShape(12.dp),
-                        color = Color.White,
-                        border = BorderStroke(1.dp, BorderColor)
-                    ) {
-                        Box(
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("More", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextDark)
+@Composable
+private fun DateStep(selectedDate: LocalDate, onDateSelected: (LocalDate) -> Unit) {
+    val today = remember { LocalDate.now() }
+    var viewMonth by remember { mutableStateOf(YearMonth.from(selectedDate)) }
+
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Surface(
+            color = Color.White,
+            shape = RoundedCornerShape(20.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("Select Date", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextDark)
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Month header with arrows
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { viewMonth = viewMonth.minusMonths(1) }) {
+                        Icon(Icons.Default.ChevronLeft, contentDescription = "Previous", tint = TextDark)
+                    }
+                    Text(
+                        text = viewMonth.format(DateTimeFormatter.ofPattern("MMMM yyyy")),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextDark
+                    )
+                    IconButton(onClick = { viewMonth = viewMonth.plusMonths(1) }) {
+                        Icon(Icons.Default.ChevronRight, contentDescription = "Next", tint = TextDark)
+                    }
+                }
+
+                // Day of week headers
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun").forEach { day ->
+                        Text(
+                            text = day,
+                            modifier = Modifier.weight(1f),
+                            textAlign = TextAlign.Center,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextGray
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Calendar grid
+                val firstDayOfMonth = viewMonth.atDay(1)
+                val daysInMonth = viewMonth.lengthOfMonth()
+                val startDayOfWeek = (firstDayOfMonth.dayOfWeek.value - 1) // Mon=0
+
+                val totalCells = startDayOfWeek + daysInMonth
+                val rows = (totalCells + 6) / 7
+
+                for (row in 0 until rows) {
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        for (col in 0 until 7) {
+                            val dayIndex = row * 7 + col - startDayOfWeek + 1
+                            if (dayIndex in 1..daysInMonth) {
+                                val date = viewMonth.atDay(dayIndex)
+                                val isPast = date.isBefore(today)
+                                val isSelected = date == selectedDate
+                                val isToday = date == today
+
+                                Surface(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .aspectRatio(1f)
+                                        .padding(2.dp)
+                                        .clickable(enabled = !isPast) { onDateSelected(date) },
+                                    shape = CircleShape,
+                                    color = when {
+                                        isSelected -> PrimaryNavy
+                                        isToday -> PrimaryNavy.copy(alpha = 0.1f)
+                                        else -> Color.Transparent
+                                    }
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text(
+                                            text = "$dayIndex",
+                                            fontSize = 13.sp,
+                                            fontWeight = if (isSelected || isToday) FontWeight.Bold else FontWeight.Normal,
+                                            color = when {
+                                                isSelected -> Color.White
+                                                isPast -> Color.LightGray
+                                                isToday -> PrimaryNavy
+                                                else -> TextDark
+                                            }
+                                        )
+                                    }
+                                }
+                            } else {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // === TIME PICKER ===
-                Text("Select Time", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextDark)
                 Spacer(modifier = Modifier.height(8.dp))
+
+                // Quick date buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    val quickDates = listOf(today to "Today", today.plusDays(1) to "Tmrw", today.plusDays(2) to today.plusDays(2).format(DateTimeFormatter.ofPattern("EEE")))
+                    quickDates.forEach { (date, label) ->
+                        val isSelected = selectedDate == date
+                        Surface(
+                            modifier = Modifier.weight(1f).clickable { onDateSelected(date) },
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (isSelected) PrimaryNavy else Color.White,
+                            border = if (isSelected) null else BorderStroke(1.dp, BorderColor)
+                        ) {
+                            Box(modifier = Modifier.padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                                Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (isSelected) Color.White else TextDark, textAlign = TextAlign.Center)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TimeStep(
+    selectedHour: Int,
+    selectedMinute: Int,
+    selectedIsPm: Boolean,
+    hasConflict: Boolean,
+    onTimeChanged: (Int, Int, Boolean) -> Unit,
+    onConfirmTime: () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Surface(
+            color = Color.White,
+            shape = RoundedCornerShape(20.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("Select Time", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextDark)
+                Spacer(modifier = Modifier.height(12.dp))
 
                 WheelTimePicker(
                     initialHour = selectedHour,
                     initialMinute = selectedMinute,
                     initialIsPm = selectedIsPm,
-                    onTimeSelected = { h, m, pm ->
-                        selectedHour = h
-                        selectedMinute = m
-                        selectedIsPm = pm
-                    }
+                    onTimeSelected = onTimeChanged
                 )
 
-                // Conflict warning below picker
                 if (hasConflict) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = DangerBg,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Surface(shape = RoundedCornerShape(10.dp), color = DangerBg, modifier = Modifier.fillMaxWidth()) {
+                        Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Icon(Icons.Default.Warning, contentDescription = null, tint = DangerRed, modifier = Modifier.size(18.dp))
-                            Text(
-                                text = "This time is within 10 minutes of a booked slot",
-                                fontSize = 12.sp,
-                                color = DangerRed,
-                                fontWeight = FontWeight.Medium
-                            )
+                            Text("This time is within 10 min of a booked slot", fontSize = 12.sp, color = DangerRed, fontWeight = FontWeight.Medium)
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(
+                    onClick = onConfirmTime,
+                    enabled = !hasConflict,
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy, disabledContainerColor = PrimaryNavy.copy(alpha = 0.5f))
+                ) {
+                    Text("Confirm Time", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color.White)
+                }
+            }
+        }
+    }
+}
 
-                // === BOOKED SLOTS ===
-                Text("Booked Slots", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextDark)
-                Spacer(modifier = Modifier.height(8.dp))
+@Composable
+private fun ConfirmStep(
+    selectedDate: LocalDate,
+    selectedTime: String,
+    selectedCallType: String,
+    hasConflict: Boolean,
+    scheduleState: UiState<Unit>,
+    onBook: () -> Unit,
+    onGoHome: () -> Unit,
+    onBackToTime: () -> Unit
+) {
+    val displayDate = remember(selectedDate) {
+        selectedDate.format(DateTimeFormatter.ofPattern("EEE, MMM d, yyyy"))
+    }
 
-                when (slotsState) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Surface(
+            color = Color.White,
+            shape = RoundedCornerShape(20.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                when (scheduleState) {
                     is UiState.Loading -> {
-                        Box(
-                            modifier = Modifier.fillMaxWidth().height(60.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(color = PrimaryNavy, modifier = Modifier.size(24.dp))
+                        CircularProgressIndicator(color = PrimaryNavy, modifier = Modifier.size(48.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("Booking your slot...", fontSize = 16.sp, color = TextGray)
+                    }
+                    is UiState.Success -> {
+                        // BOOKED
+                        Surface(modifier = Modifier.size(80.dp), shape = CircleShape, color = Color(0xFFE8F5E9)) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF2E7D32), modifier = Modifier.size(50.dp))
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Text("Slot Booked!", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = TextDark)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("$displayDate at $selectedTime", fontSize = 14.sp, color = TextGray)
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Button(onClick = onGoHome, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy)) {
+                            Text("Go to Home", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color.White)
                         }
                     }
                     is UiState.Error -> {
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = DangerBg,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = slotsState.message,
-                                modifier = Modifier.padding(12.dp),
-                                fontSize = 12.sp,
-                                color = DangerRed
-                            )
-                        }
-                    }
-                    is UiState.Success -> {
-                        if (bookedSlots.isEmpty()) {
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = Color(0xFFF0FDF4),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF16A34A), modifier = Modifier.size(18.dp))
-                                    Text("No slots booked for this date", fontSize = 12.sp, color = Color(0xFF16A34A), fontWeight = FontWeight.Medium)
-                                }
-                            }
-                        } else {
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                bookedSlots.forEach { slot ->
-                                    BookedSlotRow(slot = slot)
-                                }
+                        // UNAVAILABLE
+                        Surface(modifier = Modifier.size(80.dp), shape = CircleShape, color = DangerBg) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.Warning, contentDescription = null, tint = DangerRed, modifier = Modifier.size(50.dp))
                             }
                         }
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Text("Slot Unavailable", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = TextDark)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Someone has scheduled a call at this time. Choose another slot.", fontSize = 14.sp, color = TextGray, textAlign = TextAlign.Center)
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Button(onClick = onBackToTime, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy)) {
+                            Text("Go Back", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        }
                     }
-                    else -> {}
-                }
-            }
+                    else -> {
+                        // AVAILABLE — show summary + book
+                        Surface(modifier = Modifier.size(80.dp), shape = CircleShape, color = AccentGreenBg) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = AccentGreen, modifier = Modifier.size(50.dp))
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Text("Slot Available!", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = TextDark)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Slot is available to book", fontSize = 14.sp, color = AccentGreen, fontWeight = FontWeight.Medium)
+                        Spacer(modifier = Modifier.height(20.dp))
 
-            // === BOTTOM BUTTONS ===
-            Spacer(modifier = Modifier.height(12.dp))
+                        Surface(modifier = Modifier.fillMaxWidth(), color = LightBg, shape = RoundedCornerShape(12.dp)) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("Date", fontSize = 13.sp, color = TextGray); Text(displayDate, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextDark)
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("Time", fontSize = 13.sp, color = TextGray); Text(selectedTime, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextDark)
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("Call Type", fontSize = 13.sp, color = TextGray); Text(selectedCallType, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                }
+                            }
+                        }
 
-            // Call type toggle
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Surface(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable { selectedCallType = "Video" },
-                    shape = RoundedCornerShape(10.dp),
-                    color = if (selectedCallType == "Video") PrimaryNavy.copy(alpha = 0.1f) else Color.White,
-                    border = BorderStroke(1.5.dp, if (selectedCallType == "Video") PrimaryNavy else BorderColor)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(vertical = 10.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.Videocam, contentDescription = null, tint = if (selectedCallType == "Video") PrimaryNavy else TextGray, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Video", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = if (selectedCallType == "Video") PrimaryNavy else TextGray)
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Button(onClick = onBook, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy)) {
+                            Icon(Icons.Default.PhoneInTalk, contentDescription = null, tint = Color.White)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Book Now", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color.White)
+                        }
                     }
-                }
-                Surface(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable { selectedCallType = "Audio" },
-                    shape = RoundedCornerShape(10.dp),
-                    color = if (selectedCallType == "Audio") PrimaryNavy.copy(alpha = 0.1f) else Color.White,
-                    border = BorderStroke(1.5.dp, if (selectedCallType == "Audio") PrimaryNavy else BorderColor)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(vertical = 10.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.Call, contentDescription = null, tint = if (selectedCallType == "Audio") PrimaryNavy else TextGray, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Audio", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = if (selectedCallType == "Audio") PrimaryNavy else TextGray)
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Confirm button
-            val timeLabel = formatTimeDisplay(selectedHour, selectedMinute, selectedIsPm)
-            Button(
-                onClick = {
-                    if (hasConflict) {
-                        conflictMessage = "The selected time ($timeLabel) is within 10 minutes of an existing booked slot. Please choose a different time."
-                        showConflictDialog = true
-                    } else {
-                        onConfirmBooking(selectedDate, "$timeLabel-$timeLabel", selectedCallType)
-                    }
-                },
-                enabled = scheduleState !is UiState.Loading,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy)
-            ) {
-                if (scheduleState is UiState.Loading) {
-                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
-                } else {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            if (selectedCallType == "Video") Icons.Default.Videocam else Icons.Default.Call,
-                            contentDescription = null
-                        )
-                        Text("Book $selectedCallType Call", fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-        }
-    }
-}
-
-@Composable
-private fun BookedSlotRow(slot: BookedSlot) {
-    Surface(
-        shape = RoundedCornerShape(10.dp),
-        color = Color(0xFFFEF2F2),
-        border = BorderStroke(1.dp, Color(0xFFFECACA)),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    imageVector = if (slot.callType == "video") Icons.Default.Videocam else Icons.Default.Call,
-                    contentDescription = null,
-                    tint = DangerRed,
-                    modifier = Modifier.size(16.dp)
-                )
-                Text(
-                    text = slot.timeSlot,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = DangerRed
-                )
-            }
-            Text(
-                text = "Booked",
-                fontSize = 12.sp,
-                color = DangerRed,
-                fontWeight = FontWeight.Medium
-            )
-        }
-    }
-}
-
-@Composable
-fun FullScreenSuccessDialog(onGoHome: () -> Unit) {
-    Dialog(
-        onDismissRequest = { },
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = Color.White
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Surface(
-                    modifier = Modifier.size(120.dp),
-                    shape = CircleShape,
-                    color = Color(0xFFE8F5E9)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            tint = Color(0xFF2E7D32),
-                            modifier = Modifier.size(80.dp)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(32.dp))
-
-                Text("Booking Successful!", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = TextDark)
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "Your call has been scheduled. You can find it in the 'Scheduled Calls' tab.",
-                    fontSize = 16.sp,
-                    color = TextGray,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(0.8f)
-                )
-
-                Spacer(modifier = Modifier.height(48.dp))
-
-                Button(
-                    onClick = onGoHome,
-                    modifier = Modifier.fillMaxWidth(0.7f).height(56.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy)
-                ) {
-                    Text("Go to Home", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -577,4 +501,162 @@ private fun parseTimeToMinutes(time: String): Int {
 
 private fun formatTimeDisplay(hour: Int, minute: Int, isPm: Boolean): String {
     return "%d:%02d %s".format(hour, minute, if (isPm) "PM" else "AM")
+}
+
+@Composable
+fun ScheduleDetailDialog(
+    contactId: String,
+    contactName: String,
+    date: String,
+    timeSlot: String,
+    callType: String,
+    status: String,
+    onDismiss: () -> Unit,
+    onStartCall: (contactId: String, roomId: String, isVideo: Boolean) -> Unit,
+    viewModel: RoomViewModel = hiltViewModel()
+) {
+    val createRoomState by viewModel.createRoomState.collectAsState()
+    val isVideo = callType.equals("Video", ignoreCase = true)
+
+    val scheduledDateTime = remember(date, timeSlot) {
+        parseScheduledDateTime(date, timeSlot.split("-").firstOrNull()?.trim() ?: "")
+    }
+
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            now = System.currentTimeMillis()
+            kotlinx.coroutines.delay(1000)
+        }
+    }
+
+    val remainingMillis = remember(now, scheduledDateTime) {
+        (scheduledDateTime - now).coerceAtLeast(0)
+    }
+    val isTimeReady = remainingMillis <= 0
+
+    val days = remainingMillis / (1000 * 60 * 60 * 24)
+    val hours = (remainingMillis / (1000 * 60 * 60)) % 24
+    val minutes = (remainingMillis / (1000 * 60)) % 60
+    val seconds = (remainingMillis / 1000) % 60
+
+    val countdownText = if (isTimeReady) "Ready to call"
+    else buildString {
+        if (days > 0) append("${days}d ")
+        if (hours > 0 || days > 0) append("${hours}h ")
+        if (minutes > 0 || hours > 0 || days > 0) append("${minutes}m ")
+        append("${seconds}s")
+    }
+
+    LaunchedEffect(createRoomState) {
+        val s = createRoomState
+        if (s is UiState.Success) {
+            onStartCall("", s.data.sessionId, isVideo)
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(24.dp),
+        containerColor = Color.White,
+        title = {
+            Column {
+                Text(
+                    text = contactName,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextDark
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Surface(
+                    color = if (status.equals("booked", true)) AccentGreenBg else Color.Gray.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Text(
+                        text = status.replaceFirstChar { it.uppercase() },
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (status.equals("booked", true)) AccentGreen else Color.Gray,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                    )
+                }
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = LightBg,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        DetailRow(label = "Date", value = date)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        DetailRow(label = "Time", value = timeSlot)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        DetailRow(label = "Call Type", value = callType)
+                    }
+                }
+
+                val isCreatingRoom = createRoomState is UiState.Loading
+
+                Button(
+                    onClick = { viewModel.createRoom(contactId, callType) },
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isTimeReady) PrimaryNavy else Color(0xFFB0BEC5)
+                    ),
+                    enabled = isTimeReady && !isCreatingRoom
+                ) {
+                    if (isCreatingRoom) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+                    } else if (!isTimeReady) {
+                        Icon(Icons.Default.AccessTime, contentDescription = null, tint = TextDark)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("$countdownText left", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = TextDark)
+                    } else {
+                        Icon(Icons.Default.PhoneInTalk, contentDescription = null, tint = Color.White)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Start Call", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.White)
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {}
+    )
+}
+
+private fun parseScheduledDateTime(dateStr: String, timeStr: String): Long {
+    return try {
+        val date = LocalDate.parse(dateStr, DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+        val time = parseTimeFlexible(timeStr)
+        if (time != null) {
+            LocalDateTime.of(date, time).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        } else 0L
+    } catch (_: Exception) {
+        0L
+    }
+}
+
+private fun parseTimeFlexible(timeStr: String): LocalTime? {
+    val formats = listOf("h:mm a", "HH:mm", "h:mma", "HH:mm:ss")
+    for (fmt in formats) {
+        try {
+            return LocalTime.parse(timeStr, DateTimeFormatter.ofPattern(fmt, java.util.Locale.ENGLISH))
+        } catch (_: Exception) { }
+    }
+    return null
+}
+
+@Composable
+private fun DetailRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(text = label, fontSize = 13.sp, color = TextGray)
+        Text(text = value, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextDark)
+    }
 }

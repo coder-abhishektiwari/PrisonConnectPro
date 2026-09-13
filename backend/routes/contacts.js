@@ -62,7 +62,7 @@ function createContactsRouter(broadcastEvent) {
 
   // ==================== ANDROID COMPATIBILITY: PRISONER-SPECIFIC CONTACTS ====================
 
-  router.get('/admin/prisoners/:prisonerId/contacts', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+  router.get('/admin/prisoners/:prisonerId/contacts', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
     const { prisonerId } = req.params;
     const inmates = await readDb('inmates.json');
     if (!inmates.find((i) => i.inmateId === prisonerId && inAdminScope(req, i))) {
@@ -73,7 +73,7 @@ function createContactsRouter(broadcastEvent) {
     return sendSuccess(res, scoped);
   }));
 
-  router.post('/admin/prisoners/:prisonerId/contacts', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+  router.post('/admin/prisoners/:prisonerId/contacts', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
     const { prisonerId } = req.params;
     const contactData = req.body;
 

@@ -7,17 +7,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.prisonconnect.kiosk.ui.SplashScreen
-import com.prisonconnect.kiosk.ui.UnauthorizedDeviceScreen
 import com.prisonconnect.kiosk.ui.auth.LoginScreen
 import com.prisonconnect.kiosk.ui.call.AudioCallScreen
 import com.prisonconnect.kiosk.ui.call.CallProgressScreen
-import com.prisonconnect.kiosk.ui.call.LobbyScreen
 import com.prisonconnect.kiosk.ui.call.ScheduleCallScreen
 import com.prisonconnect.kiosk.ui.call.VideoCallScreen
-import com.prisonconnect.kiosk.ui.dashboard.ContactDetailScreen
-import com.prisonconnect.kiosk.ui.dashboard.ContactListScreen
 import com.prisonconnect.kiosk.ui.dashboard.DashboardScreen
-import com.prisonconnect.kiosk.ui.dashboard.InmateProfileScreen
 import com.prisonconnect.kiosk.models.call.ScheduledCall
 import com.prisonconnect.kiosk.ui.admin.AddPrisonerScreen
 import com.prisonconnect.kiosk.ui.admin.AdminDashboardScreen
@@ -47,12 +42,8 @@ object KioskRoutes {
     const val ADMIN_EDIT_PRISONER = "admin_edit_prisoner/{prisonerId}"
     const val ADMIN_PRISONER_CONTACTS = "admin_prisoner_contacts/{prisonerId}"
     const val ADMIN_DEVICE_INFO = "admin_device_info"
-    const val CONTACT_LIST = "contact_list"
-    const val CONTACT_DETAILS = "contact_details/{contactId}"
-    const val PROFILE = "profile"
     const val WALLET = "wallet"
     const val SCHEDULE = "schedule/{contactId}/{contactName}/{callType}"
-    const val LOBBY = "lobby/{contactId}/{contactName}/{time}/{callType}/{isSlotBooked}/{scheduleId}/{date}"
     const val VIDEO_CALL = "video_call/{contactName}/{roomId}"
     const val AUDIO_CALL = "audio_call/{contactName}/{roomId}"
     const val CALL_SUMMARY = "call_summary/{contactName}/{total}/{duration}/{callType}"
@@ -72,7 +63,7 @@ fun KioskNavHost(
     LaunchedEffect(currentRoute) {
         val activity = context as? MainActivity
         activity?.isInCall = currentRoute != null && (
-            currentRoute!!.startsWith("lobby") ||
+            currentRoute!!.startsWith("call_progress") ||
             currentRoute!!.startsWith("video_call") ||
             currentRoute!!.startsWith("audio_call")
         )
@@ -156,22 +147,8 @@ fun KioskNavHost(
         composable(KioskRoutes.DASHBOARD) {
             DashboardScreen(
                 windowSizeClass = windowSizeClass,
-                onContactClick = { contactId: String, name: String, type: String ->
-                    navController.navigate("lobby/${Uri.encode(contactId)}/${Uri.encode(name)}/Now/${Uri.encode(type)}/false/-/-")
-                },
-                onContactDetailClick = { id: String ->
-                    navController.navigate("contact_details/$id")
-                },
-                onScheduledCallClick = { call: ScheduledCall ->
-                    navController.navigate("lobby/${Uri.encode(call.contactId ?: "")}/${Uri.encode(call.contactName)}/${Uri.encode(call.timeSlot)}/${Uri.encode(call.type?.name ?: "")}/true/${call.id}/${call.date}")
-                },
-                onViewAllContacts = {
-                    navController.navigate(KioskRoutes.CONTACT_LIST)
-                },
-                onViewHistory = { /* History navigation */ },
-                onProfileClick = {
-                    navController.navigate(KioskRoutes.PROFILE)
-                },
+                onContactClick = { _, _, _ -> },
+                onScheduledCallClick = { _: ScheduledCall -> },
                 onWalletClick = {
                     navController.navigate(KioskRoutes.WALLET)
                 },
@@ -179,6 +156,12 @@ fun KioskNavHost(
                     navController.navigate(KioskRoutes.LOGIN) {
                         popUpTo(KioskRoutes.DASHBOARD) { inclusive = true }
                     }
+                },
+                onScheduleCall = { contactId, contactName ->
+                    navController.navigate("schedule/${Uri.encode(contactId)}/${Uri.encode(contactName)}/Video")
+                },
+                onStartCall = { contactId, contactName, roomId, isVideo ->
+                    navController.navigate("call_progress/${Uri.encode(contactName)}/$roomId/$isVideo")
                 }
             )
         }
@@ -245,35 +228,6 @@ fun KioskNavHost(
                 onBackClick = { navController.popBackStack() }
             )
         }
-        composable(KioskRoutes.CONTACT_LIST) {
-            ContactListScreen(
-                onContactClick = { contactId: String, name: String, type: String ->
-                    navController.navigate("lobby/${Uri.encode(contactId)}/${Uri.encode(name)}/Now/${Uri.encode(type)}/false/-/-")
-                },
-                onContactDetailClick = { id: String ->
-                    navController.navigate("contact_details/$id")
-                },
-                onBack = { navController.popBackStack() }
-            )
-        }
-        composable(KioskRoutes.CONTACT_DETAILS) { backStackEntry ->
-            val contactId = backStackEntry.arguments?.getString("contactId") ?: ""
-            ContactDetailScreen(
-                contactId = contactId,
-                onBack = { navController.popBackStack() },
-                onScheduleCall = { id: String, name: String, type: String ->
-                    navController.navigate("schedule/${Uri.encode(id)}/${Uri.encode(name)}/${Uri.encode(type)}")
-                },
-                onInstantCall = { id: String, name: String, type: String ->
-                    navController.navigate("lobby/${Uri.encode(id)}/${Uri.encode(name)}/Now/${Uri.encode(type)}/false/-/-")
-                }
-            )
-        }
-        composable(KioskRoutes.PROFILE) {
-            InmateProfileScreen(
-                onBack = { navController.popBackStack() }
-            )
-        }
         composable(KioskRoutes.WALLET) {
             com.prisonconnect.kiosk.ui.wallet.WalletScreen(
                 windowSizeClass = windowSizeClass,
@@ -296,32 +250,6 @@ fun KioskNavHost(
                     navController.navigate(KioskRoutes.DASHBOARD) {
                         popUpTo(KioskRoutes.DASHBOARD) { inclusive = true }
                     }
-                },
-                onBack = { navController.popBackStack() }
-            )
-        }
-        composable(KioskRoutes.LOBBY) { backStackEntry ->
-            val contactId = backStackEntry.arguments?.getString("contactId") ?: ""
-            val contactName = backStackEntry.arguments?.getString("contactName") ?: ""
-            val time = backStackEntry.arguments?.getString("time") ?: ""
-            val type = backStackEntry.arguments?.getString("callType") ?: ""
-            val isSlotBooked = backStackEntry.arguments?.getString("isSlotBooked")?.toBoolean() ?: false
-            val scheduleId = backStackEntry.arguments?.getString("scheduleId") ?: ""
-            val date = backStackEntry.arguments?.getString("date") ?: ""
-            LobbyScreen(
-                contactId = contactId,
-                contactName = contactName,
-                time = time,
-                callType = type,
-                date = date,
-                isSlotBookedForCurrentTime = isSlotBooked,
-                scheduleId = scheduleId,
-                windowSizeClass = windowSizeClass,
-                onConfirm = { roomId ->
-                    navController.navigate("call_progress/${Uri.encode(contactName)}/$roomId/${type == "Video"}")
-                },
-                onScheduleCall = {
-                    navController.navigate("schedule/${Uri.encode(contactId)}/${Uri.encode(contactName)}/${Uri.encode(type)}")
                 },
                 onBack = { navController.popBackStack() }
             )

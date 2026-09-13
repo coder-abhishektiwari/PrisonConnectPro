@@ -22,6 +22,7 @@ val OnSurfaceLight = Color(0xFF0F172A)
 val SurfaceVariantLight = Color(0xFFF1F5F9)
 val OnSurfaceVariantLight = Color(0xFF475569)
 val OutlineLight = Color(0xFFCBD5E1)
+val White = Color(0xFFEEE8E8)
 
 // ==================== DARK THEME (Navy Primary) ====================
 val PrimaryDark = Color(0xFF93C5FD)         // Light blue on dark
