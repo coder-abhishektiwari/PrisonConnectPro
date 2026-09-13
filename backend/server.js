@@ -198,6 +198,49 @@ app.delete('/admin/biometrics/:biometricId', requireAuth, requireRole('admin', '
   return sendSuccess(res, { message: 'Biometric deleted successfully', biometricId, prisonerId });
 }));
 
+// ==================== INMATE SELF-SERVICE (used by Android kiosk) ====================
+const { getStatement, resolveInmate } = require('./lib/jail-account');
+
+app.get('/inmate/profile/:inmateId', requireAuth, asyncRoute(async (req, res) => {
+  const id = req.params.inmateId;
+  const inmate = await resolveInmate(id);
+  if (!inmate) return sendError(res, 'NOT_FOUND', 'Inmate not found', 404);
+  return sendSuccess(res, {
+    inmateId: inmate.inmateId,
+    firstName: inmate.firstName,
+    lastName: inmate.lastName,
+    prisonId: inmate.prisonId,
+    facility: inmate.facility || inmate.prisonId,
+    cellBlock: inmate.cellBlock || '',
+    status: inmate.status || 'active',
+    photoUrl: inmate.photoUrl || null,
+    securityLevel: inmate.securityLevel || null,
+    sentenceDetails: inmate.sentenceDetails || null
+  });
+}));
+
+app.get('/inmate/balance/:inmateId', requireAuth, asyncRoute(async (req, res) => {
+  const id = req.params.inmateId;
+  const statement = await getStatement(id);
+  if (!statement) return sendError(res, 'NOT_FOUND', 'Inmate or wallet not found', 404);
+  const { wallet } = statement;
+  return sendSuccess(res, {
+    balance: wallet.balance,
+    currency: wallet.currency || 'INR',
+    lastRecharge: wallet.lastRecharge,
+    totalSpent: wallet.totalSpent,
+    remainingMinutes: wallet.remainingMinutes || 0,
+    lastRechargeAmount: wallet.lastRechargeAmount
+  });
+}));
+
+app.get('/inmate/wallet/:inmateId', requireAuth, asyncRoute(async (req, res) => {
+  const id = req.params.inmateId;
+  const statement = await getStatement(id);
+  if (!statement) return sendError(res, 'NOT_FOUND', 'Inmate or wallet not found', 404);
+  return sendSuccess(res, statement);
+}));
+
 // Admin router mounted AFTER explicit /admin routes
 app.use('/admin', requireAuth, adminRouter);
 
