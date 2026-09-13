@@ -243,11 +243,35 @@ app.use((err, req, res, next) => {
 // ==================== START ====================
 const PORT = process.env.PORT || 3000;
 
+async function autoSeed() {
+  try {
+    const { Pool } = require('pg');
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 2 });
+    const { rows } = await pool.query("SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'");
+    const tableCount = parseInt(rows[0].count, 10);
+    await pool.end();
+
+    if (tableCount === 0 || process.env.FORCE_SEED === 'true') {
+      console.log('[startup] database empty or FORCE_SEED set — running migrations + seed...');
+      const { migrate } = require('./lib/migrate');
+      await migrate();
+      // seed.js is a standalone script — exec it in a child process
+      const { execSync } = require('child_process');
+      execSync('node lib/seed.js', { cwd: __dirname, stdio: 'inherit', env: { ...process.env, FORCE_SEED: 'true' } });
+      console.log('[startup] auto-seed complete');
+    } else {
+      console.log(`[startup] database has ${tableCount} tables — skipping seed`);
+    }
+  } catch (err) {
+    console.error('[startup] auto-seed failed (non-blocking):', err.message);
+  }
+}
+
 console.warn('[startup] attempting to load face recognition models (non-blocking)...');
 
 try {
   const faceRecognition = require('./lib/faceRecognition');
-  faceRecognition.loadModels()
+  autoSeed().then(() => faceRecognition.loadModels())
     .then(() => {
       console.log('[startup] face recognition models loaded successfully');
       startServer();
@@ -260,7 +284,7 @@ try {
 } catch (err) {
   console.warn('[startup] face recognition module not available (non-blocking):', err.message);
   console.warn('[startup] server will continue without face recognition capabilities');
-  startServer();
+  autoSeed().then(() => startServer());
 }
 
 function startServer() {
