@@ -80,14 +80,6 @@ export function MonitorScreenPage() {
     officerName: storedUser?.name || '',
   });
 
-  // Control states (UI only)
-  const [controls, setControls] = useState({
-    mutePrisoner: false,
-    muteFamily: false,
-    cameraDisabled: false,
-    recordingPaused: false,
-  });
-
   const statsIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadMonitorData = useCallback(async () => {
@@ -254,7 +246,7 @@ export function MonitorScreenPage() {
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold text-neutral-900">Monitor Screen</h1>
           <button
-            onClick={() => navigate('/monitoring/live')}
+            onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/calls'))}
             className="px-4 py-2 bg-neutral-200 text-neutral-900 rounded-lg text-sm hover:bg-neutral-300"
           >
             Back to Live Monitoring
@@ -275,7 +267,7 @@ export function MonitorScreenPage() {
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold text-neutral-900">Monitor Screen</h1>
           <button
-            onClick={() => navigate('/monitoring/live')}
+            onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/calls'))}
             className="px-4 py-2 bg-neutral-200 text-neutral-900 rounded-lg text-sm hover:bg-neutral-300"
           >
             Back to Live Monitoring
@@ -340,73 +332,15 @@ export function MonitorScreenPage() {
     developerMode: 'disabled',
   };
 
-  // Call control handlers
-  const handleControl = async (action: string, target?: string) => {
-    try {
-      await wardenApi.sendCallControl(call.callId, action, target);
-      success(`Action sent: ${action}`);
-    } catch (err) {
-      console.error('Failed to send control:', err);
-      toastError(`Failed to send ${action} command`);
-    }
-  };
-
-  const handleMutePrisoner = () => {
-    setControls((p) => ({ ...p, mutePrisoner: !p.mutePrisoner }));
-    handleControl('mute', 'prisoner');
-  };
-
-  const handleMuteFamily = () => {
-    setControls((p) => ({ ...p, muteFamily: !p.muteFamily }));
-    handleControl('mute', 'family');
-  };
-
-  const handleDisableCamera = () => {
-    setControls((p) => ({ ...p, cameraDisabled: !p.cameraDisabled }));
-    handleControl('disable_camera');
-  };
-
-  const handlePauseRecording = async () => {
-    setControls((p) => ({ ...p, recordingPaused: true }));
-    if (recording) {
-      try {
-        await wardenApi.stopRecording(recording.recordingId);
-        success('Recording paused');
-      } catch (err) {
-        console.error('Failed to pause recording:', err);
-        toastError('Failed to pause recording');
-        setControls((p) => ({ ...p, recordingPaused: false }));
-      }
-    }
-  };
-
-  const handleResumeRecording = async () => {
-    setControls((p) => ({ ...p, recordingPaused: false }));
-    if (recording) {
-      try {
-        await wardenApi.startRecording(recording.recordingId);
-        success('Recording resumed');
-      } catch (err) {
-        console.error('Failed to resume recording:', err);
-        toastError('Failed to resume recording');
-        setControls((p) => ({ ...p, recordingPaused: true }));
-      }
-    }
-  };
-
   const handleForceDisconnect = async () => {
     try {
       await wardenApi.endCall(call.callId);
       success('Call force disconnected');
-      navigate('/monitoring/live');
+      navigate('/calls');
     } catch (err) {
       console.error('Failed to force disconnect:', err);
       toastError('Failed to disconnect call');
     }
-  };
-
-  const handleGenerateIncident = () => {
-    document.getElementById('incident-report')?.scrollIntoView({ behavior: 'smooth' });
   };
 
   const handleCreateIncident = async () => {
@@ -523,7 +457,7 @@ export function MonitorScreenPage() {
             Live
           </span>
           <button
-            onClick={() => navigate('/monitoring/live')}
+            onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/calls'))}
             className="px-4 py-2 bg-neutral-200 text-neutral-900 rounded-lg text-sm hover:bg-neutral-300"
           >
             Back
@@ -536,7 +470,7 @@ export function MonitorScreenPage() {
         {/* Video Area */}
         <div className="lg:col-span-2 space-y-4">
           {/* Remote Video Placeholder */}
-          <Card title="Video Area">
+          <Card title="Video Area" className="border-l-8 border-slate-300 bg-slate-50">
             <div className="bg-neutral-900 rounded-lg aspect-video flex items-center justify-center relative">
               <div className="text-center text-neutral-400">
                 <svg className="w-16 h-16 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -571,122 +505,28 @@ export function MonitorScreenPage() {
           </Card>
 
           {/* Call Controls */}
-          <Card title="Call Controls">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <button
-                onClick={handleMutePrisoner}
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  controls.mutePrisoner
-                    ? 'bg-error text-white'
-                    : 'bg-neutral-100 text-neutral-900 hover:bg-neutral-200'
-                }`}
-              >
-                {controls.mutePrisoner ? 'Unmute Prisoner' : 'Mute Prisoner'}
-              </button>
-              <button
-                onClick={handleMuteFamily}
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  controls.muteFamily
-                    ? 'bg-error text-white'
-                    : 'bg-neutral-100 text-neutral-900 hover:bg-neutral-200'
-                }`}
-              >
-                {controls.muteFamily ? 'Unmute Family' : 'Mute Family'}
-              </button>
-              <button
-                onClick={handleDisableCamera}
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  controls.cameraDisabled
-                    ? 'bg-error text-white'
-                    : 'bg-neutral-100 text-neutral-900 hover:bg-neutral-200'
-                }`}
-              >
-                {controls.cameraDisabled ? 'Enable Camera' : 'Disable Camera'}
-              </button>
-              {controls.recordingPaused ? (
-                <button
-                  onClick={handleResumeRecording}
-                  className="px-3 py-2 bg-success text-white rounded-lg text-sm font-medium hover:bg-success-700"
-                >
-                  Resume Recording
-                </button>
-              ) : (
-                <button
-                  onClick={handlePauseRecording}
-                  className="px-3 py-2 bg-warning text-white rounded-lg text-sm font-medium hover:bg-warning-700"
-                >
-                  Pause Recording
-                </button>
-              )}
+          <Card title="Call Controls" className="border-l-8 border-slate-300 bg-slate-50">
+            <div className="flex">
               <button
                 onClick={handleForceDisconnect}
-                className="px-3 py-2 bg-error text-white rounded-lg text-sm font-medium hover:bg-error-700"
+                className="w-full px-4 py-3 bg-error text-white rounded-lg text-sm font-bold hover:bg-error-700"
               >
                 Force Disconnect
               </button>
-              <button
-                onClick={handleGenerateIncident}
-                className="px-3 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700"
-              >
-                Generate Incident Report
-              </button>
             </div>
           </Card>
 
-          {/* Call Statistics - Live Graphs */}
-          <Card title="Call Statistics">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <Sparkline data={statHistory.packetLoss} color="text-error" label="Packet Loss" unit="%" />
-              <Sparkline data={statHistory.latency} color="text-info" label="Latency" unit="ms" />
-              <Sparkline data={statHistory.bitrate} color="text-success" label="Bitrate" unit="kbps" />
-              <Sparkline data={statHistory.jitter} color="text-warning" label="Jitter" unit="ms" />
-              <Sparkline data={statHistory.audioLevel} color="text-primary-600" label="Audio Level" unit="%" />
-              <Sparkline data={statHistory.fps} color="text-info" label="FPS" unit="fps" />
-            </div>
-            <div className="mt-3 flex items-center justify-between border-t border-neutral-200 pt-3">
-              <span className="text-sm text-neutral-600">Network Health</span>
-              <span className={`text-sm font-medium capitalize ${
-                statistics?.networkHealth === 'excellent' ? 'text-success' :
-                statistics?.networkHealth === 'good' ? 'text-info' :
-                statistics?.networkHealth === 'fair' ? 'text-warning' : 'text-error'
-              }`}>
-                {statistics?.networkHealth || call.connectionQuality}
-              </span>
-            </div>
-          </Card>
-
-          {/* Session Timeline */}
-          <Card title="Session Timeline">
-            <div className="space-y-4">
-              {timeline.map((event, index) => (
-                <div key={event.id} className="flex gap-3">
-                  <div className="flex flex-col items-center">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${getTimelineColor(event.type)}`}>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={getTimelineIcon(event.type)} />
-                      </svg>
-                    </div>
-                    {index < timeline.length - 1 && <div className="w-px flex-1 bg-neutral-200" />}
-                  </div>
-                  <div className="pb-4">
-                    <p className="text-sm font-medium text-neutral-900">{event.label}</p>
-                    <p className="text-sm text-neutral-600">{formatTime(event.time)}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
         </div>
 
         {/* Right Panel */}
         <div className="space-y-4">
           {/* Prisoner Information */}
-          <Card title="Prisoner Information">
+          <Card title="Prisoner Information" className="border-l-8 border-slate-300 bg-slate-50">
             <div className="space-y-3">
               <div className="flex items-center gap-3">
-                {inmate?.photoUrl && (
-                  <img src={inmate.photoUrl} alt={inmate?.firstName} className="w-12 h-12 rounded-full" />
-                )}
+                <div className="w-12 h-12 rounded-full bg-[#E9EEF3] border border-[#D1D7DB] flex items-center justify-center shrink-0">
+                  <svg className="w-7 h-7 text-[#8696A0]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" /></svg>
+                </div>
                 <div>
                   <p className="font-semibold text-neutral-900">
                     {inmate ? `${inmate.firstName} ${inmate.lastName}` : call.inmateName || call.inmateId}
@@ -703,21 +543,17 @@ export function MonitorScreenPage() {
                   <span className="text-neutral-500">Cell Block</span>
                   <span className="font-medium text-neutral-900">{inmate?.cellBlock || '—'}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-neutral-500">Security Level</span>
-                  <span className="font-medium text-neutral-900">{inmate?.securityLevel || '—'}</span>
-                </div>
               </div>
             </div>
           </Card>
 
           {/* Family Information */}
-          <Card title="Family Information">
+          <Card title="Family Information" className="border-l-8 border-slate-300 bg-slate-50">
             <div className="space-y-3">
               <div className="flex items-center gap-3">
-                {contact?.photoUrl && (
-                  <img src={contact.photoUrl} alt={contact.fullName} className="w-12 h-12 rounded-full" />
-                )}
+                <div className="w-12 h-12 rounded-full bg-[#E9EEF3] border border-[#D1D7DB] flex items-center justify-center shrink-0">
+                  <svg className="w-7 h-7 text-[#8696A0]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" /></svg>
+                </div>
                 <div>
                   <p className="font-semibold text-neutral-900">
                     {contact?.fullName || call.familyMemberName || call.contactId}
@@ -738,229 +574,15 @@ export function MonitorScreenPage() {
             </div>
           </Card>
 
-          {/* Wallet & Charges */}
-          <Card title="Wallet & Charges">
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-neutral-500">Wallet Balance</span>
-                <span className="font-bold text-success">₹{wallet?.balance.toFixed(2) || '0.00'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-neutral-500">Call Charges</span>
-                <span className="font-medium text-neutral-900">₹{callCharges.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-neutral-500">Rate</span>
-                <span className="font-medium text-neutral-900">₹{ratePerMinute}/min</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-neutral-500">Time Remaining</span>
-                <span className="font-medium text-neutral-900">{timeRemaining} min</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-neutral-500">Remaining Minutes</span>
-                <span className="font-medium text-neutral-900">{wallet?.remainingMinutes || 0}</span>
-              </div>
-            </div>
-          </Card>
 
-          {/* Recording Status */}
-          <Card title="Recording Status">
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-neutral-500">Status</span>
-                <span className={`font-medium capitalize ${
-                  call.recordingStatus === 'recording' ? 'text-error' :
-                  call.recordingStatus === 'completed' ? 'text-success' : 'text-neutral-600'
-                }`}>
-                  {call.recordingStatus}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-neutral-500">Recording ID</span>
-                <span className="font-medium text-neutral-900">{recording?.recordingId || '—'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-neutral-500">Duration</span>
-                <span className="font-medium text-neutral-900">
-                  {recording ? formatDuration(recording.duration) : formatDuration(call.durationMinutes * 60)}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-neutral-500">File Size</span>
-                <span className="font-medium text-neutral-900">{recording ? formatSize(recording.size) : '0 B'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-neutral-500">Encryption</span>
-                <span className="font-medium text-neutral-900">{recording?.encryption || 'AES-256-GCM'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-neutral-500">Retention Policy</span>
-                <span className="font-medium text-neutral-900">{recording?.retentionDays || 'N/A'} {recording?.retentionDays ? 'days' : ''}</span>
-              </div>
-              <div className="border-t border-neutral-200 pt-2 mt-2">
-                <button
-                  disabled
-                  className="w-full px-3 py-2 bg-neutral-100 text-neutral-400 rounded-lg text-sm cursor-not-allowed"
-                >
-                  Download (Disabled)
-                </button>
-              </div>
-            </div>
-          </Card>
 
-          {/* Security Panel */}
-          <Card title="Security Panel">
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between items-center">
-                <span className="text-neutral-500">Face Verification</span>
-                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getSecurityBadge(securityStatus.faceVerification)}`}>
-                  {securityStatus.faceVerification}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-neutral-500">RFID Verification</span>
-                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getSecurityBadge(securityStatus.rfidVerification)}`}>
-                  {securityStatus.rfidVerification}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-neutral-500">OTP Verification</span>
-                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getSecurityBadge(securityStatus.otpVerification)}`}>
-                  {securityStatus.otpVerification}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-neutral-500">Browser Verification</span>
-                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getSecurityBadge(securityStatus.browserVerification)}`}>
-                  {securityStatus.browserVerification}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-neutral-500">Device Fingerprint</span>
-                <span className="font-medium text-neutral-900 text-xs">{securityStatus.deviceFingerprint}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-neutral-500">IP Address</span>
-                <span className="font-medium text-neutral-900">{securityStatus.ipAddress}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-neutral-500">Location</span>
-                <span className="font-medium text-neutral-900">{securityStatus.location}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-neutral-500">VPN Status</span>
-                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getSecurityBadge(securityStatus.vpnStatus)}`}>
-                  {securityStatus.vpnStatus}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-neutral-500">Developer Mode</span>
-                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getSecurityBadge(securityStatus.developerMode)}`}>
-                  {securityStatus.developerMode}
-                </span>
-              </div>
-            </div>
-          </Card>
+
+
+
         </div>
       </div>
 
-      {/* Incident Report Section */}
-      <div id="incident-report">
-        <Card title="Incident Report">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Form */}
-            <div className="space-y-4">
-              <h4 className="text-sm font-semibold text-neutral-900">Create New Incident</h4>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-neutral-700 mb-1">Category</label>
-                  <select
-                    value={incidentForm.category}
-                    onChange={(e) => setIncidentForm({ ...incidentForm, category: e.target.value })}
-                    className="w-full px-3 py-2 border-2 border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  >
-                    <option value="security">Security</option>
-                    <option value="network">Network</option>
-                    <option value="recording">Recording</option>
-                    <option value="behavioral">Behavioral</option>
-                    <option value="hardware">Hardware</option>
-                    <option value="other">Other</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-neutral-700 mb-1">Severity</label>
-                  <select
-                    value={incidentForm.severity}
-                    onChange={(e) => setIncidentForm({ ...incidentForm, severity: e.target.value })}
-                    className="w-full px-3 py-2 border-2 border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  >
-                    <option value="high">High</option>
-                    <option value="medium">Medium</option>
-                    <option value="low">Low</option>
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-neutral-700 mb-1">Officer Name</label>
-                <input
-                  type="text"
-                  value={incidentForm.officerName}
-                  onChange={(e) => setIncidentForm({ ...incidentForm, officerName: e.target.value })}
-                  className="w-full px-3 py-2 border-2 border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-neutral-700 mb-1">Remarks</label>
-                <textarea
-                  value={incidentForm.remarks}
-                  onChange={(e) => setIncidentForm({ ...incidentForm, remarks: e.target.value })}
-                  rows={3}
-                  className="w-full px-3 py-2 border-2 border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  placeholder="Describe the incident..."
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-neutral-700 mb-1">Time</label>
-                <p className="text-sm text-neutral-900">{new Date().toLocaleString('en-IN')}</p>
-              </div>
-              <button
-                onClick={handleCreateIncident}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700"
-              >
-                Submit Incident
-              </button>
-            </div>
 
-            {/* Incident List */}
-            <div>
-              <h4 className="text-sm font-semibold text-neutral-900 mb-3">Incidents for this Call ({incidents.length})</h4>
-              {incidents.length === 0 ? (
-                <p className="text-sm text-neutral-600">No incidents reported for this call</p>
-              ) : (
-                <div className="space-y-3 max-h-96 overflow-y-auto">
-                  {incidents.map((incident) => (
-                    <div key={incident.incidentId} className="bg-neutral-50 rounded-lg p-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium text-neutral-900">{incident.incidentId}</span>
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getSeverityBadge(incident.severity)}`}>
-                          {incident.severity}
-                        </span>
-                      </div>
-                      <p className="text-sm text-neutral-600 capitalize">Category: {incident.category}</p>
-                      {incident.remarks && <p className="text-sm text-neutral-600 mt-1">{incident.remarks}</p>}
-                      <div className="flex justify-between mt-2 text-xs text-neutral-500">
-                        <span>Officer: {incident.officerName}</span>
-                        <span>{new Date(incident.time).toLocaleString('en-IN')}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </Card>
-      </div>
 
       {/* Toast */}
       <ToastContainer toasts={toasts} onDismiss={removeToast} />

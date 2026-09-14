@@ -141,6 +141,41 @@ export interface Wallet {
   lastRechargeDate: string;
   totalSpent: number;
   remainingMinutes: number;
+  remainingAudioMinutes?: number;
+  remainingVideoMinutes?: number;
+  audioCallEligible?: boolean;
+  videoCallEligible?: boolean;
+  callEligibility?: 'none' | 'audio_only' | 'both';
+  minAudioBalance?: number;
+  minVideoBalance?: number;
+}
+
+export interface WalletRequest {
+  requestId: string;
+  walletId: string;
+  inmateId: string;
+  prisonId?: string | null;
+  amount: number;
+  reason?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  requestedBy?: string;
+  reviewedBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Transaction {
+  transactionId: string;
+  walletId: string;
+  inmateId: string;
+  type: string; // charge | recharge | refund | credit | debit
+  amount: number;
+  currency?: string;
+  status: string;
+  description?: string;
+  reason?: string;
+  timestamp: string;
+  callId?: string;
 }
 
 export interface Schedule {
@@ -318,9 +353,21 @@ export const wardenApi = {
   getInmate: (inmateId: string) =>
     cachedGet(`inmates:${inmateId}`, () => apiClient.get<ApiResponse<Inmate>>(`/inmates/${inmateId}`).then((r) => r.data?.data)),
 
+  createInmate: (data: Partial<Inmate> & {kioskId?:string}) =>
+    apiClient.post<ApiResponse<Inmate>>('/inmates', data).then((r) => { invalidateCache('inmates'); return r.data?.data; }),
+
+  deleteInmateApi: (inmateId: string) =>
+    apiClient.delete<ApiResponse<void>>(`/inmates/${inmateId}`).then((r) => { invalidateCache('inmates'); return r.data; }),
+
   // Contacts
   getContacts: () =>
     cachedGet('contacts', () => apiClient.get<ApiResponse<Contact[]>>('/contacts').then((r) => r.data?.data ?? [])),
+
+  createContact: (inmateId: string, data: Partial<Contact>) =>
+    apiClient.post<ApiResponse<Contact>>(`/admin/prisoners/${inmateId}/contacts`, data).then((r) => { invalidateCache('contacts'); return r.data?.data; }),
+
+  deleteContactApi: (contactId: string) =>
+    apiClient.delete<ApiResponse<void>>(`/contacts/${contactId}`).then((r) => { invalidateCache('contacts'); return r.data; }),
 
   // Wallets
   getWallets: () =>
@@ -328,6 +375,37 @@ export const wardenApi = {
 
   getWallet: (inmateId: string) =>
     cachedGet(`wallets:${inmateId}`, () => apiClient.get<ApiResponse<Wallet>>(`/wallets/${inmateId}`).then((r) => r.data?.data)),
+
+  getWalletStatement: (inmateId: string) =>
+    apiClient.get<ApiResponse<{ wallet: Wallet; transactions: Transaction[] }>>(`/inmate/wallet/${inmateId}`).then((r) => r.data?.data ?? { wallet: null as any, transactions: [] }),
+
+  rechargeWallet: (inmateId: string, amount: number, description?: string) =>
+    apiClient.post<ApiResponse<{ wallet: Wallet; transaction: Transaction }>>(`/wallets/${inmateId}/recharge`, { amount, description }).then((r) => {
+      invalidateCache('wallets', `wallets:${inmateId}`);
+      return r.data?.data;
+    }),
+
+  // Wallet Money Requests (inmate requests warden to add money)
+  getWalletRequests: () =>
+    cachedGet('wallet-requests', () => apiClient.get<ApiResponse<WalletRequest[]>>('/wallet-requests').then((r) => r.data?.data ?? [])),
+
+  createWalletRequest: (inmateId: string, amount: number, reason?: string) =>
+    apiClient.post<ApiResponse<WalletRequest>>('/wallet-requests', { inmateId, amount, reason }).then((r) => {
+      invalidateCache('wallet-requests');
+      return r.data?.data;
+    }),
+
+  approveWalletRequest: (requestId: string) =>
+    apiClient.patch<ApiResponse<{ request: WalletRequest; wallet: Wallet; transaction: Transaction }>>(`/wallet-requests/${requestId}/approve`).then((r) => {
+      invalidateCache('wallet-requests', 'wallets');
+      return r.data?.data;
+    }),
+
+  rejectWalletRequest: (requestId: string, reason?: string) =>
+    apiClient.patch<ApiResponse<WalletRequest>>(`/wallet-requests/${requestId}/reject`, { reason }).then((r) => {
+      invalidateCache('wallet-requests');
+      return r.data?.data;
+    }),
 
   // Schedule
   getSchedule: () =>
@@ -343,13 +421,33 @@ export const wardenApi = {
       return r.data?.data;
     }),
 
+  // Ensure wallet statements also refresh when settings that could affect UI are changed
+  invalidateWallets: () => {
+    invalidateCache('wallets', 'wallets:all');
+    try {
+      const keys = Object.keys(localStorage).filter((k) => k.startsWith('pc_cache_wallets'));
+      keys.forEach((k) => localStorage.removeItem(k));
+    } catch {}
+  },
+
   // Pricing (per-minute call rates set by the warden)
   getPricing: () =>
     cachedGet('pricing', () => apiClient.get<ApiResponse<Pricing>>('/pricing').then((r) => r.data?.data), 60_000),
 
   updatePricing: (pricing: Partial<Pricing>) =>
     apiClient.patch<ApiResponse<Pricing>>('/pricing', pricing).then((r) => {
-      invalidateCache('pricing');
+      // Pricing directly affects wallet remaining minutes, so bust all wallet + pricing caches
+      invalidateCache('pricing', 'wallets', 'wallets:all');
+      try {
+        // Clear any cached wallet list or individual wallet entries (pc_cache_wallets / pc_cache_wallets:*)
+        const keys = Object.keys(localStorage).filter((k) => k.startsWith('pc_cache_wallets') || k.startsWith('pc_cache_pricing'));
+        keys.forEach((k) => localStorage.removeItem(k));
+        // Also clear in-memory for wallets: prefix
+        // (invalidateCache only deletes exact keys, so clear all pc_cache_wallets:* from memory via internal map)
+        // Force bust by clearing known wallet keys from memoryCache via invalidate
+        // We do a broad clear by touching cache.ts internal map not exposed, so we piggyback on invalidate of known keys:
+        // The above localStorage clear covers persistence; memory will be cleared on next fetchFresh due to isStale
+      } catch {}
       return r.data?.data;
     }),
 
@@ -383,9 +481,13 @@ export const wardenApi = {
   sendCallControl: (callId: string, action: string, target?: string) =>
     apiClient.post<ApiResponse<CallControlEvent>>(`/calls/${callId}/control`, { action, target }).then((r) => r.data?.data),
 
-  // End Call (force disconnect)
+  // End Call (force disconnect) — immediately moves from active → call logs (completed) + synthesizes recording
   endCall: (callId: string) =>
-    apiClient.post<ApiResponse<ActiveCall>>(`/calls/${callId}/end`).then((r) => r.data?.data),
+    apiClient.post<ApiResponse<ActiveCall>>(`/calls/${callId}/end`).then((r) => {
+      // Bust live + history + recordings + stats caches so next fetches are fresh, not 30s stale
+      invalidateCache('calls:active', 'calls:all', 'calls:history', `calls:${callId}`, 'recordings', `recordings:${callId}`, 'statistics');
+      return r.data?.data;
+    }),
 
   // Dashboard Stats
   getDashboardStats: async (): Promise<DashboardStats> => {

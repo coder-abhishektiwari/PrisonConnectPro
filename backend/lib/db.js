@@ -72,6 +72,7 @@ const REGISTRY = {
   'schedule.json':     { table: 'schedule',                idKey: 'scheduleId', cols: { inmateId: 'inmate_id', contactId: 'contact_id', kioskId: 'kiosk_id', date: 'date', timeSlot: 'time_slot', status: 'status' } },
   'wallets.json':      { table: 'wallets',                 idKey: 'walletId', cols: { inmateId: 'inmate_id' } },
   'transactions.json': { table: 'transactions',            idKey: 'transactionId', cols: { walletId: 'wallet_id', inmateId: 'inmate_id', callId: 'call_id' } },
+  'wallet-requests.json': { table: 'wallet_requests',     idKey: 'requestId', cols: { inmateId: 'inmate_id' } },
   'alerts.json':       { table: 'alerts',                  idKey: 'alertId', cols: { prisonId: 'prison_id', kioskId: 'kiosk_id', callId: 'call_id' } },
   'incidents.json':    { table: 'incidents',               idKey: 'incidentId', cols: { prisonId: 'prison_id', inmateId: 'inmate_id', kioskId: 'kiosk_id', callId: 'call_id', wardenId: 'warden_id' } },
   'devices.json':      { table: 'devices',                 idKey: 'deviceId', cols: {} },

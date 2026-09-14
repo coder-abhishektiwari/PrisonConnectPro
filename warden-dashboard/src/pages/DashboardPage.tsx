@@ -4,7 +4,7 @@ import { StatCard } from '@/components/ui/StatCard';
 import { DataTable } from '@/components/ui/DataTable';
 import { wardenApi } from '@/services/api/wardenApi';
 import { useWardenSocket } from '@/hooks/useWardenSocket';
-import type { DashboardStats, ActiveCall, Alert, Device } from '@/services/api/wardenApi';
+import type { DashboardStats, ActiveCall, Alert, Device, Wallet } from '@/services/api/wardenApi';
 
 const initialStats: DashboardStats = {
   activeCalls: 0,
@@ -27,21 +27,24 @@ export function DashboardPage() {
   const [activeCalls, setActiveCalls] = useState<ActiveCall[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
+  const [wallets, setWallets] = useState<Wallet[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadStats = useCallback(async () => {
     setLoadError(null);
     try {
-      const [dashboardStats, calls, alertsData, devicesData] = await Promise.all([
+      const [dashboardStats, calls, alertsData, devicesData, walletsData] = await Promise.all([
         wardenApi.getDashboardStats(),
         wardenApi.getActiveCalls(),
         wardenApi.getAlerts(),
         wardenApi.getDevices(),
+        wardenApi.getWallets().catch(()=>[] as Wallet[]),
       ]);
       setStats(dashboardStats);
       setActiveCalls(calls ?? []);
       setAlerts(alertsData ?? []);
       setDevices(devicesData ?? []);
+      setWallets(walletsData ?? []);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
       setLoadError('Failed to load dashboard data');
@@ -195,6 +198,74 @@ export function DashboardPage() {
           icon="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
           color="success"
         />
+      </div>
+
+        {/* Inmate Wallet Overview */}
+        <div className="bg-white rounded-xl shadow-sm border border-neutral-200 p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-semibold text-neutral-900">Inmate Wallet</h3>
+            <Link to="/inmate-wallet" className="text-sm text-primary-600 hover:text-primary-700 font-medium">View All →</Link>
+        </div>
+        {(() => {
+          const totalBalance = wallets.reduce((a,w)=>a+(Number(w.balance)||0),0);
+          const lowBalance = wallets.filter(w=> Number(w.balance) < 25);
+          const avgBalance = wallets.length ? Math.round(totalBalance / wallets.length) : 0;
+          return (
+            <>
+              <div className="grid grid-cols-3 gap-4 mb-5">
+                <div className="p-4 bg-neutral-50 border rounded-xl text-center">
+                  <p className="text-2xl font-extrabold text-neutral-900">{wallets.length}</p>
+                  <p className="text-xs uppercase font-semibold text-neutral-500">Total Wallets</p>
+                </div>
+                <div className="p-4 bg-success/10 border border-success/20 rounded-xl text-center">
+                  <p className="text-2xl font-extrabold text-success">₹{totalBalance.toLocaleString('en-IN')}</p>
+                  <p className="text-xs uppercase font-semibold text-neutral-500">Total Balance</p>
+                  <p className="text-xs text-neutral-400">Avg ₹{avgBalance}</p>
+                </div>
+                <div className={`p-4 border rounded-xl text-center ${lowBalance.length ? 'bg-error/10 border-error/20' : 'bg-neutral-50'}`}>
+                  <p className={`text-2xl font-extrabold ${lowBalance.length ? 'text-error' : 'text-neutral-900'}`}>{lowBalance.length}</p>
+                  <p className="text-xs uppercase font-semibold text-neutral-500">Low Balance (&lt;₹25)</p>
+                  <p className="text-xs text-neutral-400">audio min ₹10</p>
+                </div>
+              </div>
+              {lowBalance.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold text-neutral-700">Low Balance Alerts</p>
+                  {lowBalance.slice(0,4).map(w=> {
+                    const audioMin = (w as any).remainingAudioMinutes ?? Math.floor(Number(w.balance)/1);
+                    const videoMin = (w as any).remainingVideoMinutes ?? (w as any).remainingMinutes ?? Math.floor(Number(w.balance)/2.5);
+                    return (
+                      <div key={w.walletId} className="flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 bg-error rounded-full animate-pulse" />
+                          <span className="font-mono text-sm font-medium">{w.inmateId}</span>
+                          <span className="text-xs px-2 py-0.5 bg-error text-white rounded-full">₹{w.balance}</span>
+                        </div>
+                        <span className="text-xs text-neutral-600">{audioMin} min audio • {videoMin} min video</span>
+                      </div>
+                    );
+                  })}
+                  {lowBalance.length > 4 && <p className="text-xs text-neutral-500 text-center">+{lowBalance.length-4} more low balance wallets</p>}
+                </div>
+              ) : (
+                <p className="text-sm text-neutral-500 text-center py-4">All wallets have sufficient balance</p>
+              )}
+              {wallets.length > 0 && (
+                <div className="mt-4 pt-4 border-t">
+                  <p className="text-xs font-semibold text-neutral-500 uppercase mb-2">Recent Wallets</p>
+                  <div className="space-y-2">
+                    {wallets.slice(0,3).map(w=> (
+                      <Link key={w.walletId} to="/inmate-wallet" className="flex items-center justify-between p-2 hover:bg-neutral-50 rounded-lg">
+                        <span className="font-mono text-sm">{w.inmateId}</span>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${Number(w.balance)<50?'bg-error text-white':'bg-success text-white'}`}>₹{w.balance}</span>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          );
+        })()}
       </div>
 
       {/* Second Row - Tables */}
