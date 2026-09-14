@@ -137,7 +137,10 @@ router.put('/contacts/:contactId', requireRole(...ALL_ROLES), async (req, res) =
   const updated = await updateDb('contacts.json', (ct) => {
     const idx = ct.findIndex((c) => c.contactId === contactId);
     if (idx === -1) return { data: ct, result: null };
-    ct[idx] = { ...ct[idx], ...updates };
+    const merged = { ...ct[idx], ...updates };
+    if (updates.name) { merged.fullName = updates.name; merged.firstName = updates.name.split(' ')[0]; merged.lastName = updates.name.split(' ').slice(1).join(' '); }
+    if (updates.mobileNumber) { merged.phoneNumber = updates.mobileNumber; merged.phone = updates.mobileNumber; }
+    ct[idx] = merged;
     return { data: ct, result: ct[idx] };
   });
   if (!updated) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Contact not found' } });
@@ -146,12 +149,23 @@ router.put('/contacts/:contactId', requireRole(...ALL_ROLES), async (req, res) =
 
 router.patch('/contacts/:contactId/status', requireRole(...ALL_ROLES), async (req, res) => {
   const { contactId } = req.params;
-  const { status } = req.body;
-  if (!status) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'status is required' } });
-  const allowedStatuses = ['pending', 'approved', 'rejected', 'suspended'];
+  let { status, active } = req.body;
+
+  // Android sends { active: true/false }, translate to status
+  if (active !== undefined && !status) {
+    status = active ? 'approved' : 'rejected';
+  }
+
+  if (!status) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'status or active is required' } });
+  const allowedStatuses = ['pending', 'approved', 'active', 'rejected', 'inactive', 'suspended', 'blocked'];
   if (!allowedStatuses.includes(status)) {
     return res.status(400).json({ success: false, error: { code: 'INVALID_STATUS', message: `Status must be one of: ${allowedStatuses.join(', ')}` } });
   }
+
+  // Normalize status: active → approved, inactive → rejected
+  const normalizedStatus = status === 'active' ? 'approved' : status === 'inactive' ? 'rejected' : status;
+  const isActive = ['approved', 'pending', 'active'].includes(normalizedStatus);
+
   const inmates = await readDb('inmates.json');
   const contacts = await readDb('contacts.json');
   const contact = contacts.find((c) => c.contactId === contactId);
@@ -164,7 +178,7 @@ router.patch('/contacts/:contactId/status', requireRole(...ALL_ROLES), async (re
   const updated = await updateDb('contacts.json', (ct) => {
     const idx = ct.findIndex((c) => c.contactId === contactId);
     if (idx === -1) return { data: ct, result: null };
-    ct[idx] = { ...ct[idx], status };
+    ct[idx] = { ...ct[idx], status: normalizedStatus, active: isActive, approvalStatus: normalizedStatus };
     return { data: ct, result: ct[idx] };
   });
   if (!updated) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Contact not found' } });

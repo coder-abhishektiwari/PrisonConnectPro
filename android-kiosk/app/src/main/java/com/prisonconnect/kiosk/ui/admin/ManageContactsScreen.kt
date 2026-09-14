@@ -22,6 +22,8 @@ import com.prisonconnect.kiosk.network.NetworkResult
 import com.prisonconnect.kiosk.ui.components.ConfirmDeleteDialog
 import com.prisonconnect.kiosk.ui.components.KioskLoadingState
 import com.prisonconnect.kiosk.ui.components.KioskTopBar
+import com.prisonconnect.kiosk.ui.theme.AlertRed
+import com.prisonconnect.kiosk.ui.theme.PrimaryNavy
 
 @Composable
 fun ManageContactsScreen(
@@ -84,7 +86,7 @@ fun ManageContactsScreen(
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { showAddDialog = true },
-                containerColor = Color(0xFF003366),
+                containerColor = PrimaryNavy,
                 contentColor = Color.White
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Add Contact")
@@ -124,7 +126,7 @@ fun ManageContactsScreen(
                 is NetworkResult.Failure -> {
                     Text(
                         text = result.error.message ?: "Failed to load contacts",
-                        color = Color.Red,
+                        color = Color(0xFFD32F2F),
                         modifier = Modifier.align(Alignment.Center)
                     )
                 }
@@ -220,14 +222,14 @@ fun ContactItem(
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(contact.displayName, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                Text(contact.phone, color = Color.Gray, fontSize = 14.sp)
+                Text(contact.phone, color = Color(0xFF687A8F), fontSize = 14.sp)
                 Text(contact.relationship ?: "Contact", color = Color(0xFF003366), fontSize = 12.sp)
             }
             IconButton(onClick = { onEdit(contact) }) {
                 Icon(Icons.Default.Edit, contentDescription = "Edit", tint = Color(0xFF666666))
             }
             IconButton(onClick = { onDelete(contact) }) {
-                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color.Red)
+                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = AlertRed)
             }
             Switch(
                 checked = localActive,

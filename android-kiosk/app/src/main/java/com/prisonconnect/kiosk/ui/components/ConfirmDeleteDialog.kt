@@ -7,6 +7,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import com.prisonconnect.kiosk.ui.theme.DangerRed
 
 @Composable
 fun ConfirmDeleteDialog(
@@ -24,7 +25,10 @@ fun ConfirmDeleteDialog(
         confirmButton = {
             Button(
                 onClick = onConfirm,
-                colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = DangerRed,
+                    contentColor = Color.White
+                )
             ) {
                 Text(confirmText)
             }

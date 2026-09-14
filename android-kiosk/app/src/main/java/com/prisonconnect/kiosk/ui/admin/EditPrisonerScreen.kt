@@ -61,7 +61,7 @@ fun EditPrisonerScreen(
                 is NetworkResult.Failure -> {
                     Text(
                         text = result.error.message ?: "Failed to load prisoner",
-                        color = Color.Red,
+                        color = Color(0xFFD32F2F),
                         modifier = Modifier.align(Alignment.Center)
                     )
                 }

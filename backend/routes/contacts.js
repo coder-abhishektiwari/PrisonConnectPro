@@ -106,7 +106,7 @@ function createContactsRouter(broadcastEvent) {
     return sendSuccess(res, newContact, 201);
   }));
 
-  router.put('/admin/contacts/:contactId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+  router.put('/admin/contacts/:contactId', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
     const { contactId } = req.params;
     const updates = req.body;
 
@@ -138,20 +138,24 @@ function createContactsRouter(broadcastEvent) {
     return sendSuccess(res, updated);
   }));
 
-  router.patch('/admin/contacts/:contactId/status', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+  router.patch('/admin/contacts/:contactId/status', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
     const { contactId } = req.params;
     let { status, active } = req.body;
 
-    // Android sends { active: true/false }, backend uses { status: "active"/"inactive" }
+    // Android sends { active: true/false }, translate to status
     if (active !== undefined && !status) {
-      status = active ? 'active' : 'inactive';
+      status = active ? 'approved' : 'rejected';
     }
 
     if (!status) return sendError(res, 'INVALID_REQUEST', 'status or active is required', 400);
-    const allowedStatuses = ['active', 'inactive', 'suspended', 'blocked'];
+    const allowedStatuses = ['pending', 'approved', 'active', 'rejected', 'inactive', 'suspended', 'blocked'];
     if (!allowedStatuses.includes(status)) {
       return sendError(res, 'INVALID_STATUS', `Status must be one of: ${allowedStatuses.join(', ')}`, 400);
     }
+
+    // Normalize status
+    const normalizedStatus = status === 'active' ? 'approved' : status === 'inactive' ? 'rejected' : status;
+    const isActive = ['approved', 'pending', 'active'].includes(normalizedStatus);
 
     const [contacts, inmates] = await Promise.all([readDb('contacts.json'), readDb('inmates.json')]);
     const target = contacts.find((c) => c.contactId === contactId);
@@ -166,7 +170,7 @@ function createContactsRouter(broadcastEvent) {
     const updated = await updateDb('contacts.json', (all) => {
       const idx = all.findIndex((c) => c.contactId === contactId);
       if (idx === -1) return { data: all, result: null };
-      all[idx] = { ...all[idx], status, active: status === 'active' || status === 'suspended' };
+      all[idx] = { ...all[idx], status: normalizedStatus, active: isActive, approvalStatus: normalizedStatus };
       return { data: all, result: all[idx] };
     });
 

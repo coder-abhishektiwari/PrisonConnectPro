@@ -17,6 +17,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.prisonconnect.kiosk.R
+import com.prisonconnect.kiosk.ui.theme.PrimaryNavy
 import com.prisonconnect.kiosk.ui.theme.PrisonKioskTheme
 import java.text.SimpleDateFormat
 import java.util.*
@@ -42,8 +43,8 @@ fun KioskTopBar(
 
     Surface(
         modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 4.dp
+        color = PrimaryNavy,
+        tonalElevation = 0.dp
     ) {
         BoxWithConstraints {
             val isCompact = maxWidth < 400.dp
@@ -68,17 +69,18 @@ fun KioskTopBar(
                             onClick = onBackClick,
                             modifier = Modifier.size(if (isCompact) 32.dp else 40.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.ArrowBack,
-                                contentDescription = "Back"
-                            )
+                    Icon(
+                        imageVector = Icons.Default.ArrowBack,
+                        contentDescription = "Back",
+                        tint = Color.White
+                    )
                         }
                         Spacer(modifier = Modifier.width(4.dp))
                     }
                     Icon(
                         imageVector = Icons.Default.Lock,
                         contentDescription = "Secure",
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = Color.White,
                         modifier = Modifier.size(if (isCompact) 18.dp else 24.dp)
                     )
                     Spacer(modifier = Modifier.width(if (isCompact) 6.dp else 12.dp))
@@ -86,7 +88,7 @@ fun KioskTopBar(
                         text = title ?: stringResource(R.string.secure_prison_kiosk),
                         style = if (isCompact) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
+                        color = Color.White,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -102,7 +104,7 @@ fun KioskTopBar(
                     Icon(
                         imageVector = Icons.Default.Wifi,
                         contentDescription = if (isOnline) "Online" else "Offline",
-                        tint = if (isOnline) Color(0xFF4CAF50) else Color(0xFFF44336),
+                        tint = if (isOnline) Color(0xFF4CAF50) else Color(0xFFFF7043),
                         modifier = Modifier.size(if (isCompact) 16.dp else 20.dp)
                     )
 
@@ -115,7 +117,7 @@ fun KioskTopBar(
                                 MaterialTheme.typography.titleLarge
                             },
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
+                            color = Color.White,
                             maxLines = 1,
                             softWrap = false
                         )
@@ -126,7 +128,7 @@ fun KioskTopBar(
                             } else {
                                 MaterialTheme.typography.labelMedium
                             },
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = Color.White.copy(alpha = 0.7f),
                             maxLines = 1,
                             softWrap = false
                         )

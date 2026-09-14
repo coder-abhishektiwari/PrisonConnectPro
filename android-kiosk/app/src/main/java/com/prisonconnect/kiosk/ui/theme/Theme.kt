@@ -56,11 +56,10 @@ private val DarkColors = darkColorScheme(
  */
 @Composable
 fun PrisonKioskTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
     MaterialTheme(
-        colorScheme = if (darkTheme) DarkColors else LightColors,
+        colorScheme = LightColors,
         typography = KioskTypography,
         shapes = KioskShapes,
         content = content
