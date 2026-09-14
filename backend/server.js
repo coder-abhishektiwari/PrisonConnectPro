@@ -148,56 +148,6 @@ app.get('/admin/profile/:adminId', requireAuth, requireRole('admin', 'super-admi
   return sendSuccess(res, profile);
 }));
 
-// ==================== BIOMETRICS ====================
-app.get('/admin/prisoners/:prisonerId/biometrics', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
-  const { prisonerId } = req.params;
-  const inmates = await readDb('inmates.json');
-  const inmate = inmates.find((i) => i.inmateId === prisonerId && inAdminScope(req, i));
-  if (!inmate) return sendError(res, 'NOT_FOUND', 'Prisoner not found in your kiosk', 404);
-  const biometrics = inmate.biometricData || {};
-  return sendSuccess(res, {
-    prisonerId, biometrics,
-    hasFace: biometrics.faceRegistered || false,
-    hasFingerprint: biometrics.fingerprintRegistered || false,
-    hasRfid: biometrics.rfidRegistered || false,
-    lastUpdate: biometrics.lastBiometricUpdate
-  });
-}));
-
-app.delete('/admin/biometrics/:biometricId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
-  const { biometricId } = req.params;
-  const parts = biometricId.split('-');
-  if (parts.length < 3) return sendError(res, 'INVALID_REQUEST', 'Invalid biometric ID format', 400);
-  const type = parts[parts.length - 1].toLowerCase();
-  const prisonerId = req.query.prisonerId || req.body.prisonerId;
-  if (!prisonerId) return sendError(res, 'INVALID_REQUEST', 'prisonerId query parameter is required', 400);
-
-  const updated = await updateDb('inmates.json', (inmates) => {
-    const idx = inmates.findIndex((i) => i.inmateId === prisonerId && inAdminScope(req, i));
-    if (idx === -1) return { data: inmates, result: null };
-    const biometricData = { ...inmates[idx].biometricData };
-    if (type === 'face') {
-      biometricData.faceRegistered = false;
-      biometricData.faceEmbedding = null;
-      biometricData.faceLiveness = null;
-      biometricData.faceAntispoof = null;
-    } else if (type === 'fingerprint') {
-      biometricData.fingerprintRegistered = false;
-      biometricData.fingerprintTemplate = null;
-    } else if (type === 'rfid') {
-      biometricData.rfidRegistered = false;
-      biometricData.rfidToken = null;
-    } else {
-      return { data: inmates, result: null };
-    }
-    biometricData.lastBiometricUpdate = new Date().toISOString();
-    inmates[idx] = { ...inmates[idx], biometricData };
-    return { data: inmates, result: inmates[idx] };
-  });
-  if (!updated) return sendError(res, 'NOT_FOUND', 'Prisoner not found', 404);
-  return sendSuccess(res, { message: 'Biometric deleted successfully', biometricId, prisonerId });
-}));
-
 // ==================== INMATE SELF-SERVICE (dashboard data) ====================
 const { getStatement, resolveInmate } = require('./lib/jail-account');
 
@@ -337,7 +287,7 @@ try {
 function startServer() {
   server.listen(PORT, () => {
     console.log(`PrisonConnect backend running on port ${PORT}`);
-    console.log(`API: https://prisonconnect-mockbackend.onrender.com:${PORT}`);
-    console.log(`Socket.IO: https://prisonconnect-mockbackend.onrender.com:${PORT}`);
+    console.log(`API: http://localhost:${PORT}`);
+    console.log(`Socket.IO: http://localhost:${PORT}`);
   });
 }

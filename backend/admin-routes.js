@@ -4,35 +4,56 @@ const router = express.Router();
 const { readDb, updateDb } = require('./lib/db');
 const { hashSecret } = require('./lib/auth');
 const { requireRole } = require('./middleware/auth');
-const { inAdminScope, adminScopeFilter } = require('./lib/scoping');
+const { inAdminScope, adminScopeFilter, jailScopeOf, kioskScopeOf } = require('./lib/scoping');
+
+const ALL_ROLES = ['admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'];
+const ADMIN_ROLES = ['admin', 'warden', 'super-admin', 'super_admin'];
 
 // ==================== PRISONER ROUTES (must be before /:adminId) ====================
 
-router.get('/prisoners', requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), async (req, res) => {
+router.get('/prisoners', requireRole(...ALL_ROLES), async (req, res) => {
   const inmates = await readDb('inmates.json');
   return res.json({ success: true, data: inmates.filter(adminScopeFilter(req)) });
 });
 
-router.get('/prisoners/:prisonerId', requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), async (req, res) => {
+router.get('/prisoners/:prisonerId', requireRole(...ALL_ROLES), async (req, res) => {
   const inmates = await readDb('inmates.json');
   const inmate = inmates.find((i) => i.inmateId === req.params.prisonerId && inAdminScope(req, i));
   if (!inmate) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Prisoner not found' } });
   return res.json({ success: true, data: inmate });
 });
 
-router.post('/prisoners', requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), async (req, res) => {
+router.post('/prisoners', requireRole(...ALL_ROLES), async (req, res) => {
   const inmateData = req.body;
+  const jailId = jailScopeOf(req);
+  const kioskId = kioskScopeOf(req);
+  if (jailId && inmateData.prisonId && inmateData.prisonId !== jailId) {
+    return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Cannot create prisoner outside your jail' } });
+  }
+  if (kioskId && inmateData.assignedKioskId && inmateData.assignedKioskId !== kioskId) {
+    return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Cannot create prisoner for another kiosk' } });
+  }
   const record = {
     ...inmateData,
     inmateId: inmateData.inmateId || `INM-${uuidv4().substring(0, 8).toUpperCase()}`,
+    prisonId: jailId || inmateData.prisonId,
+    facility: jailId || inmateData.facility,
+    assignedKioskId: kioskId || inmateData.assignedKioskId,
     status: inmateData.status || 'active',
+    biometricData: inmateData.biometricData || {
+      faceRegistered: false, faceEmbedding: null,
+      fingerprintRegistered: false, rfidRegistered: false, lastBiometricUpdate: null
+    },
     createdAt: new Date().toISOString()
   };
+  if (record.pin && !/^\$2[aby]\$/.test(record.pin)) {
+    record.pin = await hashSecret(String(record.pin));
+  }
   const updated = await updateDb('inmates.json', (inmates) => ({ data: [...inmates, record], result: record }));
   return res.status(201).json({ success: true, data: updated.result });
 });
 
-router.put('/prisoners/:prisonerId', requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), async (req, res) => {
+router.put('/prisoners/:prisonerId', requireRole(...ALL_ROLES), async (req, res) => {
   const updates = { ...req.body };
   delete updates.inmateId; delete updates.createdAt;
   const updated = await updateDb('inmates.json', (inmates) => {
@@ -45,7 +66,7 @@ router.put('/prisoners/:prisonerId', requireRole('admin', 'warden', 'kiosk_admin
   return res.json({ success: true, data: updated });
 });
 
-router.patch('/prisoners/:prisonerId/status', requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), async (req, res) => {
+router.patch('/prisoners/:prisonerId/status', requireRole(...ALL_ROLES), async (req, res) => {
   const { prisonerId } = req.params;
   const { status } = req.body;
   if (!status) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'status is required' } });
@@ -59,7 +80,7 @@ router.patch('/prisoners/:prisonerId/status', requireRole('admin', 'warden', 'ki
   return res.json({ success: true, data: updated });
 });
 
-router.delete('/prisoners/:prisonerId', requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), async (req, res) => {
+router.delete('/prisoners/:prisonerId', requireRole(...ALL_ROLES), async (req, res) => {
   const deleted = await updateDb('inmates.json', (inmates) => {
     const idx = inmates.findIndex((i) => i.inmateId === req.params.prisonerId && inAdminScope(req, i));
     if (idx === -1) return { data: inmates, result: null };
@@ -70,9 +91,9 @@ router.delete('/prisoners/:prisonerId', requireRole('admin', 'warden', 'kiosk_ad
   return res.json({ success: true, data: { message: 'Prisoner deleted', prisonerId: req.params.prisonerId } });
 });
 
-// ==================== PRISONER CONTACTS ====================
+// ==================== PRISONER CONTACTS (via prisoner) ====================
 
-router.get('/prisoners/:prisonerId/contacts', requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), async (req, res) => {
+router.get('/prisoners/:prisonerId/contacts', requireRole(...ALL_ROLES), async (req, res) => {
   const inmates = await readDb('inmates.json');
   if (!inmates.find((i) => i.inmateId === req.params.prisonerId && inAdminScope(req, i))) {
     return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Prisoner not found' } });
@@ -81,7 +102,7 @@ router.get('/prisoners/:prisonerId/contacts', requireRole('admin', 'warden', 'ki
   return res.json({ success: true, data: contacts.filter((c) => c.inmateId === req.params.prisonerId) });
 });
 
-router.post('/prisoners/:prisonerId/contacts', requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), async (req, res) => {
+router.post('/prisoners/:prisonerId/contacts', requireRole(...ALL_ROLES), async (req, res) => {
   const inmates = await readDb('inmates.json');
   if (!inmates.find((i) => i.inmateId === req.params.prisonerId && inAdminScope(req, i))) {
     return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Prisoner not found' } });
@@ -98,17 +119,214 @@ router.post('/prisoners/:prisonerId/contacts', requireRole('admin', 'warden', 'k
   return res.status(201).json({ success: true, data: updated.result });
 });
 
-// Kiosk-aware scope: principals with a kioskId claim only manage their own
-// kiosk's prisoners; others fall back to jail scope.
-function inJailScope(req, record) {
-  const jailId = req.auth?.prisonId || req.auth?.jailId || null;
-  if (jailId && !(record && (record.prisonId === jailId || record.facility === jailId || record.jailId === jailId))) return false;
-  const kioskId = req.auth?.kioskId || null;
-  if (kioskId && !(record && (record.assignedKioskId === kioskId || record.kioskId === kioskId || record.inmateId === kioskId))) return false;
-  return true;
-}
+// ==================== CONTACT CRUD (direct contactId) ====================
 
-// Admin CRUD — restricted to super-admins only.
+router.put('/contacts/:contactId', requireRole(...ALL_ROLES), async (req, res) => {
+  const { contactId } = req.params;
+  const updates = { ...req.body };
+  delete updates.contactId; delete updates.createdAt;
+  const inmates = await readDb('inmates.json');
+  const contacts = await readDb('contacts.json');
+  const contact = contacts.find((c) => c.contactId === contactId);
+  if (contact) {
+    const inmate = inmates.find((i) => i.inmateId === contact.inmateId);
+    if (inmate && !inAdminScope(req, inmate)) {
+      return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Contact not found' } });
+    }
+  }
+  const updated = await updateDb('contacts.json', (ct) => {
+    const idx = ct.findIndex((c) => c.contactId === contactId);
+    if (idx === -1) return { data: ct, result: null };
+    ct[idx] = { ...ct[idx], ...updates };
+    return { data: ct, result: ct[idx] };
+  });
+  if (!updated) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Contact not found' } });
+  return res.json({ success: true, data: updated });
+});
+
+router.patch('/contacts/:contactId/status', requireRole(...ALL_ROLES), async (req, res) => {
+  const { contactId } = req.params;
+  const { status } = req.body;
+  if (!status) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'status is required' } });
+  const allowedStatuses = ['pending', 'approved', 'rejected', 'suspended'];
+  if (!allowedStatuses.includes(status)) {
+    return res.status(400).json({ success: false, error: { code: 'INVALID_STATUS', message: `Status must be one of: ${allowedStatuses.join(', ')}` } });
+  }
+  const inmates = await readDb('inmates.json');
+  const contacts = await readDb('contacts.json');
+  const contact = contacts.find((c) => c.contactId === contactId);
+  if (contact) {
+    const inmate = inmates.find((i) => i.inmateId === contact.inmateId);
+    if (inmate && !inAdminScope(req, inmate)) {
+      return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Contact not found' } });
+    }
+  }
+  const updated = await updateDb('contacts.json', (ct) => {
+    const idx = ct.findIndex((c) => c.contactId === contactId);
+    if (idx === -1) return { data: ct, result: null };
+    ct[idx] = { ...ct[idx], status };
+    return { data: ct, result: ct[idx] };
+  });
+  if (!updated) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Contact not found' } });
+  return res.json({ success: true, data: updated });
+});
+
+router.delete('/contacts/:contactId', requireRole(...ALL_ROLES), async (req, res) => {
+  const { contactId } = req.params;
+  const inmates = await readDb('inmates.json');
+  const contacts = await readDb('contacts.json');
+  const contact = contacts.find((c) => c.contactId === contactId);
+  if (contact) {
+    const inmate = inmates.find((i) => i.inmateId === contact.inmateId);
+    if (inmate && !inAdminScope(req, inmate)) {
+      return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Contact not found' } });
+    }
+  }
+  const deleted = await updateDb('contacts.json', (ct) => {
+    const idx = ct.findIndex((c) => c.contactId === contactId);
+    if (idx === -1) return { data: ct, result: null };
+    const [removed] = ct.splice(idx, 1);
+    return { data: ct, result: removed };
+  });
+  if (!deleted) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Contact not found' } });
+  return res.json({ success: true, data: { message: 'Contact deleted', contactId } });
+});
+
+// ==================== DEVICES ====================
+
+router.get('/devices', requireRole(...ALL_ROLES), async (req, res) => {
+  const devices = await readDb('devices.json');
+  return res.json({ success: true, data: devices });
+});
+
+router.get('/devices/:deviceId', requireRole(...ALL_ROLES), async (req, res) => {
+  const devices = await readDb('devices.json');
+  const device = devices.find((d) => d.deviceId === req.params.deviceId);
+  if (!device) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Device not found' } });
+  return res.json({ success: true, data: device });
+});
+
+// ==================== BIOMETRICS ====================
+
+router.get('/prisoners/:prisonerId/biometrics', requireRole(...ALL_ROLES), async (req, res) => {
+  const { prisonerId } = req.params;
+  const inmates = await readDb('inmates.json');
+  const inmate = inmates.find((i) => i.inmateId === prisonerId && inAdminScope(req, i));
+  if (!inmate) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Prisoner not found' } });
+  const biometrics = inmate.biometricData || {};
+  return res.json({
+    success: true,
+    data: {
+      prisonerId, biometrics,
+      hasFace: biometrics.faceRegistered || false,
+      hasFingerprint: biometrics.fingerprintRegistered || false,
+      hasRfid: biometrics.rfidRegistered || false,
+      lastUpdate: biometrics.lastBiometricUpdate
+    }
+  });
+});
+
+router.post('/prisoners/:prisonerId/biometrics', requireRole(...ALL_ROLES), async (req, res) => {
+  const { prisonerId } = req.params;
+  const { type, image, capture, rfidToken } = req.body;
+
+  if (!['face', 'fingerprint', 'rfid'].includes(type)) {
+    return res.status(400).json({ success: false, error: { code: 'INVALID_TYPE', message: 'type must be face, fingerprint, or rfid' } });
+  }
+
+  const inmates = await readDb('inmates.json');
+  const inmateIdx = inmates.findIndex((i) => i.inmateId === prisonerId && inAdminScope(req, i));
+  if (inmateIdx === -1) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Prisoner not found' } });
+
+  let updateFields = {};
+  let biometricRecord = null;
+
+  if (type === 'face') {
+    if (!image) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'image (base64) is required for face registration' } });
+
+    let imageBase64 = image;
+    if (imageBase64.startsWith('data:image')) imageBase64 = imageBase64.split(',')[1];
+    const imageBuffer = Buffer.from(imageBase64, 'base64');
+
+    try {
+      const { detectAndEmbed, isLive } = require('./lib/faceRecognition');
+      const probeResult = await detectAndEmbed(imageBuffer);
+
+      const livenessThreshold = parseFloat(process.env.FACE_LIVENESS_THRESHOLD || '0.5');
+      if (!isLive(probeResult.liveness, probeResult.antispoof, livenessThreshold)) {
+        return res.status(403).json({ success: false, error: { code: 'LIVENESS_FAILED', message: 'Liveness check failed' } });
+      }
+
+      updateFields = {
+        biometricData: {
+          ...inmates[inmateIdx].biometricData,
+          faceRegistered: true,
+          faceEmbedding: probeResult.embedding,
+          faceLiveness: probeResult.liveness,
+          faceAntispoof: probeResult.antispoof,
+          lastBiometricUpdate: new Date().toISOString()
+        }
+      };
+      biometricRecord = { biometricId: `BIO-${Date.now()}-FACE`, prisonerId, type: 'face', status: 'registered', registeredAt: new Date().toISOString() };
+    } catch (err) {
+      if (err.message === 'NO_FACE_DETECTED') return res.status(400).json({ success: false, error: { code: 'NO_FACE', message: 'No face detected' } });
+      if (err.message === 'MULTIPLE_FACES_DETECTED') return res.status(400).json({ success: false, error: { code: 'MULTIPLE_FACES', message: 'Multiple faces detected' } });
+      console.error('[biometric-register] error:', err.message);
+      return res.status(500).json({ success: false, error: { code: 'FACE_REG_ERROR', message: 'Face registration failed' } });
+    }
+  } else if (type === 'fingerprint') {
+    if (!capture) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'capture is required for fingerprint' } });
+    updateFields = {
+      biometricData: { ...inmates[inmateIdx].biometricData, fingerprintRegistered: true, fingerprintTemplate: capture, lastBiometricUpdate: new Date().toISOString() }
+    };
+    biometricRecord = { biometricId: `BIO-${Date.now()}-FGP`, prisonerId, type: 'fingerprint', status: 'registered', registeredAt: new Date().toISOString() };
+  } else if (type === 'rfid') {
+    if (!rfidToken) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'rfidToken is required for RFID' } });
+    updateFields = {
+      biometricData: { ...inmates[inmateIdx].biometricData, rfidRegistered: true, rfidToken, lastBiometricUpdate: new Date().toISOString() }
+    };
+    biometricRecord = { biometricId: `BIO-${Date.now()}-RFID`, prisonerId, type: 'rfid', status: 'registered', registeredAt: new Date().toISOString() };
+  }
+
+  const updated = await updateDb('inmates.json', (inmates) => {
+    const idx = inmates.findIndex((i) => i.inmateId === prisonerId && inAdminScope(req, i));
+    if (idx === -1) return { data: inmates, result: null };
+    inmates[idx] = { ...inmates[idx], ...updateFields };
+    const existingBiometrics = inmates[idx].biometrics || [];
+    inmates[idx].biometrics = [...existingBiometrics, biometricRecord];
+    return { data: inmates, result: inmates[idx] };
+  });
+
+  if (!updated) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Prisoner not found' } });
+  return res.json({ success: true, data: { biometricId: biometricRecord.biometricId, type, status: 'registered' } });
+});
+
+router.delete('/biometrics/:biometricId', requireRole(...ALL_ROLES), async (req, res) => {
+  const { biometricId } = req.params;
+  const parts = biometricId.split('-');
+  if (parts.length < 3) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'Invalid biometric ID' } });
+  const type = parts[parts.length - 1].toLowerCase();
+  const prisonerId = req.query.prisonerId || req.body.prisonerId;
+  if (!prisonerId) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'prisonerId is required' } });
+
+  const updated = await updateDb('inmates.json', (inmates) => {
+    const idx = inmates.findIndex((i) => i.inmateId === prisonerId && inAdminScope(req, i));
+    if (idx === -1) return { data: inmates, result: null };
+    const biometricData = { ...inmates[idx].biometricData };
+    if (type === 'face') { biometricData.faceRegistered = false; biometricData.faceEmbedding = null; }
+    else if (type === 'fingerprint') { biometricData.fingerprintRegistered = false; biometricData.fingerprintTemplate = null; }
+    else if (type === 'rfid') { biometricData.rfidRegistered = false; biometricData.rfidToken = null; }
+    else return { data: inmates, result: null };
+    biometricData.lastBiometricUpdate = new Date().toISOString();
+    inmates[idx] = { ...inmates[idx], biometricData };
+    return { data: inmates, result: inmates[idx] };
+  });
+  if (!updated) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Prisoner not found' } });
+  return res.json({ success: true, data: { message: 'Biometric deleted', biometricId, prisonerId } });
+});
+
+// ==================== ADMIN CRUD (must be LAST — catch-all /:adminId) ====================
+
 router.get('/', requireRole('super-admin', 'super_admin'), async (req, res) => {
   const admins = await readDb('admins.json');
   return res.json({ success: true, data: admins });
@@ -130,12 +348,8 @@ router.post('/', requireRole('super-admin', 'super_admin'), async (req, res) => 
     status: adminData.status || 'active',
     createdAt: new Date().toISOString()
   };
-  if (record.pin && !/^\$2[aby]\$/.test(record.pin)) {
-    record.pin = await hashSecret(String(record.pin));
-  }
-  if (record.password && !/^\$2[aby]\$/.test(record.password)) {
-    record.password = await hashSecret(String(record.password));
-  }
+  if (record.pin && !/^\$2[aby]\$/.test(record.pin)) record.pin = await hashSecret(String(record.pin));
+  if (record.password && !/^\$2[aby]\$/.test(record.password)) record.password = await hashSecret(String(record.password));
   const updated = await updateDb('admins.json', (all) => ({ data: [...all, record], result: record }));
   return res.status(201).json({ success: true, data: updated.result });
 });
@@ -165,93 +379,6 @@ router.delete('/:adminId', requireRole('super-admin', 'super_admin'), async (req
   });
   if (!deleted) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Admin not found' } });
   return res.json({ success: true, data: { message: 'Admin deleted', adminId } });
-});
-
-// Biometric registration for prisoners (real face embedding + fingerprint/RFID)
-router.post('/prisoners/:prisonerId/biometrics', requireRole('super-admin', 'super_admin', 'admin', 'warden'), async (req, res) => {
-  const { prisonerId } = req.params;
-  const { type, image, capture, rfidToken } = req.body;
-
-  if (!['face', 'fingerprint', 'rfid'].includes(type)) {
-    return res.status(400).json({ success: false, error: { code: 'INVALID_TYPE', message: 'type must be face, fingerprint, or rfid' } });
-  }
-
-  const inmates = await readDb('inmates.json');
-  const inmateIdx = inmates.findIndex((i) => i.inmateId === prisonerId && inJailScope(req, i));
-  if (inmateIdx === -1) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Prisoner not found in your jail' } });
-
-  let updateFields = {};
-  let biometricRecord = null;
-
-  if (type === 'face') {
-    if (!image) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'image (base64) is required for face registration' } });
-
-    let imageBase64 = image;
-    if (imageBase64.startsWith('data:image')) imageBase64 = imageBase64.split(',')[1];
-    const imageBuffer = Buffer.from(imageBase64, 'base64');
-
-    try {
-      const { detectAndEmbed, isLive } = require('../lib/faceRecognition');
-      const probeResult = await detectAndEmbed(imageBuffer);
-
-      // Liveness check during registration - reject spoofed faces
-      const livenessThreshold = parseFloat(process.env.FACE_LIVENESS_THRESHOLD || '0.5');
-      if (!isLive(probeResult.liveness, probeResult.antispoof, livenessThreshold)) {
-        return res.status(403).json({ success: false, error: { code: 'LIVENESS_FAILED', message: 'Liveness check failed - possible spoof attempt' } });
-      }
-
-      updateFields = {
-        biometricData: {
-          ...inmates[inmateIdx].biometricData,
-          faceRegistered: true,
-          faceEmbedding: probeResult.embedding,
-          faceLiveness: probeResult.liveness,
-          faceAntispoof: probeResult.antispoof,
-          lastBiometricUpdate: new Date().toISOString()
-        }
-      };
-      biometricRecord = { biometricId: `BIO-${Date.now()}-FACE`, prisonerId, type: 'face', status: 'registered', registeredAt: new Date().toISOString() };
-    } catch (err) {
-      if (err.message === 'NO_FACE_DETECTED') return res.status(400).json({ success: false, error: { code: 'NO_FACE', message: 'No face detected in image' } });
-      if (err.message === 'MULTIPLE_FACES_DETECTED') return res.status(400).json({ success: false, error: { code: 'MULTIPLE_FACES', message: 'Multiple faces detected in image' } });
-      console.error('[biometric-register] error:', err.message);
-      return res.status(500).json({ success: false, error: { code: 'FACE_REGISTRATION_ERROR', message: 'Face registration failed' } });
-    }
-  } else if (type === 'fingerprint') {
-    if (!capture) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'capture (base64) is required for fingerprint registration' } });
-    updateFields = {
-      biometricData: {
-        ...inmates[inmateIdx].biometricData,
-        fingerprintRegistered: true,
-        fingerprintTemplate: capture,
-        lastBiometricUpdate: new Date().toISOString()
-      }
-    };
-    biometricRecord = { biometricId: `BIO-${Date.now()}-FGP`, prisonerId, type: 'fingerprint', status: 'registered', registeredAt: new Date().toISOString() };
-  } else if (type === 'rfid') {
-    if (!rfidToken) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'rfidToken is required for RFID registration' } });
-    updateFields = {
-      biometricData: {
-        ...inmates[inmateIdx].biometricData,
-        rfidRegistered: true,
-        rfidToken,
-        lastBiometricUpdate: new Date().toISOString()
-      }
-    };
-    biometricRecord = { biometricId: `BIO-${Date.now()}-RFID`, prisonerId, type: 'rfid', status: 'registered', registeredAt: new Date().toISOString() };
-  }
-
-  const updated = await updateDb('inmates.json', (inmates) => {
-    const idx = inmates.findIndex((i) => i.inmateId === prisonerId && inJailScope(req, i));
-    if (idx === -1) return { data: inmates, result: null };
-    inmates[idx] = { ...inmates[idx], ...updateFields };
-    const existingBiometrics = inmates[idx].biometrics || [];
-    inmates[idx].biometrics = [...existingBiometrics, biometricRecord];
-    return { data: inmates, result: inmates[idx] };
-  });
-
-  if (!updated) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Prisoner not found' } });
-  return res.json({ success: true, data: { biometricId: biometricRecord.biometricId, type, status: 'registered' } });
 });
 
 module.exports = { router };
