@@ -130,7 +130,7 @@ fun LoginScreen(
                         onCancel = { viewModel.resetToSelection() }
                     )
                     LoginStage.PIN_ENTRY -> PinEntryLayout(
-                        name = inmate?.let { "${it.firstName} ${it.lastName}" } ?: "Prisoner",
+                        name = inmate?.let { it.displayName } ?: "Prisoner",
                         uiState = uiState,
                         onPinSubmit = { viewModel.onPinSubmit(it) },
                         onCancel = { viewModel.resetToSelection() }
