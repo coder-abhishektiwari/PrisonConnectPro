@@ -87,7 +87,10 @@ fun WalletScreen(
                             tint = Color.White
                         )
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = PrimaryNavy
+                )
             )
         },
         containerColor = LightBg
