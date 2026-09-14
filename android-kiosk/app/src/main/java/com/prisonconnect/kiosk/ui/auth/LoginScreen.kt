@@ -625,34 +625,59 @@ fun PinEntryLayout(
 
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Icon(
+            imageVector = Icons.Default.Lock,
+            contentDescription = null,
+            tint = PremiumBlue,
+            modifier = Modifier.size(80.dp)
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
         Text("Welcome,", fontSize = 24.sp, color = Color.Gray)
         Text(name, fontSize = 36.sp, fontWeight = FontWeight.Black, color = PremiumNavy)
-        Text("Enter your 6-digit PIN to confirm", fontSize = 16.sp, color = Color.Gray, modifier = Modifier.padding(top = 16.dp))
+        Text("Enter your 6-digit PIN to confirm", fontSize = 20.sp, color = Color.Gray, modifier = Modifier.padding(top = 8.dp))
 
         Spacer(modifier = Modifier.height(48.dp))
 
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            repeat(6) { index ->
-                val filled = pin.length > index
-                Box(
-                    modifier = Modifier.size(20.dp).clip(CircleShape)
-                        .background(if (filled) PremiumNavy else Color.LightGray.copy(alpha = 0.5f))
-                        .border(1.dp, if (filled) PremiumNavy else Color.Gray, CircleShape)
-                )
+        Surface(
+            color = Color.White,
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(2.dp, PremiumBlue, RoundedCornerShape(16.dp))
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                repeat(6) { index ->
+                    val filled = pin.length > index
+                    Box(
+                        modifier = Modifier.size(20.dp).clip(CircleShape)
+                            .background(if (filled) PremiumNavy else Color.LightGray.copy(alpha = 0.5f))
+                            .border(1.dp, if (filled) PremiumNavy else Color.Gray, CircleShape)
+                    )
+                }
             }
         }
 
-        Spacer(modifier = Modifier.height(48.dp))
+        Spacer(modifier = Modifier.height(32.dp))
 
         IPhoneKeypad(
             onNumberClick = { if (pin.length < 6) { pin += it; if (pin.length == 6) onPinSubmit(pin) } },
             onDeleteClick = { if (pin.isNotEmpty()) pin = pin.dropLast(1) }
         )
 
-        Spacer(modifier = Modifier.height(40.dp))
+        Spacer(modifier = Modifier.weight(1f))
+
         TextButton(onClick = onCancel) {
             Text("<- Back to Login Methods", color = AccentBlue, fontWeight = FontWeight.Bold)
         }
@@ -741,9 +766,10 @@ fun PrisonerIdEntryLayout(
 
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        Spacer(modifier = Modifier.height(24.dp))
+
         Icon(
             imageVector = Icons.Default.Badge,
             contentDescription = null,
@@ -755,9 +781,7 @@ fun PrisonerIdEntryLayout(
 
         Text("Prisoner Login", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = PremiumNavy)
         Text("Enter your Prisoner ID", fontSize = 20.sp, color = Color.Gray, modifier = Modifier.padding(top = 8.dp))
-        TextButton(onClick = onCancel) {
-            Text("<- Back to Login Methods", color = AccentBlue, fontWeight = FontWeight.Bold)
-        }
+
         Spacer(modifier = Modifier.height(48.dp))
 
         Surface(
@@ -766,7 +790,6 @@ fun PrisonerIdEntryLayout(
             modifier = Modifier
                 .fillMaxWidth()
                 .border(2.dp, PremiumBlue, RoundedCornerShape(16.dp))
-                .padding(horizontal = 16.dp)
         ) {
             Row(
                 modifier = Modifier
@@ -785,14 +808,13 @@ fun PrisonerIdEntryLayout(
             }
         }
 
-        Spacer(modifier = Modifier.height(48.dp))
+        Spacer(modifier = Modifier.height(32.dp))
 
         IPhoneKeypad(
             onNumberClick = {
                 if (prisonerId.length < 6) {
                     val newId = prisonerId + it
                     prisonerId = newId
-                    // Auto-submit when 6 digits are entered
                     if (newId.length == 6) {
                         onPrisonerIdSubmit(newId)
                     }
@@ -805,7 +827,7 @@ fun PrisonerIdEntryLayout(
             }
         )
 
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
         Button(
             onClick = {
@@ -825,7 +847,8 @@ fun PrisonerIdEntryLayout(
             Icon(Icons.AutoMirrored.Default.ArrowForward, contentDescription = null, tint = Color.White)
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.weight(1f))
+
         TextButton(onClick = onCancel) {
             Text("<- Back to Login Methods", color = AccentBlue, fontWeight = FontWeight.Bold)
         }

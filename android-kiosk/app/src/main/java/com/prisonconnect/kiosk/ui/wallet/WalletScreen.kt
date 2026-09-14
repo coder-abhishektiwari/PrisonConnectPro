@@ -43,6 +43,8 @@ import com.prisonconnect.kiosk.ui.theme.MoneyRedBg
 import com.prisonconnect.kiosk.ui.theme.PrimaryDarkNavy
 import com.prisonconnect.kiosk.ui.theme.PrimaryNavy
 import com.prisonconnect.kiosk.ui.theme.TextDark
+import com.prisonconnect.kiosk.ui.theme.TextGray
+import com.prisonconnect.kiosk.ui.theme.DividerColor
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -127,12 +129,14 @@ fun WalletScreen(
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .verticalScroll(rememberScrollState())
-                                .padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                                .padding(16.dp)
                         ) {
                             WalletSummaryCard(data = s.data)
-                            WalletTransactionsCard(data = s.data)
+                            Spacer(modifier = Modifier.height(16.dp))
+                            WalletTransactionsCard(
+                                data = s.data,
+                                modifier = Modifier.weight(1f)
+                            )
                         }
                     }
                 }
@@ -148,7 +152,7 @@ private fun WalletSummaryCard(data: WalletViewModel.WalletUiData, modifier: Modi
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = TextDark)
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC))
     ) {
         Row(
             modifier = Modifier
@@ -164,28 +168,29 @@ private fun WalletSummaryCard(data: WalletViewModel.WalletUiData, modifier: Modi
                 Icon(
                     imageVector = Icons.Default.AccountBalanceWallet,
                     contentDescription = null,
-                    tint = Color(0xFFA8F5A2),
+                    tint = MoneyGreen,
                     modifier = Modifier.size(22.dp)
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     "Balance",
-                    style = MaterialTheme.typography.bodySmall
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextGray
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "₹${String.format("%.2f", data.balance)}",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Black,
-                    color = Color.White
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = PrimaryDarkNavy
                 )
             }
             // Divider
             Box(
                 modifier = Modifier
                     .width(1.dp)
-                    .height(56.dp)
-                    .background(Color(0xFF2A4568))
+                    .height(48.dp)
+                    .background(DividerColor)
             )
             // Total Spent (right)
             Column(
@@ -195,20 +200,21 @@ private fun WalletSummaryCard(data: WalletViewModel.WalletUiData, modifier: Modi
                 Icon(
                     imageVector = Icons.Default.RemoveCircle,
                     contentDescription = null,
-                    tint = Color(0xFFFFB4AB),
+                    tint = MoneyRed,
                     modifier = Modifier.size(22.dp)
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     "Total Spent",
-                    style = MaterialTheme.typography.bodySmall
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextGray
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "₹${String.format("%.2f", data.totalDeducted)}",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Black,
-                    color = Color(0xFFFFB4AB)
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MoneyRed
                 )
             }
         }
@@ -242,13 +248,11 @@ private fun WalletTransactionsCard(data: WalletViewModel.WalletUiData, modifier:
                         .padding(vertical = 20.dp)
                 )
             } else {
-                Column(
-                    modifier = Modifier
-                        .heightIn(max = 300.dp)
-                        .verticalScroll(rememberScrollState()),
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    data.transactions.forEach { tx -> TransactionRow(tx) }
+                    items(data.transactions) { tx -> TransactionRow(tx) }
                 }
             }
         }
@@ -271,7 +275,7 @@ private fun TransactionRow(tx: WalletTransaction) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
@@ -279,15 +283,15 @@ private fun TransactionRow(tx: WalletTransaction) {
                 contentDescription = null,
                 tint = iconTint,
                 modifier = Modifier
-                    .size(28.dp)
+                    .size(24.dp)
                     .background(iconBg, CircleShape)
-                    .padding(5.dp)
+                    .padding(4.dp)
             )
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = tx.displayDescription,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.SemiBold,
                     color = PrimaryDarkNavy,
                     maxLines = 1,
@@ -295,13 +299,13 @@ private fun TransactionRow(tx: WalletTransaction) {
                 )
                 Text(
                     text = formatTransactionTime(tx.timestamp),
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             Text(
                 text = amountText,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Bold,
                 color = amountColor
             )
