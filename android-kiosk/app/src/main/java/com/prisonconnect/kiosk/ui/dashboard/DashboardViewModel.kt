@@ -81,7 +81,7 @@ class DashboardViewModel @Inject constructor(
             ) { profile, balance, contacts, calls, history ->
                 val p = (profile as? NetworkResult.Success)?.data
                 val b = (balance as? NetworkResult.Success)?.data
-                val c = (contacts as? NetworkResult.Success)?.data?.filter { it.isApproved } ?: emptyList()
+                val c = (contacts as? NetworkResult.Success)?.data ?: emptyList()
                 val s = (calls as? NetworkResult.Success)?.data
                     ?.filter { call ->
                         val startTimeStr = call.timeSlot.split("-").firstOrNull()?.trim() ?: ""

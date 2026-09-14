@@ -9,6 +9,14 @@ const { inAdminScope, adminScopeFilter, jailScopeOf, kioskScopeOf } = require('.
 const ALL_ROLES = ['admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'];
 const ADMIN_ROLES = ['admin', 'warden', 'super-admin', 'super_admin'];
 
+function normalizeContact(c) {
+  if (!c) return c;
+  const out = { ...c };
+  if (!out.name && out.fullName) out.name = out.fullName;
+  delete out.fullName;
+  return out;
+}
+
 // ==================== PRISONER ROUTES (must be before /:adminId) ====================
 
 router.get('/prisoners', requireRole(...ALL_ROLES), async (req, res) => {
@@ -99,7 +107,7 @@ router.get('/prisoners/:prisonerId/contacts', requireRole(...ALL_ROLES), async (
     return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Prisoner not found' } });
   }
   const contacts = await readDb('contacts.json');
-  return res.json({ success: true, data: contacts.filter((c) => c.inmateId === req.params.prisonerId) });
+  return res.json({ success: true, data: contacts.filter((c) => c.inmateId === req.params.prisonerId).map(normalizeContact) });
 });
 
 router.post('/prisoners/:prisonerId/contacts', requireRole(...ALL_ROLES), async (req, res) => {
@@ -112,11 +120,13 @@ router.post('/prisoners/:prisonerId/contacts', requireRole(...ALL_ROLES), async 
     contactId: contactData.contactId || `CONT-${uuidv4().substring(0, 8).toUpperCase()}`,
     inmateId: req.params.prisonerId,
     ...contactData,
-    status: contactData.status || 'pending',
+    status: 'approved',
+    active: true,
+    approvalStatus: 'approved',
     createdAt: new Date().toISOString()
   };
   const updated = await updateDb('contacts.json', (contacts) => ({ data: [...contacts, newContact], result: newContact }));
-  return res.status(201).json({ success: true, data: updated.result });
+  return res.status(201).json({ success: true, data: normalizeContact(updated.result) });
 });
 
 // ==================== CONTACT CRUD (direct contactId) ====================
@@ -138,13 +148,13 @@ router.put('/contacts/:contactId', requireRole(...ALL_ROLES), async (req, res) =
     const idx = ct.findIndex((c) => c.contactId === contactId);
     if (idx === -1) return { data: ct, result: null };
     const merged = { ...ct[idx], ...updates };
-    if (updates.name) { merged.fullName = updates.name; merged.firstName = updates.name.split(' ')[0]; merged.lastName = updates.name.split(' ').slice(1).join(' '); }
+    if (updates.name) { merged.firstName = updates.name.split(' ')[0]; merged.lastName = updates.name.split(' ').slice(1).join(' '); }
     if (updates.mobileNumber) { merged.phoneNumber = updates.mobileNumber; merged.phone = updates.mobileNumber; }
     ct[idx] = merged;
     return { data: ct, result: ct[idx] };
   });
   if (!updated) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Contact not found' } });
-  return res.json({ success: true, data: updated });
+  return res.json({ success: true, data: normalizeContact(updated) });
 });
 
 router.patch('/contacts/:contactId/status', requireRole(...ALL_ROLES), async (req, res) => {
@@ -182,7 +192,7 @@ router.patch('/contacts/:contactId/status', requireRole(...ALL_ROLES), async (re
     return { data: ct, result: ct[idx] };
   });
   if (!updated) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Contact not found' } });
-  return res.json({ success: true, data: updated });
+  return res.json({ success: true, data: normalizeContact(updated) });
 });
 
 router.delete('/contacts/:contactId', requireRole(...ALL_ROLES), async (req, res) => {

@@ -5,6 +5,14 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 const { sendSuccess, sendError, asyncRoute } = require('../lib/response');
 const { jailScopeOf, inJailScope, adminScopeFilter, inScopeOf, scopeList, inAdminScope, kioskScopeOf } = require('../lib/scoping');
 
+function normalizeContact(c) {
+  if (!c) return c;
+  const out = { ...c };
+  if (!out.name && out.fullName) out.name = out.fullName;
+  delete out.fullName;
+  return out;
+}
+
 function createContactsRouter(broadcastEvent) {
   const router = express.Router();
 
@@ -46,7 +54,7 @@ function createContactsRouter(broadcastEvent) {
     const contact = contacts.find((c) => c.contactId === id);
     if (contact) {
       if (!(await inScopeOf(req, contact))) return sendError(res, 'NOT_FOUND', 'Contact not found', 404);
-      return sendSuccess(res, contact);
+      return sendSuccess(res, normalizeContact(contact));
     }
 
     const inmates = await readDb('inmates.json');
@@ -57,7 +65,7 @@ function createContactsRouter(broadcastEvent) {
       return sendError(res, 'NOT_FOUND', 'Inmate not found in your kiosk/jail', 404);
     }
     const scoped = inmate ? contacts.filter((c) => (c.inmateId === inmate.inmateId || c.inmateId === `INM-${inmate.inmateId}`) && c.active !== false) : [];
-    return sendSuccess(res, scoped);
+    return sendSuccess(res, scoped.map(normalizeContact));
   }));
 
   // ==================== ANDROID COMPATIBILITY: PRISONER-SPECIFIC CONTACTS ====================
@@ -70,7 +78,7 @@ function createContactsRouter(broadcastEvent) {
     }
     const contacts = await readDb('contacts.json');
     const scoped = contacts.filter((c) => c.inmateId === prisonerId);
-    return sendSuccess(res, scoped);
+    return sendSuccess(res, scoped.map(normalizeContact));
   }));
 
   router.post('/admin/prisoners/:prisonerId/contacts', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
@@ -86,7 +94,6 @@ function createContactsRouter(broadcastEvent) {
       contactId: contactData.contactId || `CONT-${uuidv4().substring(0, 8).toUpperCase()}`,
       inmateId: prisonerId,
       name: contactData.name,
-      fullName: contactData.name,
       firstName: contactData.firstName || contactData.name?.split(' ')[0] || '',
       lastName: contactData.lastName || contactData.name?.split(' ').slice(1).join(' ') || '',
       mobileNumber: contactData.mobileNumber,
@@ -95,7 +102,7 @@ function createContactsRouter(broadcastEvent) {
       relationship: contactData.relationship || 'family',
       email: contactData.email,
       active: true,
-      status: contactData.status || 'active',
+      status: 'approved',
       verified: contactData.verified !== undefined ? contactData.verified : true,
       approvalStatus: 'approved',
       verificationStatus: 'verified',
@@ -103,7 +110,7 @@ function createContactsRouter(broadcastEvent) {
     };
 
     await updateDb('contacts.json', (contacts) => ({ data: [...contacts, newContact], result: newContact }));
-    return sendSuccess(res, newContact, 201);
+    return sendSuccess(res, normalizeContact(newContact), 201);
   }));
 
   router.put('/admin/contacts/:contactId', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {

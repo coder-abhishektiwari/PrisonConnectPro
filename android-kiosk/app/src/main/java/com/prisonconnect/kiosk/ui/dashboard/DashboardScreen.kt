@@ -466,8 +466,8 @@ fun DashboardContent(
             items(data.contacts) { contact ->
                 ContactCardItem(
                     contact = contact,
-                    onCallClick = { onContactClick(contact.id, contact.fullName, "Audio") },
-                    onVideoClick = { onContactClick(contact.id, contact.fullName, "Video") }
+                    onCallClick = { onContactClick(contact.id, contact.displayName, "Audio") },
+                    onVideoClick = { onContactClick(contact.id, contact.displayName, "Video") }
                 )
             }
         }
@@ -638,7 +638,7 @@ private fun ContactCardItem(
 
                     Column {
                         Text(
-                            text = contact.fullName.orEmpty(),
+                            text = contact.displayName,
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp,
                             color = PrimaryDarkNavy,
@@ -849,21 +849,21 @@ private fun BottomNavItem(
 //                    contacts = listOf(
 //                        Contact(
 //                            id = "1",
-//                            fullName = "Suresh Kumar",
+//                            name = "Suresh Kumar",
 //                            relationship = "Brother",
 //                            phoneNumber = "9876543210",
 //                            isApproved = true
 //                        ),
 //                        Contact(
 //                            id = "2",
-//                            fullName = "Mohan Sharma",
+//                            name = "Mohan Sharma",
 //                            relationship = "Brother",
 //                            phoneNumber = "9876787678",
 //                            isApproved = true
 //                        ),
 //                        Contact(
 //                            id = "3",
-//                            fullName = "Rohit Verma",
+//                            name = "Rohit Verma",
 //                            relationship = "Father",
 //                            phoneNumber = "9999675678",
 //                            isApproved = true
@@ -909,24 +909,21 @@ fun PreviewDashboardMobile() {
                     contacts = listOf(
                         Contact(
                             id = "1",
-                            fullName = "Suresh Kumar",
+                            name = "Suresh Kumar",
                             relationship = "Brother",
-                            phoneNumber = "9876543210",
-                            approvalStatus = "approved"
+                            phoneNumber = "9876543210"
                         ),
                         Contact(
                             id = "2",
-                            fullName = "Mohan Sharma",
+                            name = "Mohan Sharma",
                             relationship = "Brother",
-                            phoneNumber = "9876787678",
-                            approvalStatus = "approved"
+                            phoneNumber = "9876787678"
                         ),
                         Contact(
                             id = "3",
-                            fullName = "Rohit Verma",
+                            name = "Rohit Verma",
                             relationship = "Father",
-                            phoneNumber = "9999675678",
-                            approvalStatus = "approved"
+                            phoneNumber = "9999675678"
                         ),
 
                         ),

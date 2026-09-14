@@ -806,10 +806,9 @@ fun VideoCallContentMobilePreview() {
             ),
             contactProfile = Contact(
                 id = "CON1",
-                fullName = "Suresh Kumar",
+                name = "Suresh Kumar",
                 phoneNumber = "+919876543210",
-                relationship = "Father",
-                approvalStatus = "approved"
+                relationship = "Father"
             ),
             localTrack = null,
             remoteTrack = null,
@@ -856,10 +855,9 @@ fun VideoCallContentTabletPreview() {
             ),
             contactProfile = Contact(
                 id = "CON1",
-                fullName = "Suresh Kumar",
+                name = "Suresh Kumar",
                 phoneNumber = "+919876543210",
-                relationship = "Father",
-                approvalStatus = "approved"
+                relationship = "Father"
             ),
             localTrack = null,
             remoteTrack = null,
