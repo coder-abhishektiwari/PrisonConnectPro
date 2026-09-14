@@ -51,9 +51,9 @@ export interface Recording {
   startTime: string;
   endTime: string | null;
   duration: number;
-  size: number;
-  url: string | null;
-  encryptionKey: string | null;
+  size?: number;
+  url?: string | null;
+  encryptionKey?: string | null;
   encryption?: string;
   retentionDays?: number;
   status: string;
@@ -109,8 +109,9 @@ export interface Report {
 
 export interface Inmate {
   inmateId: string;
-  firstName: string;
-  lastName: string;
+  name: string;
+  firstName?: string;
+  lastName?: string;
   prisonId: string;
   facility: string;
   cellBlock: string;
@@ -118,18 +119,26 @@ export interface Inmate {
   photoUrl: string;
   securityLevel: string;
   sentenceDetails: string;
+  assignedKioskId?: string;
+  prisonerNumber?: string;
 }
 
 export interface Contact {
-  id: string;
+  contactId: string;
   inmateId: string;
-  fullName: string;
+  name: string;
+  fullName?: string;
   relationship: string;
   phoneNumber: string;
-  isApproved: boolean;
-  photoUrl: string;
-  lastCallDate: string;
-  nextScheduledCallDate: string | null;
+  phone?: string;
+  mobileNumber?: string;
+  email?: string;
+  active: boolean;
+  status?: string;
+  verified?: boolean;
+  photoUrl?: string;
+  lastCallDate?: string;
+  nextScheduledCallDate?: string | null;
 }
 
 export interface Wallet {
@@ -137,9 +146,10 @@ export interface Wallet {
   inmateId: string;
   balance: number;
   currency: string;
+  lastRecharge: string;
   lastRechargeAmount: number;
-  lastRechargeDate: string;
   totalSpent: number;
+  totalRecharged?: number;
   remainingMinutes: number;
   remainingAudioMinutes?: number;
   remainingVideoMinutes?: number;
@@ -152,7 +162,7 @@ export interface Wallet {
 
 export interface WalletRequest {
   requestId: string;
-  walletId: string;
+  walletId?: string;
   inmateId: string;
   prisonId?: string | null;
   amount: number;
@@ -160,22 +170,24 @@ export interface WalletRequest {
   status: 'pending' | 'approved' | 'rejected';
   requestedBy?: string;
   reviewedBy?: string | null;
-  createdAt: string;
-  updatedAt: string;
+  rejectionReason?: string;
+  requestedAt: string;
+  reviewedAt?: string | null;
 }
 
 export interface Transaction {
   transactionId: string;
-  walletId: string;
+  walletId?: string;
   inmateId: string;
-  type: string; // charge | recharge | refund | credit | debit
+  type: string;
   amount: number;
   currency?: string;
-  status: string;
+  status?: string;
   description?: string;
   reason?: string;
   timestamp: string;
   callId?: string;
+  performedBy?: string;
 }
 
 export interface Schedule {

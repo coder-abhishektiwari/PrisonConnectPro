@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { backendSocket, signalingSocket } from '@/services/socket/socketClient';
+import { backendSocket } from '@/services/socket/socketClient';
 import { invalidateCache } from '@/services/api/cache';
 import type { Alert, Device, Recording } from '@/services/api/wardenApi';
 
@@ -14,103 +14,68 @@ export function useWardenSocket(
   const handlersRef = useRef<Map<string, EventHandler>>(new Map());
 
   useEffect(() => {
-    // ========== BACKEND SOCKET ==========
-    // App-level events: call-created, call-ended, alerts, recordings, etc.
-    backendSocket.connect();
+    const socket = backendSocket;
+    socket.connect();
 
-    const backendHandlers: Record<string, EventHandler> = {
+    const handlers: Record<string, EventHandler> = {
       'call-created': (data) => {
-        console.log('[BackendSocket] Call created:', data);
+        console.log('[Socket] Call created:', data);
         invalidateCache('calls:active', 'calls:all', 'calls:history');
         onActiveCallsUpdate?.();
       },
       'call-updated': (data) => {
-        console.log('[BackendSocket] Call updated:', data);
+        console.log('[Socket] Call updated:', data);
         invalidateCache('calls:active', 'calls:all', 'calls:history');
         onActiveCallsUpdate?.();
       },
       'call-ended': (data) => {
-        console.log('[BackendSocket] Call ended:', data);
+        console.log('[Socket] Call ended:', data);
         invalidateCache('calls:active', 'calls:all', 'calls:history', 'recordings', 'statistics');
         onActiveCallsUpdate?.();
       },
       'alert-generated': (data) => {
-        console.log('[BackendSocket] Alert generated:', data);
+        console.log('[Socket] Alert generated:', data);
         onAlertGenerated?.(data);
       },
       'device-status-change': (data) => {
-        console.log('[BackendSocket] Device status changed:', data);
+        console.log('[Socket] Device status changed:', data);
         onDeviceStatusChange?.(data);
       },
       'recording-started': (data) => {
-        console.log('[BackendSocket] Recording started:', data);
+        console.log('[Socket] Recording started:', data);
         invalidateCache('recordings');
         onRecordingUpdate?.(data);
       },
       'recording-finished': (data) => {
-        console.log('[BackendSocket] Recording finished:', data);
+        console.log('[Socket] Recording finished:', data);
         invalidateCache('recordings');
         onRecordingUpdate?.(data);
       },
       'settings-updated': (data) => {
-        console.log('[BackendSocket] Settings updated:', data);
+        console.log('[Socket] Settings updated:', data);
         invalidateCache('settings', 'wallets', 'wallets:all');
       },
       'pricing-updated': (data) => {
-        console.log('[BackendSocket] Pricing updated:', data);
+        console.log('[Socket] Pricing updated:', data);
         invalidateCache('pricing', 'wallets', 'wallets:all', 'statistics');
       },
       'incident-created': (data) => {
-        console.log('[BackendSocket] Incident created:', data);
+        console.log('[Socket] Incident created:', data);
       },
       'statistics-updated': (data) => {
-        console.log('[BackendSocket] Statistics updated:', data);
+        console.log('[Socket] Statistics updated:', data);
       },
     };
 
-    // ========== SIGNALING SOCKET ==========
-    // WebRTC-level events: peer-joined, peer-left, room events
-    signalingSocket.connect();
-
-    const signalingHandlers: Record<string, EventHandler> = {
-      'joined': (data) => {
-        console.log('[SignalingSocket] Room joined:', data);
-      },
-      'peer-joined': (data) => {
-        console.log('[SignalingSocket] Peer joined:', data);
-        invalidateCache('calls:active', 'calls:all');
-        onActiveCallsUpdate?.();
-      },
-      'peer-left': (data) => {
-        console.log('[SignalingSocket] Peer left:', data);
-        invalidateCache('calls:active', 'calls:all', 'calls:history', 'recordings');
-        onActiveCallsUpdate?.();
-      },
-      'call-ended': (data) => {
-        console.log('[SignalingSocket] Call ended (WebRTC):', data);
-        invalidateCache('calls:active', 'calls:all', 'calls:history', 'recordings', 'statistics');
-        onActiveCallsUpdate?.();
-      },
-    };
-
-    // Register all handlers
     handlersRef.current = new Map();
-    Object.entries(backendHandlers).forEach(([event, handler]) => {
-      handlersRef.current.set(`backend:${event}`, handler);
-      backendSocket.on(event, handler as any);
-    });
-    Object.entries(signalingHandlers).forEach(([event, handler]) => {
-      handlersRef.current.set(`signaling:${event}`, handler);
-      signalingSocket.on(event, handler as any);
+    Object.entries(handlers).forEach(([event, handler]) => {
+      handlersRef.current.set(event, handler);
+      socket.on(event, handler as any);
     });
 
-    // Cleanup
     return () => {
-      Object.entries(backendHandlers).forEach(([event, handler]) => {
-        backendSocket.off(event, handler as any);
-      });
-      Object.entries(signalingHandlers).forEach(([event, handler]) => {
-        signalingSocket.off(event, handler as any);
+      Object.entries(handlers).forEach(([event, handler]) => {
+        socket.off(event, handler as any);
       });
       handlersRef.current.clear();
     };

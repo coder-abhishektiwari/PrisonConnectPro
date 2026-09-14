@@ -133,7 +133,7 @@ export function TrustAccountPage() {
 
   if(loading) return <Loading message="Loading trust accounts..." />;
   if(error) return <Card><div className="text-center py-12"><p className="text-error mb-4">{error}</p><button onClick={()=>{setLoading(true); load();}} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm">Retry</button></div></Card>;
-  const filtered = wallets.filter(w=> !search || w.inmateId.toLowerCase().includes(search.toLowerCase()) || `${inmates[w.inmateId]?.firstName || ''} ${inmates[w.inmateId]?.lastName || ''}`.toLowerCase().includes(search.toLowerCase()));
+  const filtered = wallets.filter(w=> !search || w.inmateId.toLowerCase().includes(search.toLowerCase()) || `${inmates[w.inmateId]?.name || ''}`.toLowerCase().includes(search.toLowerCase()));
 
   const selectedWallet = selectedId ? wallets.find(w=>w.inmateId===selectedId) || statement?.wallet || null : null;
   const selectedInmate = selectedId ? inmates[selectedId] : null;
@@ -207,7 +207,7 @@ export function TrustAccountPage() {
                     </div>
                     <div>
                       <p className="font-mono font-medium">{w.inmateId}</p>
-                      <p className="text-xs text-neutral-500">{inmate ? `${inmate.firstName} ${inmate.lastName}` : '—'} • {inmate?.facility || ''}</p>
+                      <p className="text-xs text-neutral-500">{inmate ? `${inmate.name}` : '—'} • {inmate?.facility || ''}</p>
                     </div>
                   </td>
                   <td className="py-3 px-4" onClick={e=>e.stopPropagation()}>
@@ -248,7 +248,7 @@ export function TrustAccountPage() {
             <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
               <div>
                 <h2 className="text-xl font-bold">Inmate Statement</h2>
-                <p className="text-sm text-neutral-500">{selectedId} {selectedInmate ? `• ${selectedInmate.firstName} ${selectedInmate.lastName} • ${selectedInmate.facility}` : ''}</p>
+                <p className="text-sm text-neutral-500">{selectedId} {selectedInmate ? `• ${selectedInmate.name} • ${selectedInmate.facility}` : ''}</p>
               </div>
               <button onClick={()=> setSelectedId(null)} className="w-9 h-9 rounded-full bg-neutral-100 hover:bg-neutral-200 flex items-center justify-center">✕</button>
             </div>

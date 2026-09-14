@@ -221,7 +221,7 @@ export function CallHistoryPage() {
                     <div className="flex items-center gap-3 mt-3 p-2.5 bg-neutral-50 rounded-xl border border-neutral-200">
                       <div className="w-9 h-9 rounded-xl bg-white border border-neutral-200 flex items-center justify-center shrink-0 shadow-sm"><svg className="w-5 h-5 text-neutral-600" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" /></svg></div>
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold text-neutral-900 truncate">{inmates[call.inmateId] ? `${inmates[call.inmateId].firstName} ${inmates[call.inmateId].lastName}` : call.inmateId}</p>
+                        <p className="text-sm font-semibold text-neutral-900 truncate">{inmates[call.inmateId] ? `${inmates[call.inmateId].name}` : call.inmateId}</p>
                         <p className="text-xs text-neutral-500">{call.kioskId} • {call.type} • {formatDuration(call.durationMinutes)}</p>
                       </div>
                     </div>
@@ -262,7 +262,7 @@ export function CallHistoryPage() {
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 rounded-full bg-[#E9EEF3] border border-[#D1D7DB] flex items-center justify-center shrink-0"><svg className="w-5 h-5 text-[#8696A0]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" /></svg></div>
                         <div>
-                          <p className="text-sm font-medium text-neutral-900">{inmates[call.inmateId] ? `${inmates[call.inmateId].firstName} ${inmates[call.inmateId].lastName}` : call.inmateId}</p>
+                          <p className="text-sm font-medium text-neutral-900">{inmates[call.inmateId] ? `${inmates[call.inmateId].name}` : call.inmateId}</p>
                           <p className="text-xs text-neutral-500">{call.inmateId}</p>
                         </div>
                       </div>
@@ -340,7 +340,7 @@ export function CallHistoryPage() {
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 rounded-full bg-[#E9EEF3] border border-[#D1D7DB] flex items-center justify-center shrink-0"><svg className="w-7 h-7 text-[#8696A0]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" /></svg></div>
               <div>
-                <p className="font-medium">{inmates[selected.inmateId] ? `${inmates[selected.inmateId].firstName} ${inmates[selected.inmateId].lastName}` : selected.inmateId}</p>
+                <p className="font-medium">{inmates[selected.inmateId] ? `${inmates[selected.inmateId].name}` : selected.inmateId}</p>
                 <p className="text-xs text-neutral-500">{selected.inmateId} • {inmates[selected.inmateId]?.cellBlock || ''}</p>
               </div>
             </div>

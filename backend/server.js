@@ -275,18 +275,6 @@ app.patch('/wallet-requests/:requestId/reject', requireAuth, requireRole('admin'
   return sendSuccess(res, all[idx]);
 }));
 
-// ==================== SIGNALING WEBHOOK ====================
-// Signaling server pushes WebRTC events here → backend relays to dashboard via Socket.IO
-app.post('/signaling/webhook', asyncRoute(async (req, res) => {
-  const { event, data } = req.body;
-  if (!event) return sendError(res, 'BAD_REQUEST', 'event required');
-
-  // Relay to all connected dashboard clients
-  broadcastEvent(event, data);
-  console.log(`[signaling-webhook] ${event}`, data?.roomId || '');
-  return sendSuccess(res, { relayed: true });
-}));
-
 // ==================== WARDENS ====================
 app.get('/wardens', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('wardens.json')))));
 app.get('/wardens/:wardenId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {

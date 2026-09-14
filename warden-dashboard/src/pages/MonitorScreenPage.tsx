@@ -107,7 +107,7 @@ export function MonitorScreenPage() {
 
       if (foundCall) {
         setInmate(inmates.find((i) => i.inmateId === foundCall.inmateId) || null);
-        setContact(contacts.find((c) => c.id === foundCall.contactId) || null);
+        setContact(contacts.find((c) => c.contactId === foundCall.contactId) || null);
         setWallet(wallets.find((w) => w.inmateId === foundCall.inmateId) || null);
         setRecording(recordings.find((r) => r.callId === foundCall.callId) || null);
         setDevice(devices.find((d) => d.deviceId === foundCall.kioskId) || null);
@@ -529,7 +529,7 @@ export function MonitorScreenPage() {
                 </div>
                 <div>
                   <p className="font-semibold text-neutral-900">
-                    {inmate ? `${inmate.firstName} ${inmate.lastName}` : call.inmateName || call.inmateId}
+                    {inmate ? `${inmate.name}` : call.inmateName || call.inmateId}
                   </p>
                   <p className="text-sm text-neutral-600">{inmate?.inmateId || call.inmateId}</p>
                 </div>
@@ -556,7 +556,7 @@ export function MonitorScreenPage() {
                 </div>
                 <div>
                   <p className="font-semibold text-neutral-900">
-                    {contact?.fullName || call.familyMemberName || call.contactId}
+                    {contact?.name || contact?.fullName || call.familyMemberName || call.contactId}
                   </p>
                   <p className="text-sm text-neutral-600">{contact?.relationship || 'Family Member'}</p>
                 </div>

@@ -31,7 +31,7 @@ export function CallDetailsDrawer({ call, onClose }: CallDetailsDrawerProps) {
         ]);
 
         setInmate(inmates.find((i) => i.inmateId === call.inmateId) || null);
-        setContact(contacts.find((c) => c.id === call.contactId) || null);
+        setContact(contacts.find((c) => c.contactId === call.contactId) || null);
         setWallet(wallets.find((w) => w.inmateId === call.inmateId) || null);
         setSchedule(schedules.find((s) => s.inmateId === call.inmateId) || null);
       } catch (error) {
@@ -128,7 +128,7 @@ export function CallDetailsDrawer({ call, onClose }: CallDetailsDrawerProps) {
                   </div>
                   <div>
                     <p className="font-semibold text-neutral-900">
-                      {contact?.fullName || call.familyMemberName || call.contactId}
+                      {contact?.name || contact?.fullName || call.familyMemberName || call.contactId}
                     </p>
                     <p className="text-sm text-neutral-600">{contact?.relationship || 'Family Member'}</p>
                     <p className="text-sm text-neutral-600">{contact?.phoneNumber || '—'}</p>

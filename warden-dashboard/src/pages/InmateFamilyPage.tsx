@@ -16,8 +16,9 @@ export function InmateFamilyPage() {
   const [editingInmate, setEditingInmate] = useState<Inmate | null>(null);
   const [editingFamily, setEditingFamily] = useState<Contact | null>(null);
   const [detailPrisoner, setDetailPrisoner] = useState<Inmate | null>(null);
-  const [newInmate, setNewInmate] = useState({firstName:'',lastName:'',inmateId:'',facility:'Barrack A', kioskId:''});
-  const [newFamily, setNewFamily] = useState({fullName:'',relationship:'',phoneNumber:'',inmateId:''});
+  const [newInmate, setNewInmate] = useState({name:'',inmateId:'',facility:'Barrack A', kioskId:''});
+  const [newFamily, setNewFamily] = 
+useState({name:'',relationship:'',phoneNumber:'',inmateId:''});
 
   const [loadError, setLoadError] = useState<string|null>(null);
   const load = useCallback(async()=>{
@@ -37,19 +38,19 @@ export function InmateFamilyPage() {
 
   const deleteInmate = async (id:string)=> { try{ await wardenApi.deleteInmateApi(id); }catch{} setInmates(s=>s.filter(i=>i.inmateId!==id)); };
   const updateInmate = async () => { if(!editingInmate) return; try{ await wardenApi.createInmate(editingInmate as any); }catch{} setInmates(s=> s.map(i=> i.inmateId===editingInmate.inmateId ? editingInmate : i)); setEditingInmate(null); };
-  const deleteFamily = async (id:string)=> { try{ await wardenApi.deleteContactApi(id); }catch{} setContacts(s=>s.filter(c=>c.id!==id)); };
-  const updateFamily = async () => { if(!editingFamily) return; try{ await wardenApi.createContact(editingFamily.inmateId, editingFamily as any); }catch{} setContacts(s=> s.map(c=> c.id===editingFamily.id ? editingFamily : c)); setEditingFamily(null); };
-  const toggleApproval = async (id:string)=> { const c=contacts.find(x=>x.id===id); if(!c) return; const upd={...c, isApproved:!c.isApproved}; try{ await wardenApi.createContact(upd.inmateId, upd as any); }catch{} setContacts(s=>s.map(x=> x.id===id ? upd : x)); };
-  const addInmate = async ()=>{ if(!newInmate.inmateId||!newInmate.firstName||!newInmate.kioskId) return; const payload={ inmateId:newInmate.inmateId, firstName:newInmate.firstName, lastName:newInmate.lastName, prisonId:'PR-01', facility:newInmate.facility, cellBlock:'B-X', status:'active', photoUrl:'', securityLevel:'medium', sentenceDetails:'', kioskId:newInmate.kioskId } as any; try{ const saved=await wardenApi.createInmate(payload); setInmates(s=>[...s, (saved||payload) as Inmate]); }catch{ setInmates(s=>[...s, payload as Inmate]); } setNewInmate({firstName:'',lastName:'',inmateId:'',facility:'Barrack A', kioskId:''}); setShowAddInmate(false); };
+  const deleteFamily = async (id:string)=> { try{ await wardenApi.deleteContactApi(id); }catch{} setContacts(s=>s.filter(c=>c.contactId!==id)); };
+  const updateFamily = async () => { if(!editingFamily) return; try{ await wardenApi.createContact(editingFamily.inmateId, editingFamily as any); }catch{} setContacts(s=> s.map(c=> c.contactId===editingFamily.contactId ? editingFamily : c)); setEditingFamily(null); };
+  const toggleApproval = async (id:string)=> { const c=contacts.find(x=>x.contactId===id); if(!c) return; const upd={...c, active:!c.active}; try{ await wardenApi.createContact(upd.inmateId, upd as any); }catch{} setContacts(s=>s.map(x=> x.contactId===id ? upd : x)); };
+  const addInmate = async ()=>{ if(!newInmate.inmateId||!newInmate.name||!newInmate.kioskId) return; const payload={ inmateId:newInmate.inmateId, name:newInmate.name, prisonId:'PR-01', facility:newInmate.facility, cellBlock:'B-X', status:'active', photoUrl:'', securityLevel:'medium', sentenceDetails:'', kioskId:newInmate.kioskId } as any; try{ const saved=await wardenApi.createInmate(payload); setInmates(s=>[...s, (saved||payload) as Inmate]); }catch{ setInmates(s=>[...s, payload as Inmate]); } setNewInmate({name:'',inmateId:'',facility:'Barrack A', kioskId:''}); setShowAddInmate(false); };
   const [addFamilyError, setAddFamilyError] = useState('');
   const addFamily = async ()=>{ 
-    if(!newFamily.fullName.trim()||!newFamily.phoneNumber.trim()){ setAddFamilyError('Full Name and Phone are required'); return; }
+    if(!newFamily.name.trim()||!newFamily.phoneNumber.trim()){ setAddFamilyError('Full Name and Phone are required'); return; }
     const targetId = newFamily.inmateId || selectedId || detailPrisoner?.inmateId || inmates[0]?.inmateId;
     if(!targetId){ setAddFamilyError('Select a prisoner'); return; }
     setAddFamilyError('');
-    const payload={ fullName:newFamily.fullName.trim(), relationship:newFamily.relationship.trim()||'Family', phoneNumber:newFamily.phoneNumber.trim(), inmateId:targetId } as any;
-    try{ const saved=await wardenApi.createContact(targetId, payload); setContacts(s=>[...s, (saved||{ id:`FAM-${Date.now()}`, ...payload, isApproved:false, photoUrl:'', lastCallDate:new Date().toISOString(), nextScheduledCallDate:null } as Contact)]); }catch{ setContacts(s=>[...s,{ id:`FAM-${Date.now()}`, inmateId:targetId, fullName:payload.fullName, relationship:payload.relationship, phoneNumber:payload.phoneNumber, isApproved:false, photoUrl:'', lastCallDate:new Date().toISOString(), nextScheduledCallDate:null } as Contact]); }
-    setNewFamily({fullName:'',relationship:'',phoneNumber:'',inmateId:''}); setShowAddFamily(false); setAddFamilyError('');
+    const payload={ name:newFamily.name.trim(), relationship:newFamily.relationship.trim()||'Family', phoneNumber:newFamily.phoneNumber.trim(), inmateId:targetId } as any;
+    try{ const saved=await wardenApi.createContact(targetId, payload); setContacts(s=>[...s, (saved||{ contactId:`FAM-${Date.now()}`, ...payload, active:true, photoUrl:'', lastCallDate:new Date().toISOString(), nextScheduledCallDate:null } as Contact)]); }catch{ setContacts(s=>[...s,{ contactId:`FAM-${Date.now()}`, inmateId:targetId, name:payload.name, relationship:payload.relationship, phoneNumber:payload.phoneNumber, active:true, photoUrl:'', lastCallDate:new Date().toISOString(), nextScheduledCallDate:null } as Contact]); }
+    setNewFamily({name:'',relationship:'',phoneNumber:'',inmateId:''}); setShowAddFamily(false); setAddFamilyError('');
     // ensure detail view shows
     if(detailPrisoner && detailPrisoner.inmateId!==targetId){
       const inmate = inmates.find(i=>i.inmateId===targetId);
@@ -67,9 +68,9 @@ export function InmateFamilyPage() {
   const selected = inmates.find(i=>i.inmateId===selectedId);
   const facilities = Array.from(new Set(inmates.map(i=>i.facility)));
   const relations = Array.from(new Set(contacts.map(c=>c.relationship)));
-  const filteredPrisoners = inmates.filter(i=> (!searchPrisoner || `${i.firstName} ${i.lastName} ${i.inmateId} ${i.facility}`.toLowerCase().includes(searchPrisoner.toLowerCase())) && (facilityFilter==='all' || i.facility===facilityFilter));
+  const filteredPrisoners = inmates.filter(i=> (!searchPrisoner || `${i.name} ${i.inmateId} ${i.facility}`.toLowerCase().includes(searchPrisoner.toLowerCase())) && (facilityFilter==='all' || i.facility===facilityFilter));
   const familyOfSelected = selectedId ? contacts.filter(c=>c.inmateId===selectedId) : [];
-  const filteredFamilyBase = familyOfSelected.filter(c=> (!searchFamily || `${c.fullName} ${c.relationship} ${c.phoneNumber}`.toLowerCase().includes(searchFamily.toLowerCase())) && (relationFilter==='all' || c.relationship===relationFilter));
+  const filteredFamilyBase = familyOfSelected.filter(c=> (!searchFamily || `${c.name} ${c.relationship} ${c.phoneNumber}`.toLowerCase().includes(searchFamily.toLowerCase())) && (relationFilter==='all' || c.relationship===relationFilter));
   const prisonerTotalPages = Math.max(1, Math.ceil(filteredPrisoners.length/4));
   const familyTotalPages = Math.max(1, Math.ceil(filteredFamilyBase.length/4));
   const pagedPrisoners = filteredPrisoners.slice((prisonerPage-1)*4, prisonerPage*4);
@@ -98,7 +99,7 @@ export function InmateFamilyPage() {
 
       <Card className="overflow-hidden">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-5 border-b border-neutral-200 bg-neutral-50/50">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-neutral-700 flex items-center gap-2"><span className="w-2 h-2 bg-primary-600 rounded-full animate-pulse" />All Prisoners <span className="px-2 py-1 bg-white border border-neutral-200 rounded-full text-xs font-bold text-neutral-900">{filteredPrisoners.length}</span> {selected && <span className="text-xs font-bold text-primary-600 normal-case tracking-normal">• {selected.firstName} selected</span>}</h2>
+          <h2 className="text-sm font-bold uppercase tracking-wide text-neutral-700 flex items-center gap-2"><span className="w-2 h-2 bg-primary-600 rounded-full animate-pulse" />All Prisoners <span className="px-2 py-1 bg-white border border-neutral-200 rounded-full text-xs font-bold text-neutral-900">{filteredPrisoners.length}</span> {selected && <span className="text-xs font-bold text-primary-600 normal-case tracking-normal">• {selected.name} selected</span>}</h2>
           <div className="flex gap-2">
             <div className="relative">
               <svg className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
@@ -117,7 +118,7 @@ export function InmateFamilyPage() {
                 <tr key={i.inmateId} onClick={()=>{setSelectedId(i.inmateId); setDetailPrisoner(i);}} className={`border-b hover:bg-neutral-50 cursor-pointer transition-colors even:bg-neutral-50/30 ${selectedId===i.inmateId?'bg-primary-50 ring-1 ring-inset ring-primary-200':''}`}>
                   <td className="py-2.5 px-3"><div className="w-9 h-9 rounded-full bg-[#E9EEF3] border border-[#D1D7DB] flex items-center justify-center"><svg className="w-5 h-5 text-[#8696A0]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" /></svg></div></td>
                   <td className="py-2.5 px-3 text-sm font-mono font-medium">{i.inmateId}</td>
-                  <td className="py-2.5 px-3 text-sm font-medium">{i.firstName} {i.lastName} {selectedId===i.inmateId && <span className="ml-2 text-xs text-primary-600 font-bold">←</span>}</td>
+                  <td className="py-2.5 px-3 text-sm font-medium">{i.name} {selectedId===i.inmateId && <span className="ml-2 text-xs text-primary-600 font-bold">←</span>}</td>
                   <td className="py-2.5 px-3 text-sm text-neutral-600">{i.facility} • {i.cellBlock}</td>
                   <td className="py-2.5 px-3 text-sm"><span className={`px-2 py-1 rounded-full text-xs font-medium border ${(i as any).kioskId?'bg-primary-600 text-white border-primary-600':'bg-amber-100 text-amber-700 border-amber-200'}`}>{(i as any).kioskId || 'Unassigned'}</span></td>
                   <td className="py-2.5 px-3"><span className="px-2.5 py-1 bg-success/10 text-success rounded-full text-xs font-medium border border-success/20">{i.status}</span></td>
@@ -138,8 +139,7 @@ export function InmateFamilyPage() {
             <div className="bg-white rounded-xl p-6 w-full max-w-md" onClick={e=>e.stopPropagation()}>
               <h3 className="font-bold mb-4">Add Prisoner - Assign Kiosk *</h3>
               <input placeholder="Inmate ID (INM-1026) *" value={newInmate.inmateId} onChange={e=>setNewInmate({...newInmate,inmateId:e.target.value})} className="w-full mb-3 px-3 py-2 border rounded-lg" />
-              <input placeholder="First Name *" value={newInmate.firstName} onChange={e=>setNewInmate({...newInmate,firstName:e.target.value})} className="w-full mb-3 px-3 py-2 border rounded-lg" />
-              <input placeholder="Last Name" value={newInmate.lastName} onChange={e=>setNewInmate({...newInmate,lastName:e.target.value})} className="w-full mb-3 px-3 py-2 border rounded-lg" />
+              <input placeholder="Name *" value={newInmate.name} onChange={e=>setNewInmate({...newInmate,name:e.target.value})} className="w-full mb-3 px-3 py-2 border rounded-lg" />
               <select value={newInmate.kioskId} onChange={e=>setNewInmate({...newInmate,kioskId:e.target.value})} className="w-full mb-3 px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-primary-500">
                 <option value="">Select Kiosk * (required)</option>
                 <option value="KIOSK-01">KIOSK-01 - Barrack A</option>
@@ -162,12 +162,12 @@ export function InmateFamilyPage() {
           <div className="bg-white rounded-xl p-6 w-full max-w-md" onClick={e=>e.stopPropagation()}>
             <h3 className="font-bold mb-4">Add Family Members</h3>
             {addFamilyError && <p className="text-sm text-error bg-error/10 border border-error/20 rounded-lg px-3 py-2 mb-3">{addFamilyError}</p>}
-            <input placeholder="Full Name *" value={newFamily.fullName} onChange={e=>setNewFamily({...newFamily,fullName:e.target.value})} className="w-full mb-3 px-3 py-2 border rounded-lg" />
+            <input placeholder="Full Name *" value={newFamily.name} onChange={e=>setNewFamily({...newFamily,name:e.target.value})} className="w-full mb-3 px-3 py-2 border rounded-lg" />
             <input placeholder="Relationship" value={newFamily.relationship} onChange={e=>setNewFamily({...newFamily,relationship:e.target.value})} className="w-full mb-3 px-3 py-2 border rounded-lg" />
             <input placeholder="Phone *" value={newFamily.phoneNumber} onChange={e=>setNewFamily({...newFamily,phoneNumber:e.target.value})} className="w-full mb-3 px-3 py-2 border rounded-lg" />
             <select value={newFamily.inmateId} onChange={e=>setNewFamily({...newFamily,inmateId:e.target.value})} className="w-full mb-3 px-3 py-2 border rounded-lg">
               <option value="">Select Inmate *</option>
-              {inmates.map(i=><option key={i.inmateId} value={i.inmateId}>{i.firstName} {i.lastName} ({i.inmateId})</option>)}
+              {inmates.map(i=><option key={i.inmateId} value={i.inmateId}>{i.name} ({i.inmateId})</option>)}
             </select>
             <p className="text-xs text-neutral-500 mb-3">Will be added to: {newFamily.inmateId || selectedId || detailPrisoner?.inmateId || '— select above'}</p>
             <div className="flex gap-2 justify-end">
@@ -183,8 +183,7 @@ export function InmateFamilyPage() {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={()=>setEditingInmate(null)}>
           <div className="bg-white rounded-xl p-6 w-full max-w-md" onClick={e=>e.stopPropagation()}>
             <h3 className="font-bold mb-4">Edit Prisoner - {editingInmate.inmateId}</h3>
-            <input value={editingInmate.firstName} onChange={e=>setEditingInmate({...editingInmate, firstName:e.target.value})} placeholder="First Name" className="w-full mb-3 px-3 py-2 border rounded-lg" />
-            <input value={editingInmate.lastName} onChange={e=>setEditingInmate({...editingInmate, lastName:e.target.value})} placeholder="Last Name" className="w-full mb-3 px-3 py-2 border rounded-lg" />
+            <input value={editingInmate.name} onChange={e=>setEditingInmate({...editingInmate, name:e.target.value})} placeholder="Name" className="w-full mb-3 px-3 py-2 border rounded-lg" />
             <input value={editingInmate.facility} onChange={e=>setEditingInmate({...editingInmate, facility:e.target.value})} placeholder="Facility" className="w-full mb-3 px-3 py-2 border rounded-lg" />
             <div className="flex gap-2 justify-end">
               <button onClick={()=>setEditingInmate(null)} className="px-4 py-2 border rounded-lg">Cancel</button>
@@ -198,8 +197,8 @@ export function InmateFamilyPage() {
       {editingFamily && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={()=>setEditingFamily(null)}>
           <div className="bg-white rounded-xl p-6 w-full max-w-md" onClick={e=>e.stopPropagation()}>
-            <h3 className="font-bold mb-4">Edit Family - {editingFamily.fullName}</h3>
-            <input value={editingFamily.fullName} onChange={e=>setEditingFamily({...editingFamily, fullName:e.target.value})} placeholder="Full Name" className="w-full mb-3 px-3 py-2 border rounded-lg" />
+            <h3 className="font-bold mb-4">Edit Family - {editingFamily.name}</h3>
+            <input value={editingFamily.name} onChange={e=>setEditingFamily({...editingFamily, name:e.target.value})} placeholder="Full Name" className="w-full mb-3 px-3 py-2 border rounded-lg" />
             <input value={editingFamily.relationship} onChange={e=>setEditingFamily({...editingFamily, relationship:e.target.value})} placeholder="Relationship" className="w-full mb-3 px-3 py-2 border rounded-lg" />
             <input value={editingFamily.phoneNumber} onChange={e=>setEditingFamily({...editingFamily, phoneNumber:e.target.value})} placeholder="Phone" className="w-full mb-3 px-3 py-2 border rounded-lg" />
             <div className="flex gap-2 justify-end">
@@ -223,7 +222,7 @@ export function InmateFamilyPage() {
                 <svg className="w-9 h-9 text-[#8696A0]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" /></svg>
               </div>
               <div>
-                <p className="font-bold text-lg">{detailPrisoner.firstName} {detailPrisoner.lastName}</p>
+                <p className="font-bold text-lg">{detailPrisoner.name}</p>
                 <p className="text-sm text-neutral-500">{detailPrisoner.inmateId} • {detailPrisoner.facility} • {detailPrisoner.cellBlock}</p>
                 <p className="text-xs mt-1"><span className="px-2 py-0.5 bg-success/10 text-success rounded-full">{detailPrisoner.status}</span> <span className="ml-2 px-2 py-0.5 bg-neutral-200 rounded-full text-xs">{(detailPrisoner as any).kioskId || 'No kiosk'}</span></p>
               </div>
@@ -234,19 +233,19 @@ export function InmateFamilyPage() {
             </div>
             <div className="space-y-3">
               {contacts.filter(c=>c.inmateId===detailPrisoner.inmateId).length===0 ? <p className="text-sm text-neutral-500">No family - click + Add Family above</p> : contacts.filter(c=>c.inmateId===detailPrisoner.inmateId).map(c=>(
-                <div key={c.id} className="flex items-center justify-between p-3 border rounded-xl hover:bg-neutral-50">
+                <div key={c.contactId} className="flex items-center justify-between p-3 border rounded-xl hover:bg-neutral-50">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-[#E9EEF3] border border-[#D1D7DB] flex items-center justify-center shrink-0">
                       <svg className="w-6 h-6 text-[#8696A0]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" /></svg>
                     </div>
                     <div>
-                      <p className="text-sm font-medium">{c.fullName}</p>
+                      <p className="text-sm font-medium">{c.name}</p>
                       <p className="text-xs text-neutral-500">{c.relationship} • {c.phoneNumber}</p>
                     </div>
                   </div>
                   <div className="flex gap-1">
                     <button onClick={()=>setEditingFamily({...c})} className="px-2.5 py-1 text-xs border border-primary-600 text-primary-600 rounded-lg hover:bg-primary-600 hover:text-white">Edit</button>
-                    <button onClick={()=>deleteFamily(c.id)} className="px-2.5 py-1 text-xs border border-error text-error rounded-lg hover:bg-error hover:text-white">Delete</button>
+                    <button onClick={()=>deleteFamily(c.contactId)} className="px-2.5 py-1 text-xs border border-error text-error rounded-lg hover:bg-error hover:text-white">Delete</button>
                   </div>
                 </div>
               ))}
