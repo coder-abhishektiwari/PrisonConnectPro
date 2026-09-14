@@ -9,8 +9,10 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
@@ -624,7 +626,10 @@ fun PinEntryLayout(
     var pin by remember { mutableStateOf("") }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Spacer(modifier = Modifier.height(24.dp))
@@ -642,7 +647,13 @@ fun PinEntryLayout(
         Text(name, fontSize = 36.sp, fontWeight = FontWeight.Black, color = PremiumNavy)
         Text("Enter your 6-digit PIN to confirm", fontSize = 20.sp, color = Color.Gray, modifier = Modifier.padding(top = 8.dp))
 
-        Spacer(modifier = Modifier.height(48.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+
+        TextButton(onClick = onCancel) {
+            Text("<- Back to Login Methods", color = AccentBlue, fontWeight = FontWeight.Bold)
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
 
         Surface(
             color = Color.White,
@@ -675,12 +686,6 @@ fun PinEntryLayout(
             onNumberClick = { if (pin.length < 6) { pin += it; if (pin.length == 6) onPinSubmit(pin) } },
             onDeleteClick = { if (pin.isNotEmpty()) pin = pin.dropLast(1) }
         )
-
-        Spacer(modifier = Modifier.weight(1f))
-
-        TextButton(onClick = onCancel) {
-            Text("<- Back to Login Methods", color = AccentBlue, fontWeight = FontWeight.Bold)
-        }
     }
 }
 
@@ -765,7 +770,10 @@ fun PrisonerIdEntryLayout(
     var prisonerId by remember { mutableStateOf("") }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Spacer(modifier = Modifier.height(24.dp))
@@ -782,7 +790,13 @@ fun PrisonerIdEntryLayout(
         Text("Prisoner Login", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = PremiumNavy)
         Text("Enter your Prisoner ID", fontSize = 20.sp, color = Color.Gray, modifier = Modifier.padding(top = 8.dp))
 
-        Spacer(modifier = Modifier.height(48.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+
+        TextButton(onClick = onCancel) {
+            Text("<- Back to Login Methods", color = AccentBlue, fontWeight = FontWeight.Bold)
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
 
         Surface(
             color = Color.White,
@@ -794,17 +808,28 @@ fun PrisonerIdEntryLayout(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 20.dp, horizontal = 24.dp),
-                horizontalArrangement = Arrangement.Center,
+                    .padding(vertical = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = prisonerId.ifEmpty { "------" },
-                    fontSize = 36.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (prisonerId.isEmpty()) Color.Gray else PremiumNavy,
-                    letterSpacing = 4.sp
-                )
+                repeat(6) { index ->
+                    val filled = prisonerId.length > index
+                    Box(
+                        modifier = Modifier.size(20.dp).clip(CircleShape)
+                            .background(if (filled) PremiumNavy else Color.LightGray.copy(alpha = 0.5f))
+                            .border(1.dp, if (filled) PremiumNavy else Color.Gray, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (filled) {
+                            Text(
+                                text = prisonerId[index].toString(),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
             }
         }
 
@@ -845,12 +870,6 @@ fun PrisonerIdEntryLayout(
             Text("Continue to PIN", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
             Spacer(modifier = Modifier.width(8.dp))
             Icon(Icons.AutoMirrored.Default.ArrowForward, contentDescription = null, tint = Color.White)
-        }
-
-        Spacer(modifier = Modifier.weight(1f))
-
-        TextButton(onClick = onCancel) {
-            Text("<- Back to Login Methods", color = AccentBlue, fontWeight = FontWeight.Bold)
         }
     }
 }
