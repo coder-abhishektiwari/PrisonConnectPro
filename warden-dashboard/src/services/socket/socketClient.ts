@@ -2,10 +2,19 @@ import { io, type Socket } from 'socket.io-client';
 import { env } from '@/config/env';
 
 /**
- * Socket.IO client for the Node.js signaling server.
- * Used for real-time monitoring of active calls, kiosk status, and threat alerts.
+ * Dual Socket.IO setup:
+ * - backendSocket: connects to backend for app-level events (call-created, call-ended, alerts, etc.)
+ * - signalingSocket: connects to signaling server for WebRTC events (peer-joined, peer-left, ice-state)
  */
-export const socketClient: Socket = io(env.signalingUrl, {
+export const backendSocket: Socket = io(env.apiGatewayUrl, {
   autoConnect: false,
   transports: ['websocket'],
 });
+
+export const signalingSocket: Socket = io(env.signalingUrl, {
+  autoConnect: false,
+  transports: ['websocket'],
+});
+
+/** Legacy alias — keeps old code working */
+export const socketClient = backendSocket;
