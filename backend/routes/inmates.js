@@ -10,10 +10,22 @@ const router = express.Router();
 
 const INMATE_IMMUTABLE_FIELDS = ['inmateId', 'createdAt'];
 
+function normalizeInmate(i) {
+  if (!i) return i;
+  const out = { ...i };
+  if (!out.name) {
+    out.name = out.fullName || [out.firstName, out.lastName].filter(Boolean).join(' ').trim() || 'Unknown';
+  }
+  delete out.fullName;
+  delete out.firstName;
+  delete out.lastName;
+  return out;
+}
+
 function inmateListHandler(req, res) {
   return asyncRoute(async (req, res) => {
     const inmates = await readDb('inmates.json');
-    return sendSuccess(res, inmates.filter(adminScopeFilter(req)));
+    return sendSuccess(res, inmates.filter(adminScopeFilter(req)).map(normalizeInmate));
   })(req, res);
 }
 
@@ -23,7 +35,7 @@ function inmateGetHandler(req, res) {
     const id = req.params.inmateId || req.params.prisonerId;
     const inmate = inmates.find((i) => i.inmateId === id && inAdminScope(req, i));
     if (!inmate) return sendError(res, 'NOT_FOUND', 'Inmate not found', 404);
-    return sendSuccess(res, inmate);
+    return sendSuccess(res, normalizeInmate(inmate));
   })(req, res);
 }
 

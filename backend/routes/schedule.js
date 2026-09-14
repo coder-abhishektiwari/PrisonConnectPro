@@ -103,7 +103,7 @@ router.post('/book', requireAuth, asyncRoute(async (req, res) => {
       const prisons = await readDb('prisons.json');
       const prison = prisons.find((p) => p.prisonId === inmate.prisonId || p.prisonId === kiosk.prisonId);
       const jailName = prison?.name || 'the correctional facility';
-      const inmateName = `${inmate.firstName || ''} ${inmate.lastName || ''}`.trim() || 'An inmate';
+      const inmateName = inmate.name || inmate.fullName || `${inmate.firstName || ''} ${inmate.lastName || ''}`.trim() || 'An inmate';
       const familyMemberName = contact.fullName || contact.name || 'Dear Member';
       const time = timeSlot.split('-')[0].trim();
       const callLink = buildCallLink(linkToken);

@@ -157,8 +157,7 @@ app.get('/inmate/profile/:inmateId', requireAuth, asyncRoute(async (req, res) =>
   if (!inmate) return sendError(res, 'NOT_FOUND', 'Inmate not found', 404);
   return sendSuccess(res, {
     inmateId: inmate.inmateId,
-    firstName: inmate.firstName,
-    lastName: inmate.lastName,
+    name: inmate.name || inmate.fullName || [inmate.firstName, inmate.lastName].filter(Boolean).join(' ').trim() || 'Unknown',
     prisonId: inmate.prisonId,
     facility: inmate.facility || inmate.prisonId,
     cellBlock: inmate.cellBlock || '',

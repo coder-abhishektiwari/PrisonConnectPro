@@ -4,8 +4,9 @@ import com.google.gson.annotations.SerializedName
 
 data class InmateProfile(
     @SerializedName("inmateId") val inmateId: String,
-    @SerializedName("firstName") val firstName: String,
-    @SerializedName("lastName") val lastName: String,
+    @SerializedName("name") val name: String = "",
+    @SerializedName("firstName") val firstName: String = "",
+    @SerializedName("lastName") val lastName: String = "",
     @SerializedName("prisonId") val prisonId: String,
     @SerializedName("facility") val facility: String,
     @SerializedName("cellBlock") val cellBlock: String,
@@ -13,7 +14,10 @@ data class InmateProfile(
     @SerializedName("photoUrl") val photoUrl: String? = null,
     @SerializedName("securityLevel") val securityLevel: String? = null,
     @SerializedName("sentenceDetails") val sentenceDetails: String? = null
-)
+) {
+    val displayName: String
+        get() = name.ifEmpty { "$firstName $lastName".trim() }.ifEmpty { "Unknown" }
+}
 
 enum class InmateStatus {
     @SerializedName("active") ACTIVE,

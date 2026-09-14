@@ -48,7 +48,7 @@ class AddPrisonerViewModel @Inject constructor(
 
         val request = CreatePrisonerRequest(
             prisonerNumber = prisonerNumber.ifBlank { "PN-${System.currentTimeMillis()}" },
-            fullName = fullName,
+            name = fullName,
             mobileNumber = mobileNumber.ifBlank { null },
             dateOfBirth = dateOfBirth.ifBlank { null },
             gender = gender.ifBlank { null },

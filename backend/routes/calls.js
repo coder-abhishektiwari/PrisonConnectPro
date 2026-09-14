@@ -319,7 +319,7 @@ function createCallsRouter(broadcastEvent, signaling) {
       recordingEnabled: callData.recordingEnabled !== undefined ? callData.recordingEnabled : true,
       recordingStatus: 'not_recording',
       connectionQuality: 'good', bitrate: 0, packetLoss: 0, jitter: 0, iceState: 'new',
-      inmateName: callData.inmateName || `${inmate.firstName || ''} ${inmate.lastName || ''}`.trim() || 'An inmate',
+      inmateName: callData.inmateName || inmate.name || inmate.fullName || `${inmate.firstName || ''} ${inmate.lastName || ''}`.trim() || 'An inmate',
       familyMemberName: callData.familyMemberName || '',
       roomIdLabel: callData.roomIdLabel || '',
       maxDurationMinutes: settings.callSettings?.maxCallDurationMinutes ?? 15,

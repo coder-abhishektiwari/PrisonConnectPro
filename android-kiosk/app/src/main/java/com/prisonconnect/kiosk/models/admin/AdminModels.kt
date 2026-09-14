@@ -8,6 +8,7 @@ import com.google.gson.annotations.SerializedName
 data class Prisoner(
     @SerializedName("inmateId") val inmateId: String,
     @SerializedName("prisonerNumber") val prisonerNumber: String? = null,
+    @SerializedName("name") val name: String? = null,
     @SerializedName("firstName") val firstName: String? = null,
     @SerializedName("lastName") val lastName: String? = null,
     @SerializedName("fullName") val fullName: String? = null,
@@ -31,7 +32,7 @@ data class Prisoner(
     @SerializedName("updatedAt") val updatedAt: String? = null
 ) {
     val displayName: String
-        get() = fullName ?: listOfNotNull(firstName, lastName).joinToString(" ").ifEmpty { "Unknown" }
+        get() = name ?: fullName ?: listOfNotNull(firstName, lastName).joinToString(" ").ifEmpty { "Unknown" }
 }
 
 data class BiometricData(
@@ -145,7 +146,7 @@ data class NetworkStatus(
  */
 data class CreatePrisonerRequest(
     @SerializedName("prisonerNumber") val prisonerNumber: String,
-    @SerializedName("fullName") val fullName: String,
+    @SerializedName("name") val name: String,
     @SerializedName("mobileNumber") val mobileNumber: String? = null,
     @SerializedName("dateOfBirth") val dateOfBirth: String? = null,
     @SerializedName("gender") val gender: String? = null,
@@ -164,7 +165,7 @@ data class CreatePrisonerRequest(
 )
 
 data class EditPrisonerRequest(
-    @SerializedName("fullName") val fullName: String? = null,
+    @SerializedName("name") val name: String? = null,
     @SerializedName("mobileNumber") val mobileNumber: String? = null,
     @SerializedName("cellBlock") val cellBlock: String? = null,
     @SerializedName("securityLevel") val securityLevel: String? = null,

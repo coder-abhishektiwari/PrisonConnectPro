@@ -44,7 +44,7 @@ class EditPrisonerViewModel @Inject constructor(
     ) {
         _updateState.value = NetworkResult.Loading
         val request = EditPrisonerRequest(
-            fullName = fullName.ifBlank { null },
+            name = fullName.ifBlank { null },
             mobileNumber = mobileNumber.ifBlank { null },
             cellBlock = cellBlock.ifBlank { null },
             securityLevel = securityLevel.ifBlank { null },

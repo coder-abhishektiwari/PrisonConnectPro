@@ -541,7 +541,7 @@ private fun InmateProfileCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "${inmateProfile.firstName.orEmpty()} ${inmateProfile.lastName.orEmpty()}",
+                        text = inmateProfile.displayName,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = PrimaryDarkNavy,

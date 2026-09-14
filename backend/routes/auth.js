@@ -258,8 +258,7 @@ async function identifyInmate(req, res, matchFn, confidence) {
 
   return sendSuccess(res, {
     inmateId: inmate.inmateId,
-    firstName: inmate.firstName,
-    lastName: inmate.lastName,
+    name: inmate.name || inmate.fullName || [inmate.firstName, inmate.lastName].filter(Boolean).join(' ').trim() || 'Unknown',
     prisonId: inmate.prisonId,
     facility: inmate.prisonId,
     cellBlock: inmate.cellBlock,
@@ -313,8 +312,7 @@ router.post('/face-identify', authLimiter, asyncRoute(async (req, res) => {
 
     return sendSuccess(res, {
       inmateId: inmate.inmateId,
-      firstName: inmate.firstName,
-      lastName: inmate.lastName,
+      name: inmate.name || inmate.fullName || [inmate.firstName, inmate.lastName].filter(Boolean).join(' ').trim() || 'Unknown',
       prisonId: inmate.prisonId,
       facility: inmate.prisonId,
       cellBlock: inmate.cellBlock,
@@ -408,8 +406,9 @@ router.post('/rfid-identify', asyncRoute(async (req, res) => {
   const inmate = inmates.find((i) => i.assignedKioskId === kioskId && i.rfidToken === rfidToken);
   if (!inmate) return sendError(res, 'NOT_FOUND', 'No inmate identified for this RFID token', 404);
 
+  const inmateName = inmate.name || inmate.fullName || [inmate.firstName, inmate.lastName].filter(Boolean).join(' ').trim() || 'Unknown';
   return sendSuccess(res, {
-    inmateId: inmate.inmateId, firstName: inmate.firstName, lastName: inmate.lastName,
+    inmateId: inmate.inmateId, name: inmateName,
     prisonId: inmate.prisonId, facility: inmate.prisonId, cellBlock: inmate.cellBlock,
     status: inmate.status, photoUrl: inmate.photo, securityLevel: inmate.securityLevel,
     sentenceDetails: inmate.sentenceDetails, rfidToken, confidence: 0.98
@@ -433,7 +432,8 @@ router.post('/prisoner/identify', asyncRoute(async (req, res) => {
   }
 
   return sendSuccess(res, {
-    inmateId: inmate.inmateId, firstName: inmate.firstName, lastName: inmate.lastName,
+    inmateId: inmate.inmateId,
+    name: inmate.name || inmate.fullName || [inmate.firstName, inmate.lastName].filter(Boolean).join(' ').trim() || 'Unknown',
     prisonId: inmate.prisonId, facility: inmate.facility, cellBlock: inmate.cellBlock,
     status: inmate.status, photoUrl: inmate.photoUrl, securityLevel: inmate.securityLevel,
     sentenceDetails: inmate.sentenceDetails, confidence: 1.0

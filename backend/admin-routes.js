@@ -17,18 +17,30 @@ function normalizeContact(c) {
   return out;
 }
 
+function normalizeInmate(i) {
+  if (!i) return i;
+  const out = { ...i };
+  if (!out.name) {
+    out.name = out.fullName || [out.firstName, out.lastName].filter(Boolean).join(' ').trim() || 'Unknown';
+  }
+  delete out.fullName;
+  delete out.firstName;
+  delete out.lastName;
+  return out;
+}
+
 // ==================== PRISONER ROUTES (must be before /:adminId) ====================
 
 router.get('/prisoners', requireRole(...ALL_ROLES), async (req, res) => {
   const inmates = await readDb('inmates.json');
-  return res.json({ success: true, data: inmates.filter(adminScopeFilter(req)) });
+  return res.json({ success: true, data: inmates.filter(adminScopeFilter(req)).map(normalizeInmate) });
 });
 
 router.get('/prisoners/:prisonerId', requireRole(...ALL_ROLES), async (req, res) => {
   const inmates = await readDb('inmates.json');
   const inmate = inmates.find((i) => i.inmateId === req.params.prisonerId && inAdminScope(req, i));
   if (!inmate) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Prisoner not found' } });
-  return res.json({ success: true, data: inmate });
+  return res.json({ success: true, data: normalizeInmate(inmate) });
 });
 
 router.post('/prisoners', requireRole(...ALL_ROLES), async (req, res) => {
@@ -57,13 +69,21 @@ router.post('/prisoners', requireRole(...ALL_ROLES), async (req, res) => {
   if (record.pin && !/^\$2[aby]\$/.test(record.pin)) {
     record.pin = await hashSecret(String(record.pin));
   }
+  if (record.name) {
+    record.firstName = record.name.split(' ')[0];
+    record.lastName = record.name.split(' ').slice(1).join(' ');
+  }
   const updated = await updateDb('inmates.json', (inmates) => ({ data: [...inmates, record], result: record }));
-  return res.status(201).json({ success: true, data: updated.result });
+  return res.status(201).json({ success: true, data: normalizeInmate(updated.result) });
 });
 
 router.put('/prisoners/:prisonerId', requireRole(...ALL_ROLES), async (req, res) => {
   const updates = { ...req.body };
   delete updates.inmateId; delete updates.createdAt;
+  if (updates.name) {
+    updates.firstName = updates.name.split(' ')[0];
+    updates.lastName = updates.name.split(' ').slice(1).join(' ');
+  }
   const updated = await updateDb('inmates.json', (inmates) => {
     const idx = inmates.findIndex((i) => i.inmateId === req.params.prisonerId && inAdminScope(req, i));
     if (idx === -1) return { data: inmates, result: null };
@@ -71,7 +91,7 @@ router.put('/prisoners/:prisonerId', requireRole(...ALL_ROLES), async (req, res)
     return { data: inmates, result: inmates[idx] };
   });
   if (!updated) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Prisoner not found' } });
-  return res.json({ success: true, data: updated });
+  return res.json({ success: true, data: normalizeInmate(updated) });
 });
 
 router.patch('/prisoners/:prisonerId/status', requireRole(...ALL_ROLES), async (req, res) => {
