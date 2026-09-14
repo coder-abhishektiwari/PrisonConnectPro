@@ -28,23 +28,26 @@ export function DashboardPage() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
   const [wallets, setWallets] = useState<Wallet[]>([]);
+  const [storage, setStorage] = useState<{ used: number; total: number; available: number } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadStats = useCallback(async () => {
     setLoadError(null);
     try {
-      const [dashboardStats, calls, alertsData, devicesData, walletsData] = await Promise.all([
+      const [dashboardStats, calls, alertsData, devicesData, walletsData, storageData] = await Promise.all([
         wardenApi.getDashboardStats(),
         wardenApi.getActiveCalls(),
         wardenApi.getAlerts(),
         wardenApi.getDevices(),
         wardenApi.getWallets().catch(()=>[] as Wallet[]),
+        wardenApi.getStorage(),
       ]);
       setStats(dashboardStats);
       setActiveCalls(calls ?? []);
       setAlerts(alertsData ?? []);
       setDevices(devicesData ?? []);
       setWallets(walletsData ?? []);
+      setStorage(storageData);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
       setLoadError('Failed to load dashboard data');
@@ -402,20 +405,12 @@ export function DashboardPage() {
             <div>
               <div className="flex justify-between text-sm mb-1">
                 <span className="text-neutral-600">Database</span>
-                <span className="font-medium text-neutral-900">45%</span>
+                <span className="font-medium text-neutral-900">{storage ? `${Math.round((storage.used / storage.total) * 100)}%` : '—'}</span>
               </div>
               <div className="w-full bg-neutral-200 rounded-full h-2">
-                <div className="bg-primary-600 h-2 rounded-full" style={{ width: '45%' }}></div>
+                <div className="bg-primary-600 h-2 rounded-full" style={{ width: `${storage ? Math.round((storage.used / storage.total) * 100) : 0}%` }}></div>
               </div>
-            </div>
-            <div>
-              <div className="flex justify-between text-sm mb-1">
-                <span className="text-neutral-600">Cache</span>
-                <span className="font-medium text-neutral-900">32%</span>
-              </div>
-              <div className="w-full bg-neutral-200 rounded-full h-2">
-                <div className="bg-info h-2 rounded-full" style={{ width: '32%' }}></div>
-              </div>
+              {storage && <p className="text-xs text-neutral-400 mt-1">{(storage.used / (1024*1024*1024*1024)).toFixed(1)} TB of {(storage.total / (1024*1024*1024*1024)).toFixed(1)} TB used</p>}
             </div>
           </div>
         </div>

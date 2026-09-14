@@ -143,6 +143,11 @@ app.patch('/pricing', requireAuth, requireRole('admin', 'warden', 'super-admin',
 }));
 app.get('/subscriptions', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('subscriptions.json')))));
 app.get('/reports', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('reports.json')))));
+app.get('/storage', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+  const { readDb } = require('./lib/db');
+  const storage = await readDb('storage.json');
+  return sendSuccess(res, storage);
+}));
 app.get('/reports/:reportId', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
   const reports = await readDb('reports.json');
   const report = reports.find((r) => r.reportId === req.params.reportId);

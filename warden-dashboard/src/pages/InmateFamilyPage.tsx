@@ -16,17 +16,19 @@ export function InmateFamilyPage() {
   const [editingInmate, setEditingInmate] = useState<Inmate | null>(null);
   const [editingFamily, setEditingFamily] = useState<Contact | null>(null);
   const [detailPrisoner, setDetailPrisoner] = useState<Inmate | null>(null);
-  const [newInmate, setNewInmate] = useState({name:'',inmateId:'',facility:'Barrack A', kioskId:''});
+  const [newInmate, setNewInmate] = useState({name:'',inmateId:'',facility:'', kioskId:''});
   const [newFamily, setNewFamily] = 
 useState({name:'',relationship:'',phoneNumber:'',inmateId:''});
+  const [kiosks, setKiosks] = useState<{deviceId: string; name: string; location?: string}[]>([]);
 
   const [loadError, setLoadError] = useState<string|null>(null);
   const load = useCallback(async()=>{
     try{
       setLoadError(null);
-      const [im, co] = await Promise.all([wardenApi.getInmates(), wardenApi.getContacts()]);
+      const [im, co, dv] = await Promise.all([wardenApi.getInmates(), wardenApi.getContacts(), wardenApi.getDevices()]);
       setInmates(im ?? []);
       setContacts(co ?? []);
+      setKiosks((dv ?? []).map((d:any)=>({deviceId:d.deviceId||d.id,name:d.name||d.deviceId||d.id,location:d.location})));
       if ((im ?? []).length===0) console.info('[InmateFamily] inmates backend returned empty');
       if ((co ?? []).length===0) console.info('[InmateFamily] contacts backend returned empty');
     }catch(e:any){
@@ -41,7 +43,7 @@ useState({name:'',relationship:'',phoneNumber:'',inmateId:''});
   const deleteFamily = async (id:string)=> { try{ await wardenApi.deleteContactApi(id); }catch{} setContacts(s=>s.filter(c=>c.contactId!==id)); };
   const updateFamily = async () => { if(!editingFamily) return; try{ await wardenApi.createContact(editingFamily.inmateId, editingFamily as any); }catch{} setContacts(s=> s.map(c=> c.contactId===editingFamily.contactId ? editingFamily : c)); setEditingFamily(null); };
   const toggleApproval = async (id:string)=> { const c=contacts.find(x=>x.contactId===id); if(!c) return; const upd={...c, active:!c.active}; try{ await wardenApi.createContact(upd.inmateId, upd as any); }catch{} setContacts(s=>s.map(x=> x.contactId===id ? upd : x)); };
-  const addInmate = async ()=>{ if(!newInmate.inmateId||!newInmate.name||!newInmate.kioskId) return; const payload={ inmateId:newInmate.inmateId, name:newInmate.name, prisonId:'PR-01', facility:newInmate.facility, cellBlock:'B-X', status:'active', photoUrl:'', securityLevel:'medium', sentenceDetails:'', kioskId:newInmate.kioskId } as any; try{ const saved=await wardenApi.createInmate(payload); setInmates(s=>[...s, (saved||payload) as Inmate]); }catch{ setInmates(s=>[...s, payload as Inmate]); } setNewInmate({name:'',inmateId:'',facility:'Barrack A', kioskId:''}); setShowAddInmate(false); };
+  const addInmate = async ()=>{ if(!newInmate.inmateId||!newInmate.name||!newInmate.kioskId) return; const payload={ inmateId:newInmate.inmateId, name:newInmate.name, facility:newInmate.facility, status:'active', photoUrl:'', securityLevel:'medium', sentenceDetails:'', kioskId:newInmate.kioskId } as any; try{ const saved=await wardenApi.createInmate(payload); setInmates(s=>[...s, (saved||payload) as Inmate]); }catch{ setInmates(s=>[...s, payload as Inmate]); } setNewInmate({name:'',inmateId:'',facility:'', kioskId:''}); setShowAddInmate(false); };
   const [addFamilyError, setAddFamilyError] = useState('');
   const addFamily = async ()=>{ 
     if(!newFamily.name.trim()||!newFamily.phoneNumber.trim()){ setAddFamilyError('Full Name and Phone are required'); return; }
@@ -142,10 +144,9 @@ useState({name:'',relationship:'',phoneNumber:'',inmateId:''});
               <input placeholder="Name *" value={newInmate.name} onChange={e=>setNewInmate({...newInmate,name:e.target.value})} className="w-full mb-3 px-3 py-2 border rounded-lg" />
               <select value={newInmate.kioskId} onChange={e=>setNewInmate({...newInmate,kioskId:e.target.value})} className="w-full mb-3 px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-primary-500">
                 <option value="">Select Kiosk * (required)</option>
-                <option value="KIOSK-01">KIOSK-01 - Barrack A</option>
-                <option value="KIOSK-02">KIOSK-02 - Barrack B</option>
-                <option value="KIOSK-03">KIOSK-03 - Barrack C</option>
-                <option value="KIOSK-04">KIOSK-04 - Visitor Hall</option>
+                {kiosks.map(k=>(
+                  <option key={k.deviceId} value={k.deviceId}>{k.name}{k.location ? ` - ${k.location}` : ''}</option>
+                ))}
               </select>
               <input placeholder="Facility" value={newInmate.facility} onChange={e=>setNewInmate({...newInmate,facility:e.target.value})} className="w-full mb-3 px-3 py-2 border rounded-lg" />
               <div className="flex gap-2 justify-end">

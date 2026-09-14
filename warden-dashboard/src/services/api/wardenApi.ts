@@ -549,6 +549,13 @@ export const wardenApi = {
     }
   },
 
+  getStorage: async () => {
+    try {
+      const r = await apiClient.get<ApiResponse<{ used: number; total: number; available: number; retentionDays: number; encryption: string }>>('/storage');
+      return r.data?.data ?? null;
+    } catch { return null; }
+  },
+
   // Kiosk Registration & Authorization
   getKioskRegistrationRequests: () =>
     cachedGet('kiosks:registration', () => apiClient.get<ApiResponse<KioskRegistrationRequestItem[]>>('/kiosks/registration-requests').then((r) => r.data?.data ?? [])),

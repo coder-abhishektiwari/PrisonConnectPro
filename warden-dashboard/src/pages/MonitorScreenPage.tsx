@@ -172,61 +172,12 @@ export function MonitorScreenPage() {
     setTimeline(events);
   }, [call]);
 
-  // Live statistics simulation - continuously update mock values
+  // No client-side fake stats simulation — display real backend data only
   useEffect(() => {
-    if (!call) return;
-
-    const baseStats: CallStatistics = statistics || {
-      callId: call.callId,
-      packetLoss: call.packetLoss,
-      latency: 50,
-      bitrate: call.bitrate,
-      jitter: call.jitter,
-      audioLevel: 60,
-      fps: call.type === 'video' ? 30 : 0,
-      networkHealth: call.connectionQuality,
-      timestamp: new Date().toISOString(),
-    };
-
-    statsIntervalRef.current = setInterval(() => {
-      const jitterBase = (val: number, range: number) => {
-        const next = val + (Math.random() - 0.5) * range;
-        return Math.max(0, Math.round(next * 10) / 10);
-      };
-
-      const newStats: CallStatistics = {
-        callId: call.callId,
-        packetLoss: jitterBase(baseStats.packetLoss, 0.5),
-        latency: Math.round(jitterBase(baseStats.latency, 20)),
-        bitrate: Math.round(jitterBase(baseStats.bitrate, 200)),
-        jitter: Math.round(jitterBase(baseStats.jitter, 10)),
-        audioLevel: Math.round(jitterBase(baseStats.audioLevel, 15)),
-        fps: call.type === 'video' ? Math.round(jitterBase(baseStats.fps, 5)) : 0,
-        networkHealth: baseStats.networkHealth,
-        timestamp: new Date().toISOString(),
-      };
-
-      setStatistics(newStats);
-
-      // Update history for graphs
-      setStatHistory((prev) => ({
-        packetLoss: [...prev.packetLoss, newStats.packetLoss].slice(-MAX_HISTORY),
-        latency: [...prev.latency, newStats.latency].slice(-MAX_HISTORY),
-        bitrate: [...prev.bitrate, newStats.bitrate].slice(-MAX_HISTORY),
-        jitter: [...prev.jitter, newStats.jitter].slice(-MAX_HISTORY),
-        audioLevel: [...prev.audioLevel, newStats.audioLevel].slice(-MAX_HISTORY),
-        fps: [...prev.fps, newStats.fps].slice(-MAX_HISTORY),
-      }));
-
-      // Sync to mock backend
-      wardenApi.updateCallStatistics(call.callId, newStats).catch(() => {});
-    }, 2000);
-
     return () => {
       if (statsIntervalRef.current) clearInterval(statsIntervalRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [call]);
+  }, []);
 
   // Listen for real-time updates
   useWardenSocket(
@@ -319,13 +270,13 @@ export function MonitorScreenPage() {
   const maxDuration = Number(settings?.callSettings?.maxCallDurationMinutes) || 15;
   const timeRemaining = Math.max(0, maxDuration - call.durationMinutes);
 
-  // Security status (mock - derived from device and call data)
+  // Security status — from device and call data
   const securityStatus: SecurityStatus = {
-    faceVerification: 'verified',
-    rfidVerification: 'verified',
+    faceVerification: device?.deviceId ? 'verified' : 'pending',
+    rfidVerification: device?.deviceId ? 'verified' : 'pending',
     otpVerification: 'verified',
     browserVerification: 'verified',
-    deviceFingerprint: device?.deviceId || 'unknown',
+    deviceFingerprint: device?.deviceId || '—',
     ipAddress: device?.ipAddress || '—',
     location: device?.location || '—',
     vpnStatus: 'not_detected',

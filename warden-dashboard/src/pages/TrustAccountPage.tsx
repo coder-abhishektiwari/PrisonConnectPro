@@ -125,7 +125,7 @@ export function TrustAccountPage() {
     const amt = Number(amtStr);
     if (!amt || amt <= 0) { alert('Invalid amount'); return; }
     try {
-      await wardenApi.createWalletRequest(inmateId, amt, 'Inmate request via warden (demo)');
+      await wardenApi.createWalletRequest(inmateId, amt, 'Recharge request via warden');
       const reqs = await wardenApi.getWalletRequests();
       setRequests(reqs ?? []);
     } catch (e:any) { alert(e?.response?.data?.error?.message || e?.message); }
