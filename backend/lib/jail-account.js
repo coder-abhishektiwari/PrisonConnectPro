@@ -130,6 +130,11 @@ async function getStatement(id) {
 
   const transactions = await internalTransactions(wallet);
   const summary = deriveSummary(transactions, wallet);
+  // Normalize: ensure every transaction has a status so clients can filter reliably
+  const normalizedTxns = transactions.map((t) => ({
+    ...t,
+    status: t.status || 'completed'
+  }));
   return {
     wallet: {
       walletId: wallet.walletId,
@@ -142,7 +147,7 @@ async function getStatement(id) {
       lastRechargeAmount: summary.lastRechargeAmount,
       remainingMinutes: summary.remainingMinutes
     },
-    transactions
+    transactions: normalizedTxns
   };
 }
 
