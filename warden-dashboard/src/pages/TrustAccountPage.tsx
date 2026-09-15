@@ -187,52 +187,67 @@ export function TrustAccountPage() {
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead><tr className="border-b bg-neutral-50"><th className="text-left py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Inmate</th><th className="text-left py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Request</th><th className="text-left py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Balance</th><th className="text-left py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Remaining @ Live Rate</th><th className="text-left py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider"></th></tr></thead>
+            <thead><tr className="border-b bg-neutral-50">
+              <th className="text-left py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Inmate</th>
+              <th className="text-right py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Balance</th>
+              <th className="text-center py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Call Time</th>
+              <th className="text-left py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Requests</th>
+            </tr></thead>
             <tbody>
               {wallets.length===0 ? (
-                <tr><td colSpan={5} className="py-10 text-center text-sm text-neutral-500">{total===0 ? 'No trust accounts — backend returned empty. Add wallets via backend seed or inmates.' : `No wallets match "${search}"`}</td></tr>
+                <tr><td colSpan={4} className="py-10 text-center text-sm text-neutral-500">{total===0 ? 'No trust accounts — backend returned empty. Add wallets via backend seed or inmates.' : `No wallets match "${search}"`}</td></tr>
               ) : wallets.map(w=>{
-                // Always compute remaining from live pricing + balance so Call Configuration changes reflect instantly, even if backend cached remaining is stale
                 const audioMin = Math.floor(w.balance / (pricing.audioRate || 1));
                 const videoMin = Math.floor(w.balance / (pricing.videoRate || 2.5));
                 const inmate = inmates[w.inmateId];
+                const isLowBalance = w.balance < (pricing.audioRate || 1) * 5;
+                const pending = requests.find(r=> r.inmateId===w.inmateId && r.status==='pending');
                 return (
-                <tr key={w.walletId} onClick={()=> setSelectedId(w.inmateId)} className={`border-b hover:bg-neutral-50 transition-colors cursor-pointer even:bg-neutral-50/30 ${selectedId===w.inmateId?'bg-primary-50 ring-1 ring-inset ring-primary-200':''}`}>
-                  <td className="py-3 px-4 text-sm font-medium flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-[#E9EEF3] flex items-center justify-center shrink-0 border border-[#D1D7DB]" title="No photo">
-                      <svg className="w-5 h-5 text-[#8696A0]" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
-                      </svg>
+                <tr key={w.walletId} onClick={()=> setSelectedId(w.inmateId)} className={`border-b hover:bg-neutral-50 transition-colors cursor-pointer ${selectedId===w.inmateId?'bg-primary-50 ring-1 ring-inset ring-primary-200':''}`}>
+                  <td className="py-3 px-4 text-sm font-medium">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full bg-[#E9EEF3] flex items-center justify-center shrink-0 border border-[#D1D7DB]">
+                        <span className="material-icons text-[#8696A0] text-lg">person</span>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-mono font-medium truncate">{w.inmateId}</p>
+                        <p className="text-xs text-neutral-500 truncate">{inmate?.name || '—'} • {inmate?.facility || ''}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-mono font-medium">{w.inmateId}</p>
-                      <p className="text-xs text-neutral-500">{inmate ? `${inmate.name}` : '—'} • {inmate?.facility || ''}</p>
+                  </td>
+                  <td className="py-3 px-4 text-right" onClick={e=>e.stopPropagation()}>
+                    <div className="flex flex-col items-end gap-0.5">
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-bold border ${isLowBalance ? 'bg-error/10 text-error border-error/20' : 'bg-neutral-100 text-neutral-900 border-neutral-200'}`}>
+                        {isLowBalance && <span className="w-1.5 h-1.5 bg-error rounded-full animate-pulse" />}
+                        ₹{Number(w.balance).toLocaleString('en-IN')}
+                      </span>
+                      {isLowBalance && <span className="text-[11px] text-error font-medium">Low balance</span>}
+                    </div>
+                  </td>
+                  <td className="py-3 px-4">
+                    <div className="flex items-center justify-center gap-4">
+                      <div className="flex items-center gap-1.5">
+                        <span className="material-icons text-xs text-neutral-400">headset_mic</span>
+                        <span className={`text-sm font-bold ${audioMin < 5 ? 'text-error' : 'text-neutral-900'}`}>{audioMin}<span className="text-xs font-normal text-neutral-500">m</span></span>
+                      </div>
+                      <div className="w-px h-4 bg-neutral-200" />
+                      <div className="flex items-center gap-1.5">
+                        <span className="material-icons text-xs text-neutral-400">videocam</span>
+                        <span className={`text-sm font-bold ${videoMin < 3 ? 'text-error' : 'text-neutral-900'}`}>{videoMin}<span className="text-xs font-normal text-neutral-500">m</span></span>
+                      </div>
                     </div>
                   </td>
                   <td className="py-3 px-4" onClick={e=>e.stopPropagation()}>
-                    {(() => {
-                      const pending = requests.find(r=> r.inmateId===w.inmateId && r.status==='pending');
-                      if (pending) return (
-                        <div className="flex flex-col gap-1">
-                          <span className="text-xs text-neutral-500">Bal ₹{w.balance} → Req ₹{pending.amount}</span>
-                          <span className="px-2 py-1 bg-amber-50 border border-amber-200 rounded-full text-xs font-bold text-amber-700 w-fit">₹{pending.amount} pending</span>
-                          <div className="flex gap-1">
-                            <button disabled={reqLoading} onClick={()=>approveRequest(pending.requestId)} className="px-2 py-1 bg-neutral-900 text-white rounded text-xs hover:bg-black disabled:opacity-50">Approve</button>
-                            <button disabled={reqLoading} onClick={()=>rejectRequest(pending.requestId)} className="px-2 py-1 bg-white border border-neutral-200 rounded text-xs hover:bg-neutral-50 disabled:opacity-50">Reject</button>
-                          </div>
-                        </div>
-                      );
-                      return <span className="px-2 py-1 bg-neutral-50 border border-neutral-200 rounded-full text-xs text-neutral-500">No request</span>;
-                    })()}
+                    {pending ? (
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-1 bg-amber-50 border border-amber-200 rounded-lg text-xs font-bold text-amber-700">₹{pending.amount}</span>
+                        <button disabled={reqLoading} onClick={()=>approveRequest(pending.requestId)} className="w-7 h-7 flex items-center justify-center bg-success text-white rounded-lg text-xs hover:bg-success-700 disabled:opacity-50" title="Approve"><span className="material-icons text-sm">check</span></button>
+                        <button disabled={reqLoading} onClick={()=>rejectRequest(pending.requestId)} className="w-7 h-7 flex items-center justify-center bg-white border border-neutral-200 text-neutral-500 rounded-lg text-xs hover:bg-neutral-50 disabled:opacity-50" title="Reject"><span className="material-icons text-sm">close</span></button>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-neutral-400">—</span>
+                    )}
                   </td>
-                  <td className="py-3 px-4"><span className="px-3 py-1 rounded-full text-xs font-bold border bg-neutral-100 text-neutral-900 border-neutral-200">₹{w.balance}</span></td>
-                  <td className="py-3 px-4 text-sm">
-                    <div className="flex flex-col gap-1">
-                      <span className="font-medium">{audioMin} min <span className="text-xs text-neutral-500 font-normal">Audio @ ₹{pricing.audioRate}/min</span></span>
-                      <span className="font-medium">{videoMin} min <span className="text-xs text-neutral-500 font-normal">Video @ ₹{pricing.videoRate}/min</span></span>
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 text-right"><span className="text-xs text-primary-600 font-medium">View →</span></td>
                 </tr>
               );})}
             </tbody>
@@ -265,7 +280,7 @@ export function TrustAccountPage() {
             </div>
 
             {stmtLoading ? <div className="p-12 text-center"><Loading message="Loading statement..." /></div> : !selectedWallet ? <p className="p-6 text-sm text-neutral-500">No wallet found</p> : (
-              <div className="p-6 space-y-6">
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
                 {/* Wallet summary */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="p-4 bg-neutral-50 border border-neutral-200 rounded-xl"><p className="text-xs uppercase font-semibold text-neutral-500">Balance</p><p className="text-2xl font-extrabold text-neutral-900">₹{selectedWallet.balance}</p><p className="text-xs text-neutral-500">{selectedWallet.currency}</p></div>
@@ -276,15 +291,22 @@ export function TrustAccountPage() {
 
                 {/* Manual Add Money (without gateway) */}
                 <div className="p-4 border border-neutral-200 rounded-xl bg-neutral-50">
-                  <p className="text-sm font-semibold text-neutral-900 mb-2">Add Money (Manual – No Gateway)</p>
-                  <p className="text-xs text-neutral-500 mb-3">Warden cash deposit – directly credits jail account</p>
+                  <p className="text-sm font-semibold text-neutral-900 mb-1">Add Money (Manual)</p>
+                  <p className="text-xs text-neutral-500 mb-3">Warden cash deposit — directly credits jail account</p>
+                  <div className="flex gap-1.5 mb-2">
+                    {[100, 200, 500, 1000].map(amt => (
+                      <button key={amt} onClick={()=>setRechargeAmount(String(amt))} className={`flex-1 py-2 rounded-lg text-xs font-bold border transition-colors ${rechargeAmount===String(amt) ? 'bg-neutral-900 text-white border-neutral-900' : 'bg-white text-neutral-700 border-neutral-200 hover:bg-neutral-100'}`}>
+                        ₹{amt}
+                      </button>
+                    ))}
+                  </div>
                   <div className="flex gap-2">
                     <input type="number" min="1" value={rechargeAmount} onChange={e=>setRechargeAmount(e.target.value)} placeholder="Amount ₹" className="flex-1 px-3 py-2 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900" />
-                    <button onClick={doRecharge} disabled={recharging} className="px-5 py-2 bg-neutral-900 text-white rounded-lg text-sm font-semibold hover:bg-black disabled:opacity-50">{recharging?'Adding...':'+ Add Money'}</button>
+                    <button onClick={doRecharge} disabled={recharging || !rechargeAmount} className="px-5 py-2 bg-neutral-900 text-white rounded-lg text-sm font-semibold hover:bg-black disabled:opacity-50">{recharging?'Adding...':'+ Add'}</button>
                   </div>
-                  <input value={rechargeDesc} onChange={e=>setRechargeDesc(e.target.value)} placeholder="Description (optional)" className="w-full mt-2 px-3 py-2 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900" />
-                  {rechargeError && <p className="text-xs text-red-600 mt-2">{rechargeError}</p>}
-                  {rechargeSuccess && <p className="text-xs text-green-700 mt-2">{rechargeSuccess}</p>}
+                  <input value={rechargeDesc} onChange={e=>setRechargeDesc(e.target.value)} placeholder="Note (optional)" className="w-full mt-2 px-3 py-2 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900" />
+                  {rechargeError && <p className="text-xs text-error mt-2 flex items-center gap-1"><span className="material-icons text-sm">error</span>{rechargeError}</p>}
+                  {rechargeSuccess && <p className="text-xs text-success mt-2 flex items-center gap-1"><span className="material-icons text-sm">check_circle</span>{rechargeSuccess}</p>}
                 </div>
 
                 {/* Tabs — clean segmented */}

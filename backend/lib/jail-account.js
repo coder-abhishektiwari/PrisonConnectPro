@@ -146,4 +146,4 @@ async function getStatement(id) {
   };
 }
 
-module.exports = { getStatement, resolveInmate };
+module.exports = { getStatement, resolveInmate, deriveSummary };
