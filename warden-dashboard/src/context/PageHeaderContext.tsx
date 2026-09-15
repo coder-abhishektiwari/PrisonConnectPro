@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useRef, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useRef, type ReactNode } from 'react';
 
 interface PageHeaderConfig {
   title: string;
@@ -34,30 +34,6 @@ export function usePageHeader(config: PageHeaderConfig) {
   }
 }
 
-// Action slot: ref-based, no infinite loops
-let globalActionRef: ReactNode = null;
-let globalActionListeners: Set<() => void> = new Set();
-
-function notifyActionListeners() {
-  globalActionListeners.forEach((l) => l());
-}
-
-export function setPageAction(action: ReactNode) {
-  globalActionRef = action;
-  notifyActionListeners();
-}
-
-export function usePageAction() {
-  const [, forceRender] = useState(0);
-  useEffect(() => {
-    const listener = () => forceRender((n) => n + 1);
-    globalActionListeners.add(listener);
-    return () => { globalActionListeners.delete(listener); };
-  }, []);
-  return globalActionRef;
-}
-
 export function usePageHeaderConfig() {
-  const ctx = useContext(PageHeaderContext);
-  return { title: ctx.config.title, subtitle: ctx.config.subtitle };
+  return useContext(PageHeaderContext).config;
 }

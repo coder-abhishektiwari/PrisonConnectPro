@@ -3,7 +3,7 @@ import { Card } from '@/components/Card';
 import { Loading } from '@/components/States';
 import { ToastContainer } from '@/components/ToastContainer';
 import { useToast } from '@/hooks/useToast';
-import { usePageHeader, setPageAction } from '@/context/PageHeaderContext';
+import { usePageHeader } from '@/context/PageHeaderContext';
 import { wardenApi, KioskRegistrationRequestItem, ListParams } from '@/services/api/wardenApi';
 
 const PAGE_SIZE = 20;
@@ -103,11 +103,6 @@ export function KioskRegistrationPage() {
     title: 'Kiosk Registration',
     subtitle: 'Device authorization and setup requests',
   });
-  setPageAction(
-    <button onClick={() => { setIsLoading(true); fetchRequests(); fetchCounts().then(setCounts); }} disabled={isLoading} className="px-4 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-lg text-sm font-medium transition">
-      {isLoading ? 'Refreshing...' : 'Refresh'}
-    </button>
-  );
 
   if (isLoading) return <Loading message="Loading registration requests..." />;
 
@@ -127,6 +122,16 @@ export function KioskRegistrationPage() {
   return (
     <div className="space-y-6">
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
+
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+  <div>
+    <h1 className="text-3xl font-bold text-neutral-900">Kiosk Registration</h1>
+    <p className="text-neutral-600 mt-1">Device authorization and setup requests</p>
+  </div>
+  <button onClick={() => { setIsLoading(true); fetchRequests(); fetchCounts().then(setCounts); }} disabled={isLoading} className="px-4 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-lg text-sm font-medium transition">
+    {isLoading ? 'Refreshing...' : 'Refresh'}
+  </button>
+</div>
 
       {/* Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">

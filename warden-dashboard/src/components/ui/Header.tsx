@@ -1,12 +1,11 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import { usePageHeaderConfig, usePageAction } from '@/context/PageHeaderContext';
+import { usePageHeaderConfig } from '@/context/PageHeaderContext';
 
 export function Header() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { title, subtitle } = usePageHeaderConfig();
-  const action = usePageAction();
 
   const handleLogout = async () => {
     await logout();
@@ -26,7 +25,6 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-4 shrink-0">
-        {action && <div className="flex items-center">{action}</div>}
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 bg-primary-600 rounded-full flex items-center justify-center text-white font-medium text-xs">
             {initials}

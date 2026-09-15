@@ -5,7 +5,7 @@ import { Card } from '@/components/Card';
 import { Loading } from '@/components/States';
 import { wardenApi } from '@/services/api/wardenApi';
 import { useWardenSocket } from '@/hooks/useWardenSocket';
-import { usePageHeader, setPageAction } from '@/context/PageHeaderContext';
+import { usePageHeader } from '@/context/PageHeaderContext';
 import type { ActiveCall, ListParams } from '@/services/api/wardenApi';
 
 const PAGE_SIZE = 20;
@@ -51,15 +51,6 @@ export function ActiveCallsPage() {
     title: 'Live Calls',
     subtitle: `${total} active calls`,
   });
-  setPageAction(
-    <div className="flex gap-2">
-      <button onClick={() => { setTypeFilter('all'); setPage(1); }} className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors ${typeFilter === 'all' ? 'bg-neutral-900 text-white' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'}`}>
-        <span className={`w-2 h-2 rounded-full ${typeFilter === 'all' ? 'bg-white' : 'bg-neutral-400'}`} />All
-      </button>
-      <button onClick={() => { setTypeFilter('video'); setPage(1); }} className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors ${typeFilter === 'video' ? 'bg-primary-600 text-white' : 'bg-primary-50 border border-primary-200 text-primary-700 hover:bg-primary-100'}`}>Video</button>
-      <button onClick={() => { setTypeFilter('audio'); setPage(1); }} className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors ${typeFilter === 'audio' ? 'bg-info text-white' : 'bg-info-50 border border-info/20 text-info hover:bg-info-100'}`}>Audio</button>
-    </div>
-  );
 
   if (isLoading) return <Loading message="Loading active calls..." />;
 
@@ -112,6 +103,27 @@ export function ActiveCallsPage() {
 
   return (
     <div className="space-y-6">
+      <div className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex gap-4">
+            <div className="w-12 h-12 rounded-xl bg-neutral-900 text-white flex items-center justify-center shrink-0">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-neutral-900 tracking-tight">Live Calls</h1>
+              <p className="text-sm text-neutral-600 mt-1">{total} active calls</p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => { setTypeFilter('all'); setPage(1); }} className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors ${typeFilter === 'all' ? 'bg-neutral-900 text-white' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'}`}>
+              <span className={`w-2 h-2 rounded-full ${typeFilter === 'all' ? 'bg-white' : 'bg-neutral-400'}`} />All
+            </button>
+            <button onClick={() => { setTypeFilter('video'); setPage(1); }} className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors ${typeFilter === 'video' ? 'bg-primary-600 text-white' : 'bg-primary-50 border border-primary-200 text-primary-700 hover:bg-primary-100'}`}>Video</button>
+            <button onClick={() => { setTypeFilter('audio'); setPage(1); }} className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors ${typeFilter === 'audio' ? 'bg-info text-white' : 'bg-info-50 border border-info/20 text-info hover:bg-info-100'}`}>Audio</button>
+          </div>
+        </div>
+      </div>
+
       <div className="bg-white border border-neutral-200 rounded-xl p-4 shadow-sm">
         <div className="flex-1 relative">
           <svg className="w-5 h-5 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
