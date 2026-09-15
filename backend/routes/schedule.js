@@ -9,7 +9,16 @@ const { contactPhone, buildCallLink } = require('../lib/familySecurity');
 
 const router = express.Router();
 
-router.get('/', requireAuth, asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('schedule.json')))));
+router.get('/', requireAuth, asyncRoute(async (req, res) => {
+  let schedules = await readDb('schedule.json');
+  // Inmate: only see own schedules
+  if (req.auth.role === 'inmate') {
+    schedules = schedules.filter((s) => s.inmateId === req.auth.inmateId);
+  } else {
+    schedules = await scopeList(req, schedules);
+  }
+  return sendSuccess(res, schedules);
+}));
 
 router.get('/slots/:kioskId/:date', requireAuth, asyncRoute(async (req, res) => {
   const { kioskId, date } = req.params;

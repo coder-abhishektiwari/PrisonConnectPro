@@ -121,8 +121,10 @@ function createCallsRouter(broadcastEvent, signaling) {
 
   router.get('/', requireAuth, asyncRoute(async (req, res) => {
     let calls = await readDb('calls.json');
-    // Warden-scoped: wardens only see calls for their assigned prison(s)
-    if (req.auth.role === 'warden') {
+    // Inmate: only see own calls
+    if (req.auth.role === 'inmate') {
+      calls = calls.filter((c) => c.inmateId === req.auth.inmateId);
+    } else if (req.auth.role === 'warden') {
       const wardens = await readDb('wardens.json');
       const warden = wardens.find((w) => w.wardenId === req.auth.sub);
       if (!warden) return sendError(res, 'NOT_FOUND', 'Warden profile not found', 404);
@@ -134,9 +136,6 @@ function createCallsRouter(broadcastEvent, signaling) {
       const inmateIds = inmates.filter((i) => prisonIds.includes(i.prisonId)).map((i) => i.inmateId);
       calls = calls.filter((c) => inmateIds.includes(c.inmateId));
     } else {
-      // Admin/kiosk-level: calls carry kioskId/prisonId/inmateId, so inAdminScope
-      // restricts a kiosk admin to their own kiosk's calls and a jail admin to
-      // their prison's calls. Global super admins (no kiosk/jail claim) see all.
       calls = calls.filter((c) => inAdminScope(req, c));
     }
     return sendSuccess(res, calls);
@@ -144,7 +143,9 @@ function createCallsRouter(broadcastEvent, signaling) {
 
   router.get('/active', requireAuth, asyncRoute(async (req, res) => {
     let calls = await readDb('calls.json');
-    if (req.auth.role === 'warden') {
+    if (req.auth.role === 'inmate') {
+      calls = calls.filter((c) => c.inmateId === req.auth.inmateId);
+    } else if (req.auth.role === 'warden') {
       const wardens = await readDb('wardens.json');
       const warden = wardens.find((w) => w.wardenId === req.auth.sub);
       if (!warden) return sendError(res, 'NOT_FOUND', 'Warden profile not found', 404);
@@ -174,7 +175,9 @@ function createCallsRouter(broadcastEvent, signaling) {
 
   router.get('/history', requireAuth, asyncRoute(async (req, res) => {
     let calls = await readDb('calls.json');
-    if (req.auth.role === 'warden') {
+    if (req.auth.role === 'inmate') {
+      calls = calls.filter((c) => c.inmateId === req.auth.inmateId);
+    } else if (req.auth.role === 'warden') {
       const wardens = await readDb('wardens.json');
       const warden = wardens.find((w) => w.wardenId === req.auth.sub);
       if (!warden) return sendError(res, 'NOT_FOUND', 'Warden profile not found', 404);
