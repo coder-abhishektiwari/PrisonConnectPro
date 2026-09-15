@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card } from '@/components/Card';
 import { Loading } from '@/components/States';
 import { ToastContainer } from '@/components/ToastContainer';
@@ -80,9 +80,17 @@ export function UsersPage() {
     return matchesStatus;
   });
 
+  const headerIcon = useMemo(() => <span className="material-icons text-primary-600 text-xl">people</span>, []);
+
   usePageHeader({
     title: 'Users',
     subtitle: 'Manage warden and staff accounts',
+    icon: headerIcon,
+    actions: useMemo(() => (
+      <button onClick={loadUsers} disabled={isLoading} className="px-4 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-lg text-sm font-medium transition">
+        {isLoading ? 'Refreshing...' : 'Refresh'}
+      </button>
+    ), [isLoading]),
   });
 
   if (isLoading) return <Loading message="Loading users..." />;
@@ -103,16 +111,6 @@ export function UsersPage() {
   return (
     <div className="space-y-6">
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
-
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-  <div>
-    <h1 className="text-3xl font-bold text-neutral-900">Users</h1>
-    <p className="text-neutral-600 mt-1">Manage warden and staff accounts</p>
-  </div>
-  <button onClick={loadUsers} disabled={isLoading} className="px-4 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-lg text-sm font-medium transition">
-    {isLoading ? 'Refreshing...' : 'Refresh'}
-  </button>
-</div>
 
       {/* Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

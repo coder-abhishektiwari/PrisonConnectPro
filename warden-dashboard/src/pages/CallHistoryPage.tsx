@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Card } from '@/components/Card';
 import { Loading } from '@/components/States';
@@ -198,9 +198,18 @@ export function CallHistoryPage() {
     } finally { setIsExporting(false); }
   };
 
+  const headerIcon = useMemo(() => <span className="material-icons text-primary-600 text-xl">schedule</span>, []);
+
   usePageHeader({
     title: 'Call Logs',
     subtitle: `${total} calls total`,
+    icon: headerIcon,
+    actions: useMemo(() => (
+      <button onClick={handleExport} disabled={isExporting} className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-success text-white rounded-xl text-sm font-bold hover:bg-success-700 shadow-sm disabled:opacity-50">
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+        {isExporting ? 'Exporting...' : `Export Excel${selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}`}
+      </button>
+    ), [handleExport, isExporting, selectedIds.size]),
   });
 
   if (isLoading) return <Loading message="Loading call history..." />;
@@ -227,26 +236,6 @@ export function CallHistoryPage() {
 
   return (
     <div className="space-y-6">
-      <div className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm">
-  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-    <div className="flex gap-4">
-      <div className="w-12 h-12 rounded-xl bg-neutral-900 text-white flex items-center justify-center shrink-0">
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-      </div>
-      <div>
-        <h1 className="text-2xl font-bold text-neutral-900 tracking-tight">Call Logs</h1>
-        <p className="text-sm text-neutral-600 mt-1">{total} calls total</p>
-      </div>
-    </div>
-    <div className="flex gap-2">
-      <button onClick={handleExport} disabled={isExporting} className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-success text-white rounded-xl text-sm font-bold hover:bg-success-700 shadow-sm disabled:opacity-50">
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-        {isExporting ? 'Exporting...' : `Export Excel${selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}`}
-      </button>
-    </div>
-  </div>
-</div>
-      {/* Search + Date */}
       <div className="bg-white border border-neutral-200 rounded-xl p-4 shadow-sm flex gap-3">
         <div className="flex-1 relative">
           <svg className="w-5 h-5 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>

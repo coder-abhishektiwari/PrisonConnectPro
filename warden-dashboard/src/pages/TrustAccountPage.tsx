@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Card } from '@/components/Card';
 import { Loading } from '@/components/States';
@@ -139,6 +139,23 @@ export function TrustAccountPage() {
     } catch (e:any) { alert(e?.response?.data?.error?.message || e?.message); }
   };
 
+  const totalBalance = wallets.reduce((a,w)=>a+Number(w.balance||0),0);
+  const avgBalance = wallets.length ? Math.round(totalBalance / wallets.length) : 0;
+
+  const headerIcon = useMemo(() => <span className="material-icons text-primary-600 text-xl">account_balance_wallet</span>, []);
+
+  usePageHeader({
+    title: 'Inmate Wallet',
+    subtitle: `₹${totalBalance.toLocaleString('en-IN')} total • ${wallets.length} inmates • Avg ₹${avgBalance}`,
+    icon: headerIcon,
+    actions: useMemo(() => (
+      <div className="flex gap-2">
+        <div className="px-3 py-2 bg-neutral-900 text-white rounded-xl text-xs font-bold">Audio ₹{pricing.audioRate}/min</div>
+        <div className="px-3 py-2 bg-primary-50 border border-primary-200 text-primary-700 rounded-xl text-xs font-bold">Video ₹{pricing.videoRate}/min</div>
+      </div>
+    ), [pricing.audioRate, pricing.videoRate]),
+  });
+
   if(loading) return <Loading message="Loading trust accounts..." />;
   if(error) return <Card><div className="text-center py-12"><p className="text-error mb-4">{error}</p><button onClick={()=>{setLoading(true); load();}} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm">Retry</button></div></Card>;
 
@@ -156,36 +173,8 @@ export function TrustAccountPage() {
   const totalRecharges = txns.filter(t=> ['recharge','credit'].includes(String(t.type).toLowerCase())).reduce((a,t)=>a+Number(t.amount||0),0);
   const totalRefunds = txns.filter(t=> String(t.type).toLowerCase()==='refund').reduce((a,t)=>a+Number(t.amount||0),0);
 
-  const totalBalance = wallets.reduce((a,w)=>a+Number(w.balance||0),0);
-  const avgBalance = wallets.length ? Math.round(totalBalance / wallets.length) : 0;
-
-  usePageHeader({
-    title: 'Inmate Wallet',
-    subtitle: `₹${totalBalance.toLocaleString('en-IN')} total • ${wallets.length} inmates • Avg ₹${avgBalance}`,
-  });
-
   return (
     <div className="space-y-6">
-      <div className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm">
-  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-    <div className="flex gap-4">
-      <div className="w-12 h-12 rounded-xl bg-neutral-900 text-white flex items-center justify-center shrink-0">
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v3m12-3v3m-6-3h.01" /></svg>
-      </div>
-      <div>
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold text-neutral-900 tracking-tight">Inmate Wallet</h1>
-          <span className="px-2.5 py-1 bg-success/10 text-success border border-success/20 rounded-full text-xs font-bold">₹{totalBalance.toLocaleString('en-IN')} total</span>
-        </div>
-        <p className="text-sm text-neutral-600 mt-1">Trust accounts • {wallets.length} inmates • Avg ₹{avgBalance} • Click row for ledger</p>
-      </div>
-    </div>
-    <div className="hidden lg:flex gap-2">
-      <div className="px-3 py-2 bg-neutral-900 text-white rounded-xl text-xs font-bold">Audio ₹{pricing.audioRate}/min</div>
-      <div className="px-3 py-2 bg-primary-50 border border-primary-200 text-primary-700 rounded-xl text-xs font-bold">Video ₹{pricing.videoRate}/min</div>
-    </div>
-  </div>
-</div>
       <Card className="overflow-hidden">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-5 border-b border-neutral-200 bg-neutral-50/50">
           <h2 className="font-bold flex items-center gap-2 text-sm uppercase tracking-wide text-neutral-700"><span className="w-2 h-2 bg-success rounded-full animate-pulse" />Wallets <span className="px-2.5 py-1 bg-neutral-900 text-white rounded-full text-xs font-bold">{wallets.length}</span> <span className="text-xs font-normal text-neutral-500 normal-case tracking-normal">Click row for statement</span></h2>

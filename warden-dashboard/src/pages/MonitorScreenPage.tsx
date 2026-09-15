@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card } from '@/components/Card';
 import { Loading } from '@/components/States';
@@ -6,6 +6,7 @@ import { ToastContainer } from '@/components/ToastContainer';
 import { wardenApi } from '@/services/api/wardenApi';
 import { useWardenSocket } from '@/hooks/useWardenSocket';
 import { useToast } from '@/hooks/useToast';
+import { usePageHeader } from '@/context/PageHeaderContext';
 import type { ActiveCall, Inmate, Contact, Wallet, Recording, Device, CallStatistics } from '@/services/api/wardenApi';
 
 export function MonitorScreenPage() {
@@ -65,15 +66,28 @@ export function MonitorScreenPage() {
     () => { loadMonitorData(); }
   );
 
+  const headerIcon = useMemo(() => <span className="material-icons text-primary-600 text-xl">videocam</span>, []);
+
+  usePageHeader({
+    title: 'Monitor Screen',
+    subtitle: call ? `Call ${call.callId} — ${call.inmateName || call.inmateId}` : 'Loading...',
+    icon: headerIcon,
+    actions: useMemo(() => (
+      <div className="flex items-center gap-3">
+        <span className="inline-flex items-center gap-2 px-3 py-1.5 bg-success/10 text-success rounded-lg text-sm font-medium">
+          <span className="w-2 h-2 bg-success rounded-full animate-pulse" />
+          Live
+        </span>
+        <button onClick={() => navigate('/calls')} className="px-4 py-2 bg-neutral-200 text-neutral-900 rounded-lg text-sm hover:bg-neutral-300">Back</button>
+      </div>
+    ), [navigate]),
+  });
+
   if (isLoading) return <Loading message="Loading monitor screen..." />;
 
   if (!call && !loadError) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold text-neutral-900">Monitor Screen</h1>
-          <button onClick={() => navigate('/calls')} className="px-4 py-2 bg-neutral-200 text-neutral-900 rounded-lg text-sm hover:bg-neutral-300">Back</button>
-        </div>
         <Card>
           <div className="text-center py-12">
             <p className="text-neutral-600">Call not found or no longer active</p>
@@ -86,10 +100,6 @@ export function MonitorScreenPage() {
   if (loadError) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold text-neutral-900">Monitor Screen</h1>
-          <button onClick={() => navigate('/calls')} className="px-4 py-2 bg-neutral-200 text-neutral-900 rounded-lg text-sm hover:bg-neutral-300">Back</button>
-        </div>
         <Card>
           <div className="text-center py-12">
             <p className="text-error mb-4">{loadError}</p>
@@ -119,20 +129,6 @@ export function MonitorScreenPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-neutral-900">Monitor Screen</h1>
-          <p className="text-neutral-600 mt-1">Call {call.callId} — {call.inmateName || call.inmateId}</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="inline-flex items-center gap-2 px-3 py-1.5 bg-success/10 text-success rounded-lg text-sm font-medium">
-            <span className="w-2 h-2 bg-success rounded-full animate-pulse" />
-            Live
-          </span>
-          <button onClick={() => navigate('/calls')} className="px-4 py-2 bg-neutral-200 text-neutral-900 rounded-lg text-sm hover:bg-neutral-300">Back</button>
-        </div>
-      </div>
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-4">
           <Card title="Video Area" className="border-l-8 border-slate-300 bg-slate-50">

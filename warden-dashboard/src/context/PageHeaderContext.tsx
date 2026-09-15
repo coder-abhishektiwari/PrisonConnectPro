@@ -1,8 +1,10 @@
-import { createContext, useContext, useState, useCallback, useRef, type ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useLayoutEffect, useRef, type ReactNode } from 'react';
 
 interface PageHeaderConfig {
   title: string;
   subtitle?: string;
+  icon?: ReactNode;
+  actions?: ReactNode;
 }
 
 interface PageHeaderContextValue {
@@ -27,11 +29,12 @@ export function PageHeaderProvider({ children }: { children: ReactNode }) {
 
 export function usePageHeader(config: PageHeaderConfig) {
   const { setConfig } = useContext(PageHeaderContext);
-  const prev = useRef({ title: config.title, subtitle: config.subtitle });
-  if (prev.current.title !== config.title || prev.current.subtitle !== config.subtitle) {
-    prev.current = { title: config.title, subtitle: config.subtitle };
-    setConfig(config);
-  }
+  const configRef = useRef(config);
+  configRef.current = config;
+
+  useLayoutEffect(() => {
+    setConfig(configRef.current);
+  }, [config.title, config.subtitle, setConfig]);
 }
 
 export function usePageHeaderConfig() {
