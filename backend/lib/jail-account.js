@@ -49,7 +49,7 @@ async function internalTransactions(wallet) {
 function deriveSummary(transactions, wallet = {}) {
   const settled = transactions.filter((t) => {
     const s = String(t.status || '').toLowerCase();
-    return s === 'success' || s === 'completed';
+    return s === 'completed';
   });
   const charges = settled.filter((t) => String(t.type || '').toLowerCase() === 'charge');
   const recharges = settled.filter((t) => String(t.type || '').toLowerCase() === 'recharge');
@@ -128,13 +128,13 @@ async function getStatement(id) {
     };
   }
 
-  const transactions = await internalTransactions(wallet);
-  const summary = deriveSummary(transactions, wallet);
-  // Normalize: ensure every transaction has a status so clients can filter reliably
-  const normalizedTxns = transactions.map((t) => ({
+  const rawTransactions = await internalTransactions(wallet);
+  // Normalize first: ensure every transaction has status='completed'
+  const transactions = rawTransactions.map((t) => ({
     ...t,
     status: t.status || 'completed'
   }));
+  const summary = deriveSummary(transactions, wallet);
   return {
     wallet: {
       walletId: wallet.walletId,
@@ -147,7 +147,7 @@ async function getStatement(id) {
       lastRechargeAmount: summary.lastRechargeAmount,
       remainingMinutes: summary.remainingMinutes
     },
-    transactions: normalizedTxns
+    transactions
   };
 }
 

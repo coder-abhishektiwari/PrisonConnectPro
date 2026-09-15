@@ -16,7 +16,9 @@ router.get('/', requireAuth, requireRole('admin', 'warden', 'super-admin', 'supe
 
   // Derive accurate balance from transactions for each wallet
   const enriched = wallets.map((w) => {
-    const walletTxns = transactions.filter((t) => t.walletId === w.walletId || t.inmateId === w.inmateId);
+    const walletTxns = transactions
+      .filter((t) => t.walletId === w.walletId || t.inmateId === w.inmateId)
+      .map((t) => ({ ...t, status: t.status || 'completed' }));
     const summary = deriveSummary(walletTxns, w);
     return { ...w, ...summary };
   });
@@ -39,7 +41,9 @@ router.get('/:inmateId', requireAuth, asyncRoute(async (req, res) => {
   const transactions = await readDb('transactions.json');
   const wallet = wallets.find((w) => w.inmateId === req.params.inmateId);
   if (!wallet || !(await inScopeOf(req, wallet))) return sendError(res, 'NOT_FOUND', 'Wallet not found', 404);
-  const walletTxns = transactions.filter((t) => t.walletId === wallet.walletId || t.inmateId === wallet.inmateId);
+  const walletTxns = transactions
+    .filter((t) => t.walletId === wallet.walletId || t.inmateId === wallet.inmateId)
+    .map((t) => ({ ...t, status: t.status || 'completed' }));
   const summary = deriveSummary(walletTxns, wallet);
   return sendSuccess(res, { ...wallet, ...summary });
 }));
