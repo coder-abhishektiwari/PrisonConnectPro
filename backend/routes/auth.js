@@ -254,7 +254,7 @@ async function identifyInmate(req, res, matchFn, confidence) {
 
   const [inmates, kiosks] = await Promise.all([readDb('inmates.json'), readDb('kiosks.json')]);
   const kiosk = kiosks.find((k) => k.kioskId === kioskId);
-  if (!kiosk) return sendError(res, 'KIOSK_NOT_FOUND', 'Kiosk not registered. Contact administrator.', 403);
+  if (!kiosk) return sendError(res, 'NOT_FOUND', 'Record not found', 404);
 
   // Find matching inmate in same prison + assigned to this kiosk
   const match = inmates.find((i) =>
@@ -285,7 +285,7 @@ router.post('/face-identify', authLimiter, asyncRoute(async (req, res) => {
 
   const [inmates, kiosks] = await Promise.all([readDb('inmates.json'), readDb('kiosks.json')]);
   const kiosk = kiosks.find((k) => k.kioskId === kioskId);
-  if (!kiosk) return sendError(res, 'KIOSK_NOT_FOUND', 'Kiosk not registered. Contact administrator.', 403);
+  if (!kiosk) return sendError(res, 'NOT_FOUND', 'Record not found', 404);
 
   // Filter candidates: face registered + same prison + assigned to this kiosk
   const candidates = inmates.filter((i) =>
@@ -371,10 +371,10 @@ router.post('/face-register', requireAuth, asyncRoute(async (req, res) => {
 
   const kiosk = kiosks.find((k) => k.kioskId === kioskId);
   if (kiosk && kiosk.prisonId && inmate.prisonId && kiosk.prisonId !== inmate.prisonId) {
-    return sendError(res, 'KIOSK_MISMATCH', 'Inmate is not assigned to this prison', 403);
+    return sendError(res, 'NOT_FOUND', 'Record not found', 404);
   }
   if (!kiosk && inmate.assignedKioskId && inmate.assignedKioskId !== kioskId) {
-    return sendError(res, 'KIOSK_MISMATCH', 'Inmate not assigned to this kiosk', 403);
+    return sendError(res, 'NOT_FOUND', 'Record not found', 404);
   }
 
   let imageBase64 = req.body.image;
@@ -430,7 +430,7 @@ router.post('/rfid-identify', asyncRoute(async (req, res) => {
 
   const [inmates, kiosks] = await Promise.all([readDb('inmates.json'), readDb('kiosks.json')]);
   const kiosk = kiosks.find((k) => k.kioskId === kioskId);
-  if (!kiosk) return sendError(res, 'KIOSK_NOT_FOUND', 'Kiosk not registered. Contact administrator.', 403);
+  if (!kiosk) return sendError(res, 'NOT_FOUND', 'Record not found', 404);
 
   // Find inmate with matching RFID in same prison + assigned to this kiosk
   const inmate = inmates.find((i) =>
@@ -459,16 +459,16 @@ router.post('/prisoner/identify', asyncRoute(async (req, res) => {
 
   // Kiosk MUST be registered — block if not found
   const kiosk = kiosks.find((k) => k.kioskId === kioskId);
-  if (!kiosk) return sendError(res, 'KIOSK_NOT_FOUND', 'Kiosk not registered. Contact administrator.', 403);
+  if (!kiosk) return sendError(res, 'NOT_FOUND', 'Record not found', 404);
 
   // Inmate must be in same prison as kiosk
   if (kiosk.prisonId && inmate.prisonId && kiosk.prisonId !== inmate.prisonId) {
-    return sendError(res, 'KIOSK_MISMATCH', 'Inmate is not assigned to this prison', 403);
+    return sendError(res, 'NOT_FOUND', 'Record not found', 404);
   }
 
   // Inmate must be assigned to this specific kiosk
   if (inmate.assignedKioskId && inmate.assignedKioskId !== kioskId) {
-    return sendError(res, 'KIOSK_MISMATCH', 'Inmate is not assigned to this kiosk', 403);
+    return sendError(res, 'NOT_FOUND', 'Record not found', 404);
   }
 
   return sendSuccess(res, {
@@ -490,16 +490,16 @@ router.post('/verify-pin', authLimiter, asyncRoute(async (req, res) => {
 
   // Kiosk MUST be registered
   const kiosk = kiosks.find((k) => k.kioskId === kioskId);
-  if (!kiosk) return sendError(res, 'KIOSK_NOT_FOUND', 'Kiosk not registered. Contact administrator.', 403);
+  if (!kiosk) return sendError(res, 'NOT_FOUND', 'Record not found', 404);
 
   // Inmate must be in same prison
   if (kiosk.prisonId && inmate.prisonId && kiosk.prisonId !== inmate.prisonId) {
-    return sendError(res, 'KIOSK_MISMATCH', 'Inmate is not assigned to this prison', 403);
+    return sendError(res, 'NOT_FOUND', 'Record not found', 404);
   }
 
   // Inmate must be assigned to this specific kiosk
   if (inmate.assignedKioskId && inmate.assignedKioskId !== kioskId) {
-    return sendError(res, 'KIOSK_MISMATCH', 'Inmate is not assigned to this kiosk', 403);
+    return sendError(res, 'NOT_FOUND', 'Record not found', 404);
   }
 
   const valid = await verifySecret(pin, inmate.pin);
