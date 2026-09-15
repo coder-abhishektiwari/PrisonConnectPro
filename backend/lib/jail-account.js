@@ -129,10 +129,10 @@ async function getStatement(id) {
   }
 
   const rawTransactions = await internalTransactions(wallet);
-  // Normalize first: ensure every transaction has status='completed'
+  // Normalize: ensure every transaction has status='completed' (standardize on single value)
   const transactions = rawTransactions.map((t) => ({
     ...t,
-    status: t.status || 'completed'
+    status: (t.status === 'success' || t.status === 'completed') ? 'completed' : (t.status || 'completed')
   }));
   const summary = deriveSummary(transactions, wallet);
   return {

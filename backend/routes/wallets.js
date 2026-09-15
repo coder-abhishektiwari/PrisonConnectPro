@@ -18,7 +18,7 @@ router.get('/', requireAuth, requireRole('admin', 'warden', 'super-admin', 'supe
   const enriched = wallets.map((w) => {
     const walletTxns = transactions
       .filter((t) => t.walletId === w.walletId || t.inmateId === w.inmateId)
-      .map((t) => ({ ...t, status: t.status || 'completed' }));
+      .map((t) => ({ ...t, status: (t.status === 'success' || t.status === 'completed') ? 'completed' : (t.status || 'completed') }));
     const summary = deriveSummary(walletTxns, w);
     return { ...w, ...summary };
   });
@@ -43,7 +43,7 @@ router.get('/:inmateId', requireAuth, asyncRoute(async (req, res) => {
   if (!wallet || !(await inScopeOf(req, wallet))) return sendError(res, 'NOT_FOUND', 'Wallet not found', 404);
   const walletTxns = transactions
     .filter((t) => t.walletId === wallet.walletId || t.inmateId === wallet.inmateId)
-    .map((t) => ({ ...t, status: t.status || 'completed' }));
+    .map((t) => ({ ...t, status: (t.status === 'success' || t.status === 'completed') ? 'completed' : (t.status || 'completed') }));
   const summary = deriveSummary(walletTxns, wallet);
   return sendSuccess(res, { ...wallet, ...summary });
 }));
