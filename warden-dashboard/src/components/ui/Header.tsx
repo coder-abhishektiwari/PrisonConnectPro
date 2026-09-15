@@ -17,7 +17,7 @@ export function Header() {
   return (
     <header className="bg-white border-b border-neutral-200 h-16 flex items-center justify-between px-6">
       <div className="flex items-center gap-4">
-        <span className="text-lg font-bold text-neutral-900">Monitoring Dashboard</span>
+        <span className="text-lg font-bold text-neutral-900">Warden Console</span>
       </div>
 
       <div className="flex items-center gap-6">
