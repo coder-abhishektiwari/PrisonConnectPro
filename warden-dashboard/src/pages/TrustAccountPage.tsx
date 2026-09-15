@@ -4,7 +4,7 @@ import { Card } from '@/components/Card';
 import { Loading } from '@/components/States';
 import { wardenApi } from '@/services/api/wardenApi';
 import { apiClient } from '@/services/api/client';
-import type { Wallet, Transaction, Inmate, WalletRequest } from '@/services/api/wardenApi';
+import type { Wallet, Transaction, Inmate, WalletRequest, ListParams } from '@/services/api/wardenApi';
 
 export function TrustAccountPage() {
   const [wallets, setWallets] = useState<Wallet[]>([]);
@@ -13,6 +13,9 @@ export function TrustAccountPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [error, setError] = useState<string|null>(null);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const PAGE_SIZE = 20;
 
   const [selectedId, setSelectedId] = useState<string|null>(null);
   const [statement, setStatement] = useState<{wallet: Wallet, transactions: Transaction[]} | null>(null);
@@ -29,14 +32,15 @@ export function TrustAccountPage() {
   const load = useCallback(async()=>{
     try{
       setError(null);
-      // Bypass 30s/60s cache — fresh read so Call Configuration rate changes reflect instantly in Remaining
-      const [w, im, reqs, pricingData] = await Promise.all([
-        apiClient.get('/wallets').then((r) => r.data?.data ?? []).catch(() => [] as Wallet[]),
+      const params: ListParams = { limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE, search: search || undefined };
+      const [wResult, im, reqs, pricingData] = await Promise.all([
+        wardenApi.getWallets(params).catch(() => ({ items: [] as Wallet[], total: 0 })),
         wardenApi.getInmates().catch(()=>[] as Inmate[]),
         wardenApi.getWalletRequests().catch(()=>[] as WalletRequest[]),
         apiClient.get('/pricing').then((r) => r.data?.data).catch(()=> null as any).then((d: any) => (Array.isArray(d) ? d[0] : d)),
       ]);
-      setWallets((w as Wallet[]) ?? []);
+      setWallets((wResult as any).items ?? []);
+      setTotal((wResult as any).total ?? 0);
       const map: Record<string, Inmate> = {};
       (im as Inmate[]).forEach(i=> map[i.inmateId]=i);
       setInmates(map);
@@ -50,9 +54,11 @@ export function TrustAccountPage() {
     } catch (e:any) {
       setError(e?.response?.data?.error?.message || e?.message || 'Failed to load wallets');
       setWallets([]);
+      setTotal(0);
     } finally{ setLoading(false); }
-  },[]);
+  },[page, search]);
   useEffect(()=>{load();},[load]);
+  useEffect(()=>{ setPage(1); },[search]);
 
   // Fetch statement when inmate clicked
   useEffect(()=>{
@@ -82,8 +88,8 @@ export function TrustAccountPage() {
       setRechargeSuccess(`₹${amt} credited`);
       setRechargeAmount(''); setRechargeDesc('');
       // refresh wallets and statement
-      const [w] = await Promise.all([wardenApi.getWallets()]);
-      setWallets(w ?? []);
+      const [wResult] = await Promise.all([wardenApi.getWallets({ limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE, search: search || undefined })]);
+      setWallets((wResult as any).items ?? []);
       if (res?.wallet) setStatement(prev => prev ? { ...prev, wallet: res.wallet, transactions: [...(prev.transactions||[]), res.transaction].filter(Boolean) } : prev);
       else {
         const stmt = await wardenApi.getWalletStatement(selectedId);
@@ -98,8 +104,8 @@ export function TrustAccountPage() {
     setReqLoading(true);
     try {
       await wardenApi.approveWalletRequest(reqId);
-      const [w, reqs] = await Promise.all([wardenApi.getWallets(), wardenApi.getWalletRequests()]);
-      setWallets(w ?? []); setRequests(reqs ?? []);
+      const [wResult, reqs] = await Promise.all([wardenApi.getWallets({ limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE, search: search || undefined }), wardenApi.getWalletRequests()]);
+      setWallets((wResult as any).items ?? []); setRequests(reqs ?? []);
       if (selectedId) {
         const stmt = await wardenApi.getWalletStatement(selectedId);
         setStatement(stmt as any);
@@ -134,7 +140,6 @@ export function TrustAccountPage() {
 
   if(loading) return <Loading message="Loading trust accounts..." />;
   if(error) return <Card><div className="text-center py-12"><p className="text-error mb-4">{error}</p><button onClick={()=>{setLoading(true); load();}} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm">Retry</button></div></Card>;
-  const filtered = wallets.filter(w=> !search || w.inmateId.toLowerCase().includes(search.toLowerCase()) || `${inmates[w.inmateId]?.name || ''}`.toLowerCase().includes(search.toLowerCase()));
 
   const selectedWallet = selectedId ? wallets.find(w=>w.inmateId===selectedId) || statement?.wallet || null : null;
   const selectedInmate = selectedId ? inmates[selectedId] : null;
@@ -179,7 +184,7 @@ export function TrustAccountPage() {
 
       <Card className="overflow-hidden">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-5 border-b border-neutral-200 bg-neutral-50/50">
-          <h2 className="font-bold flex items-center gap-2 text-sm uppercase tracking-wide text-neutral-700"><span className="w-2 h-2 bg-success rounded-full animate-pulse" />Wallets <span className="px-2.5 py-1 bg-neutral-900 text-white rounded-full text-xs font-bold">{filtered.length}</span> <span className="text-xs font-normal text-neutral-500 normal-case tracking-normal">Click row for statement</span></h2>
+          <h2 className="font-bold flex items-center gap-2 text-sm uppercase tracking-wide text-neutral-700"><span className="w-2 h-2 bg-success rounded-full animate-pulse" />Wallets <span className="px-2.5 py-1 bg-neutral-900 text-white rounded-full text-xs font-bold">{wallets.length}</span> <span className="text-xs font-normal text-neutral-500 normal-case tracking-normal">Click row for statement</span></h2>
           <div className="flex gap-2">
             <div className="relative">
               <svg className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
@@ -191,9 +196,9 @@ export function TrustAccountPage() {
           <table className="w-full">
             <thead><tr className="border-b bg-neutral-50"><th className="text-left py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Inmate</th><th className="text-left py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Request</th><th className="text-left py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Balance</th><th className="text-left py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Remaining @ Live Rate</th><th className="text-left py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider"></th></tr></thead>
             <tbody>
-              {filtered.length===0 ? (
-                <tr><td colSpan={5} className="py-10 text-center text-sm text-neutral-500">{wallets.length===0 ? 'No trust accounts — backend returned empty. Add wallets via backend seed or inmates.' : `No wallets match "${search}"`}</td></tr>
-              ) : filtered.map(w=>{
+              {wallets.length===0 ? (
+                <tr><td colSpan={5} className="py-10 text-center text-sm text-neutral-500">{total===0 ? 'No trust accounts — backend returned empty. Add wallets via backend seed or inmates.' : `No wallets match "${search}"`}</td></tr>
+              ) : wallets.map(w=>{
                 // Always compute remaining from live pricing + balance so Call Configuration changes reflect instantly, even if backend cached remaining is stale
                 const audioMin = Math.floor(w.balance / (pricing.audioRate || 1));
                 const videoMin = Math.floor(w.balance / (pricing.videoRate || 2.5));
@@ -240,6 +245,19 @@ export function TrustAccountPage() {
             </tbody>
           </table>
         </div>
+
+        {total > PAGE_SIZE && (
+          <div className="flex items-center justify-between px-5 py-4 bg-neutral-50 border-t border-neutral-200">
+            <span className="text-sm text-neutral-600">Showing <span className="font-semibold text-neutral-900">{(page - 1) * PAGE_SIZE + 1}-{Math.min(page * PAGE_SIZE, total)}</span> of <span className="font-semibold text-neutral-900">{total}</span></span>
+            <div className="flex gap-2">
+              <button disabled={page === 1} onClick={() => setPage(1)} className="px-3 py-2 bg-white border border-neutral-200 rounded-xl text-xs font-bold disabled:opacity-40 hover:bg-neutral-50 shadow-sm">«</button>
+              <button disabled={page === 1} onClick={() => setPage((p) => p - 1)} className="px-4 py-2 bg-white border border-neutral-200 rounded-xl text-xs font-bold disabled:opacity-40 hover:bg-neutral-50 shadow-sm">Prev</button>
+              <span className="px-4 py-2 bg-neutral-900 text-white rounded-xl text-xs font-bold shadow-sm">{page} / {Math.max(1, Math.ceil(total / PAGE_SIZE))}</span>
+              <button disabled={page === Math.ceil(total / PAGE_SIZE)} onClick={() => setPage((p) => p + 1)} className="px-4 py-2 bg-white border border-neutral-200 rounded-xl text-xs font-bold disabled:opacity-40 hover:bg-neutral-50 shadow-sm">Next</button>
+              <button disabled={page === Math.ceil(total / PAGE_SIZE)} onClick={() => setPage(Math.ceil(total / PAGE_SIZE))} className="px-3 py-2 bg-white border border-neutral-200 rounded-xl text-xs font-bold disabled:opacity-40 hover:bg-neutral-50 shadow-sm">»</button>
+            </div>
+          </div>
+        )}
       </Card>
 
       {createPortal(selectedId && (

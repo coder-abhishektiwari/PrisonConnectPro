@@ -69,6 +69,21 @@ export interface CallHistoryParams {
   sortDir?: string;
 }
 
+export interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ListParams {
+  limit?: number;
+  offset?: number;
+  search?: string;
+  sortField?: string;
+  sortDir?: string;
+}
+
 export interface Recording {
   recordingId: string;
   callId: string;
@@ -313,8 +328,12 @@ export interface SecurityStatus {
 
 export const wardenApi = {
   // Active Calls
-  getActiveCalls: () =>
-    cachedGet('calls:active', () => apiClient.get<ApiResponse<ActiveCall[]>>('/calls/active').then((r) => r.data?.data ?? [])),
+  getActiveCalls: (params?: ListParams) => {
+    const qs = new URLSearchParams();
+    if (params) Object.entries(params).forEach(([k, v]) => { if (v != null && v !== '') qs.set(k, String(v)); });
+    const url = `/calls/active${qs.toString() ? '?' + qs.toString() : ''}`;
+    return apiClient.get<ApiResponse<PaginatedResponse<ActiveCall>>>(url).then((r) => r.data?.data ?? { items: [], total: 0, limit: 20, offset: 0 });
+  },
 
   // All Calls
   getAllCalls: () =>
@@ -371,8 +390,12 @@ export const wardenApi = {
     }),
 
   // Devices
-  getDevices: () =>
-    cachedGet('devices', () => apiClient.get<ApiResponse<Device[]>>('/devices').then((r) => r.data?.data ?? [])),
+  getDevices: (params?: ListParams) => {
+    const qs = new URLSearchParams();
+    if (params) Object.entries(params).forEach(([k, v]) => { if (v != null && v !== '') qs.set(k, String(v)); });
+    const url = `/admin/devices${qs.toString() ? '?' + qs.toString() : ''}`;
+    return apiClient.get<ApiResponse<PaginatedResponse<Device>>>(url).then((r) => r.data?.data ?? { items: [], total: 0, limit: 20, offset: 0 });
+  },
 
   getDevice: (deviceId: string) =>
     cachedGet(`devices:${deviceId}`, () => apiClient.get<ApiResponse<Device>>(`/devices/${deviceId}`).then((r) => r.data?.data)),
@@ -391,8 +414,12 @@ export const wardenApi = {
     cachedGet(`reports:${reportId}`, () => apiClient.get<ApiResponse<Report>>(`/reports/${reportId}`).then((r) => r.data?.data)),
 
   // Inmates
-  getInmates: () =>
-    cachedGet('inmates', () => apiClient.get<ApiResponse<Inmate[]>>('/inmates').then((r) => r.data?.data ?? [])),
+  getInmates: (params?: ListParams) => {
+    const qs = new URLSearchParams();
+    if (params) Object.entries(params).forEach(([k, v]) => { if (v != null && v !== '') qs.set(k, String(v)); });
+    const url = `/inmates${qs.toString() ? '?' + qs.toString() : ''}`;
+    return apiClient.get<ApiResponse<PaginatedResponse<Inmate>>>(url).then((r) => r.data?.data ?? { items: [], total: 0, limit: 20, offset: 0 });
+  },
 
   getInmate: (inmateId: string) =>
     cachedGet(`inmates:${inmateId}`, () => apiClient.get<ApiResponse<Inmate>>(`/inmates/${inmateId}`).then((r) => r.data?.data)),
@@ -404,8 +431,12 @@ export const wardenApi = {
     apiClient.delete<ApiResponse<void>>(`/inmates/${inmateId}`).then((r) => { invalidateCache('inmates'); return r.data; }),
 
   // Contacts
-  getContacts: () =>
-    cachedGet('contacts', () => apiClient.get<ApiResponse<Contact[]>>('/contacts').then((r) => r.data?.data ?? [])),
+  getContacts: (params?: ListParams) => {
+    const qs = new URLSearchParams();
+    if (params) Object.entries(params).forEach(([k, v]) => { if (v != null && v !== '') qs.set(k, String(v)); });
+    const url = `/contacts${qs.toString() ? '?' + qs.toString() : ''}`;
+    return apiClient.get<ApiResponse<PaginatedResponse<Contact>>>(url).then((r) => r.data?.data ?? { items: [], total: 0, limit: 20, offset: 0 });
+  },
 
   createContact: (inmateId: string, data: Partial<Contact>) =>
     apiClient.post<ApiResponse<Contact>>(`/admin/prisoners/${inmateId}/contacts`, data).then((r) => { invalidateCache('contacts'); return r.data?.data; }),
@@ -414,8 +445,12 @@ export const wardenApi = {
     apiClient.delete<ApiResponse<void>>(`/contacts/${contactId}`).then((r) => { invalidateCache('contacts'); return r.data; }),
 
   // Wallets
-  getWallets: () =>
-    cachedGet('wallets', () => apiClient.get<ApiResponse<Wallet[]>>('/wallets').then((r) => r.data?.data ?? [])),
+  getWallets: (params?: ListParams) => {
+    const qs = new URLSearchParams();
+    if (params) Object.entries(params).forEach(([k, v]) => { if (v != null && v !== '') qs.set(k, String(v)); });
+    const url = `/wallets${qs.toString() ? '?' + qs.toString() : ''}`;
+    return apiClient.get<ApiResponse<PaginatedResponse<Wallet>>>(url).then((r) => r.data?.data ?? { items: [], total: 0, limit: 20, offset: 0 });
+  },
 
   getWallet: (inmateId: string) =>
     cachedGet(`wallets:${inmateId}`, () => apiClient.get<ApiResponse<Wallet>>(`/wallets/${inmateId}`).then((r) => r.data?.data)),
@@ -589,8 +624,12 @@ export const wardenApi = {
   },
 
   // Kiosk Registration & Authorization
-  getKioskRegistrationRequests: () =>
-    cachedGet('kiosks:registration', () => apiClient.get<ApiResponse<KioskRegistrationRequestItem[]>>('/kiosks/registration-requests').then((r) => r.data?.data ?? [])),
+  getKioskRegistrationRequests: (params?: ListParams) => {
+    const qs = new URLSearchParams();
+    if (params) Object.entries(params).forEach(([k, v]) => { if (v != null && v !== '') qs.set(k, String(v)); });
+    const url = `/kiosks/registration-requests${qs.toString() ? '?' + qs.toString() : ''}`;
+    return apiClient.get<ApiResponse<PaginatedResponse<KioskRegistrationRequestItem>>>(url).then((r) => r.data?.data ?? { items: [], total: 0, limit: 20, offset: 0 });
+  },
 
   approveKioskRegistration: (requestId: string) =>
     apiClient.put<ApiResponse<{ success: boolean }>>(`/kiosks/registration/${requestId}/approve`).then((r) => {
@@ -614,8 +653,12 @@ export const wardenApi = {
     }),
 
   // User Management
-  getWardens: () =>
-    cachedGet('wardens', () => apiClient.get<ApiResponse<any[]>>('/wardens').then((r) => r.data?.data ?? [])),
+  getWardens: (params?: ListParams) => {
+    const qs = new URLSearchParams();
+    if (params) Object.entries(params).forEach(([k, v]) => { if (v != null && v !== '') qs.set(k, String(v)); });
+    const url = `/wardens${qs.toString() ? '?' + qs.toString() : ''}`;
+    return apiClient.get<ApiResponse<PaginatedResponse<any>>>(url).then((r) => r.data?.data ?? { items: [], total: 0, limit: 20, offset: 0 });
+  },
 
   getWarden: (wardenId: string) =>
     cachedGet(`wardens:${wardenId}`, () => apiClient.get<ApiResponse<any>>(`/wardens/${wardenId}`).then((r) => r.data?.data)),

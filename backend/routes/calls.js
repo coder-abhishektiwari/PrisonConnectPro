@@ -8,6 +8,7 @@ const { sendSuccess, sendError, asyncRoute } = require('../lib/response');
 const { inAdminScope, adminScopeFilter, inScopeOf, scopeList, kioskScopeOf } = require('../lib/scoping');
 const { sendSms, otpTemplateVars, linkTemplateVars } = require('../lib/sms');
 const { maskedPhone, contactPhone, buildLinkSms, buildCallLink } = require('../lib/familySecurity');
+const { paginate } = require('../lib/paginate');
 
 // ==================== CALL STATE MACHINE ====================
 const CALL_STATES = ['scheduled', 'ringing', 'connecting', 'active', 'reconnecting', 'completed', 'failed', 'cancelled', 'rejected', 'missed'];
@@ -157,7 +158,18 @@ function createCallsRouter(broadcastEvent, signaling) {
     } else {
       calls = calls.filter((c) => inAdminScope(req, c));
     }
-    return sendSuccess(res, calls.filter((c) => c.status === 'active'));
+    const active = calls.filter((c) => c.status === 'active');
+    const result = await paginate({
+      req, data: active,
+      search: (c, q) =>
+        (c.callId || '').toLowerCase().includes(q) ||
+        (c.inmateName || '').toLowerCase().includes(q) ||
+        (c.familyMemberName || '').toLowerCase().includes(q) ||
+        (c.inmateId || '').toLowerCase().includes(q) ||
+        (c.kioskId || '').toLowerCase().includes(q),
+      searchFields: [],
+    });
+    return sendSuccess(res, result);
   }));
 
   router.get('/history', requireAuth, asyncRoute(async (req, res) => {

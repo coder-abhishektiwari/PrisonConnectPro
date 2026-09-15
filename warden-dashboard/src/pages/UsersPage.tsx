@@ -4,6 +4,7 @@ import { Loading } from '@/components/States';
 import { ToastContainer } from '@/components/ToastContainer';
 import { useToast } from '@/hooks/useToast';
 import { wardenApi } from '@/services/api/wardenApi';
+import type { ListParams } from '@/services/api/wardenApi';
 
 interface WardenUser {
   wardenId: string;
@@ -24,23 +25,48 @@ export function UsersPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'on_leave'>('all');
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [statsCounts, setStatsCounts] = useState({ activeCount: 0, inactiveCount: 0, onLeaveCount: 0 });
   const { toasts, success: toastSuccess, error: toastError, removeToast } = useToast();
+  const limit = 20;
 
   const loadUsers = useCallback(async () => {
     try {
       setIsLoading(true);
       setLoadError(null);
-      const data = await wardenApi.getWardens();
-      setUsers(data);
+      const params: ListParams = {
+        limit,
+        offset: (page - 1) * limit,
+        search: searchQuery || undefined,
+      };
+      const data = await wardenApi.getWardens(params);
+      setUsers(data.items);
+      setTotal(data.total);
     } catch (err) {
       console.error('Failed to load users:', err);
       setLoadError('Failed to load users. Please try again.');
     } finally {
       setIsLoading(false);
     }
+  }, [page, searchQuery]);
+
+  const loadStats = useCallback(async () => {
+    try {
+      const data = await wardenApi.getWardens({ limit: 1000 });
+      const allUsers = data.items;
+      setStatsCounts({
+        activeCount: allUsers.filter(u => u.status === 'active').length,
+        inactiveCount: allUsers.filter(u => u.status === 'inactive').length,
+        onLeaveCount: allUsers.filter(u => u.status === 'on_leave').length,
+      });
+    } catch {
+      // silently fail for stats
+    }
   }, []);
 
   useEffect(() => { loadUsers(); }, [loadUsers]);
+  useEffect(() => { loadStats(); }, [loadStats]);
 
   function toggleStatus(userId: string, currentStatus: string) {
     const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
@@ -49,16 +75,9 @@ export function UsersPage() {
   }
 
   const filtered = users.filter(u => {
-    const matchesSearch = u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.employeeId.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === 'all' || u.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    return matchesStatus;
   });
-
-  const activeCount = users.filter(u => u.status === 'active').length;
-  const inactiveCount = users.filter(u => u.status === 'inactive').length;
-  const onLeaveCount = users.filter(u => u.status === 'on_leave').length;
 
   if (isLoading) return <Loading message="Loading users..." />;
 
@@ -97,15 +116,15 @@ export function UsersPage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="p-4 bg-white border border-neutral-200 rounded-xl">
           <p className="text-xs font-semibold uppercase text-success">Active Users</p>
-          <p className="text-3xl font-extrabold text-neutral-900 mt-2">{activeCount}</p>
+          <p className="text-3xl font-extrabold text-neutral-900 mt-2">{statsCounts.activeCount}</p>
         </div>
         <div className="p-4 bg-white border border-neutral-200 rounded-xl">
           <p className="text-xs font-semibold uppercase text-error">Inactive</p>
-          <p className="text-3xl font-extrabold text-neutral-900 mt-2">{inactiveCount}</p>
+          <p className="text-3xl font-extrabold text-neutral-900 mt-2">{statsCounts.inactiveCount}</p>
         </div>
         <div className="p-4 bg-white border border-neutral-200 rounded-xl">
           <p className="text-xs font-semibold uppercase text-warning">On Leave</p>
-          <p className="text-3xl font-extrabold text-neutral-900 mt-2">{onLeaveCount}</p>
+          <p className="text-3xl font-extrabold text-neutral-900 mt-2">{statsCounts.onLeaveCount}</p>
         </div>
       </div>
 
@@ -115,12 +134,12 @@ export function UsersPage() {
           type="text"
           placeholder="Search by name, email, or ID..."
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
           className="flex-1 px-4 py-2 border-2 border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
         />
         <select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+          onChange={(e) => { setStatusFilter(e.target.value as typeof statusFilter); setPage(1); }}
           className="px-4 py-2 border-2 border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
         >
           <option value="all">All Status</option>
@@ -194,6 +213,32 @@ export function UsersPage() {
           </table>
         </div>
       </Card>
+
+      {/* Pagination */}
+      {total > 0 && (
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-neutral-600">
+            Showing {Math.min((page - 1) * limit + 1, total)}-{Math.min(page * limit, total)} of {total}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="px-3 py-1.5 rounded-lg text-sm font-medium border border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+            >
+              Prev
+            </button>
+            <span className="text-sm text-neutral-600">Page {page} of {Math.ceil(total / limit)}</span>
+            <button
+              onClick={() => setPage(p => Math.min(Math.ceil(total / limit), p + 1))}
+              disabled={page >= Math.ceil(total / limit)}
+              className="px-3 py-1.5 rounded-lg text-sm font-medium border border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

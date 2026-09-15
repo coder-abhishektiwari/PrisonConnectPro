@@ -5,6 +5,7 @@ const { readDb, updateDb } = require('./lib/db');
 const { hashSecret } = require('./lib/auth');
 const { requireRole } = require('./middleware/auth');
 const { inAdminScope, adminScopeFilter, jailScopeOf, kioskScopeOf } = require('./lib/scoping');
+const { paginate } = require('./lib/paginate');
 
 const ALL_ROLES = ['admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'];
 const ADMIN_ROLES = ['admin', 'warden', 'super-admin', 'super_admin'];
@@ -33,7 +34,17 @@ function normalizeInmate(i) {
 
 router.get('/prisoners', requireRole(...ALL_ROLES), async (req, res) => {
   const inmates = await readDb('inmates.json');
-  return res.json({ success: true, data: inmates.filter(adminScopeFilter(req)).map(normalizeInmate) });
+  const scoped = inmates.filter(adminScopeFilter(req)).map(normalizeInmate);
+  const result = await paginate({
+    req, data: scoped,
+    search: (i, q) =>
+      (i.name || '').toLowerCase().includes(q) ||
+      (i.inmateId || '').toLowerCase().includes(q) ||
+      (i.facility || '').toLowerCase().includes(q),
+    searchFields: [],
+    defaultSort: 'name',
+  });
+  return res.json({ success: true, data: result });
 });
 
 router.get('/prisoners/:prisonerId', requireRole(...ALL_ROLES), async (req, res) => {
@@ -240,7 +251,16 @@ router.delete('/contacts/:contactId', requireRole(...ALL_ROLES), async (req, res
 
 router.get('/devices', requireRole(...ALL_ROLES), async (req, res) => {
   const devices = await readDb('devices.json');
-  return res.json({ success: true, data: devices });
+  const result = await paginate({
+    req, data: devices,
+    search: (d, q) =>
+      (d.deviceId || '').toLowerCase().includes(q) ||
+      (d.name || '').toLowerCase().includes(q) ||
+      (d.location || '').toLowerCase().includes(q),
+    searchFields: [],
+    defaultSort: 'deviceId',
+  });
+  return res.json({ success: true, data: result });
 });
 
 router.get('/devices/:deviceId', requireRole(...ALL_ROLES), async (req, res) => {

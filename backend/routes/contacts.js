@@ -4,6 +4,7 @@ const { readDb, updateDb } = require('../lib/db');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { sendSuccess, sendError, asyncRoute } = require('../lib/response');
 const { jailScopeOf, inJailScope, adminScopeFilter, inScopeOf, scopeList, inAdminScope, kioskScopeOf } = require('../lib/scoping');
+const { paginate } = require('../lib/paginate');
 
 function normalizeContact(c) {
   if (!c) return c;
@@ -18,7 +19,22 @@ function createContactsRouter(broadcastEvent) {
 
   // ==================== CONTACT ROUTES ====================
 
-  router.get('/', requireAuth, asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('contacts.json')))));
+  router.get('/', requireAuth, asyncRoute(async (req, res) => {
+    const contacts = await readDb('contacts.json');
+    const scoped = await scopeList(req, contacts);
+    const result = await paginate({
+      req, data: scoped,
+      search: (c, q) =>
+        (c.name || '').toLowerCase().includes(q) ||
+        (c.contactId || '').toLowerCase().includes(q) ||
+        (c.inmateId || '').toLowerCase().includes(q) ||
+        (c.phoneNumber || '').toLowerCase().includes(q) ||
+        (c.relationship || '').toLowerCase().includes(q),
+      searchFields: [],
+      defaultSort: 'name',
+    });
+    return sendSuccess(res, result);
+  }));
 
   // Clear all registered family-device fingerprints for a contact. The NEXT
   // call to this contact registers whatever device opens the link — use when a

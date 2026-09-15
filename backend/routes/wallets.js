@@ -3,6 +3,7 @@ const { readDb, updateDb } = require('../lib/db');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { sendSuccess, sendError, asyncRoute } = require('../lib/response');
 const { scopeList, inScopeOf } = require('../lib/scoping');
+const { paginate } = require('../lib/paginate');
 const { v4: uuidv4 } = require('uuid');
 
 const router = express.Router();
@@ -10,7 +11,16 @@ const router = express.Router();
 // GET /wallets — list all wallets
 router.get('/', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const wallets = await readDb('wallets.json');
-  return sendSuccess(res, await scopeList(req, wallets));
+  const scoped = await scopeList(req, wallets);
+  const result = await paginate({
+    req, data: scoped,
+    search: (w, q) =>
+      (w.inmateId || '').toLowerCase().includes(q) ||
+      (w.walletId || '').toLowerCase().includes(q),
+    searchFields: [],
+    defaultSort: 'balance',
+  });
+  return sendSuccess(res, result);
 }));
 
 // GET /wallets/:inmateId — get wallet by inmate ID

@@ -5,6 +5,7 @@ const { hashSecret } = require('../lib/auth');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { sendSuccess, sendError, asyncRoute } = require('../lib/response');
 const { jailScopeOf, inJailScope, kioskScopeOf, inAdminScope, adminScopeFilter, inScopeOf, scopeList } = require('../lib/scoping');
+const { paginate } = require('../lib/paginate');
 
 const router = express.Router();
 
@@ -25,7 +26,18 @@ function normalizeInmate(i) {
 function inmateListHandler(req, res) {
   return asyncRoute(async (req, res) => {
     const inmates = await readDb('inmates.json');
-    return sendSuccess(res, inmates.filter(adminScopeFilter(req)).map(normalizeInmate));
+    const scoped = inmates.filter(adminScopeFilter(req)).map(normalizeInmate);
+    const result = await paginate({
+      req, data: scoped,
+      search: (i, q) =>
+        (i.name || '').toLowerCase().includes(q) ||
+        (i.inmateId || '').toLowerCase().includes(q) ||
+        (i.facility || '').toLowerCase().includes(q) ||
+        (i.prisonId || '').toLowerCase().includes(q),
+      searchFields: [],
+      defaultSort: 'name',
+    });
+    return sendSuccess(res, result);
   })(req, res);
 }
 

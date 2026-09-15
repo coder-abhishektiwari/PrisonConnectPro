@@ -5,6 +5,7 @@ const { hashSecret, verifySecret } = require('../lib/auth');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { sendSuccess, sendError, asyncRoute } = require('../lib/response');
 const { jailScopeOf, inAdminScope, adminScopeFilter, inScopeOf, scopeList } = require('../lib/scoping');
+const { paginate } = require('../lib/paginate');
 
 const router = express.Router();
 
@@ -202,7 +203,7 @@ router.get('/registration-status/:serialNumber', asyncRoute(async (req, res) => 
 router.get('/registration-requests', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const [kiosks, prisons] = await Promise.all([readDb('kiosks.json'), readDb('prisons.json')]);
   const registrationRequests = kiosks.filter((k) => k.status === 'pending' || k.authorizationStatus === 'pending');
-  return sendSuccess(res, (await scopeList(req, registrationRequests)).map((k) => {
+  const mapped = (await scopeList(req, registrationRequests)).map((k) => {
     const prison = prisons.find((p) => p.prisonId === k.prisonId);
     return {
       requestId: k.kioskId,
@@ -221,7 +222,18 @@ router.get('/registration-requests', requireAuth, requireRole('admin', 'warden',
       reviewedBy: k.reviewedBy || null,
       reviewedAt: k.reviewedAt || null,
     };
-  }));
+  });
+  const result = await paginate({
+    req, data: mapped,
+    search: (r, q) =>
+      (r.requestId || '').toLowerCase().includes(q) ||
+      (r.deviceSerialNumber || '').toLowerCase().includes(q) ||
+      (r.prisonName || '').toLowerCase().includes(q) ||
+      (r.location || '').toLowerCase().includes(q),
+    searchFields: [],
+    defaultSort: 'registrationTimestamp',
+  });
+  return sendSuccess(res, result);
 }));
 
 router.put('/registration/:requestId/approve', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {

@@ -12,6 +12,7 @@ const { requireAuth, requireRole } = require('./middleware/auth');
 const { sendSms, otpTemplateVars } = require('./lib/sms');
 const { sendSuccess, sendError, asyncRoute, deepMerge } = require('./lib/response');
 const { jailScopeOf, inAdminScope, inScopeOf, scopeList, kioskScopeOf } = require('./lib/scoping');
+const { paginate } = require('./lib/paginate');
 
 const { router: authRouter } = require('./auth-routes');
 const { router: adminRouter } = require('./admin-routes');
@@ -282,7 +283,20 @@ app.patch('/wallet-requests/:requestId/reject', requireAuth, requireRole('admin'
 }));
 
 // ==================== WARDENS ====================
-app.get('/wardens', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('wardens.json')))));
+app.get('/wardens', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+  const wardens = await scopeList(req, await readDb('wardens.json'));
+  const result = await paginate({
+    req, data: wardens,
+    search: (w, q) =>
+      (w.name || '').toLowerCase().includes(q) ||
+      (w.wardenId || '').toLowerCase().includes(q) ||
+      (w.email || '').toLowerCase().includes(q) ||
+      (w.employeeId || '').toLowerCase().includes(q),
+    searchFields: [],
+    defaultSort: 'name',
+  });
+  return sendSuccess(res, result);
+}));
 app.get('/wardens/:wardenId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const wardens = await readDb('wardens.json');
   const warden = wardens.find((w) => w.wardenId === req.params.wardenId);

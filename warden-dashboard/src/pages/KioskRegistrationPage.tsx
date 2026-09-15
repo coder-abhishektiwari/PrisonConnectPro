@@ -3,7 +3,9 @@ import { Card } from '@/components/Card';
 import { Loading } from '@/components/States';
 import { ToastContainer } from '@/components/ToastContainer';
 import { useToast } from '@/hooks/useToast';
-import { wardenApi, KioskRegistrationRequestItem } from '@/services/api/wardenApi';
+import { wardenApi, KioskRegistrationRequestItem, ListParams } from '@/services/api/wardenApi';
+
+const PAGE_SIZE = 20;
 
 export function KioskRegistrationPage() {
   const [requests, setRequests] = useState<KioskRegistrationRequestItem[]>([]);
@@ -12,22 +14,46 @@ export function KioskRegistrationPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const { toasts, success, error: toastError, removeToast } = useToast();
 
-  const fetchRequests = useCallback(async () => {
+  const fetchRequests = useCallback(async (signal?: AbortSignal) => {
     setLoadError(null);
     try {
-      const data = await wardenApi.getKioskRegistrationRequests();
-      setRequests(data);
+      const params: ListParams = { limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE, search: searchQuery };
+      const data = await wardenApi.getKioskRegistrationRequests(params);
+      setRequests(data.items);
+      setTotal(data.total);
     } catch (err) {
-      console.error('Failed to fetch registration requests:', err);
-      setLoadError('Failed to load registration requests');
+      if (!signal?.aborted) {
+        console.error('Failed to fetch registration requests:', err);
+        setLoadError('Failed to load registration requests');
+      }
     } finally {
       setIsLoading(false);
     }
+  }, [page, searchQuery]);
+
+  const fetchCounts = useCallback(async () => {
+    try {
+      const data = await wardenApi.getKioskRegistrationRequests({ limit: 1000 });
+      return data.items;
+    } catch {
+      return [];
+    }
   }, []);
 
-  useEffect(() => { fetchRequests(); }, [fetchRequests]);
+  const [counts, setCounts] = useState<KioskRegistrationRequestItem[]>([]);
+  useEffect(() => {
+    fetchCounts().then(setCounts);
+  }, [fetchCounts, actionLoading]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchRequests(controller.signal);
+    return () => controller.abort();
+  }, [fetchRequests]);
 
   const handleApprove = async (requestId: string) => {
     try {
@@ -58,19 +84,19 @@ export function KioskRegistrationPage() {
     }
   };
 
-  const filtered = requests.filter((r) => {
-    const matchesFilter = filter === 'all' || r.status === filter;
-    const matchesSearch =
-      r.deviceSerialNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.requestId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (r.prisonName && r.prisonName.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      r.location.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesFilter && matchesSearch;
-  });
+  const handleFilterChange = (newFilter: typeof filter) => {
+    setPage(1);
+    setFilter(newFilter);
+  };
 
-  const pendingCount = requests.filter((r) => r.status === 'pending').length;
-  const approvedCount = requests.filter((r) => r.status === 'approved').length;
-  const rejectedCount = requests.filter((r) => r.status === 'rejected').length;
+  const handleSearchChange = (value: string) => {
+    setPage(1);
+    setSearchQuery(value);
+  };
+
+  const pendingCount = counts.filter((r) => r.status === 'pending').length;
+  const approvedCount = counts.filter((r) => r.status === 'approved').length;
+  const rejectedCount = counts.filter((r) => r.status === 'rejected').length;
 
   if (isLoading) return <Loading message="Loading registration requests..." />;
 
@@ -100,14 +126,14 @@ export function KioskRegistrationPage() {
           <h1 className="text-3xl font-bold text-neutral-900">Kiosk Registration</h1>
           <p className="text-neutral-600 mt-1">Device authorization and setup requests</p>
         </div>
-        <button onClick={() => { setIsLoading(true); fetchRequests(); }} disabled={isLoading} className="px-4 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-lg text-sm font-medium transition">
+        <button onClick={() => { setIsLoading(true); fetchRequests(); fetchCounts().then(setCounts); }} disabled={isLoading} className="px-4 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-lg text-sm font-medium transition">
           {isLoading ? 'Refreshing...' : 'Refresh'}
         </button>
       </div>
 
       {/* Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        <button onClick={() => setFilter('pending')} className={`p-4 rounded-xl border text-left transition ${filter === 'pending' ? 'bg-warning/10 border-warning/40' : 'bg-white border-neutral-200 hover:border-warning/30'}`}>
+        <button onClick={() => handleFilterChange('pending')} className={`p-4 rounded-xl border text-left transition ${filter === 'pending' ? 'bg-warning/10 border-warning/40' : 'bg-white border-neutral-200 hover:border-warning/30'}`}>
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase text-warning">Pending</span>
             <span className="w-2 h-2 bg-warning rounded-full animate-pulse" />
@@ -115,7 +141,7 @@ export function KioskRegistrationPage() {
           <p className="text-3xl font-extrabold text-neutral-900 mt-2">{pendingCount}</p>
           <p className="text-xs text-neutral-500 mt-1">Requires Review</p>
         </button>
-        <button onClick={() => setFilter('approved')} className={`p-4 rounded-xl border text-left transition ${filter === 'approved' ? 'bg-success/10 border-success/40' : 'bg-white border-neutral-200 hover:border-success/30'}`}>
+        <button onClick={() => handleFilterChange('approved')} className={`p-4 rounded-xl border text-left transition ${filter === 'approved' ? 'bg-success/10 border-success/40' : 'bg-white border-neutral-200 hover:border-success/30'}`}>
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase text-success">Approved</span>
             <span className="w-2 h-2 bg-success rounded-full" />
@@ -123,7 +149,7 @@ export function KioskRegistrationPage() {
           <p className="text-3xl font-extrabold text-neutral-900 mt-2">{approvedCount}</p>
           <p className="text-xs text-neutral-500 mt-1">Active & Provisioned</p>
         </button>
-        <button onClick={() => setFilter('rejected')} className={`p-4 rounded-xl border text-left transition ${filter === 'rejected' ? 'bg-error/10 border-error/40' : 'bg-white border-neutral-200 hover:border-error/30'}`}>
+        <button onClick={() => handleFilterChange('rejected')} className={`p-4 rounded-xl border text-left transition ${filter === 'rejected' ? 'bg-error/10 border-error/40' : 'bg-white border-neutral-200 hover:border-error/30'}`}>
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase text-error">Rejected</span>
             <span className="w-2 h-2 bg-error rounded-full" />
@@ -131,12 +157,12 @@ export function KioskRegistrationPage() {
           <p className="text-3xl font-extrabold text-neutral-900 mt-2">{rejectedCount}</p>
           <p className="text-xs text-neutral-500 mt-1">Access Denied</p>
         </button>
-        <button onClick={() => setFilter('all')} className={`p-4 rounded-xl border text-left transition ${filter === 'all' ? 'bg-primary-50 border-primary-300' : 'bg-white border-neutral-200 hover:border-primary-200'}`}>
+        <button onClick={() => handleFilterChange('all')} className={`p-4 rounded-xl border text-left transition ${filter === 'all' ? 'bg-primary-50 border-primary-300' : 'bg-white border-neutral-200 hover:border-primary-200'}`}>
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase text-primary-700">All Requests</span>
             <span className="w-2 h-2 bg-primary-500 rounded-full" />
           </div>
-          <p className="text-3xl font-extrabold text-neutral-900 mt-2">{requests.length}</p>
+          <p className="text-3xl font-extrabold text-neutral-900 mt-2">{counts.length}</p>
           <p className="text-xs text-neutral-500 mt-1">Total Requests</p>
         </button>
       </div>
@@ -146,15 +172,15 @@ export function KioskRegistrationPage() {
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 border-b border-neutral-200">
           <div className="flex gap-2">
             {(['pending', 'approved', 'rejected', 'all'] as const).map((tab) => (
-              <button key={tab} onClick={() => setFilter(tab)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition ${filter === tab ? 'bg-primary-600 text-white' : 'text-neutral-600 hover:bg-neutral-100'}`}>
+              <button key={tab} onClick={() => handleFilterChange(tab)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition ${filter === tab ? 'bg-primary-600 text-white' : 'text-neutral-600 hover:bg-neutral-100'}`}>
                 {tab === 'pending' ? `Pending (${pendingCount})` : tab}
               </button>
             ))}
           </div>
-          <input type="text" placeholder="Search serial, ID, location..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full sm:w-64 px-3 py-1.5 text-sm border-2 border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" />
+          <input type="text" placeholder="Search serial, ID, location..." value={searchQuery} onChange={(e) => handleSearchChange(e.target.value)} className="w-full sm:w-64 px-3 py-1.5 text-sm border-2 border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" />
         </div>
 
-        {filtered.length === 0 ? (
+        {requests.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-neutral-600">No registration requests match the selected criteria.</p>
           </div>
@@ -174,7 +200,7 @@ export function KioskRegistrationPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((req) => (
+                {requests.map((req) => (
                   <tr key={req.requestId} className="border-b border-neutral-100 hover:bg-neutral-50 transition-colors">
                     <td className="py-3 px-4">
                       <span className="font-mono text-xs font-bold text-primary-700 bg-primary-50 px-2 py-0.5 rounded">{req.requestId}</span>
@@ -213,6 +239,23 @@ export function KioskRegistrationPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {total > PAGE_SIZE && (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-neutral-200">
+            <p className="text-sm text-neutral-500">
+              Showing {Math.min((page - 1) * PAGE_SIZE + 1, total)}–{Math.min(page * PAGE_SIZE, total)} of {total}
+            </p>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="px-3 py-1.5 text-sm font-medium border border-neutral-300 rounded-lg hover:bg-neutral-50 disabled:opacity-50 disabled:cursor-not-allowed transition">
+                Prev
+              </button>
+              <span className="text-sm text-neutral-600">Page {page} of {Math.ceil(total / PAGE_SIZE)}</span>
+              <button onClick={() => setPage((p) => p + 1)} disabled={page >= Math.ceil(total / PAGE_SIZE)} className="px-3 py-1.5 text-sm font-medium border border-neutral-300 rounded-lg hover:bg-neutral-50 disabled:opacity-50 disabled:cursor-not-allowed transition">
+                Next
+              </button>
+            </div>
           </div>
         )}
       </Card>

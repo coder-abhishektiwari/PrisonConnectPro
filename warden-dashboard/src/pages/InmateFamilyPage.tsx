@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Card } from '@/components/Card';
 import { Loading } from '@/components/States';
 import { wardenApi } from '@/services/api/wardenApi';
-import type { Inmate, Contact } from '@/services/api/wardenApi';
+import type { Inmate, Contact, ListParams } from '@/services/api/wardenApi';
 
 export function InmateFamilyPage() {
   const [inmates, setInmates] = useState<Inmate[]>([]);
@@ -26,15 +26,19 @@ useState({name:'',relationship:'',phoneNumber:'',inmateId:''});
   const load = useCallback(async()=>{
     try{
       setLoadError(null);
-      const [im, co, dv] = await Promise.all([wardenApi.getInmates(), wardenApi.getContacts(), wardenApi.getDevices()]);
-      setInmates(im ?? []);
-      setContacts(co ?? []);
-      setKiosks((dv ?? []).map((d:any)=>({deviceId:d.deviceId||d.id,name:d.name||d.deviceId||d.id,location:d.location})));
+      const params: ListParams = { limit: 20, offset: (prisonerPage-1)*20, search: searchPrisoner || undefined };
+      const contactParams: ListParams = { limit: 100, offset: 0 };
+      const [im, co, dv] = await Promise.all([wardenApi.getInmates(params), wardenApi.getContacts(contactParams), wardenApi.getDevices()]);
+      setInmates(im?.items ?? []);
+      setPrisonerTotal(im?.total ?? 0);
+      setContacts(co?.items ?? []);
+      setFamilyTotal(co?.total ?? 0);
+      setKiosks((dv?.items ?? []).map((d:any)=>({deviceId:d.deviceId||d.id,name:d.name||d.deviceId||d.id,location:d.location})));
     }catch(e:any){
       setLoadError(e?.response?.data?.error?.message || e?.message || 'Failed to load prisoners & family');
       setInmates([]); setContacts([]);
     }finally{ setLoading(false); }
-  },[]);
+  },[prisonerPage, searchPrisoner]);
   useEffect(()=>{load();},[load]);
 
   const deleteInmate = async (id:string)=> { try{ await wardenApi.deleteInmateApi(id); }catch{} setInmates(s=>s.filter(i=>i.inmateId!==id)); };
@@ -60,7 +64,9 @@ useState({name:'',relationship:'',phoneNumber:'',inmateId:''});
   };
 
   const [prisonerPage, setPrisonerPage] = useState(1);
+  const [prisonerTotal, setPrisonerTotal] = useState(0);
   const [familyPage, setFamilyPage] = useState(1);
+  const [familyTotal, setFamilyTotal] = useState(0);
   const [facilityFilter, setFacilityFilter] = useState('all');
   const [relationFilter, setRelationFilter] = useState('all');
 
@@ -69,12 +75,12 @@ useState({name:'',relationship:'',phoneNumber:'',inmateId:''});
   const selected = inmates.find(i=>i.inmateId===selectedId);
   const facilities = Array.from(new Set(inmates.map(i=>i.facility)));
   const relations = Array.from(new Set(contacts.map(c=>c.relationship)));
-  const filteredPrisoners = inmates.filter(i=> (!searchPrisoner || `${i.name} ${i.inmateId} ${i.facility}`.toLowerCase().includes(searchPrisoner.toLowerCase())) && (facilityFilter==='all' || i.facility===facilityFilter));
+  const filteredPrisoners = inmates.filter(i=> facilityFilter==='all' || i.facility===facilityFilter);
   const familyOfSelected = selectedId ? contacts.filter(c=>c.inmateId===selectedId) : [];
   const filteredFamilyBase = familyOfSelected.filter(c=> (!searchFamily || `${c.name} ${c.relationship} ${c.phoneNumber}`.toLowerCase().includes(searchFamily.toLowerCase())) && (relationFilter==='all' || c.relationship===relationFilter));
-  const prisonerTotalPages = Math.max(1, Math.ceil(filteredPrisoners.length/4));
+  const prisonerTotalPages = Math.max(1, Math.ceil(prisonerTotal/20));
   const familyTotalPages = Math.max(1, Math.ceil(filteredFamilyBase.length/4));
-  const pagedPrisoners = filteredPrisoners.slice((prisonerPage-1)*4, prisonerPage*4);
+  const pagedPrisoners = filteredPrisoners;
   const filteredFamily = filteredFamilyBase.slice((familyPage-1)*4, familyPage*4);
   return (
     <div className="space-y-6">
@@ -88,8 +94,8 @@ useState({name:'',relationship:'',phoneNumber:'',inmateId:''});
             <div>
               <div className="flex items-center gap-3">
                 <h1 className="text-2xl font-bold text-neutral-900 tracking-tight">Prisoner & Family</h1>
-                <span className="px-2.5 py-1 bg-neutral-900 text-white rounded-full text-xs font-bold">{filteredPrisoners.length} prisoners</span>
-                <span className="px-2.5 py-1 bg-primary-50 border border-primary-200 text-primary-700 rounded-full text-xs font-bold">{contacts.length} family</span>
+                <span className="px-2.5 py-1 bg-neutral-900 text-white rounded-full text-xs font-bold">{prisonerTotal} prisoners</span>
+                <span className="px-2.5 py-1 bg-primary-50 border border-primary-200 text-primary-700 rounded-full text-xs font-bold">{familyTotal} family</span>
               </div>
               <p className="text-sm text-neutral-600 mt-1">Manage inmates and approved family contacts • Click prisoner for details</p>
             </div>
@@ -100,7 +106,7 @@ useState({name:'',relationship:'',phoneNumber:'',inmateId:''});
 
       <Card className="overflow-hidden">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-5 border-b border-neutral-200 bg-neutral-50/50">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-neutral-700 flex items-center gap-2"><span className="w-2 h-2 bg-primary-600 rounded-full animate-pulse" />All Prisoners <span className="px-2 py-1 bg-white border border-neutral-200 rounded-full text-xs font-bold text-neutral-900">{filteredPrisoners.length}</span> {selected && <span className="text-xs font-bold text-primary-600 normal-case tracking-normal">• {selected.name} selected</span>}</h2>
+          <h2 className="text-sm font-bold uppercase tracking-wide text-neutral-700 flex items-center gap-2"><span className="w-2 h-2 bg-primary-600 rounded-full animate-pulse" />All Prisoners <span className="px-2 py-1 bg-white border border-neutral-200 rounded-full text-xs font-bold text-neutral-900">{prisonerTotal}</span> {selected && <span className="text-xs font-bold text-primary-600 normal-case tracking-normal">• {selected.name} selected</span>}</h2>
           <div className="flex gap-2">
             <div className="relative">
               <svg className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
@@ -114,7 +120,7 @@ useState({name:'',relationship:'',phoneNumber:'',inmateId:''});
             <thead><tr className="border-b bg-neutral-50"><th className="text-left py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Photo</th><th className="text-left py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">ID</th><th className="text-left py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Name</th><th className="text-left py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Facility</th><th className="text-left py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Kiosk</th><th className="text-left py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Status</th><th className="text-left py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Action</th></tr></thead>
             <tbody>
               {pagedPrisoners.length===0 ? (
-                <tr><td colSpan={7} className="py-16 text-center"><div className="w-12 h-12 bg-neutral-100 rounded-xl flex items-center justify-center mx-auto mb-3"><svg className="w-6 h-6 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857" /></svg></div><p className="text-sm font-semibold text-neutral-900">No prisoners</p><p className="text-xs text-neutral-500">{inmates.length===0 ? 'Backend empty — Add Prisoner' : `No match for "${searchPrisoner}"`}</p></td></tr>
+                <tr><td colSpan={7} className="py-16 text-center"><div className="w-12 h-12 bg-neutral-100 rounded-xl flex items-center justify-center mx-auto mb-3"><svg className="w-6 h-6 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857" /></svg></div><p className="text-sm font-semibold text-neutral-900">No prisoners</p><p className="text-xs text-neutral-500">{prisonerTotal===0 ? 'Backend empty — Add Prisoner' : `No match for "${searchPrisoner}"`}</p></td></tr>
               ) : pagedPrisoners.map(i=>(
                 <tr key={i.inmateId} onClick={()=>{setSelectedId(i.inmateId); setDetailPrisoner(i);}} className={`border-b hover:bg-neutral-50 cursor-pointer transition-colors even:bg-neutral-50/30 ${selectedId===i.inmateId?'bg-primary-50 ring-1 ring-inset ring-primary-200':''}`}>
                   <td className="py-2.5 px-3"><div className="w-9 h-9 rounded-full bg-[#E9EEF3] border border-[#D1D7DB] flex items-center justify-center"><svg className="w-5 h-5 text-[#8696A0]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" /></svg></div></td>
@@ -134,7 +140,7 @@ useState({name:'',relationship:'',phoneNumber:'',inmateId:''});
             </tbody>
           </table>
         </div>
-        {prisonerTotalPages>1 && <div className="flex items-center justify-between mt-4 px-1"><span className="text-xs text-neutral-500">Showing {(prisonerPage-1)*4+1}-{Math.min(prisonerPage*4, filteredPrisoners.length)} of {filteredPrisoners.length}</span><div className="flex items-center gap-1"><button disabled={prisonerPage===1} onClick={()=>setPrisonerPage(1)} className="px-2.5 py-1.5 border rounded-lg text-xs disabled:opacity-30 hover:bg-neutral-50">«</button><button disabled={prisonerPage===1} onClick={()=>setPrisonerPage(p=>p-1)} className="px-3 py-1.5 border rounded-lg text-xs disabled:opacity-30 hover:bg-neutral-50">Prev</button><span className="px-3 py-1.5 bg-neutral-900 text-white rounded-lg text-xs font-medium">{prisonerPage} / {prisonerTotalPages}</span><button disabled={prisonerPage===prisonerTotalPages} onClick={()=>setPrisonerPage(p=>p+1)} className="px-3 py-1.5 border rounded-lg text-xs disabled:opacity-30 hover:bg-neutral-50">Next</button><button disabled={prisonerPage===prisonerTotalPages} onClick={()=>setPrisonerPage(prisonerTotalPages)} className="px-2.5 py-1.5 border rounded-lg text-xs disabled:opacity-30 hover:bg-neutral-50">»</button></div></div>}
+        {prisonerTotalPages>1 && <div className="flex items-center justify-between mt-4 px-1"><span className="text-xs text-neutral-500">Showing {(prisonerPage-1)*20+1}-{Math.min(prisonerPage*20, prisonerTotal)} of {prisonerTotal}</span><div className="flex items-center gap-1"><button disabled={prisonerPage===1} onClick={()=>setPrisonerPage(1)} className="px-2.5 py-1.5 border rounded-lg text-xs disabled:opacity-30 hover:bg-neutral-50">«</button><button disabled={prisonerPage===1} onClick={()=>setPrisonerPage(p=>p-1)} className="px-3 py-1.5 border rounded-lg text-xs disabled:opacity-30 hover:bg-neutral-50">Prev</button><span className="px-3 py-1.5 bg-neutral-900 text-white rounded-lg text-xs font-medium">{prisonerPage} / {prisonerTotalPages}</span><button disabled={prisonerPage===prisonerTotalPages} onClick={()=>setPrisonerPage(p=>p+1)} className="px-3 py-1.5 border rounded-lg text-xs disabled:opacity-30 hover:bg-neutral-50">Next</button><button disabled={prisonerPage===prisonerTotalPages} onClick={()=>setPrisonerPage(prisonerTotalPages)} className="px-2.5 py-1.5 border rounded-lg text-xs disabled:opacity-30 hover:bg-neutral-50">»</button></div></div>}
         {showAddInmate && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={()=>setShowAddInmate(false)}>
             <div className="bg-white rounded-xl p-6 w-full max-w-md" onClick={e=>e.stopPropagation()}>
