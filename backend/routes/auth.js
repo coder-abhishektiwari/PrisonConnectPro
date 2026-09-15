@@ -256,10 +256,11 @@ async function identifyInmate(req, res, matchFn, confidence) {
   const kiosk = kiosks.find((k) => k.kioskId === kioskId);
   if (!kiosk) return sendError(res, 'KIOSK_NOT_FOUND', 'Kiosk not registered. Contact administrator.', 403);
 
-  // Find matching inmate in same prison
+  // Find matching inmate in same prison + assigned to this kiosk
   const match = inmates.find((i) =>
     matchFn(i) &&
-    (!kiosk.prisonId || !i.prisonId || kiosk.prisonId === i.prisonId)
+    (!kiosk.prisonId || !i.prisonId || kiosk.prisonId === i.prisonId) &&
+    (!i.assignedKioskId || i.assignedKioskId === kioskId)
   );
   if (!match) return sendError(res, 'NOT_FOUND', 'No matching inmate identified for this kiosk', 404);
 
@@ -286,10 +287,11 @@ router.post('/face-identify', authLimiter, asyncRoute(async (req, res) => {
   const kiosk = kiosks.find((k) => k.kioskId === kioskId);
   if (!kiosk) return sendError(res, 'KIOSK_NOT_FOUND', 'Kiosk not registered. Contact administrator.', 403);
 
-  // Filter candidates: face registered + same prison as kiosk
+  // Filter candidates: face registered + same prison + assigned to this kiosk
   const candidates = inmates.filter((i) =>
     i.biometricData?.faceRegistered &&
-    (!kiosk.prisonId || !i.prisonId || kiosk.prisonId === i.prisonId)
+    (!kiosk.prisonId || !i.prisonId || kiosk.prisonId === i.prisonId) &&
+    (!i.assignedKioskId || i.assignedKioskId === kioskId)
   );
   if (candidates.length === 0) return sendError(res, 'NOT_FOUND', 'No face-registered inmate found for this kiosk', 404);
 
@@ -430,10 +432,11 @@ router.post('/rfid-identify', asyncRoute(async (req, res) => {
   const kiosk = kiosks.find((k) => k.kioskId === kioskId);
   if (!kiosk) return sendError(res, 'KIOSK_NOT_FOUND', 'Kiosk not registered. Contact administrator.', 403);
 
-  // Find inmate with matching RFID in same prison
+  // Find inmate with matching RFID in same prison + assigned to this kiosk
   const inmate = inmates.find((i) =>
     i.rfidToken === rfidToken &&
-    (!kiosk.prisonId || !i.prisonId || kiosk.prisonId === i.prisonId)
+    (!kiosk.prisonId || !i.prisonId || kiosk.prisonId === i.prisonId) &&
+    (!i.assignedKioskId || i.assignedKioskId === kioskId)
   );
   if (!inmate) return sendError(res, 'NOT_FOUND', 'No inmate identified for this RFID token', 404);
 
@@ -463,6 +466,11 @@ router.post('/prisoner/identify', asyncRoute(async (req, res) => {
     return sendError(res, 'KIOSK_MISMATCH', 'Inmate is not assigned to this prison', 403);
   }
 
+  // Inmate must be assigned to this specific kiosk
+  if (inmate.assignedKioskId && inmate.assignedKioskId !== kioskId) {
+    return sendError(res, 'KIOSK_MISMATCH', 'Inmate is not assigned to this kiosk', 403);
+  }
+
   return sendSuccess(res, {
     inmateId: inmate.inmateId,
     name: inmate.name || inmate.fullName || [inmate.firstName, inmate.lastName].filter(Boolean).join(' ').trim() || 'Unknown',
@@ -487,6 +495,11 @@ router.post('/verify-pin', authLimiter, asyncRoute(async (req, res) => {
   // Inmate must be in same prison
   if (kiosk.prisonId && inmate.prisonId && kiosk.prisonId !== inmate.prisonId) {
     return sendError(res, 'KIOSK_MISMATCH', 'Inmate is not assigned to this prison', 403);
+  }
+
+  // Inmate must be assigned to this specific kiosk
+  if (inmate.assignedKioskId && inmate.assignedKioskId !== kioskId) {
+    return sendError(res, 'KIOSK_MISMATCH', 'Inmate is not assigned to this kiosk', 403);
   }
 
   const valid = await verifySecret(pin, inmate.pin);
