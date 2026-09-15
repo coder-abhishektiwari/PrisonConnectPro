@@ -213,6 +213,7 @@ app.patch('/wallet-requests/:requestId/approve', requireAuth, requireRole('admin
     transactionId: `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
     inmateId,
     type: 'recharge',
+    status: 'completed',
     amount: Number(amount),
     description: 'Approved wallet request',
     timestamp: new Date().toISOString(),

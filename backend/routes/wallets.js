@@ -66,6 +66,7 @@ router.post('/:inmateId/recharge', requireAuth, requireRole('admin', 'warden', '
     transactionId: `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
     inmateId: req.params.inmateId,
     type: 'recharge',
+    status: 'completed',
     amount: Number(amount),
     description: description || 'Wallet recharge',
     timestamp: new Date().toISOString(),
