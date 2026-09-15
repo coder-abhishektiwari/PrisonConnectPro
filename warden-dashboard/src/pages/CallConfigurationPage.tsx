@@ -5,6 +5,7 @@ import { wardenApi } from '@/services/api/wardenApi';
 import { getStoredUser } from '@/services/auth/tokenStorage';
 import { useToast } from '@/hooks/useToast';
 import { ToastContainer } from '@/components/ToastContainer';
+import { usePageHeader } from '@/context/PageHeaderContext';
 
 export function CallConfigurationPage() {
   const [isLoading, setIsLoading] = useState(true);
@@ -26,15 +27,16 @@ export function CallConfigurationPage() {
     load();
   }, []);
 
+  usePageHeader({
+    title: 'Kiosk Setup PIN',
+    subtitle: 'Device onboarding PIN for your facility',
+  });
+
   if (isLoading) return <Loading message="Loading configuration..." />;
 
   if (loadError) {
     return (
       <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold text-neutral-900">Kiosk Setup PIN</h1>
-          <p className="text-neutral-600 mt-1">Device onboarding PIN for your facility</p>
-        </div>
         <Card><div className="text-center py-12"><p className="text-neutral-600">{loadError}</p></div></Card>
       </div>
     );
@@ -43,11 +45,6 @@ export function CallConfigurationPage() {
   return (
     <div className="space-y-6">
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
-
-      <div>
-        <h1 className="text-3xl font-bold text-neutral-900">Kiosk Setup PIN</h1>
-        <p className="text-neutral-600 mt-1">Device onboarding PIN for your facility</p>
-      </div>
 
       <Card>
         <div className="space-y-6">

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Card } from '@/components/Card';
 import { Loading } from '@/components/States';
 import { wardenApi } from '@/services/api/wardenApi';
+import { usePageHeader } from '@/context/PageHeaderContext';
 import type { Inmate, Contact, ListParams } from '@/services/api/wardenApi';
 
 export function InmateFamilyPage() {
@@ -69,6 +70,14 @@ useState({name:'',relationship:'',phoneNumber:'',inmateId:''});
     }
   };
 
+  usePageHeader({
+    title: 'Prisoner & Family',
+    subtitle: `${prisonerTotal} prisoners • ${familyTotal} family`,
+    action: (
+      <button onClick={()=>setShowAddInmate(true)} className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-primary-600 text-white rounded-xl text-sm font-bold hover:bg-primary-700 shadow-sm">+ Add Prisoner</button>
+    ),
+  });
+
   if(loading) return <Loading message="Loading..." />;
   if(loadError) return <Card><div className="text-center py-12"><p className="text-error mb-4">{loadError}</p><button onClick={()=>{setLoading(true); load();}} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm">Retry</button></div></Card>;
   const selected = inmates.find(i=>i.inmateId===selectedId);
@@ -83,26 +92,6 @@ useState({name:'',relationship:'',phoneNumber:'',inmateId:''});
   const filteredFamily = filteredFamilyBase.slice((familyPage-1)*4, familyPage*4);
   return (
     <div className="space-y-6">
-      {/* Professional Header */}
-      <div className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="flex gap-4">
-            <div className="w-12 h-12 rounded-xl bg-neutral-900 text-white flex items-center justify-center shrink-0">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-            </div>
-            <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-bold text-neutral-900 tracking-tight">Prisoner & Family</h1>
-                <span className="px-2.5 py-1 bg-neutral-900 text-white rounded-full text-xs font-bold">{prisonerTotal} prisoners</span>
-                <span className="px-2.5 py-1 bg-primary-50 border border-primary-200 text-primary-700 rounded-full text-xs font-bold">{familyTotal} family</span>
-              </div>
-              <p className="text-sm text-neutral-600 mt-1">Manage inmates and approved family contacts • Click prisoner for details</p>
-            </div>
-          </div>
-          <button onClick={()=>setShowAddInmate(true)} className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-primary-600 text-white rounded-xl text-sm font-bold hover:bg-primary-700 shadow-sm">+ Add Prisoner</button>
-        </div>
-      </div>
-
       <Card className="overflow-hidden">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-5 border-b border-neutral-200 bg-neutral-50/50">
           <h2 className="text-sm font-bold uppercase tracking-wide text-neutral-700 flex items-center gap-2"><span className="w-2 h-2 bg-primary-600 rounded-full animate-pulse" />All Prisoners <span className="px-2 py-1 bg-white border border-neutral-200 rounded-full text-xs font-bold text-neutral-900">{prisonerTotal}</span> {selected && <span className="text-xs font-bold text-primary-600 normal-case tracking-normal">• {selected.name} selected</span>}</h2>
