@@ -164,7 +164,7 @@ export function TrustAccountPage() {
     if(tab==='recharge') return type==='recharge' || type==='credit';
     if(tab==='refund') return type==='refund';
     return true;
-  });
+  }).sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
   return (
     <div className="space-y-6 text-slate-800">
