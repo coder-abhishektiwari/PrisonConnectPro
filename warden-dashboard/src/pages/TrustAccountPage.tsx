@@ -33,16 +33,16 @@ export function TrustAccountPage() {
     try{
       setError(null);
       const params: ListParams = { limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE, search: search || undefined };
-      const [wResult, im, reqs, pricingData] = await Promise.all([
+      const [wResult, imResult, reqs, pricingData] = await Promise.all([
         wardenApi.getWallets(params).catch(() => ({ items: [] as Wallet[], total: 0 })),
-        wardenApi.getInmates().catch(()=>[] as Inmate[]),
+        wardenApi.getInmates({ limit: 1000, offset: 0 }).catch(()=>({ items: [] as Inmate[], total: 0 })),
         wardenApi.getWalletRequests().catch(()=>[] as WalletRequest[]),
         apiClient.get('/pricing').then((r) => r.data?.data).catch(()=> null as any).then((d: any) => (Array.isArray(d) ? d[0] : d)),
       ]);
       setWallets((wResult as any).items ?? []);
       setTotal((wResult as any).total ?? 0);
       const map: Record<string, Inmate> = {};
-      (im as Inmate[]).forEach(i=> map[i.inmateId]=i);
+      ((imResult as any).items ?? []).forEach((i: Inmate)=> map[i.inmateId]=i);
       setInmates(map);
       setRequests((reqs as WalletRequest[]) ?? []);
       if (pricingData) {

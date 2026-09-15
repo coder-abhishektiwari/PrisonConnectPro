@@ -23,6 +23,13 @@ useState({name:'',relationship:'',phoneNumber:'',inmateId:''});
   const [kiosks, setKiosks] = useState<{deviceId: string; name: string; location?: string}[]>([]);
 
   const [loadError, setLoadError] = useState<string|null>(null);
+  const [prisonerPage, setPrisonerPage] = useState(1);
+  const [prisonerTotal, setPrisonerTotal] = useState(0);
+  const [familyPage, setFamilyPage] = useState(1);
+  const [familyTotal, setFamilyTotal] = useState(0);
+  const [facilityFilter, setFacilityFilter] = useState('all');
+  const [relationFilter, setRelationFilter] = useState('all');
+
   const load = useCallback(async()=>{
     try{
       setLoadError(null);
@@ -56,19 +63,11 @@ useState({name:'',relationship:'',phoneNumber:'',inmateId:''});
     const payload={ name:newFamily.name.trim(), relationship:newFamily.relationship.trim()||'Family', phoneNumber:newFamily.phoneNumber.trim(), inmateId:targetId } as any;
     try{ const saved=await wardenApi.createContact(targetId, payload); setContacts(s=>[...s, (saved||{ contactId:`FAM-${Date.now()}`, ...payload, active:true, photoUrl:'', lastCallDate:new Date().toISOString(), nextScheduledCallDate:null } as Contact)]); }catch{ setContacts(s=>[...s,{ contactId:`FAM-${Date.now()}`, inmateId:targetId, name:payload.name, relationship:payload.relationship, phoneNumber:payload.phoneNumber, active:true, photoUrl:'', lastCallDate:new Date().toISOString(), nextScheduledCallDate:null } as Contact]); }
     setNewFamily({name:'',relationship:'',phoneNumber:'',inmateId:''}); setShowAddFamily(false); setAddFamilyError('');
-    // ensure detail view shows
     if(detailPrisoner && detailPrisoner.inmateId!==targetId){
       const inmate = inmates.find(i=>i.inmateId===targetId);
       if(inmate) setDetailPrisoner(inmate);
     }
   };
-
-  const [prisonerPage, setPrisonerPage] = useState(1);
-  const [prisonerTotal, setPrisonerTotal] = useState(0);
-  const [familyPage, setFamilyPage] = useState(1);
-  const [familyTotal, setFamilyTotal] = useState(0);
-  const [facilityFilter, setFacilityFilter] = useState('all');
-  const [relationFilter, setRelationFilter] = useState('all');
 
   if(loading) return <Loading message="Loading..." />;
   if(loadError) return <Card><div className="text-center py-12"><p className="text-error mb-4">{loadError}</p><button onClick={()=>{setLoading(true); load();}} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm">Retry</button></div></Card>;
