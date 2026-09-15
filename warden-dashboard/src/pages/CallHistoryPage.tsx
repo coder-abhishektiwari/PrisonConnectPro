@@ -4,7 +4,7 @@ import { Card } from '@/components/Card';
 import { Loading } from '@/components/States';
 import { wardenApi } from '@/services/api/wardenApi';
 import { useWardenSocket } from '@/hooks/useWardenSocket';
-import { usePageHeader } from '@/context/PageHeaderContext';
+import { usePageHeader, usePageHeaderAction } from '@/context/PageHeaderContext';
 import ExcelJS from 'exceljs';
 
 import type { CallHistoryItem, Recording, Inmate, CallHistoryParams } from '@/services/api/wardenApi';
@@ -113,13 +113,14 @@ export function CallHistoryPage() {
   usePageHeader({
     title: 'Call Logs',
     subtitle: `${total} calls total`,
-    action: (
-      <button onClick={handleExport} disabled={isExporting} className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-success text-white rounded-xl text-sm font-bold hover:bg-success-700 shadow-sm disabled:opacity-50">
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-        {isExporting ? 'Exporting...' : `Export Excel${selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}`}
-      </button>
-    ),
   });
+  const setHeaderAction = usePageHeaderAction();
+  setHeaderAction(
+    <button onClick={handleExport} disabled={isExporting} className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-success text-white rounded-xl text-sm font-bold hover:bg-success-700 shadow-sm disabled:opacity-50">
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+      {isExporting ? 'Exporting...' : `Export Excel${selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}`}
+    </button>
+  );
 
   if (isLoading) return <Loading message="Loading call history..." />;
 

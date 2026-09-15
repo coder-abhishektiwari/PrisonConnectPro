@@ -5,7 +5,7 @@ import { Card } from '@/components/Card';
 import { Loading } from '@/components/States';
 import { wardenApi } from '@/services/api/wardenApi';
 import { useWardenSocket } from '@/hooks/useWardenSocket';
-import { usePageHeader } from '@/context/PageHeaderContext';
+import { usePageHeader, usePageHeaderAction } from '@/context/PageHeaderContext';
 import type { ActiveCall, ListParams } from '@/services/api/wardenApi';
 
 const PAGE_SIZE = 20;
@@ -50,16 +50,17 @@ export function ActiveCallsPage() {
   usePageHeader({
     title: 'Live Calls',
     subtitle: `${total} active calls`,
-    action: (
-      <div className="flex gap-2">
-        <button onClick={() => { setTypeFilter('all'); setPage(1); }} className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors ${typeFilter === 'all' ? 'bg-neutral-900 text-white' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'}`}>
-          <span className={`w-2 h-2 rounded-full ${typeFilter === 'all' ? 'bg-white' : 'bg-neutral-400'}`} />All
-        </button>
-        <button onClick={() => { setTypeFilter('video'); setPage(1); }} className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors ${typeFilter === 'video' ? 'bg-primary-600 text-white' : 'bg-primary-50 border border-primary-200 text-primary-700 hover:bg-primary-100'}`}>Video</button>
-        <button onClick={() => { setTypeFilter('audio'); setPage(1); }} className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors ${typeFilter === 'audio' ? 'bg-info text-white' : 'bg-info-50 border border-info/20 text-info hover:bg-info-100'}`}>Audio</button>
-      </div>
-    ),
   });
+  const setHeaderAction = usePageHeaderAction();
+  setHeaderAction(
+    <div className="flex gap-2">
+      <button onClick={() => { setTypeFilter('all'); setPage(1); }} className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors ${typeFilter === 'all' ? 'bg-neutral-900 text-white' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'}`}>
+        <span className={`w-2 h-2 rounded-full ${typeFilter === 'all' ? 'bg-white' : 'bg-neutral-400'}`} />All
+      </button>
+      <button onClick={() => { setTypeFilter('video'); setPage(1); }} className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors ${typeFilter === 'video' ? 'bg-primary-600 text-white' : 'bg-primary-50 border border-primary-200 text-primary-700 hover:bg-primary-100'}`}>Video</button>
+      <button onClick={() => { setTypeFilter('audio'); setPage(1); }} className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors ${typeFilter === 'audio' ? 'bg-info text-white' : 'bg-info-50 border border-info/20 text-info hover:bg-info-100'}`}>Audio</button>
+    </div>
+  );
 
   if (isLoading) return <Loading message="Loading active calls..." />;
 

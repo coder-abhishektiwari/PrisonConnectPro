@@ -3,7 +3,7 @@ import { Card } from '@/components/Card';
 import { Loading } from '@/components/States';
 import { ToastContainer } from '@/components/ToastContainer';
 import { useToast } from '@/hooks/useToast';
-import { usePageHeader } from '@/context/PageHeaderContext';
+import { usePageHeader, usePageHeaderAction } from '@/context/PageHeaderContext';
 import { wardenApi, KioskRegistrationRequestItem, ListParams } from '@/services/api/wardenApi';
 
 const PAGE_SIZE = 20;
@@ -102,12 +102,13 @@ export function KioskRegistrationPage() {
   usePageHeader({
     title: 'Kiosk Registration',
     subtitle: 'Device authorization and setup requests',
-    action: (
-      <button onClick={() => { setIsLoading(true); fetchRequests(); fetchCounts().then(setCounts); }} disabled={isLoading} className="px-4 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-lg text-sm font-medium transition">
-        {isLoading ? 'Refreshing...' : 'Refresh'}
-      </button>
-    ),
   });
+  const setHeaderAction = usePageHeaderAction();
+  setHeaderAction(
+    <button onClick={() => { setIsLoading(true); fetchRequests(); fetchCounts().then(setCounts); }} disabled={isLoading} className="px-4 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-lg text-sm font-medium transition">
+      {isLoading ? 'Refreshing...' : 'Refresh'}
+    </button>
+  );
 
   if (isLoading) return <Loading message="Loading registration requests..." />;
 
