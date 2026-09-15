@@ -211,6 +211,7 @@ app.patch('/wallet-requests/:requestId/approve', requireAuth, requireRole('admin
 
   const transaction = {
     transactionId: `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+    walletId: wallet ? wallet.walletId : null,
     inmateId,
     type: 'recharge',
     status: 'completed',

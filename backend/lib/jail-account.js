@@ -42,7 +42,7 @@ async function internalWallet(inmate) {
 /** All internal transactions belonging to a wallet. */
 async function internalTransactions(wallet) {
   const transactions = await readDb('transactions.json');
-  return transactions.filter((t) => t.walletId === wallet.walletId);
+  return transactions.filter((t) => t.walletId === wallet.walletId || t.inmateId === wallet.inmateId);
 }
 
 /** Derive wallet summary (total spent, last recharge) from a settled ledger. */

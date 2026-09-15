@@ -64,6 +64,7 @@ router.post('/:inmateId/recharge', requireAuth, requireRole('admin', 'warden', '
 
   const transaction = {
     transactionId: `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+    walletId: wallet ? wallet.walletId : null,
     inmateId: req.params.inmateId,
     type: 'recharge',
     status: 'completed',
