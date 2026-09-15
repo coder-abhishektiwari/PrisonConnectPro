@@ -19,7 +19,7 @@ const navItems: NavItem[] = [
 
 export function Sidebar() {
   return (
-    <aside className="fixed left-0 top-0 h-screen w-16 z-40 bg-neutral-900 text-white transition-all duration-300 ease-in-out hover:w-64 group/sidebar overflow-hidden flex flex-col">
+    <aside className="fixed left-0 top-0 h-screen w-16 z-50 bg-neutral-900 text-white transition-all duration-300 ease-in-out hover:w-64 group/sidebar overflow-hidden flex flex-col shadow-xl">
       {/* Logo */}
       <div className="px-2 py-5 border-b border-neutral-800 flex items-center gap-3 flex-shrink-0 h-[72px]">
         <div className="w-8 h-8 flex items-center justify-center flex-shrink-0 ml-2">
