@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Card } from '@/components/Card';
 import { Loading } from '@/components/States';
 import { wardenApi } from '@/services/api/wardenApi';
+import { apiClient } from '@/services/api/client';
 import { useWardenSocket } from '@/hooks/useWardenSocket';
 import { usePageHeader } from '@/context/PageHeaderContext';
 import ExcelJS from 'exceljs';
@@ -49,6 +50,7 @@ export function CallHistoryPage() {
   const [total, setTotal] = useState(0);
   const [recordings, setRecordings] = useState<Record<string, Recording>>({});
   const [inmates, setInmates] = useState<Record<string, Inmate>>({});
+  const [allKiosks, setAllKiosks] = useState<{value:string,label:string}[]>([]);
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -104,11 +106,18 @@ export function CallHistoryPage() {
     } catch { /* ignore */ }
   }, []);
 
+  const loadKiosks = useCallback(async () => {
+    try {
+      const r = await apiClient.get('/kiosks');
+      const items = r.data?.data ?? [];
+      setAllKiosks(items.map((k: any) => ({ value: k.kioskId, label: k.kioskId })));
+    } catch { /* ignore */ }
+  }, []);
+
   useEffect(() => { loadCalls(); }, [loadCalls]);
   useEffect(() => { loadInmates(); }, [loadInmates]);
+  useEffect(() => { loadKiosks(); }, [loadKiosks]);
   useWardenSocket(() => { loadCalls(); });
-
-  const kioskOptions = [...new Set(calls.map(c => c.kioskId).filter(Boolean))].sort().map(k => ({ value: k, label: k }));
 
   useEffect(() => { setPage(1); }, [search, dateFrom, dateTo, typeFilter.value, statusFilter.value, kioskFilter.value, qualityFilter.value, recordingFilter.value, sortDir]);
 
@@ -269,7 +278,7 @@ export function CallHistoryPage() {
                   <th className="text-left py-3 px-4"><FilterDropdown label="Type" options={[{ value: 'video', label: 'Video' }, { value: 'audio', label: 'Audio' }]} filter={typeFilter} setFilter={setTypeFilter} /></th>
                   <th className="text-left py-3 px-4"><button onClick={() => setSortDir((d) => d === 'asc' ? 'desc' : 'asc')} className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-neutral-500 hover:text-primary-600 transition-colors">Date {sortDir === 'asc' ? '↑' : '↓'}</button></th>
                   <th className="text-left py-3 px-4"><span className="text-xs font-bold uppercase tracking-wider text-neutral-500">Inmate ⇄ Family</span></th>
-                  <th className="text-left py-3 px-4"><FilterDropdown label="Kiosk" options={kioskOptions} filter={kioskFilter} setFilter={setKioskFilter} /></th>
+                  <th className="text-left py-3 px-4"><FilterDropdown label="Kiosk" options={allKiosks} filter={kioskFilter} setFilter={setKioskFilter} /></th>
                   <th className="text-left py-3 px-4"><span className="text-xs font-bold uppercase tracking-wider text-neutral-500">Duration</span></th>
                   <th className="text-left py-3 px-4"><FilterDropdown label="Status" options={[{ value: 'completed', label: 'Completed' }, { value: 'failed', label: 'Failed' }, { value: 'active', label: 'Active' }]} filter={statusFilter} setFilter={setStatusFilter} /></th>
                   <th className="text-left py-3 px-4"><FilterDropdown label="Quality" options={[{ value: 'excellent', label: 'Excellent' }, { value: 'good', label: 'Good' }, { value: 'fair', label: 'Fair' }, { value: 'poor', label: 'Poor' }]} filter={qualityFilter} setFilter={setQualityFilter} /></th>
