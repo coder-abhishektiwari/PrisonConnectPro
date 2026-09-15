@@ -215,9 +215,6 @@ export function AlertsPage() {
                       {resolvingId === alert.alertId ? 'Resolving...' : 'Resolve'}
                     </button>
                   )}
-                  <button className="px-3 py-1 bg-neutral-200 text-neutral-900 rounded-md text-sm hover:bg-neutral-300">
-                    Investigate
-                  </button>
                 </div>
               </div>
             </Card>

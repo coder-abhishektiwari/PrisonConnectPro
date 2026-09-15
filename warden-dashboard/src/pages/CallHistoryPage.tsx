@@ -42,7 +42,7 @@ export function CallHistoryPage() {
       (inmateList ?? []).forEach(i=> imap[i.inmateId]=i);
       setInmates(imap);
       if ((callHistory ?? []).length===0) {
-        console.info('[CallHistory] backend returned empty — no dummy fallback');
+        
       }
     } catch (error:any) {
       setLoadError(error?.response?.data?.error?.message || error?.message || 'Failed to load call history');

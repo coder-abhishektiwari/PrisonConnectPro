@@ -155,16 +155,13 @@ export function ReportsPage() {
                   <span className="text-sm text-neutral-600">Size</span>
                   <span className="text-sm font-medium text-neutral-900">{report.fileSize}</span>
                 </div>
-                <div className="flex gap-2 pt-2">
+                <div className="pt-2">
                   <a
                     href={report.downloadUrl}
-                    className="flex-1 px-3 py-2 bg-primary-600 text-white rounded-md text-sm hover:bg-primary-700 text-center"
+                    className="block w-full px-3 py-2 bg-primary-600 text-white rounded-md text-sm hover:bg-primary-700 text-center"
                   >
                     Download
                   </a>
-                  <button className="px-3 py-2 bg-neutral-200 text-neutral-900 rounded-md text-sm hover:bg-neutral-300">
-                    View
-                  </button>
                 </div>
               </div>
             </Card>

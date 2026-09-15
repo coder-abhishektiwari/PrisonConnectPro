@@ -60,7 +60,7 @@ export function DashboardPage() {
     loadStats();
   }, [loadStats]);
 
-  // Auto-refresh when mock data changes via socket events
+  // Auto-refresh when data changes via socket events
   useWardenSocket(
     () => { loadStats(); },
     () => { loadStats(); },

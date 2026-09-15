@@ -140,7 +140,7 @@ export function ActiveCallsPage() {
                 <h1 className="text-2xl font-bold text-neutral-900 tracking-tight">Live Calls</h1>
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-success/10 text-success border border-success/20 rounded-full text-xs font-bold"><span className="w-2 h-2 bg-success rounded-full animate-pulse" />{filteredCalls.length} Active</span>
               </div>
-              <p className="text-sm text-neutral-600 mt-1">Real-time inmate-to-family P2P calls • Monitor or Force Disconnect instantly • Auto-synced via WebRTC</p>
+              <p className="text-sm text-neutral-600 mt-1">Active calls in your facility</p>
             </div>
           </div>
           <div className="flex gap-2">

@@ -7,53 +7,34 @@ import { ForgotPasswordPage } from '@/pages/ForgotPasswordPage';
 import { ResetPasswordPage } from '@/pages/ResetPasswordPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { ActiveCallsPage } from '@/pages/ActiveCallsPage';
-import { LiveMonitoringPage } from '@/pages/LiveMonitoringPage';
 import { MonitorScreenPage } from '@/pages/MonitorScreenPage';
-import { InmateDetailsPage } from '@/pages/InmateDetailsPage';
 import { CallHistoryPage } from '@/pages/CallHistoryPage';
-import { RecordingCenterPage } from '@/pages/RecordingCenterPage';
 import { InmateFamilyPage } from '@/pages/InmateFamilyPage';
 import { TrustAccountPage } from '@/pages/TrustAccountPage';
 import { AlertsPage } from '@/pages/AlertsPage';
 import { ReportsPage } from '@/pages/ReportsPage';
-import { SettingsPage } from '@/pages/SettingsPage';
 import { DevicesPage } from '@/pages/DevicesPage';
 import { KioskRegistrationPage } from '@/pages/KioskRegistrationPage';
-import { PricingPage } from '@/pages/PricingPage';
 import { UsersPage } from '@/pages/UsersPage';
-import { PrisonsPage } from '@/pages/PrisonsPage';
-import { SubscriptionsPage } from '@/pages/SubscriptionsPage';
 import { CallConfigurationPage } from '@/pages/CallConfigurationPage';
 import { RequireAuth, RedirectIfAuthenticated } from '@/components/auth/RouteGuards';
 
-/**
- * Route paths for the Jail Administration Monitoring Console.
- */
 export const RoutePaths = {
   login: '/login',
   register: '/register',
   forgotPassword: '/forgot-password',
   resetPassword: '/reset-password',
   dashboard: '/dashboard',
-  prisons: '/prisons',
   activeCalls: '/calls',
-  liveMonitoring: '/monitoring/live',
   monitorScreen: '/monitoring/live/:callId',
-  inmates: '/inmates/:inmateId',
-  callHistory: '/inmates/:inmateId/calls',
-  callHistoryAll: '/calls/history',
-  callLogs: '/calls/logs',
+  callHistory: '/calls/logs',
   inmateFamily: '/inmates-family',
   trustAccount: '/inmate-wallet',
-  recordings: '/recordings',
   alerts: '/alerts',
   devices: '/devices',
   kioskRegistrations: '/kiosk-registrations',
   reports: '/reports',
   users: '/users',
-  settings: '/settings',
-  pricing: '/pricing',
-  subscriptions: '/subscriptions',
   callConfiguration: '/call-configuration',
 } as const;
 
@@ -84,25 +65,15 @@ export const router = createBrowserRouter([
       { index: true, element: <Navigate to="/dashboard" replace /> },
       { path: RoutePaths.dashboard, element: <DashboardPage /> },
       { path: RoutePaths.activeCalls, element: <ActiveCallsPage /> },
-      { path: RoutePaths.liveMonitoring, element: <LiveMonitoringPage /> },
       { path: RoutePaths.monitorScreen, element: <MonitorScreenPage /> },
-      { path: RoutePaths.inmates, element: <InmateDetailsPage /> },
       { path: RoutePaths.callHistory, element: <CallHistoryPage /> },
-      { path: RoutePaths.callHistoryAll, element: <CallHistoryPage /> },
-      { path: RoutePaths.callLogs, element: <CallHistoryPage /> },
       { path: RoutePaths.inmateFamily, element: <InmateFamilyPage /> },
       { path: RoutePaths.trustAccount, element: <TrustAccountPage /> },
-      { path: '/trust-account', element: <Navigate to="/inmate-wallet" replace /> },
-      { path: RoutePaths.recordings, element: <RecordingCenterPage /> },
       { path: RoutePaths.alerts, element: <AlertsPage /> },
       { path: RoutePaths.devices, element: <DevicesPage /> },
       { path: RoutePaths.kioskRegistrations, element: <KioskRegistrationPage /> },
       { path: RoutePaths.reports, element: <ReportsPage /> },
       { path: RoutePaths.users, element: <UsersPage /> },
-      { path: RoutePaths.pricing, element: <PricingPage /> },
-      { path: RoutePaths.subscriptions, element: <SubscriptionsPage /> },
-      { path: RoutePaths.prisons, element: <PrisonsPage /> },
-      { path: RoutePaths.settings, element: <SettingsPage /> },
       { path: RoutePaths.callConfiguration, element: <CallConfigurationPage /> },
       { path: '*', element: <Navigate to="/dashboard" replace /> },
     ],

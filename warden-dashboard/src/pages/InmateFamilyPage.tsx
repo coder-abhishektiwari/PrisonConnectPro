@@ -29,8 +29,6 @@ useState({name:'',relationship:'',phoneNumber:'',inmateId:''});
       setInmates(im ?? []);
       setContacts(co ?? []);
       setKiosks((dv ?? []).map((d:any)=>({deviceId:d.deviceId||d.id,name:d.name||d.deviceId||d.id,location:d.location})));
-      if ((im ?? []).length===0) console.info('[InmateFamily] inmates backend returned empty');
-      if ((co ?? []).length===0) console.info('[InmateFamily] contacts backend returned empty');
     }catch(e:any){
       setLoadError(e?.response?.data?.error?.message || e?.message || 'Failed to load prisoners & family');
       setInmates([]); setContacts([]);
