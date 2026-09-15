@@ -47,6 +47,28 @@ export interface CallHistoryItem {
   ratePerMinute?: number;
 }
 
+export interface PaginatedCallsResponse {
+  calls: CallHistoryItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface CallHistoryParams {
+  limit?: number;
+  offset?: number;
+  search?: string;
+  type?: string;
+  status?: string;
+  kioskId?: string;
+  quality?: string;
+  recording?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  sortField?: string;
+  sortDir?: string;
+}
+
 export interface Recording {
   recordingId: string;
   callId: string;
@@ -310,8 +332,14 @@ export const wardenApi = {
     }),
 
   // Call History
-  getCallHistory: () =>
-    cachedGet('calls:history', () => apiClient.get<ApiResponse<CallHistoryItem[]>>('/calls/history').then((r) => r.data?.data ?? [])),
+  getCallHistory: (params?: CallHistoryParams) => {
+    const qs = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => { if (v != null && v !== '') qs.set(k, String(v)); });
+    }
+    const url = `/calls/history${qs.toString() ? '?' + qs.toString() : ''}`;
+    return apiClient.get<ApiResponse<PaginatedCallsResponse>>(url).then((r) => r.data?.data ?? { calls: [], total: 0, limit: 20, offset: 0 });
+  },
 
   // Recordings
   getRecordings: () =>

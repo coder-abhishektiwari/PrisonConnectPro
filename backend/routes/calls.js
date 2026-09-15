@@ -177,7 +177,75 @@ function createCallsRouter(broadcastEvent, signaling) {
       calls = calls.filter((c) => inAdminScope(req, c));
     }
     // Include terminal calls AND active calls (live ones show with badge)
-    return sendSuccess(res, calls.filter((c) => TERMINAL_STATES.includes(c.status) || c.status === 'active'));
+    calls = calls.filter((c) => TERMINAL_STATES.includes(c.status) || c.status === 'active');
+
+    // --- Search ---
+    const search = (req.query.search || '').trim().toLowerCase();
+    if (search) {
+      calls = calls.filter((c) =>
+        (c.callId || '').toLowerCase().includes(search) ||
+        (c.inmateName || '').toLowerCase().includes(search) ||
+        (c.familyMemberName || '').toLowerCase().includes(search) ||
+        (c.kioskId || '').toLowerCase().includes(search) ||
+        (c.inmateId || '').toLowerCase().includes(search)
+      );
+    }
+
+    // --- Column Filters ---
+    const typeFilter = req.query.type;
+    if (typeFilter && typeFilter !== 'all') {
+      calls = calls.filter((c) => c.type === typeFilter);
+    }
+    const statusFilterVal = req.query.status;
+    if (statusFilterVal && statusFilterVal !== 'all') {
+      calls = calls.filter((c) => c.status === statusFilterVal);
+    }
+    const kioskFilterVal = req.query.kioskId;
+    if (kioskFilterVal && kioskFilterVal !== 'all') {
+      calls = calls.filter((c) => c.kioskId === kioskFilterVal);
+    }
+    const qualityFilterVal = req.query.quality;
+    if (qualityFilterVal && qualityFilterVal !== 'all') {
+      calls = calls.filter((c) => (c.connectionQuality || 'unknown') === qualityFilterVal);
+    }
+    const recordingFilterVal = req.query.recording;
+    const recordings = await readDb('recordings.json').catch(() => []);
+    const recMap = {};
+    recordings.forEach((r) => { recMap[r.callId] = r; });
+    if (recordingFilterVal === 'yes') {
+      calls = calls.filter((c) => recMap[c.callId]?.url);
+    } else if (recordingFilterVal === 'no') {
+      calls = calls.filter((c) => !recMap[c.callId]?.url);
+    }
+
+    // --- Date Range ---
+    const dateFrom = req.query.dateFrom;
+    const dateTo = req.query.dateTo;
+    if (dateFrom) {
+      const fromMs = new Date(dateFrom).getTime();
+      if (!isNaN(fromMs)) calls = calls.filter((c) => new Date(c.startTime).getTime() >= fromMs);
+    }
+    if (dateTo) {
+      const toMs = new Date(dateTo).getTime() + 86400000;
+      if (!isNaN(toMs)) calls = calls.filter((c) => new Date(c.startTime).getTime() <= toMs);
+    }
+
+    // --- Sort ---
+    const sortField = req.query.sortField || 'date';
+    const sortDir = req.query.sortDir === 'asc' ? 1 : -1;
+    calls.sort((a, b) => {
+      if (sortField === 'duration') return sortDir * ((a.durationMinutes || 0) - (b.durationMinutes || 0));
+      if (sortField === 'type') return sortDir * (a.type || '').localeCompare(b.type || '');
+      return sortDir * (new Date(a.startTime || 0).getTime() - new Date(b.startTime || 0).getTime());
+    });
+
+    // --- Pagination ---
+    const total = calls.length;
+    const limit = Math.min(Math.max(parseInt(req.query.limit) || 20, 1), 100);
+    const offset = Math.max(parseInt(req.query.offset) || 0, 0);
+    const paged = calls.slice(offset, offset + limit);
+
+    return sendSuccess(res, { calls: paged, total, limit, offset });
   }));
 
   router.get('/scheduled/:id', requireAuth, asyncRoute(async (req, res) => {

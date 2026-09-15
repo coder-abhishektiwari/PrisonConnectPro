@@ -6,12 +6,9 @@ import { wardenApi } from '@/services/api/wardenApi';
 import { useWardenSocket } from '@/hooks/useWardenSocket';
 import ExcelJS from 'exceljs';
 
-import type { CallHistoryItem, Recording, Inmate } from '@/services/api/wardenApi';
+import type { CallHistoryItem, Recording, Inmate, CallHistoryParams } from '@/services/api/wardenApi';
 
-const PAGE_SIZE = 10;
-
-type SortField = 'date' | 'duration' | 'type';
-type SortDir = 'asc' | 'desc';
+const PAGE_SIZE = 20;
 
 interface ColumnFilter { value: string; open: boolean; }
 
@@ -48,17 +45,18 @@ function FilterDropdown({ label, options, filter, setFilter }: {
 export function CallHistoryPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [calls, setCalls] = useState<CallHistoryItem[]>([]);
+  const [total, setTotal] = useState(0);
   const [recordings, setRecordings] = useState<Record<string, Recording>>({});
   const [inmates, setInmates] = useState<Record<string, Inmate>>({});
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
-  const [sortField, setSortField] = useState<SortField>('date');
-  const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [selected, setSelected] = useState<CallHistoryItem | null>(null);
   const [playing, setPlaying] = useState<Recording | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isExporting, setIsExporting] = useState(false);
 
   const [typeFilter, setTypeFilter] = useState<ColumnFilter>({ value: 'all', open: false });
   const [statusFilter, setStatusFilter] = useState<ColumnFilter>({ value: 'all', open: false });
@@ -66,27 +64,54 @@ export function CallHistoryPage() {
   const [qualityFilter, setQualityFilter] = useState<ColumnFilter>({ value: 'all', open: false });
   const [recordingFilter, setRecordingFilter] = useState<ColumnFilter>({ value: 'all', open: false });
 
+  const buildParams = useCallback((): CallHistoryParams => ({
+    limit: PAGE_SIZE,
+    offset: (page - 1) * PAGE_SIZE,
+    search: search || undefined,
+    type: typeFilter.value !== 'all' ? typeFilter.value : undefined,
+    status: statusFilter.value !== 'all' ? statusFilter.value : undefined,
+    kioskId: kioskFilter.value !== 'all' ? kioskFilter.value : undefined,
+    quality: qualityFilter.value !== 'all' ? qualityFilter.value : undefined,
+    recording: recordingFilter.value !== 'all' ? recordingFilter.value : undefined,
+    dateFrom: dateFrom || undefined,
+    dateTo: dateTo || undefined,
+    sortField: 'date',
+    sortDir,
+  }), [page, search, typeFilter.value, statusFilter.value, kioskFilter.value, qualityFilter.value, recordingFilter.value, dateFrom, dateTo, sortDir]);
+
   const loadCalls = useCallback(async () => {
     try {
-      const [callHistory, recs, inmateList] = await Promise.all([
-        wardenApi.getCallHistory(), wardenApi.getRecordings(),
-        wardenApi.getInmates().catch(() => [] as Inmate[]),
+      const [pagedResult, recs] = await Promise.all([
+        wardenApi.getCallHistory(buildParams()),
+        wardenApi.getRecordings(),
       ]);
-      setCalls(callHistory ?? []);
+      setCalls(pagedResult.calls ?? []);
+      setTotal(pagedResult.total ?? 0);
       const map: Record<string, Recording> = {};
       (recs ?? []).forEach((r) => { map[r.callId] = r; });
       setRecordings(map);
+    } catch { setCalls([]); setTotal(0); setRecordings({}); }
+    finally { setIsLoading(false); }
+  }, [buildParams]);
+
+  const loadInmates = useCallback(async () => {
+    try {
+      const inmateList = await wardenApi.getInmates();
       const imap: Record<string, Inmate> = {};
       (inmateList ?? []).forEach((i) => { imap[i.inmateId] = i; });
       setInmates(imap);
-    } catch { setCalls([]); setRecordings({}); setInmates({}); }
-    finally { setIsLoading(false); }
+    } catch { /* ignore */ }
   }, []);
 
   useEffect(() => { loadCalls(); }, [loadCalls]);
+  useEffect(() => { loadInmates(); }, [loadInmates]);
   useWardenSocket(() => { loadCalls(); });
 
+  useEffect(() => { setPage(1); }, [search, dateFrom, dateTo, typeFilter.value, statusFilter.value, kioskFilter.value, qualityFilter.value, recordingFilter.value, sortDir]);
+
   if (isLoading) return <Loading message="Loading call history..." />;
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const fmtDur = (m: number) => {
     if (!Number.isFinite(m) || m == null) return '00:00';
@@ -96,40 +121,6 @@ export function CallHistoryPage() {
   const fmtDate = (iso: string) => { if (!iso) return '—'; const d = new Date(iso); return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }); };
   const fmtDateTime = (iso: string) => { if (!iso) return '—'; const d = new Date(iso); return isNaN(d.getTime()) ? '—' : d.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' }); };
 
-  const kiosks = Array.from(new Set(calls.map((c) => c.kioskId).filter(Boolean)));
-
-  const filtered = calls.filter((c) => {
-    if (!c || !c.startTime) return false;
-    const s = search.toLowerCase();
-    const inmate = inmates[c.inmateId];
-    const matchSearch = !s || (inmate?.name || '').toLowerCase().includes(s) || (c.familyMemberName || '').toLowerCase().includes(s) || c.inmateId.toLowerCase().includes(s) || c.kioskId.toLowerCase().includes(s);
-    const matchType = typeFilter.value === 'all' || c.type === typeFilter.value;
-    const matchStatus = statusFilter.value === 'all' || c.status === statusFilter.value;
-    const matchKiosk = kioskFilter.value === 'all' || c.kioskId === kioskFilter.value;
-    const matchQuality = qualityFilter.value === 'all' || c.connectionQuality === qualityFilter.value;
-    const hasRec = recordings[c.callId]?.url;
-    const matchRec = recordingFilter.value === 'all' || (recordingFilter.value === 'available' && hasRec) || (recordingFilter.value === 'none' && !hasRec);
-    const d = new Date(c.startTime).toISOString().slice(0, 10);
-    const matchFrom = !dateFrom || d >= dateFrom;
-    const matchTo = !dateTo || d <= dateTo;
-    return matchSearch && matchType && matchStatus && matchKiosk && matchQuality && matchRec && matchFrom && matchTo;
-  });
-
-  const sorted = [...filtered].sort((a, b) => {
-    if (a.status === 'active' && b.status !== 'active') return -1;
-    if (a.status !== 'active' && b.status === 'active') return 1;
-    let cmp = 0;
-    if (sortField === 'date') cmp = new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
-    else if (sortField === 'duration') cmp = (a.durationMinutes || 0) - (b.durationMinutes || 0);
-    else if (sortField === 'type') cmp = a.type.localeCompare(b.type);
-    return sortDir === 'asc' ? cmp : -cmp;
-  });
-
-  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
-  const paged = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
-  const toggleSort = (f: SortField) => { if (sortField === f) setSortDir((d) => d === 'asc' ? 'desc' : 'asc'); else { setSortField(f); setSortDir('desc'); } };
-
   const getFailReason = (c: CallHistoryItem) => {
     if (c.failReason) return c.failReason;
     if (!c.mediaConnectedAt) return 'Family member did not join the call';
@@ -138,18 +129,14 @@ export function CallHistoryPage() {
   };
 
   const toggleBulk = (id: string) => { setSelectedIds((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; }); };
-  const toggleAll = () => { if (paged.every((c) => selectedIds.has(c.callId))) setSelectedIds(new Set()); else setSelectedIds(new Set(paged.map((c) => c.callId))); };
-
-
+  const toggleAll = () => { if (calls.every((c) => selectedIds.has(c.callId))) setSelectedIds(new Set()); else setSelectedIds(new Set(calls.map((c) => c.callId))); };
 
   const exportExcel = async (rows: CallHistoryItem[], filename: string) => {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Call Logs');
-
     const headers = ['Call ID', 'Date', 'Inmate', 'Family', 'Kiosk', 'Type', 'Duration', 'Status', 'Quality', 'Recording'];
     const colsCount = headers.length;
 
-    // 1. Title Row (A1:J1)
     ws.mergeCells(1, 1, 1, colsCount);
     const titleCell = ws.getCell('A1');
     titleCell.value = 'Call Logs Report';
@@ -157,92 +144,53 @@ export function CallHistoryPage() {
     titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
     ws.getRow(1).height = 32;
 
-    // 2. Branding & Hyperlink Row (A2:J2)
     ws.mergeCells(2, 1, 2, colsCount);
     const brandCell = ws.getCell('A2');
-    brandCell.value = {
-      text: 'DSS Solutions  |  www.dsssolutions.in',
-      hyperlink: 'http://www.dsssolutions.in',
-      tooltip: 'Visit DSS Solutions'
-    };
+    brandCell.value = { text: 'DSS Solutions  |  www.dsssolutions.in', hyperlink: 'http://www.dsssolutions.in', tooltip: 'Visit DSS Solutions' };
     brandCell.font = { name: 'Calibri', size: 14, color: { argb: 'FF000000' }, underline: true };
     brandCell.alignment = { horizontal: 'center', vertical: 'middle' };
     ws.getRow(2).height = 24;
-
-    // Blank spacer row height
     ws.getRow(3).height = 10;
 
-    // 3. Header Row (Row 4)
     const headerRow = ws.getRow(4);
     headerRow.height = 26;
     headers.forEach((h, index) => {
       const cell = headerRow.getCell(index + 1);
       cell.value = h;
       cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
-      cell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FF000000' } // Pure Black Header Background
-      };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF000000' } };
       cell.alignment = { horizontal: 'center', vertical: 'middle' };
     });
 
-    // 4. Data Rows (Row 5 onwards)
     rows.forEach((c) => {
       const rec = recordings[c.callId];
       const row = ws.addRow([
-        c.callId,
-        fmtDate(c.startTime),
-        inmates[c.inmateId]?.name || c.inmateId,
-        c.familyMemberName || '',
-        c.kioskId,
-        c.type,
-        fmtDur(c.durationMinutes),
-        c.status,
-        c.connectionQuality || '',
-        rec?.url ? 'Yes' : 'No'
+        c.callId, fmtDate(c.startTime), inmates[c.inmateId]?.name || c.inmateId,
+        c.familyMemberName || '', c.kioskId, c.type, fmtDur(c.durationMinutes),
+        c.status, c.connectionQuality || '', rec?.url ? 'Yes' : 'No'
       ]);
       row.eachCell((cell) => { cell.numFmt = '@'; });
     });
 
-    // 5. Apply Borders & Alignments to Header + Data Table
     const thinBorder: Partial<Workbook.Borders> = {
       top: { style: 'thin', color: { argb: 'D0D0D0' } },
       left: { style: 'thin', color: { argb: 'D0D0D0' } },
       bottom: { style: 'thin', color: { argb: 'D0D0D0' } },
       right: { style: 'thin', color: { argb: 'D0D0D0' } }
     };
-
     ws.eachRow((row, rowNumber) => {
-      if (rowNumber >= 4) { // Only table header & data rows
+      if (rowNumber >= 4) {
         row.eachCell((cell, colNumber) => {
           cell.border = thinBorder;
           if (rowNumber > 4) {
-            cell.alignment = {
-              horizontal: [1, 2, 5, 6, 7, 8, 9, 10].includes(colNumber) ? 'center' : 'left',
-              vertical: 'middle'
-            };
+            cell.alignment = { horizontal: [1, 2, 5, 6, 7, 8, 9, 10].includes(colNumber) ? 'center' : 'left', vertical: 'middle' };
             cell.font = { name: 'Calibri', size: 10, color: { argb: 'FF000000' } };
           }
         });
       }
     });
+    ws.columns = [{ width: 18 }, { width: 15 }, { width: 22 }, { width: 22 }, { width: 15 }, { width: 12 }, { width: 14 }, { width: 15 }, { width: 14 }, { width: 14 }];
 
-    // Set column widths
-    ws.columns = [
-      { width: 18 }, // Call ID
-      { width: 15 }, // Date
-      { width: 22 }, // Inmate
-      { width: 22 }, // Family
-      { width: 15 }, // Kiosk
-      { width: 12 }, // Type
-      { width: 14 }, // Duration
-      { width: 15 }, // Status
-      { width: 14 }, // Quality
-      { width: 14 }  // Recording
-    ];
-
-    // 6. Save File cleanly without corruption
     const buffer = await wb.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = window.URL.createObjectURL(blob);
@@ -251,6 +199,25 @@ export function CallHistoryPage() {
     a.download = filename;
     a.click();
     window.URL.revokeObjectURL(url);
+  };
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      const hasSelection = selectedIds.size > 0;
+      let rows: CallHistoryItem[];
+      if (hasSelection) {
+        rows = calls.filter((c) => selectedIds.has(c.callId));
+      } else {
+        // Fetch ALL records for export
+        const allResult = await wardenApi.getCallHistory({ ...buildParams(), limit: 10000, offset: 0 });
+        rows = allResult.calls ?? [];
+      }
+      const suffix = hasSelection ? '_selected_records' : '-all';
+      const now = new Date();
+      const ts = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}-${String(now.getMinutes()).padStart(2,'0')}-${String(now.getSeconds()).padStart(2,'0')}`;
+      await exportExcel(rows, `call-logs${suffix}_${ts}.xlsx`);
+    } finally { setIsExporting(false); }
   };
 
   return (
@@ -266,18 +233,13 @@ export function CallHistoryPage() {
               <div className="flex items-center gap-3">
                 <h1 className="text-2xl font-bold text-neutral-900 tracking-tight">Call Logs</h1>
               </div>
-              <p className="text-sm text-neutral-600 mt-1">{filtered.length} calls</p>
+              <p className="text-sm text-neutral-600 mt-1">{total} calls total</p>
             </div>
           </div>
           <div className="flex gap-2">
-            <button onClick={() => {
-              const selected = selectedIds.size > 0;
-              const rows = selected ? filtered.filter((c) => selectedIds.has(c.callId)) : filtered;
-              const suffix = selected ? '_selected_records' : '-all';
-              exportExcel(rows, `call-logs${suffix}.xlsx`);
-            }} className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-success text-white rounded-xl text-sm font-bold hover:bg-success-700 shadow-sm">
+            <button onClick={handleExport} disabled={isExporting} className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-success text-white rounded-xl text-sm font-bold hover:bg-success-700 shadow-sm disabled:opacity-50">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-              Export Excel{selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}
+              {isExporting ? 'Exporting...' : `Export Excel${selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}`}
             </button>
           </div>
         </div>
@@ -287,22 +249,20 @@ export function CallHistoryPage() {
       <div className="bg-white border border-neutral-200 rounded-xl p-4 shadow-sm flex gap-3">
         <div className="flex-1 relative">
           <svg className="w-5 h-5 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-          <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Search inmate, family, kiosk..." className="w-full pl-10 pr-4 py-2.5 bg-neutral-50 border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white text-sm" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search inmate, family, kiosk..." className="w-full pl-10 pr-4 py-2.5 bg-neutral-50 border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white text-sm" />
         </div>
         <div className="flex gap-2 items-center">
-          <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} className="px-3 py-2.5 bg-white border border-neutral-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-500" />
-          <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} className="px-3 py-2.5 bg-white border border-neutral-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-500" />
+          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="px-3 py-2.5 bg-white border border-neutral-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-500" />
+          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="px-3 py-2.5 bg-white border border-neutral-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-500" />
           {(dateFrom || dateTo) && (
-            <button onClick={() => { setDateFrom(''); setDateTo(''); setPage(1); }} className="px-3 py-2.5 text-error font-bold text-sm hover:bg-error/10 rounded-xl transition-colors">
-              Clear
-            </button>
+            <button onClick={() => { setDateFrom(''); setDateTo(''); }} className="px-3 py-2.5 text-error font-bold text-sm hover:bg-error/10 rounded-xl transition-colors">Clear</button>
           )}
         </div>
       </div>
 
       {/* Table */}
       <Card className="overflow-hidden">
-        {sorted.length === 0 ? (
+        {calls.length === 0 ? (
           <div className="text-center py-16">
             <div className="w-16 h-16 bg-neutral-100 rounded-2xl flex items-center justify-center mx-auto mb-4"><svg className="w-8 h-8 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg></div>
             <p className="text-neutral-900 font-semibold">No call logs found</p>
@@ -313,19 +273,19 @@ export function CallHistoryPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b bg-neutral-50">
-                  <th className="px-4 py-3 w-10"><input type="checkbox" checked={paged.length > 0 && paged.every((c) => selectedIds.has(c.callId))} onChange={toggleAll} className="rounded border-neutral-300" /></th>
+                  <th className="px-4 py-3 w-10"><input type="checkbox" checked={calls.length > 0 && calls.every((c) => selectedIds.has(c.callId))} onChange={toggleAll} className="rounded border-neutral-300" /></th>
                   <th className="text-left py-3 px-4"><FilterDropdown label="Type" options={[{ value: 'video', label: 'Video' }, { value: 'audio', label: 'Audio' }]} filter={typeFilter} setFilter={setTypeFilter} /></th>
-                  <th className="text-left py-3 px-4"><button onClick={() => toggleSort('date')} className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-neutral-500 hover:text-primary-600 transition-colors">Date {sortField === 'date' ? (sortDir === 'asc' ? '↑' : '↓') : ''}</button></th>
+                  <th className="text-left py-3 px-4"><button onClick={() => setSortDir((d) => d === 'asc' ? 'desc' : 'asc')} className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-neutral-500 hover:text-primary-600 transition-colors">Date {sortDir === 'asc' ? '↑' : '↓'}</button></th>
                   <th className="text-left py-3 px-4"><span className="text-xs font-bold uppercase tracking-wider text-neutral-500">Inmate ⇄ Family</span></th>
-                  <th className="text-left py-3 px-4"><FilterDropdown label="Kiosk" options={kiosks.map((k) => ({ value: k, label: k }))} filter={kioskFilter} setFilter={setKioskFilter} /></th>
-                  <th className="text-left py-3 px-4"><button onClick={() => toggleSort('duration')} className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-neutral-500 hover:text-primary-600 transition-colors">Duration {sortField === 'duration' ? (sortDir === 'asc' ? '↑' : '↓') : ''}</button></th>
-                  <th className="text-left py-3 px-4"><FilterDropdown label="Status" options={[{ value: 'completed', label: 'Completed' }, { value: 'failed', label: 'Failed' }]} filter={statusFilter} setFilter={setStatusFilter} /></th>
+                  <th className="text-left py-3 px-4"><FilterDropdown label="Kiosk" options={[]} filter={kioskFilter} setFilter={setKioskFilter} /></th>
+                  <th className="text-left py-3 px-4"><span className="text-xs font-bold uppercase tracking-wider text-neutral-500">Duration</span></th>
+                  <th className="text-left py-3 px-4"><FilterDropdown label="Status" options={[{ value: 'completed', label: 'Completed' }, { value: 'failed', label: 'Failed' }, { value: 'active', label: 'Active' }]} filter={statusFilter} setFilter={setStatusFilter} /></th>
                   <th className="text-left py-3 px-4"><FilterDropdown label="Quality" options={[{ value: 'excellent', label: 'Excellent' }, { value: 'good', label: 'Good' }, { value: 'fair', label: 'Fair' }, { value: 'poor', label: 'Poor' }]} filter={qualityFilter} setFilter={setQualityFilter} /></th>
                   <th className="text-left py-3 px-4"><FilterDropdown label="Recording" options={[{ value: 'available', label: 'Available' }, { value: 'none', label: 'None' }]} filter={recordingFilter} setFilter={setRecordingFilter} /></th>
                 </tr>
               </thead>
               <tbody>
-                {paged.map((call) => {
+                {calls.map((call) => {
                   const rec = recordings[call.callId];
                   const inmate = inmates[call.inmateId];
                   const isInmateName = inmate?.name || call.inmateName || call.inmateId;
@@ -399,9 +359,9 @@ export function CallHistoryPage() {
           </div>
         )}
 
-        {sorted.length > PAGE_SIZE && (
+        {totalPages > 1 && (
           <div className="flex items-center justify-between px-5 py-4 bg-neutral-50 border-t border-neutral-200">
-            <span className="text-sm text-neutral-600">Showing <span className="font-semibold text-neutral-900">{(page - 1) * PAGE_SIZE + 1}-{Math.min(page * PAGE_SIZE, sorted.length)}</span> of <span className="font-semibold text-neutral-900">{sorted.length}</span></span>
+            <span className="text-sm text-neutral-600">Showing <span className="font-semibold text-neutral-900">{(page - 1) * PAGE_SIZE + 1}-{Math.min(page * PAGE_SIZE, total)}</span> of <span className="font-semibold text-neutral-900">{total}</span></span>
             <div className="flex gap-2">
               <button disabled={page === 1} onClick={() => setPage(1)} className="px-3 py-2 bg-white border border-neutral-200 rounded-xl text-xs font-bold disabled:opacity-40 hover:bg-neutral-50 shadow-sm">«</button>
               <button disabled={page === 1} onClick={() => setPage((p) => p - 1)} className="px-4 py-2 bg-white border border-neutral-200 rounded-xl text-xs font-bold disabled:opacity-40 hover:bg-neutral-50 shadow-sm">Prev</button>
@@ -414,7 +374,6 @@ export function CallHistoryPage() {
       </Card>
 
       {createPortal(<>
-        {/* Recording Player */}
         {playing && (
           <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setPlaying(null)}>
             <div className="bg-white rounded-2xl p-4 max-w-3xl w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -431,7 +390,6 @@ export function CallHistoryPage() {
           </div>
         )}
 
-        {/* Call Details — Full Height */}
         {selected && (
           <div className="fixed inset-0 bg-black/60 z-[999]" onClick={() => setSelected(null)}>
             <div className="absolute inset-y-0 right-0 w-full max-w-lg bg-white shadow-2xl flex flex-col" onClick={(e) => e.stopPropagation()}>
