@@ -5,7 +5,7 @@ import { Card } from '@/components/Card';
 import { Loading } from '@/components/States';
 import { wardenApi } from '@/services/api/wardenApi';
 import { useWardenSocket } from '@/hooks/useWardenSocket';
-import { usePageHeader, usePageHeaderAction } from '@/context/PageHeaderContext';
+import { usePageHeader, setPageAction } from '@/context/PageHeaderContext';
 import type { ActiveCall, ListParams } from '@/services/api/wardenApi';
 
 const PAGE_SIZE = 20;
@@ -51,8 +51,7 @@ export function ActiveCallsPage() {
     title: 'Live Calls',
     subtitle: `${total} active calls`,
   });
-  const setHeaderAction = usePageHeaderAction();
-  setHeaderAction(
+  setPageAction(
     <div className="flex gap-2">
       <button onClick={() => { setTypeFilter('all'); setPage(1); }} className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors ${typeFilter === 'all' ? 'bg-neutral-900 text-white' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'}`}>
         <span className={`w-2 h-2 rounded-full ${typeFilter === 'all' ? 'bg-white' : 'bg-neutral-400'}`} />All

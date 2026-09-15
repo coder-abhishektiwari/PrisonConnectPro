@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Card } from '@/components/Card';
 import { Loading } from '@/components/States';
 import { wardenApi } from '@/services/api/wardenApi';
-import { usePageHeader, usePageHeaderAction } from '@/context/PageHeaderContext';
+import { usePageHeader, setPageAction } from '@/context/PageHeaderContext';
 import type { Inmate, Contact, ListParams } from '@/services/api/wardenApi';
 
 export function InmateFamilyPage() {
@@ -74,8 +74,7 @@ useState({name:'',relationship:'',phoneNumber:'',inmateId:''});
     title: 'Prisoner & Family',
     subtitle: `${prisonerTotal} prisoners • ${familyTotal} family`,
   });
-  const setHeaderAction = usePageHeaderAction();
-  setHeaderAction(
+  setPageAction(
     <button onClick={()=>setShowAddInmate(true)} className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-primary-600 text-white rounded-xl text-sm font-bold hover:bg-primary-700 shadow-sm">+ Add Prisoner</button>
   );
 

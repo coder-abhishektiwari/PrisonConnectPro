@@ -4,7 +4,7 @@ import { Card } from '@/components/Card';
 import { Loading } from '@/components/States';
 import { wardenApi } from '@/services/api/wardenApi';
 import { useWardenSocket } from '@/hooks/useWardenSocket';
-import { usePageHeader, usePageHeaderAction } from '@/context/PageHeaderContext';
+import { usePageHeader, setPageAction } from '@/context/PageHeaderContext';
 import ExcelJS from 'exceljs';
 
 import type { CallHistoryItem, Recording, Inmate, CallHistoryParams } from '@/services/api/wardenApi';
@@ -110,40 +110,6 @@ export function CallHistoryPage() {
 
   useEffect(() => { setPage(1); }, [search, dateFrom, dateTo, typeFilter.value, statusFilter.value, kioskFilter.value, qualityFilter.value, recordingFilter.value, sortDir]);
 
-  usePageHeader({
-    title: 'Call Logs',
-    subtitle: `${total} calls total`,
-  });
-  const setHeaderAction = usePageHeaderAction();
-  setHeaderAction(
-    <button onClick={handleExport} disabled={isExporting} className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-success text-white rounded-xl text-sm font-bold hover:bg-success-700 shadow-sm disabled:opacity-50">
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-      {isExporting ? 'Exporting...' : `Export Excel${selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}`}
-    </button>
-  );
-
-  if (isLoading) return <Loading message="Loading call history..." />;
-
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-
-  const fmtDur = (m: number) => {
-    if (!Number.isFinite(m) || m == null) return '00:00';
-    const mins = Math.floor(m); const secs = Math.floor((m % 1) * 60);
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-  const fmtDate = (iso: string) => { if (!iso) return '—'; const d = new Date(iso); return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }); };
-  const fmtDateTime = (iso: string) => { if (!iso) return '—'; const d = new Date(iso); return isNaN(d.getTime()) ? '—' : d.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' }); };
-
-  const getFailReason = (c: CallHistoryItem) => {
-    if (c.failReason) return c.failReason;
-    if (!c.mediaConnectedAt) return 'Family member did not join the call';
-    if (c.durationMinutes === 0) return 'Call ended immediately after connecting';
-    return 'Call ended unexpectedly';
-  };
-
-  const toggleBulk = (id: string) => { setSelectedIds((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; }); };
-  const toggleAll = () => { if (calls.every((c) => selectedIds.has(c.callId))) setSelectedIds(new Set()); else setSelectedIds(new Set(calls.map((c) => c.callId))); };
-
   const exportExcel = async (rows: CallHistoryItem[], filename: string) => {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Call Logs');
@@ -222,7 +188,6 @@ export function CallHistoryPage() {
       if (hasSelection) {
         rows = calls.filter((c) => selectedIds.has(c.callId));
       } else {
-        // Fetch ALL records for export
         const allResult = await wardenApi.getCallHistory({ ...buildParams(), limit: 10000, offset: 0 });
         rows = allResult.calls ?? [];
       }
@@ -232,6 +197,39 @@ export function CallHistoryPage() {
       await exportExcel(rows, `call-logs${suffix}_${ts}.xlsx`);
     } finally { setIsExporting(false); }
   };
+
+  usePageHeader({
+    title: 'Call Logs',
+    subtitle: `${total} calls total`,
+  });
+  setPageAction(
+    <button onClick={handleExport} disabled={isExporting} className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-success text-white rounded-xl text-sm font-bold hover:bg-success-700 shadow-sm disabled:opacity-50">
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+      {isExporting ? 'Exporting...' : `Export Excel${selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}`}
+    </button>
+  );
+
+  if (isLoading) return <Loading message="Loading call history..." />;
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const fmtDur = (m: number) => {
+    if (!Number.isFinite(m) || m == null) return '00:00';
+    const mins = Math.floor(m); const secs = Math.floor((m % 1) * 60);
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+  const fmtDate = (iso: string) => { if (!iso) return '—'; const d = new Date(iso); return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }); };
+  const fmtDateTime = (iso: string) => { if (!iso) return '—'; const d = new Date(iso); return isNaN(d.getTime()) ? '—' : d.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' }); };
+
+  const getFailReason = (c: CallHistoryItem) => {
+    if (c.failReason) return c.failReason;
+    if (!c.mediaConnectedAt) return 'Family member did not join the call';
+    if (c.durationMinutes === 0) return 'Call ended immediately after connecting';
+    return 'Call ended unexpectedly';
+  };
+
+  const toggleBulk = (id: string) => { setSelectedIds((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; }); };
+  const toggleAll = () => { if (calls.every((c) => selectedIds.has(c.callId))) setSelectedIds(new Set()); else setSelectedIds(new Set(calls.map((c) => c.callId))); };
 
   return (
     <div className="space-y-6">

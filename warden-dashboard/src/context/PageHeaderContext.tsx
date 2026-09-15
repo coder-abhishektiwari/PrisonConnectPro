@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useRef, type ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useRef, useEffect, type ReactNode } from 'react';
 
 interface PageHeaderConfig {
   title: string;
@@ -8,24 +8,18 @@ interface PageHeaderConfig {
 interface PageHeaderContextValue {
   config: PageHeaderConfig;
   setConfig: (config: PageHeaderConfig) => void;
-  actionNode: ReactNode;
-  setActionNode: (node: ReactNode) => void;
 }
 
 const PageHeaderContext = createContext<PageHeaderContextValue>({
   config: { title: '' },
   setConfig: () => {},
-  actionNode: null,
-  setActionNode: () => {},
 });
 
 export function PageHeaderProvider({ children }: { children: ReactNode }) {
   const [config, setConfigState] = useState<PageHeaderConfig>({ title: '' });
-  const [actionNode, setActionNodeState] = useState<ReactNode>(null);
   const setConfig = useCallback((c: PageHeaderConfig) => setConfigState(c), []);
-  const setActionNode = useCallback((n: ReactNode) => setActionNodeState(n), []);
   return (
-    <PageHeaderContext.Provider value={{ config, setConfig, actionNode, setActionNode }}>
+    <PageHeaderContext.Provider value={{ config, setConfig }}>
       {children}
     </PageHeaderContext.Provider>
   );
@@ -40,12 +34,30 @@ export function usePageHeader(config: PageHeaderConfig) {
   }
 }
 
-export function usePageHeaderAction() {
-  const { setActionNode } = useContext(PageHeaderContext);
-  return setActionNode;
+// Action slot: ref-based, no infinite loops
+let globalActionRef: ReactNode = null;
+let globalActionListeners: Set<() => void> = new Set();
+
+function notifyActionListeners() {
+  globalActionListeners.forEach((l) => l());
+}
+
+export function setPageAction(action: ReactNode) {
+  globalActionRef = action;
+  notifyActionListeners();
+}
+
+export function usePageAction() {
+  const [, forceRender] = useState(0);
+  useEffect(() => {
+    const listener = () => forceRender((n) => n + 1);
+    globalActionListeners.add(listener);
+    return () => { globalActionListeners.delete(listener); };
+  }, []);
+  return globalActionRef;
 }
 
 export function usePageHeaderConfig() {
   const ctx = useContext(PageHeaderContext);
-  return { title: ctx.config.title, subtitle: ctx.config.subtitle, action: ctx.actionNode };
+  return { title: ctx.config.title, subtitle: ctx.config.subtitle };
 }

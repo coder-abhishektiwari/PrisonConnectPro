@@ -4,7 +4,7 @@ import { Card } from '@/components/Card';
 import { Loading } from '@/components/States';
 import { wardenApi } from '@/services/api/wardenApi';
 import { apiClient } from '@/services/api/client';
-import { usePageHeader, usePageHeaderAction } from '@/context/PageHeaderContext';
+import { usePageHeader, setPageAction } from '@/context/PageHeaderContext';
 import type { Wallet, Transaction, Inmate, WalletRequest, ListParams } from '@/services/api/wardenApi';
 
 export function TrustAccountPage() {
@@ -163,8 +163,7 @@ export function TrustAccountPage() {
     title: 'Inmate Wallet',
     subtitle: `₹${totalBalance.toLocaleString('en-IN')} total • ${wallets.length} inmates • Avg ₹${avgBalance}`,
   });
-  const setHeaderAction = usePageHeaderAction();
-  setHeaderAction(
+  setPageAction(
     <div className="hidden lg:flex gap-2">
       <div className="px-3 py-2 bg-neutral-900 text-white rounded-xl text-xs font-bold">Audio ₹{pricing.audioRate}/min</div>
       <div className="px-3 py-2 bg-primary-50 border border-primary-200 text-primary-700 rounded-xl text-xs font-bold">Video ₹{pricing.videoRate}/min</div>

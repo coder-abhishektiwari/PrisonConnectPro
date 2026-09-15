@@ -37,16 +37,16 @@ export function MonitorScreenPage() {
         wardenApi.getStatistics(),
       ]);
 
-      const foundCall = calls.find((c) => c.callId === callId) || null;
+      const foundCall = (calls.items ?? []).find((c) => c.callId === callId) || null;
       setCall(foundCall);
 
       if (foundCall) {
-        setInmate(inmates.find((i) => i.inmateId === foundCall.inmateId) || null);
-        setContact(contacts.find((c) => c.contactId === foundCall.contactId) || null);
-        setWallet(wallets.find((w) => w.inmateId === foundCall.inmateId) || null);
-        setRecording(recordings.find((r) => r.callId === foundCall.callId) || null);
-        setDevice(devices.find((d) => d.deviceId === foundCall.kioskId) || null);
-        setStatistics(stats.find((s) => s.callId === foundCall.callId) || null);
+        setInmate((inmates.items ?? []).find((i) => i.inmateId === foundCall.inmateId) || null);
+        setContact((contacts.items ?? []).find((c) => c.contactId === foundCall.contactId) || null);
+        setWallet((wallets.items ?? []).find((w) => w.inmateId === foundCall.inmateId) || null);
+        setRecording((recordings ?? []).find((r) => r.callId === foundCall.callId) || null);
+        setDevice((devices.items ?? []).find((d) => d.deviceId === foundCall.kioskId) || null);
+        setStatistics((stats ?? []).find((s) => s.callId === foundCall.callId) || null);
       }
     } catch (err) {
       console.error('Failed to load monitor data:', err);
