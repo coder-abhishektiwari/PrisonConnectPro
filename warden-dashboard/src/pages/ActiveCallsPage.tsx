@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '@/components/Card';
 import { Loading } from '@/components/States';
@@ -16,8 +17,7 @@ export function ActiveCallsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [calls, setCalls] = useState<ActiveCall[]>([]);
   const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState('all');
-  const [qualityFilter, setQualityFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'video' | 'audio'>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [toast, setToast] = useState<string | null>(null);
   const [confirmForceEnd, setConfirmForceEnd] = useState<ActiveCall | null>(null);
@@ -116,8 +116,7 @@ export function ActiveCallsPage() {
       call.inmateId.toLowerCase().includes(search.toLowerCase()) ||
       call.kioskId.toLowerCase().includes(search.toLowerCase());
     const matchesType = typeFilter === 'all' || call.type === typeFilter;
-    const matchesQuality = qualityFilter === 'all' || call.connectionQuality === qualityFilter;
-    return matchesSearch && matchesType && matchesQuality;
+    return matchesSearch && matchesType;
   });
 
   const totalPages = Math.max(1, Math.ceil(filteredCalls.length / PAGE_SIZE));
@@ -136,23 +135,48 @@ export function ActiveCallsPage() {
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
             </div>
             <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-bold text-neutral-900 tracking-tight">Live Calls</h1>
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-success/10 text-success border border-success/20 rounded-full text-xs font-bold"><span className="w-2 h-2 bg-success rounded-full animate-pulse" />{filteredCalls.length} Active</span>
-              </div>
+              <h1 className="text-2xl font-bold text-neutral-900 tracking-tight">Live Calls</h1>
               <p className="text-sm text-neutral-600 mt-1">Active calls in your facility</p>
             </div>
           </div>
           <div className="flex gap-2">
-            <div className="px-3 py-2 bg-neutral-900 text-white rounded-xl text-xs font-bold flex items-center gap-2"><span className="w-2 h-2 bg-white rounded-full" />{filteredCalls.length} Live</div>
-            <div className="px-3 py-2 bg-primary-50 border border-primary-200 text-primary-700 rounded-xl text-xs font-bold">Video {videoCount}</div>
-            <div className="px-3 py-2 bg-info-50 border border-info/20 text-info rounded-xl text-xs font-bold">Audio {audioCount}</div>
+            <button
+              onClick={() => { setTypeFilter('all'); setCurrentPage(1); }}
+              className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors ${
+                typeFilter === 'all'
+                  ? 'bg-neutral-900 text-white'
+                  : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full ${typeFilter === 'all' ? 'bg-white' : 'bg-neutral-400'}`} />
+              All {calls.length}
+            </button>
+            <button
+              onClick={() => { setTypeFilter('video'); setCurrentPage(1); }}
+              className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors ${
+                typeFilter === 'video'
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-primary-50 border border-primary-200 text-primary-700 hover:bg-primary-100'
+              }`}
+            >
+              Video {videoCount}
+            </button>
+            <button
+              onClick={() => { setTypeFilter('audio'); setCurrentPage(1); }}
+              className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors ${
+                typeFilter === 'audio'
+                  ? 'bg-info text-white'
+                  : 'bg-info-50 border border-info/20 text-info hover:bg-info-100'
+              }`}
+            >
+              Audio {audioCount}
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Professional Filters */}
-      <div className="bg-white border border-neutral-200 rounded-xl p-4 shadow-sm flex flex-col lg:flex-row gap-3">
+      {/* Search */}
+      <div className="bg-white border border-neutral-200 rounded-xl p-4 shadow-sm">
         <div className="flex-1 relative">
           <svg className="w-5 h-5 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
           <input
@@ -162,28 +186,6 @@ export function ActiveCallsPage() {
             onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
             className="w-full pl-10 pr-4 py-2.5 bg-neutral-50 border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white text-sm"
           />
-        </div>
-        <div className="flex gap-2">
-          <select
-            value={typeFilter}
-            onChange={(e) => { setTypeFilter(e.target.value); setCurrentPage(1); }}
-            className="px-4 py-2.5 bg-white border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm font-medium min-w-[130px]"
-          >
-            <option value="all">All Types</option>
-            <option value="video">Video</option>
-            <option value="audio">Audio</option>
-          </select>
-          <select
-            value={qualityFilter}
-            onChange={(e) => { setQualityFilter(e.target.value); setCurrentPage(1); }}
-            className="px-4 py-2.5 bg-white border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm font-medium min-w-[140px]"
-          >
-            <option value="all">All Quality</option>
-            <option value="excellent">Excellent</option>
-            <option value="good">Good</option>
-            <option value="fair">Fair</option>
-            <option value="poor">Poor</option>
-          </select>
         </div>
       </div>
 
@@ -276,9 +278,9 @@ export function ActiveCallsPage() {
         )}
       </Card>
 
-      {/* Professional Confirm Dialog */}
+      {createPortal(<>
       {confirmForceEnd && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[999] p-4">
           <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-neutral-200">
             <div className="w-12 h-12 bg-error/10 border border-error/20 rounded-xl flex items-center justify-center mb-4">
               <svg className="w-6 h-6 text-error" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
@@ -310,12 +312,12 @@ export function ActiveCallsPage() {
         </div>
       )}
 
-      {/* Professional Toast */}
       {toast && (
-        <div className="fixed bottom-4 right-4 bg-neutral-900 text-white px-5 py-3 rounded-xl shadow-xl text-sm font-medium z-50 flex items-center gap-2">
+        <div className="fixed bottom-4 right-4 bg-neutral-900 text-white px-5 py-3 rounded-xl shadow-xl text-sm font-medium z-[999] flex items-center gap-2">
           <span className="w-2 h-2 bg-success rounded-full animate-pulse" />{toast}
         </div>
       )}
+      </>, document.body)}
     </div>
   );
 }

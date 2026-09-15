@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Card } from '@/components/Card';
 import { Loading } from '@/components/States';
 import { wardenApi } from '@/services/api/wardenApi';
@@ -241,11 +242,10 @@ export function TrustAccountPage() {
         </div>
       </Card>
 
-      {/* New Interface: Transaction Drawer */}
-      {selectedId && (
-        <div className="fixed inset-0 bg-black/60 flex justify-end z-50" onClick={()=> setSelectedId(null)}>
-          <div className="bg-white w-full max-w-xl h-full overflow-auto" onClick={e=>e.stopPropagation()}>
-            <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
+      {createPortal(selectedId && (
+        <div className="fixed inset-0 bg-black/60 z-[999]" onClick={()=> setSelectedId(null)}>
+          <div className="absolute inset-y-0 right-0 w-full max-w-xl bg-white shadow-2xl flex flex-col" onClick={e=>e.stopPropagation()}>
+            <div className="flex justify-between items-center px-6 py-4 border-b border-neutral-200 shrink-0">
               <div>
                 <h2 className="text-xl font-bold">Inmate Statement</h2>
                 <p className="text-sm text-neutral-500">{selectedId} {selectedInmate ? `• ${selectedInmate.name} • ${selectedInmate.facility}` : ''}</p>
@@ -344,7 +344,7 @@ export function TrustAccountPage() {
             )}
           </div>
         </div>
-      )}
+      ), document.body)}
     </div>
   );
 }

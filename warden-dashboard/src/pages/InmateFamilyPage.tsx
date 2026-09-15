@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Card } from '@/components/Card';
 import { Loading } from '@/components/States';
 import { wardenApi } from '@/services/api/wardenApi';
@@ -156,6 +157,28 @@ useState({name:'',relationship:'',phoneNumber:'',inmateId:''});
         )}
       </Card>
 
+      {createPortal(<>
+      {showAddInmate && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={()=>setShowAddInmate(false)}>
+            <div className="bg-white rounded-xl p-6 w-full max-w-md" onClick={e=>e.stopPropagation()}>
+              <h3 className="font-bold mb-4">Add Prisoner - Assign Kiosk *</h3>
+              <input placeholder="Inmate ID (INM-1026) *" value={newInmate.inmateId} onChange={e=>setNewInmate({...newInmate,inmateId:e.target.value})} className="w-full mb-3 px-3 py-2 border rounded-lg" />
+              <input placeholder="Name *" value={newInmate.name} onChange={e=>setNewInmate({...newInmate,name:e.target.value})} className="w-full mb-3 px-3 py-2 border rounded-lg" />
+              <select value={newInmate.kioskId} onChange={e=>setNewInmate({...newInmate,kioskId:e.target.value})} className="w-full mb-3 px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-primary-500">
+                <option value="">Select Kiosk * (required)</option>
+                {kiosks.map(k=>(
+                  <option key={k.deviceId} value={k.deviceId}>{k.name}{k.location ? ` - ${k.location}` : ''}</option>
+                ))}
+              </select>
+              <input placeholder="Facility" value={newInmate.facility} onChange={e=>setNewInmate({...newInmate,facility:e.target.value})} className="w-full mb-3 px-3 py-2 border rounded-lg" />
+              <div className="flex gap-2 justify-end">
+                <button onClick={()=>setShowAddInmate(false)} className="px-4 py-2 border rounded-lg">Cancel</button>
+                <button onClick={addInmate} className="px-4 py-2 bg-primary-600 text-white rounded-lg">Add</button>
+              </div>
+            </div>
+          </div>
+        )}
+
       {showAddFamily && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4" onClick={()=>{setShowAddFamily(false); setAddFamilyError('');}}>
           <div className="bg-white rounded-xl p-6 w-full max-w-md" onClick={e=>e.stopPropagation()}>
@@ -177,7 +200,6 @@ useState({name:'',relationship:'',phoneNumber:'',inmateId:''});
         </div>
       )}
 
-      {/* Edit Prisoner Modal */}
       {editingInmate && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={()=>setEditingInmate(null)}>
           <div className="bg-white rounded-xl p-6 w-full max-w-md" onClick={e=>e.stopPropagation()}>
@@ -192,7 +214,6 @@ useState({name:'',relationship:'',phoneNumber:'',inmateId:''});
         </div>
       )}
 
-      {/* Edit Family Modal */}
       {editingFamily && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={()=>setEditingFamily(null)}>
           <div className="bg-white rounded-xl p-6 w-full max-w-md" onClick={e=>e.stopPropagation()}>
@@ -208,50 +229,52 @@ useState({name:'',relationship:'',phoneNumber:'',inmateId:''});
         </div>
       )}
 
-      {/* Detail View - Prisoner + Family */}
       {detailPrisoner && (
-        <div className="fixed inset-0 bg-black/60 flex justify-end z-50" onClick={()=>setDetailPrisoner(null)}>
-          <div className="bg-white w-full max-w-lg h-full overflow-auto p-6" onClick={e=>e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-6">
+        <div className="fixed inset-0 bg-black/60 z-[999]" onClick={()=>setDetailPrisoner(null)}>
+          <div className="absolute inset-y-0 right-0 w-full max-w-lg bg-white shadow-2xl flex flex-col" onClick={e=>e.stopPropagation()}>
+            <div className="flex justify-between items-center px-6 py-4 border-b border-neutral-200 shrink-0">
               <h3 className="text-xl font-bold">Prisoner Details</h3>
-              <button onClick={()=>setDetailPrisoner(null)} className="text-neutral-500 hover:text-neutral-900 text-xl">✕</button>
+              <button onClick={()=>setDetailPrisoner(null)} className="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center text-neutral-500 hover:text-neutral-900">✕</button>
             </div>
-            <div className="flex items-center gap-4 p-4 bg-neutral-50 rounded-xl mb-6">
-              <div className="w-16 h-16 rounded-full bg-[#E9EEF3] border border-[#D1D7DB] flex items-center justify-center shrink-0">
-                <svg className="w-9 h-9 text-[#8696A0]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" /></svg>
-              </div>
-              <div>
-                <p className="font-bold text-lg">{detailPrisoner.name}</p>
-                <p className="text-sm text-neutral-500">{detailPrisoner.inmateId} • {detailPrisoner.facility} • {detailPrisoner.cellBlock}</p>
-                <p className="text-xs mt-1"><span className="px-2 py-0.5 bg-success/10 text-success rounded-full">{detailPrisoner.status}</span> <span className="ml-2 px-2 py-0.5 bg-neutral-200 rounded-full text-xs">{(detailPrisoner as any).kioskId || 'No kiosk'}</span></p>
-              </div>
-            </div>
-            <div className="flex justify-between items-center mb-3">
-              <h4 className="font-semibold">Family Members ({contacts.filter(c=>c.inmateId===detailPrisoner.inmateId).length})</h4>
-              <button onClick={()=>{setNewFamily({...newFamily, inmateId:detailPrisoner.inmateId}); setShowAddFamily(true);}} className="px-3 py-1.5 bg-success text-white rounded-lg text-xs font-medium hover:bg-success-700">+ Add Family Members</button>
-            </div>
-            <div className="space-y-3">
-              {contacts.filter(c=>c.inmateId===detailPrisoner.inmateId).length===0 ? <p className="text-sm text-neutral-500">No family - click + Add Family above</p> : contacts.filter(c=>c.inmateId===detailPrisoner.inmateId).map(c=>(
-                <div key={c.contactId} className="flex items-center justify-between p-3 border rounded-xl hover:bg-neutral-50">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-[#E9EEF3] border border-[#D1D7DB] flex items-center justify-center shrink-0">
-                      <svg className="w-6 h-6 text-[#8696A0]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" /></svg>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">{c.name}</p>
-                      <p className="text-xs text-neutral-500">{c.relationship} • {c.phoneNumber}</p>
-                    </div>
-                  </div>
-                  <div className="flex gap-1">
-                    <button onClick={()=>setEditingFamily({...c})} className="px-2.5 py-1 text-xs border border-primary-600 text-primary-600 rounded-lg hover:bg-primary-600 hover:text-white">Edit</button>
-                    <button onClick={()=>deleteFamily(c.contactId)} className="px-2.5 py-1 text-xs border border-error text-error rounded-lg hover:bg-error hover:text-white">Delete</button>
-                  </div>
+            <div className="flex-1 overflow-y-auto px-6 py-4">
+              <div className="flex items-center gap-4 p-4 bg-neutral-50 rounded-xl mb-6">
+                <div className="w-16 h-16 rounded-full bg-[#E9EEF3] border border-[#D1D7DB] flex items-center justify-center shrink-0">
+                  <svg className="w-9 h-9 text-[#8696A0]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" /></svg>
                 </div>
-              ))}
+                <div>
+                  <p className="font-bold text-lg">{detailPrisoner.name}</p>
+                  <p className="text-sm text-neutral-500">{detailPrisoner.inmateId} • {detailPrisoner.facility} • {detailPrisoner.cellBlock}</p>
+                  <p className="text-xs mt-1"><span className="px-2 py-0.5 bg-success/10 text-success rounded-full">{detailPrisoner.status}</span> <span className="ml-2 px-2 py-0.5 bg-neutral-200 rounded-full text-xs">{(detailPrisoner as any).kioskId || 'No kiosk'}</span></p>
+                </div>
+              </div>
+              <div className="flex justify-between items-center mb-3">
+                <h4 className="font-semibold">Family Members ({contacts.filter(c=>c.inmateId===detailPrisoner.inmateId).length})</h4>
+                <button onClick={()=>{setNewFamily({...newFamily, inmateId:detailPrisoner.inmateId}); setShowAddFamily(true);}} className="px-3 py-1.5 bg-success text-white rounded-lg text-xs font-medium hover:bg-success-700">+ Add Family Members</button>
+              </div>
+              <div className="space-y-3">
+                {contacts.filter(c=>c.inmateId===detailPrisoner.inmateId).length===0 ? <p className="text-sm text-neutral-500">No family - click + Add Family above</p> : contacts.filter(c=>c.inmateId===detailPrisoner.inmateId).map(c=>(
+                  <div key={c.contactId} className="flex items-center justify-between p-3 border rounded-xl hover:bg-neutral-50">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-[#E9EEF3] border border-[#D1D7DB] flex items-center justify-center shrink-0">
+                        <svg className="w-6 h-6 text-[#8696A0]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" /></svg>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">{c.name}</p>
+                        <p className="text-xs text-neutral-500">{c.relationship} • {c.phoneNumber}</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-1">
+                      <button onClick={()=>setEditingFamily({...c})} className="px-2.5 py-1 text-xs border border-primary-600 text-primary-600 rounded-lg hover:bg-primary-600 hover:text-white">Edit</button>
+                      <button onClick={()=>deleteFamily(c.contactId)} className="px-2.5 py-1 text-xs border border-error text-error rounded-lg hover:bg-error hover:text-white">Delete</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
       )}
+      </>, document.body)}
     </div>
   );
 }

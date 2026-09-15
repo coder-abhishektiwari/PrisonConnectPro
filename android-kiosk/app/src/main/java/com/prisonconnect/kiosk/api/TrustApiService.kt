@@ -13,6 +13,7 @@ import com.prisonconnect.kiosk.models.call.CreateCallRequest
 import com.prisonconnect.kiosk.models.call.RecordingUploadRequest
 import com.prisonconnect.kiosk.models.call.RecordingUploadResponse
 import com.prisonconnect.kiosk.models.call.CallStatusSnapshot
+import com.prisonconnect.kiosk.models.call.CallStatsReport
 import com.prisonconnect.kiosk.models.schedule.SlotsResponse
 import com.prisonconnect.kiosk.models.schedule.ScheduleRequest
 import com.prisonconnect.kiosk.models.wallet.WalletStatement
@@ -112,6 +113,10 @@ interface TrustApiService {
     /** Finalize a call (sets endTime/duration) when it ends. */
     @POST("calls/{callId}/end")
     suspend fun endCall(@Path("callId") callId: String): ApiResponse<*>
+
+    /** Periodic stats report during an active call. */
+    @PATCH("calls/{callId}")
+    suspend fun reportCallStats(@Path("callId") callId: String, @Body report: CallStatsReport): ApiResponse<*>
 
     @POST("recordings/upload")
     suspend fun uploadRecording(@Body request: RecordingUploadRequest): ApiResponse<RecordingUploadResponse>

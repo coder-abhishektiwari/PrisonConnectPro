@@ -176,7 +176,8 @@ function createCallsRouter(broadcastEvent, signaling) {
     } else {
       calls = calls.filter((c) => inAdminScope(req, c));
     }
-    return sendSuccess(res, calls.filter((c) => TERMINAL_STATES.includes(c.status)));
+    // Include terminal calls AND active calls (live ones show with badge)
+    return sendSuccess(res, calls.filter((c) => TERMINAL_STATES.includes(c.status) || c.status === 'active'));
   }));
 
   router.get('/scheduled/:id', requireAuth, asyncRoute(async (req, res) => {
@@ -567,4 +568,33 @@ function createCallsRouter(broadcastEvent, signaling) {
   return router;
 }
 
+/**
+ * Periodic sweep: finalize any active calls that exceeded their max duration
+ * + 2 min grace. Prevents phantom "live" calls on the dashboard when a kiosk
+ * crashes mid-call and /end never fires.
+ */
+async function sweepStaleCalls(broadcastEvent) {
+  try {
+    const calls = await readDb('calls.json');
+    const now = Date.now();
+    let swept = 0;
+
+    for (const call of calls) {
+      if (call.status !== 'active') continue;
+      const maxMs = (Number(call.maxDurationMinutes) || 15) * 60000;
+      const graceMs = 2 * 60000;
+      const startMs = new Date(call.startTime || Date.now()).getTime();
+      if (now - startMs > maxMs + graceMs) {
+        console.warn(`[calls] periodic sweep: finalizing stale call ${call.callId}`);
+        await finalizeCall(call, startMs + maxMs, broadcastEvent);
+        swept++;
+      }
+    }
+    if (swept > 0) console.log(`[calls] periodic sweep finalized ${swept} stale call(s)`);
+  } catch (err) {
+    console.error('[calls] periodic sweep failed:', err.message);
+  }
+}
+
 module.exports = createCallsRouter;
+module.exports.sweepStaleCalls = sweepStaleCalls;

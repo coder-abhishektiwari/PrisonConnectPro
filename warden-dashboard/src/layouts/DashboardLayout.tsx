@@ -11,7 +11,7 @@ export function DashboardLayout() {
       {/* Main Content — stays fixed, sidebar overlays on hover */}
       <div className="ml-16 flex flex-col min-h-screen">
         <Header />
-        <main className="flex-1 p-6 overflow-y-auto">
+        <main className="flex-1 p-6">
           <Outlet />
         </main>
       </div>

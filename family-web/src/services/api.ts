@@ -21,22 +21,22 @@ api.interceptors.response.use(
 
 export const callApi = {
   getSession: (linkToken: string) =>
-    api.get<ApiResponse<CallSession>>(`/calls/link/${linkToken}`).then((r) => r.data.data),
+    api.post<ApiResponse<CallSession>>(`/family/secure-call/link/${linkToken}`).then((r) => r.data.data),
 
   heartbeat: (linkToken: string) =>
-    api.post<ApiResponse<{ ok: boolean; done?: boolean }>>(`/calls/link/${linkToken}/heartbeat`).then((r) => r.data.data),
+    api.get<ApiResponse<{ ok: boolean; done?: boolean }>>(`/family/secure-call/heartbeat/${linkToken}`).then((r) => r.data.data),
 
   verifyDevice: (linkToken: string, payload: { fingerprint: string; signals: Record<string, unknown>; deviceInfo?: DeviceInfo }) =>
-    api.post<ApiResponse<DeviceVerificationResult>>(`/calls/${linkToken}/device-verification`, payload).then((r) => r.data.data),
+    api.post<ApiResponse<DeviceVerificationResult>>(`/family/secure-call/device/${linkToken}`, payload).then((r) => r.data.data),
 
   sendOtp: (linkToken: string) =>
-    api.post<ApiResponse<SendOtpResult>>(`/calls/${linkToken}/send-otp`).then((r) => r.data.data),
+    api.post<ApiResponse<SendOtpResult>>(`/family/secure-call/send-otp/${linkToken}`).then((r) => r.data.data),
 
   getDevOtp: (linkToken: string) =>
-    api.get<ApiResponse<{ otp: string; expiresAt?: string | null }>>(`/calls/${linkToken}/otp`).then((r) => r.data.data),
+    api.get<ApiResponse<{ otp: string; expiresAt?: string | null }>>(`/family/secure-call/info/${linkToken}`).then((r) => r.data.data),
 
   verifyOtp: (linkToken: string, otp: string) =>
-    api.post<ApiResponse<OtpVerificationResult>>(`/calls/${linkToken}/otp-verification`, { otp }).then((r) => r.data.data),
+    api.post<ApiResponse<OtpVerificationResult>>(`/family/secure-call/verify-otp/${linkToken}`, { otp }).then((r) => r.data.data),
 
   joinRoom: (roomId: string, participantId: string) =>
     api.post<ApiResponse<JoinRoomResult>>('/rooms/join', { roomId, participantId }).then((r) => r.data.data),

@@ -19,6 +19,7 @@ const { router: adminRouter } = require('./admin-routes');
 const kiosksRouter = require('./routes/kiosks');
 const authRoutesRouter = require('./routes/auth');
 const createCallsRouter = require('./routes/calls');
+const { sweepStaleCalls } = require('./routes/calls');
 const familyRouter = require('./routes/family');
 const inmatesRouter = require('./routes/inmates');
 const createContactsRouter = require('./routes/contacts');
@@ -450,4 +451,7 @@ function startServer() {
     console.log(`API: http://localhost:${PORT}`);
     console.log(`Socket.IO: http://localhost:${PORT}`);
   });
+
+  // Periodic sweep: finalize orphaned active calls every 2 minutes
+  setInterval(() => sweepStaleCalls(broadcastEvent), 2 * 60 * 1000);
 }

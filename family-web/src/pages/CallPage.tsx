@@ -145,7 +145,7 @@ export function CallPage() {
           await wait(attempt === 1 ? 1500 : 3000);
 
           if (!socketService.isConnected()) {
-            socketService.connect(session!, otpResult?.sessionToken);
+            socketService.connect(otpResult!.sessionToken);
             const ok = await waitForSocket(10000);
             if (!ok) continue;
           }
@@ -396,6 +396,12 @@ export function CallPage() {
 
   const initializeCall = async () => {
     try {
+      if (!otpResult?.sessionToken) {
+        setStatus('error');
+        setError('Session expired. Please open the call link again.');
+        return;
+      }
+
       setStatus('initializing');
       setStatusMessage('Requesting media permissions...');
 
@@ -409,7 +415,7 @@ export function CallPage() {
       await webRtcService.initialize(session!, []);
 
       // Connect to socket with the verified family session token
-      socketService.connect(session!, otpResult?.sessionToken);
+      socketService.connect(otpResult!.sessionToken);
 
       setStatus('waiting');
       setStatusMessage(`Calling ${session!.inmateName}...`);

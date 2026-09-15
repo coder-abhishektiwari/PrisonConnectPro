@@ -41,5 +41,8 @@ interface CallRepository {
     fun notifyCallEnded(callId: String)
     fun observeSignalingEvents(): Flow<SignalingEvent>
 
+    /** Periodic stats report during an active call (quality, recording status). */
+    suspend fun reportStats(callId: String, report: CallStatsReport)
+
     suspend fun getSettings(): NetworkResult<com.google.gson.JsonObject?>
 }

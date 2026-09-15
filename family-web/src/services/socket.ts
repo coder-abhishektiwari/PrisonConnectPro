@@ -1,6 +1,5 @@
 import { io, Socket } from 'socket.io-client';
 import { env } from '@/config/env';
-import type { CallSession } from '@/types/call';
 
 type SocketEventCallback = (event: string, data: any) => void;
 
@@ -13,8 +12,13 @@ class SocketService {
   private eventListeners: Map<string, Set<SocketEventCallback>> = new Map();
   private isConnecting = false;
 
-  connect(session: CallSession, authToken?: string): void {
+  connect(authToken: string): void {
     if (this.socket?.connected || this.isConnecting) {
+      return;
+    }
+
+    if (!authToken) {
+      console.error('[Socket] Cannot connect: no auth token (OTP verification required)');
       return;
     }
 
@@ -30,7 +34,7 @@ class SocketService {
         randomizationFactor: 0.5,
         timeout: 20000,
         auth: {
-          token: authToken ?? session.roomId,
+          token: authToken,
         },
       });
 

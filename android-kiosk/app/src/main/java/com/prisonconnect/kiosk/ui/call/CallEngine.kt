@@ -160,6 +160,7 @@ class CallEngine @Inject constructor(
     private var timerJob: Job? = null
     private var pollJob: Job? = null
     private var reconnectJob: Job? = null
+    private var statsReportJob: Job? = null
     @Volatile private var callSessionActive = false
 
     private val connectivityManager =
@@ -254,6 +255,7 @@ class CallEngine @Inject constructor(
                         // live and enabled when family reports missing sound.
                         webRtcManager.logAudioHealth()
                         startTimer()
+                        startStatsReporting()
                     }
                     PeerConnection.PeerConnectionState.CONNECTING -> {
                         if (_familyStage.value != FamilyStage.CONNECTING_MEDIA) {
@@ -452,6 +454,30 @@ class CallEngine @Inject constructor(
         }
     }
 
+    /**
+     * Periodic stats reporting: sends connection quality + recording status
+     * to the backend every 5s so the warden dashboard shows live updates.
+     */
+    private fun startStatsReporting() {
+        statsReportJob?.cancel()
+        statsReportJob = scope.launch {
+            while (callSessionActive) {
+                delay(5000)
+                val callId = activeCallId ?: continue
+                val quality = webRtcManager.getConnectionQuality()
+                val recordingStatus = if (_isRecording.value) "recording" else "inactive"
+                callRepository.reportStats(
+                    callId,
+                    com.prisonconnect.kiosk.models.call.CallStatsReport(
+                        connectionQuality = quality,
+                        recordingStatus = recordingStatus,
+                        iceState = rtcConnectionState.value.name.lowercase()
+                    )
+                )
+            }
+        }
+    }
+
     fun toggleMute() { _isMuted.value = !_isMuted.value; webRtcManager.toggleAudio(!_isMuted.value) }
     fun toggleCamera() { _isCameraOn.value = !_isCameraOn.value; webRtcManager.toggleVideo(_isCameraOn.value) }
     fun toggleSpeaker() { _isSpeakerOn.value = !_isSpeakerOn.value; webRtcManager.setSpeakerphoneOn(context, _isSpeakerOn.value) }
@@ -471,6 +497,7 @@ class CallEngine @Inject constructor(
         callSessionActive = false
         pollJob?.cancel(); pollJob = null
         timerJob?.cancel(); timerJob = null
+        statsReportJob?.cancel(); statsReportJob = null
         reconnectJob?.cancel(); reconnectJob = null
         webRtcManager.endCall()
         _timerSeconds.value = 0

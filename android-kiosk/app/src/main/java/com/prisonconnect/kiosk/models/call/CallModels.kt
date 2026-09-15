@@ -132,3 +132,10 @@ data class CallStatusSnapshot(
         @SerializedName("lastSeenAt") val lastSeenAt: String? = null
     )
 }
+
+/** Periodic stats report sent by the kiosk during an active call. */
+data class CallStatsReport(
+    @SerializedName("connectionQuality") val connectionQuality: String? = null,
+    @SerializedName("recordingStatus") val recordingStatus: String? = null,
+    @SerializedName("iceState") val iceState: String? = null
+)

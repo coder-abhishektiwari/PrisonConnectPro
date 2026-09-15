@@ -241,6 +241,14 @@ class CallRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun reportStats(callId: String, report: CallStatsReport) {
+        try {
+            apiService.reportCallStats(callId, report)
+        } catch (e: Exception) {
+            Logger.w("Failed to report stats for $callId: ${e.message}")
+        }
+    }
+
     override fun getScheduledCalls(id: String): Flow<NetworkResult<List<ScheduledCall>>> = flow {
         emit(NetworkResult.Loading)
         try {

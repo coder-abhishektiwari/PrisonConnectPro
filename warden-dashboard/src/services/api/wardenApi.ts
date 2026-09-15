@@ -41,6 +41,10 @@ export interface CallHistoryItem {
   connectionQuality?: string;
   inmateName?: string;
   familyMemberName?: string;
+  failReason?: string;
+  mediaConnectedAt?: string;
+  chargeAmount?: number;
+  ratePerMinute?: number;
 }
 
 export interface Recording {
