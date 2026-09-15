@@ -52,6 +52,16 @@ router.post('/:inmateId/recharge', requireAuth, requireRole('admin', 'warden', '
   const wallets = await readDb('wallets.json');
   let wallet = wallets.find((w) => w.inmateId === req.params.inmateId);
 
+  // Scope check: verify warden can access this inmate
+  if (wallet) {
+    if (!(await inScopeOf(req, wallet))) return sendError(res, 'NOT_FOUND', 'Wallet not found', 404);
+  } else {
+    // New wallet — verify the inmate belongs to warden's prison
+    const inmates = await readDb('inmates.json');
+    const inmate = inmates.find((i) => i.inmateId === req.params.inmateId);
+    if (!inmate || !(await inScopeOf(req, inmate))) return sendError(res, 'NOT_FOUND', 'Inmate not found', 404);
+  }
+
   const transaction = {
     transactionId: `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
     inmateId: req.params.inmateId,
