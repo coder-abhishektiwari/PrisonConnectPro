@@ -96,9 +96,9 @@ export function CallHistoryPage() {
 
   const loadInmates = useCallback(async () => {
     try {
-      const inmateList = await wardenApi.getInmates();
+      const result = await wardenApi.getInmates({ limit: 1000, offset: 0 });
       const imap: Record<string, Inmate> = {};
-      (inmateList ?? []).forEach((i) => { imap[i.inmateId] = i; });
+      (result?.items ?? []).forEach((i) => { imap[i.inmateId] = i; });
       setInmates(imap);
     } catch { /* ignore */ }
   }, []);
@@ -172,7 +172,7 @@ export function CallHistoryPage() {
       row.eachCell((cell) => { cell.numFmt = '@'; });
     });
 
-    const thinBorder: Partial<Workbook.Borders> = {
+    const thinBorder: Partial<ExcelJS.Borders> = {
       top: { style: 'thin', color: { argb: 'D0D0D0' } },
       left: { style: 'thin', color: { argb: 'D0D0D0' } },
       bottom: { style: 'thin', color: { argb: 'D0D0D0' } },
