@@ -94,10 +94,13 @@ async function inmateCreateHandler(req, res) {
       }
       let inmateId = inmateData.inmateId;
       if (!inmateId) {
-        const existingIds = new Set(inmates.map(i => i.inmateId));
-        for (let attempt = 0; attempt < 50; attempt++) {
-          const candidate = String(Math.floor(100000 + Math.random() * 900000));
-          if (!existingIds.has(candidate)) { inmateId = candidate; break; }
+        const maxId = inmates.reduce((max, i) => {
+          const n = parseInt(i.inmateId, 10);
+          return !isNaN(n) && n > max ? n : max;
+        }, 100000);
+        for (let attempt = 0; attempt < 5; attempt++) {
+          const candidate = String(maxId + 1 + attempt);
+          if (!inmates.find(i => i.inmateId === candidate)) { inmateId = candidate; break; }
         }
         if (!inmateId) {
           const err = new Error('Failed to generate unique inmate ID');
