@@ -83,6 +83,8 @@ const REGISTRY = {
   'biometrics.json':   { table: 'biometrics',              idKey: 'biometricId', cols: { inmateId: 'inmate_id' } },
   'subscriptions.json':{ table: 'subscriptions',           idKey: 'id', cols: { prisonId: 'prison_id' } },
   'setup-pins.json':   { table: 'setup_pins',              idKey: 'prisonId', cols: { prisonId: 'prison_id' } },
+  'cells.json':        { table: 'cells',                   idKey: 'cellId', cols: { prisonId: 'prison_id', name: 'name' } },
+  'blocks.json':       { table: 'blocks',                  idKey: 'blockId', cols: { prisonId: 'prison_id', name: 'name' } },
   'reports.json':      { table: 'reports',                 idKey: 'reportId', cols: { prisonId: 'prison_id' } },
   'servers.json':      { table: 'servers',                 idKey: 'serverId', cols: {} },
   'pricing.json':      { singleton: true },

@@ -193,7 +193,7 @@ export function TrustAccountPage() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="overflow-auto max-h-[calc(100vh-280px)]">
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/80 text-slate-500">

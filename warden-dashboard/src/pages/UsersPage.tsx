@@ -40,6 +40,7 @@ export function UsersPage() {
         limit,
         offset: (page - 1) * limit,
         search: searchQuery || undefined,
+        status: statusFilter !== 'all' ? statusFilter : undefined,
       };
       const data = await wardenApi.getWardens(params);
       setUsers(data.items);
@@ -50,16 +51,15 @@ export function UsersPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [page, searchQuery]);
+  }, [page, searchQuery, statusFilter]);
 
   const loadStats = useCallback(async () => {
     try {
-      const data = await wardenApi.getWardens({ limit: 1000 });
-      const allUsers = data.items;
+      const data = await wardenApi.getWardenStats();
       setStatsCounts({
-        activeCount: allUsers.filter(u => u.status === 'active').length,
-        inactiveCount: allUsers.filter(u => u.status === 'inactive').length,
-        onLeaveCount: allUsers.filter(u => u.status === 'on_leave').length,
+        activeCount: data.activeCount ?? 0,
+        inactiveCount: data.inactiveCount ?? 0,
+        onLeaveCount: data.onLeaveCount ?? 0,
       });
     } catch {
       // silently fail for stats
@@ -74,11 +74,6 @@ export function UsersPage() {
     setUsers(prev => prev.map(u => u.wardenId === userId ? { ...u, status: newStatus } : u));
     toastSuccess(`User status updated to ${newStatus}`);
   }
-
-  const filtered = users.filter(u => {
-    const matchesStatus = statusFilter === 'all' || u.status === statusFilter;
-    return matchesStatus;
-  });
 
   const headerIcon = useMemo(() => <span className="material-icons text-primary-600 text-xl">people</span>, []);
 
@@ -151,7 +146,7 @@ export function UsersPage() {
 
       {/* Users Table */}
       <Card>
-        <div className="overflow-x-auto">
+        <div className="overflow-auto max-h-[calc(100vh-280px)]">
           <table className="w-full">
             <thead>
               <tr className="border-b border-neutral-200 bg-neutral-50">
@@ -165,11 +160,11 @@ export function UsersPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 ? (
+              {users.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-neutral-600">No users found</td>
                 </tr>
-              ) : filtered.map((user) => (
+              ) : users.map((user) => (
                 <tr key={user.wardenId} className="border-b border-neutral-100 hover:bg-neutral-50 transition-colors">
                   <td className="py-3 px-4">
                     <p className="font-medium text-neutral-900">{user.name}</p>
@@ -215,7 +210,7 @@ export function UsersPage() {
       </Card>
 
       {/* Pagination */}
-      {total > 0 && (
+      {total > 20 && (
         <div className="flex items-center justify-between">
           <p className="text-sm text-neutral-600">
             Showing {Math.min((page - 1) * limit + 1, total)}-{Math.min(page * limit, total)} of {total}

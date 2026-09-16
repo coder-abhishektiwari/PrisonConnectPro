@@ -34,6 +34,7 @@ const createIncidentsRouter = require('./routes/incidents');
 const prisonsRouter = require('./routes/prisons');
 const transactionsRouter = require('./routes/transactions');
 const createSettingsRouter = require('./routes/settings');
+const { createCellsRouter, createBlocksRouter } = require('./routes/cells-blocks');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -130,6 +131,8 @@ app.use('/prisons', prisonsRouter);
 app.use('/transactions', transactionsRouter);
 app.use('/settings', settingsRouter);
 app.use('/wallets', walletsRouter);
+app.use('/cells', createCellsRouter());
+app.use('/blocks', createBlocksRouter());
 
 // Alias routes — dashboard expects these at root, not under /settings
 app.get('/pricing', requireAuth, asyncRoute(async (req, res) => sendSuccess(res, await readDb('pricing.json'))));
@@ -287,8 +290,12 @@ app.patch('/wallet-requests/:requestId/reject', requireAuth, requireRole('admin'
 // ==================== WARDENS ====================
 app.get('/wardens', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const wardens = await scopeList(req, await readDb('wardens.json'));
+  const statusFilter = req.query.status;
+  const filtered = (statusFilter && statusFilter !== 'all')
+    ? wardens.filter((w) => w.status === statusFilter)
+    : wardens;
   const result = await paginate({
-    req, data: wardens,
+    req, data: filtered,
     search: (w, q) =>
       (w.name || '').toLowerCase().includes(q) ||
       (w.wardenId || '').toLowerCase().includes(q) ||
@@ -298,6 +305,15 @@ app.get('/wardens', requireAuth, requireRole('admin', 'warden', 'super-admin', '
     defaultSort: 'name',
   });
   return sendSuccess(res, result);
+}));
+app.get('/wardens/stats', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+  const wardens = await scopeList(req, await readDb('wardens.json'));
+  return sendSuccess(res, {
+    total: wardens.length,
+    activeCount: wardens.filter((w) => w.status === 'active').length,
+    inactiveCount: wardens.filter((w) => w.status === 'inactive').length,
+    onLeaveCount: wardens.filter((w) => w.status === 'on_leave').length,
+  });
 }));
 app.get('/wardens/:wardenId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const wardens = await readDb('wardens.json');

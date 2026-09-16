@@ -9,6 +9,7 @@ import { ActiveCallsPage } from '@/pages/ActiveCallsPage';
 import { MonitorScreenPage } from '@/pages/MonitorScreenPage';
 import { CallHistoryPage } from '@/pages/CallHistoryPage';
 import { InmateFamilyPage } from '@/pages/InmateFamilyPage';
+import { InmateDetailPage } from '@/pages/InmateDetailPage';
 import { TrustAccountPage } from '@/pages/TrustAccountPage';
 import { KioskRegistrationPage } from '@/pages/KioskRegistrationPage';
 import { UsersPage } from '@/pages/UsersPage';
@@ -24,6 +25,7 @@ export const RoutePaths = {
   monitorScreen: '/monitoring/live/:callId',
   callHistory: '/calls/logs',
   inmateFamily: '/inmates-family',
+  inmateDetail: '/inmates-family/:inmateId',
   trustAccount: '/inmate-wallet',
   kioskRegistrations: '/kiosk-registrations',
   users: '/users',
@@ -59,6 +61,7 @@ export const router = createBrowserRouter([
       { path: RoutePaths.monitorScreen, element: <MonitorScreenPage /> },
       { path: RoutePaths.callHistory, element: <CallHistoryPage /> },
       { path: RoutePaths.inmateFamily, element: <InmateFamilyPage /> },
+      { path: RoutePaths.inmateDetail, element: <InmateDetailPage /> },
       { path: RoutePaths.trustAccount, element: <TrustAccountPage /> },
       { path: RoutePaths.kioskRegistrations, element: <KioskRegistrationPage /> },
       { path: RoutePaths.users, element: <UsersPage /> },

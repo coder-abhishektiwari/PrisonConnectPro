@@ -270,7 +270,7 @@ export function CallHistoryPage() {
             <p className="text-sm text-neutral-500 mt-1">Try adjusting filters or date range</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-auto max-h-[calc(100vh-280px)]">
             <table className="w-full">
               <thead>
                 <tr className="border-b bg-neutral-50">

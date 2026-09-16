@@ -25,21 +25,20 @@ export function ActiveCallsPage() {
     limit: PAGE_SIZE,
     offset: (page - 1) * PAGE_SIZE,
     search: search || undefined,
-  }), [page, search]);
+    type: typeFilter !== 'all' ? typeFilter : undefined,
+  }), [page, search, typeFilter]);
 
   const loadCalls = useCallback(async () => {
     try {
       const result = await wardenApi.getActiveCalls(buildParams());
-      let filtered = result.items ?? [];
-      if (typeFilter !== 'all') filtered = filtered.filter(c => c.type === typeFilter);
-      setCalls(filtered);
+      setCalls(result.items ?? []);
       setTotal(result.total ?? 0);
     } catch (error) {
       console.error('Failed to load active calls:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [buildParams, typeFilter]);
+  }, [buildParams]);
 
   useEffect(() => { loadCalls(); }, [loadCalls]);
   useWardenSocket(() => { loadCalls(); }, undefined, undefined, undefined);

@@ -22,8 +22,17 @@ function createContactsRouter(broadcastEvent) {
   router.get('/', requireAuth, asyncRoute(async (req, res) => {
     const contacts = await readDb('contacts.json');
     const scoped = await scopeList(req, contacts);
+    const inmateIdFilter = req.query.inmateId;
+    const relationshipFilter = req.query.relationship;
+    let filtered = scoped;
+    if (inmateIdFilter && inmateIdFilter !== 'all') {
+      filtered = filtered.filter((c) => c.inmateId === inmateIdFilter);
+    }
+    if (relationshipFilter && relationshipFilter !== 'all') {
+      filtered = filtered.filter((c) => c.relationship === relationshipFilter);
+    }
     const result = await paginate({
-      req, data: scoped,
+      req, data: filtered,
       search: (c, q) =>
         (c.name || '').toLowerCase().includes(q) ||
         (c.contactId || '').toLowerCase().includes(q) ||
@@ -117,6 +126,9 @@ function createContactsRouter(broadcastEvent) {
       phone: contactData.phone || contactData.mobileNumber,
       relationship: contactData.relationship || 'family',
       email: contactData.email,
+      address: contactData.address || '',
+      city: contactData.city || '',
+      state: contactData.state || '',
       active: true,
       status: 'approved',
       verified: contactData.verified !== undefined ? contactData.verified : true,
@@ -218,6 +230,29 @@ function createContactsRouter(broadcastEvent) {
       return { data: filtered, result: { deleted: true, contactId } };
     });
     return sendSuccess(res, deleted.result);
+  }));
+
+  // Toggle contact active/inactive
+  router.patch('/admin/contacts/:contactId/toggle', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+    const { contactId } = req.params;
+    const [contacts, inmates] = await Promise.all([readDb('contacts.json'), readDb('inmates.json')]);
+    const target = contacts.find((c) => c.contactId === contactId);
+    if (!target) return sendError(res, 'NOT_FOUND', 'Contact not found', 404);
+    const owner = inmates.find((i) => i.inmateId === target.inmateId) ||
+                  inmates.find((i) => `INM-${i.inmateId}` === target.inmateId);
+    if (!owner) return sendError(res, 'NOT_FOUND', 'Inmate not found for this contact', 404);
+    if (!inAdminScope(req, owner)) {
+      return sendError(res, 'FORBIDDEN', 'Contact not in your kiosk scope', 403);
+    }
+    const updated = await updateDb('contacts.json', (all) => {
+      const idx = all.findIndex((c) => c.contactId === contactId);
+      if (idx === -1) return { data: all, result: null };
+      const newActive = all[idx].active === false ? true : false;
+      all[idx] = { ...all[idx], active: newActive, status: newActive ? 'approved' : 'rejected' };
+      return { data: all, result: all[idx] };
+    });
+    if (!updated) return sendError(res, 'NOT_FOUND', 'Contact not found', 404);
+    return sendSuccess(res, updated);
   }));
 
   // ==================== ADMIN ALIASES ====================

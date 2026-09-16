@@ -160,8 +160,12 @@ function createCallsRouter(broadcastEvent, signaling) {
       calls = calls.filter((c) => inAdminScope(req, c));
     }
     const active = calls.filter((c) => c.status === 'active');
+    const typeFilter = req.query.type;
+    const filtered = (typeFilter && typeFilter !== 'all')
+      ? active.filter((c) => c.type === typeFilter)
+      : active;
     const result = await paginate({
-      req, data: active,
+      req, data: filtered,
       search: (c, q) =>
         (c.callId || '').toLowerCase().includes(q) ||
         (c.inmateName || '').toLowerCase().includes(q) ||

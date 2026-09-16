@@ -55,7 +55,8 @@ async function main() {
     'wallets.json', 'transactions.json', 'alerts.json', 'incidents.json',
     'devices.json', 'kiosk-registration-requests.json', 'statistics.json',
     'admins.json', 'super-admins.json', 'biometrics.json', 'subscriptions.json',
-    'setup-pins.json', 'reports.json', 'servers.json', 'pricing.json', 'settings.json', 'storage.json'
+    'setup-pins.json', 'reports.json', 'servers.json', 'pricing.json', 'settings.json', 'storage.json',
+    'cells.json', 'blocks.json'
   ]) {
     raw[f] = load(f);
   }
@@ -310,6 +311,35 @@ async function main() {
   await write('pricing.json');
   await write('settings.json');
   await write('storage.json');
+
+  // Seed cells and blocks if empty
+  const existingCells = await readDb('cells.json');
+  if (existingCells.length === 0) {
+    const prisonId = (raw['prisons.json'] || [])[0]?.prisonId || 'PRISON-001';
+    const defaultCells = [
+      { cellId: 'CELL-A1', prisonId, name: 'A1', createdAt: new Date().toISOString() },
+      { cellId: 'CELL-A2', prisonId, name: 'A2', createdAt: new Date().toISOString() },
+      { cellId: 'CELL-B1', prisonId, name: 'B1', createdAt: new Date().toISOString() },
+      { cellId: 'CELL-B2', prisonId, name: 'B2', createdAt: new Date().toISOString() },
+      { cellId: 'CELL-C1', prisonId, name: 'C1', createdAt: new Date().toISOString() },
+      { cellId: 'CELL-D1', prisonId, name: 'D1', createdAt: new Date().toISOString() },
+    ];
+    await updateDb('cells.json', () => ({ data: defaultCells, result: null }));
+    console.log(`[seed] cells.json: ${defaultCells.length} row(s)`);
+  }
+
+  const existingBlocks = await readDb('blocks.json');
+  if (existingBlocks.length === 0) {
+    const prisonId = (raw['prisons.json'] || [])[0]?.prisonId || 'PRISON-001';
+    const defaultBlocks = [
+      { blockId: 'BLOCK-A', prisonId, name: 'Block A', createdAt: new Date().toISOString() },
+      { blockId: 'BLOCK-B', prisonId, name: 'Block B', createdAt: new Date().toISOString() },
+      { blockId: 'BLOCK-C', prisonId, name: 'Block C', createdAt: new Date().toISOString() },
+      { blockId: 'BLOCK-D', prisonId, name: 'Block D', createdAt: new Date().toISOString() },
+    ];
+    await updateDb('blocks.json', () => ({ data: defaultBlocks, result: null }));
+    console.log(`[seed] blocks.json: ${defaultBlocks.length} row(s)`);
+  }
 
   console.log('[seed] referential-integrity repairs:');
   if (repairs.length === 0) console.log('  (none needed)');

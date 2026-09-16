@@ -1,0 +1,424 @@
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Card } from '@/components/Card';
+import { Loading } from '@/components/States';
+import { SearchableSelect } from '@/components/SearchableSelect';
+import { wardenApi } from '@/services/api/wardenApi';
+import { apiClient } from '@/services/api/client';
+import { usePageHeader } from '@/context/PageHeaderContext';
+import type { Inmate, Contact } from '@/services/api/wardenApi';
+
+export function InmateDetailPage() {
+  const { inmateId } = useParams<{ inmateId: string }>();
+  const navigate = useNavigate();
+  const [inmate, setInmate] = useState<Inmate | null>(null);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [editingInmate, setEditingInmate] = useState(false);
+  const [editData, setEditData] = useState<Partial<Inmate>>({});
+  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+  const [editingContact, setEditingContact] = useState(false);
+  const [contactEditData, setContactEditData] = useState<Partial<Contact>>({});
+  const [showAddFamily, setShowAddFamily] = useState(false);
+  const [newFamily, setNewFamily] = useState({ inmateId: '', name: '', relationship: '', phoneNumber: '', address: '', city: '', state: '' });
+  const [addFamilyError, setAddFamilyError] = useState('');
+  const [cellNames, setCellNames] = useState<string[]>([]);
+  const [blockNames, setBlockNames] = useState<string[]>([]);
+  const [allInmates, setAllInmates] = useState<Inmate[]>([]);
+  const [toggling, setToggling] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!inmateId) return;
+    try {
+      setLoadError(null);
+      const [im, co, cells, blocks, allIm] = await Promise.all([
+        wardenApi.getInmate(inmateId),
+        apiClient.get(`/contacts/admin/prisoners/${inmateId}/contacts`).then(r => r.data?.data ?? []),
+        wardenApi.getCells().catch(() => []),
+        wardenApi.getBlocks().catch(() => []),
+        wardenApi.getInmates(),
+      ]);
+      setInmate(im ?? null);
+      setContacts(Array.isArray(co) ? co : []);
+      setCellNames(cells.map((c: any) => c.name).filter(Boolean));
+      setBlockNames(blocks.map((b: any) => b.name).filter(Boolean));
+      setAllInmates(Array.isArray(allIm) ? allIm : []);
+    } catch (e: any) {
+      setLoadError(e?.response?.data?.error?.message || 'Failed to load inmate details');
+    } finally { setLoading(false); }
+  }, [inmateId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const startEditInmate = () => {
+    if (!inmate) return;
+    setEditData({ ...inmate });
+    setEditingInmate(true);
+  };
+
+  const saveInmate = async () => {
+    if (!editData.inmateId) return;
+    try {
+      await wardenApi.createInmate(editData as any);
+      setInmate({ ...inmate!, ...editData } as Inmate);
+    } catch { }
+    setEditingInmate(false);
+  };
+
+  const deleteInmate = async () => {
+    if (!inmate) return;
+    try { await wardenApi.deleteInmateApi(inmate.inmateId); } catch { }
+    navigate('/inmates-family');
+  };
+
+  const toggleInmate = async () => {
+    if (!inmate || toggling) return;
+    setToggling(true);
+    try {
+      const updated = await wardenApi.toggleInmate(inmate.inmateId);
+      if (updated) setInmate(updated);
+      else setInmate({ ...inmate, status: inmate.status === 'active' ? 'inactive' : 'active' });
+    } catch { }
+    setToggling(false);
+  };
+
+  const startEditContact = (c: Contact) => {
+    setContactEditData({ ...c });
+    setSelectedContact(c);
+    setEditingContact(true);
+  };
+
+  const saveContact = async () => {
+    if (!contactEditData.contactId) return;
+    try {
+      await wardenApi.updateContact(contactEditData.contactId, contactEditData as any);
+      setContacts(prev => prev.map(c => c.contactId === contactEditData.contactId ? { ...c, ...contactEditData } as Contact : c));
+      if (selectedContact?.contactId === contactEditData.contactId) {
+        setSelectedContact({ ...selectedContact, ...contactEditData } as Contact);
+      }
+    } catch { }
+    setEditingContact(false);
+  };
+
+  const deleteContact = async (contactId: string) => {
+    try { await wardenApi.deleteContactApi(contactId); } catch { }
+    setContacts(prev => prev.filter(c => c.contactId !== contactId));
+    if (selectedContact?.contactId === contactId) { setSelectedContact(null); setEditingContact(false); }
+  };
+
+  const toggleContact = async (contactId: string) => {
+    try {
+      const updated = await wardenApi.toggleContact(contactId);
+      if (updated) {
+        setContacts(prev => prev.map(c => c.contactId === contactId ? { ...c, ...updated } : c));
+        if (selectedContact?.contactId === contactId) setSelectedContact({ ...selectedContact, ...updated } as Contact);
+      }
+    } catch { }
+  };
+
+  const addFamily = async () => {
+    if (!newFamily.name.trim() || !newFamily.phoneNumber.trim()) { setAddFamilyError('Full Name and Phone are required'); return; }
+    if (!inmateId) return;
+    setAddFamilyError('');
+    const payload = { name: newFamily.name.trim(), relationship: newFamily.relationship.trim() || 'Family', phoneNumber: newFamily.phoneNumber.trim(), address: newFamily.address.trim(), city: newFamily.city.trim(), state: newFamily.state.trim() } as any;
+    try {
+      const saved = await wardenApi.createContact(inmateId, payload);
+      setContacts(prev => [...prev, (saved || { contactId: `FAM-${Date.now()}`, ...payload, inmateId, active: true }) as Contact]);
+    } catch {
+      setContacts(prev => [...prev, { contactId: `FAM-${Date.now()}`, inmateId, name: payload.name, relationship: payload.relationship, phoneNumber: payload.phoneNumber, active: true } as Contact]);
+    }
+    setNewFamily({ inmateId: '', name: '', relationship: '', phoneNumber: '', address: '', city: '', state: '' });
+    setShowAddFamily(false);
+  };
+
+  const headerIcon = useMemo(() => <span className="material-icons text-primary-600 text-xl">person</span>, []);
+  usePageHeader({
+    title: inmate?.name || 'Inmate Details',
+    subtitle: inmate ? `${inmate.inmateId} • ${inmate.cellBlock || 'No block'}` : '',
+    icon: headerIcon,
+    actions: useMemo(() => (
+      <button onClick={() => navigate('/inmates-family')} className="inline-flex items-center gap-1.5 px-4 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-lg text-sm font-medium transition">
+        <span className="material-icons text-base">arrow_back</span> Back to List
+      </button>
+    ), []),
+  });
+
+  if (loading) return <Loading message="Loading inmate details..." />;
+  if (loadError) return <Card><div className="text-center py-12"><p className="text-error mb-4">{loadError}</p><button onClick={() => { setLoading(true); load(); }} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm">Retry</button></div></Card>;
+  if (!inmate) return <Card><div className="text-center py-12"><p className="text-neutral-600">Inmate not found</p></div></Card>;
+
+  const kioskOptions = Array.from(new Set(allInmates.map(i => i.assignedKioskId).filter(Boolean))) as string[];
+
+  const fieldRow = (label: string, key: keyof Inmate, icon: string, options?: { type?: string; radio?: string[]; placeholder?: string }) => {
+    const val = editingInmate ? (editData[key] ?? '') : (inmate[key] ?? '');
+    if (editingInmate) {
+      if (options?.radio) {
+        return (
+          <div key={key} className="py-3 border-b border-neutral-100 last:border-0">
+            <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">{label}</p>
+            <div className="flex gap-3">
+              {options.radio.map(r => (
+                <label key={r} className="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name={key} value={r} checked={val === r} onChange={() => setEditData({ ...editData, [key]: r })} className="text-primary-600 focus:ring-primary-500" />
+                  <span className="text-sm capitalize">{r}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        );
+      }
+      return (
+        <div key={key} className="py-3 border-b border-neutral-100 last:border-0">
+          <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">{label}</p>
+          <input
+            type={options?.type || 'text'}
+            value={String(val)}
+            onChange={e => setEditData({ ...editData, [key]: e.target.value })}
+            placeholder={options?.placeholder || label}
+            className="w-full px-3 py-2 bg-white border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+          />
+        </div>
+      );
+    }
+    return (
+      <div key={key} className="py-3 border-b border-neutral-100 last:border-0 flex items-center gap-3">
+        <span className="material-icons text-neutral-400 text-lg">{icon}</span>
+        <div>
+          <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">{label}</p>
+          <p className="text-sm text-neutral-900">{val || '—'}</p>
+        </div>
+      </div>
+    );
+  };
+
+  const searchableRow = (label: string, key: keyof Inmate, icon: string, options: string[], addLabel?: string) => {
+    const val = editingInmate ? (editData[key] ?? '') : (inmate[key] ?? '');
+    if (editingInmate) {
+      return (
+        <div key={key} className="py-3 border-b border-neutral-100 last:border-0">
+          <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">{label}</p>
+          <SearchableSelect
+            value={String(val)}
+            options={options}
+            onChange={v => setEditData({ ...editData, [key]: v })}
+            onAdd={async (name) => {
+              if (key === 'cellBlock') {
+                const created = await wardenApi.createCell(name).catch(() => null);
+                setCellNames(prev => [...prev, name]);
+              } else if (key === 'facility') {
+                const created = await wardenApi.createBlock(name).catch(() => null);
+                setBlockNames(prev => [...prev, name]);
+              }
+            }}
+            addLabel={addLabel}
+            placeholder={`Select ${label}`}
+          />
+        </div>
+      );
+    }
+    return (
+      <div key={key} className="py-3 border-b border-neutral-100 last:border-0 flex items-center gap-3">
+        <span className="material-icons text-neutral-400 text-lg">{icon}</span>
+        <div>
+          <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">{label}</p>
+          <p className="text-sm text-neutral-900">{val || '—'}</p>
+        </div>
+      </div>
+    );
+  };
+
+  const contactFieldRow = (label: string, key: keyof Contact, icon: string) => {
+    const val = editingContact ? (contactEditData[key] ?? '') : (selectedContact?.[key] ?? '');
+    if (editingContact) {
+      return (
+        <div key={key} className="py-3 border-b border-neutral-100 last:border-0">
+          <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">{label}</p>
+          <input
+            type="text"
+            value={String(val)}
+            onChange={e => setContactEditData({ ...contactEditData, [key]: e.target.value })}
+            placeholder={label}
+            className="w-full px-3 py-2 bg-white border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+          />
+        </div>
+      );
+    }
+    return (
+      <div key={key} className="py-3 border-b border-neutral-100 last:border-0 flex items-center gap-3">
+        <span className="material-icons text-neutral-400 text-lg">{icon}</span>
+        <div>
+          <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">{label}</p>
+          <p className="text-sm text-neutral-900">{val || '—'}</p>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="flex gap-6 h-[calc(100vh-120px)]">
+      {/* LEFT — Inmate Details */}
+      <div className="flex-1 min-w-0 overflow-y-auto">
+        <Card className="overflow-hidden">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-bold uppercase tracking-wide text-neutral-700 flex items-center gap-2">
+              <span className="w-2 h-2 bg-primary-600 rounded-full" />Inmate Details
+            </h2>
+            <div className="flex items-center gap-2">
+              {editingInmate ? (
+                <>
+                  <button onClick={() => setEditingInmate(false)} className="px-3 py-1.5 bg-white border border-neutral-200 text-neutral-700 rounded-lg text-xs font-medium hover:bg-neutral-50 transition">Cancel</button>
+                  <button onClick={saveInmate} className="px-3 py-1.5 bg-primary-600 text-white rounded-lg text-xs font-medium hover:bg-primary-700 transition">Save</button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={toggleInmate}
+                    disabled={toggling}
+                    className={`px-3 py-2 flex items-center gap-2 rounded-lg transition font-medium text-sm ${inmate.status === 'active' ? 'bg-success/10 text-success hover:bg-success/20' : 'bg-neutral-100 text-neutral-500 hover:bg-neutral-200'}`}
+                    title={inmate.status === 'active' ? 'Deactivate' : 'Activate'}
+                  >
+                    <span className="material-icons text-xl">{inmate.status === 'active' ? 'toggle_on' : 'toggle_off'}</span>
+                    {inmate.status === 'active' ? 'Active' : 'Inactive'}
+                  </button>
+                  <button onClick={startEditInmate} className="w-8 h-8 flex items-center justify-center bg-white border border-neutral-200 text-neutral-600 rounded-lg hover:bg-neutral-50 hover:text-primary-600 transition" title="Edit"><span className="material-icons text-base">edit</span></button>
+                  <button onClick={deleteInmate} className="w-8 h-8 flex items-center justify-center bg-white border border-neutral-200 text-neutral-600 rounded-lg hover:bg-red-50 hover:text-red-600 transition" title="Delete"><span className="material-icons text-base">delete</span></button>
+                </>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-4 mb-6 pb-6 border-b border-neutral-200">
+            <div className="w-16 h-16 rounded-full bg-[#E9EEF3] border border-[#D1D7DB] flex items-center justify-center shrink-0">
+              <span className="material-icons text-[#8696A0] text-3xl">person</span>
+            </div>
+            <div>
+              <p className="font-bold text-lg text-neutral-900">{inmate.name}</p>
+              <p className="text-sm text-neutral-500 font-mono">{inmate.inmateId}</p>
+            </div>
+          </div>
+          {fieldRow('Full Name', 'name', 'person')}
+          {fieldRow('Inmate ID', 'inmateId', 'badge')}
+          {fieldRow('Prisoner Number', 'prisonerNumber', 'tag')}
+          {fieldRow('Gender', 'gender', 'wc', { radio: ['male', 'female', 'other'] })}
+          {fieldRow('Date of Admission', 'dateOfAdmission', 'calendar_today', { type: 'date' })}
+          {fieldRow('Status', 'status', 'info', { radio: ['active', 'inactive', 'suspended', 'released', 'transferred'] })}
+          {searchableRow('Cell', 'cellBlock', 'domain', cellNames, '+ Add new cell')}
+          {searchableRow('Block', 'facility', 'location_on', blockNames, '+ Add new block')}
+          {fieldRow('Security Level', 'securityLevel', 'security', { radio: ['minimum', 'medium', 'maximum'] })}
+          {fieldRow('Sentence Details', 'sentenceDetails', 'gavel')}
+          {searchableRow('Assigned Kiosk', 'assignedKioskId', 'tablet_mac', kioskOptions, '+ Add new kiosk')}
+        </Card>
+      </div>
+
+      {/* RIGHT — Family Members */}
+      <div className="w-[420px] shrink-0 flex flex-col bg-white rounded-xl shadow-md border border-neutral-200 overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-200 bg-neutral-50/50 shrink-0">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-neutral-700 flex items-center gap-2">
+            <span className="w-2 h-2 bg-success rounded-full" />Family Members
+            <span className="px-2 py-0.5 bg-white border border-neutral-200 rounded-full text-xs font-bold text-neutral-900">{contacts.length}</span>
+          </h2>
+          <button onClick={() => { setShowAddFamily(true); setNewFamily({ ...newFamily, inmateId: inmate.inmateId }); }} className="w-8 h-8 flex items-center justify-center bg-success text-white rounded-lg hover:bg-success-700 transition" title="Add Family"><span className="material-icons text-base">person_add</span></button>
+        </div>
+        <div className="flex-1 overflow-y-auto min-h-0">
+          {!selectedContact ? (
+            <div className="divide-y divide-neutral-100">
+              {contacts.length === 0 ? (
+                <div className="py-12 text-center">
+                  <span className="material-icons text-neutral-300 text-4xl">people_outline</span>
+                  <p className="text-sm text-neutral-500 mt-2">No family members</p>
+                  <button onClick={() => setShowAddFamily(true)} className="mt-3 px-4 py-2 bg-success text-white rounded-lg text-xs font-medium hover:bg-success-700 transition">+ Add Family</button>
+                </div>
+              ) : contacts.map(c => (
+                <div key={c.contactId} onClick={() => { setSelectedContact(c); setEditingContact(false); }} className="flex items-center gap-3 px-5 py-3.5 hover:bg-neutral-50 cursor-pointer transition-colors">
+                  <div className="w-10 h-10 rounded-full bg-[#E9EEF3] border border-[#D1D7DB] flex items-center justify-center shrink-0">
+                    <span className="material-icons text-[#8696A0]">person</span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-neutral-900 truncate">{c.name}</p>
+                    <p className="text-xs text-neutral-500">{c.relationship} • {c.phoneNumber}</p>
+                  </div>
+                  <button
+                    onClick={e => { e.stopPropagation(); toggleContact(c.contactId); }}
+                    className={`shrink-0 px-2 py-1 flex items-center gap-1 rounded-lg transition font-medium text-xs ${c.active !== false ? 'bg-success/10 text-success hover:bg-success/20' : 'bg-neutral-100 text-neutral-500 hover:bg-neutral-200'}`}
+                    title={c.active !== false ? 'Deactivate' : 'Activate'}
+                  >
+                    <span className="material-icons text-lg">{c.active !== false ? 'toggle_on' : 'toggle_off'}</span>
+                    {c.active !== false ? 'Active' : 'Inactive'}
+                  </button>
+                  <span className="material-icons text-neutral-300 text-lg">chevron_right</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-5">
+              <button onClick={() => { setSelectedContact(null); setEditingContact(false); }} className="flex items-center gap-1 text-xs text-neutral-500 hover:text-primary-600 mb-4 transition">
+                <span className="material-icons text-sm">arrow_back</span> Back to list
+              </button>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-full bg-[#E9EEF3] border border-[#D1D7DB] flex items-center justify-center">
+                    <span className="material-icons text-[#8696A0] text-xl">person</span>
+                  </div>
+                  <div>
+                    <p className="font-bold text-neutral-900">{selectedContact.name}</p>
+                    <p className="text-xs text-neutral-500">{selectedContact.relationship}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => toggleContact(selectedContact.contactId)}
+                    className={`px-3 py-2 flex items-center gap-2 rounded-lg transition font-medium text-sm ${selectedContact.active !== false ? 'bg-success/10 text-success hover:bg-success/20' : 'bg-neutral-100 text-neutral-500 hover:bg-neutral-200'}`}
+                    title={selectedContact.active !== false ? 'Deactivate' : 'Activate'}
+                  >
+                    <span className="material-icons text-xl">{selectedContact.active !== false ? 'toggle_on' : 'toggle_off'}</span>
+                    {selectedContact.active !== false ? 'Active' : 'Inactive'}
+                  </button>
+                  {editingContact ? (
+                    <>
+                      <button onClick={() => setEditingContact(false)} className="w-8 h-8 flex items-center justify-center bg-white border border-neutral-200 text-neutral-600 rounded-lg hover:bg-neutral-50 transition" title="Cancel"><span className="material-icons text-base">close</span></button>
+                      <button onClick={saveContact} className="w-8 h-8 flex items-center justify-center bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition" title="Save"><span className="material-icons text-base">check</span></button>
+                    </>
+                  ) : (
+                    <>
+                      <button onClick={() => startEditContact(selectedContact)} className="w-8 h-8 flex items-center justify-center bg-white border border-neutral-200 text-neutral-600 rounded-lg hover:bg-neutral-50 hover:text-primary-600 transition" title="Edit"><span className="material-icons text-base">edit</span></button>
+                      <button onClick={() => deleteContact(selectedContact.contactId)} className="w-8 h-8 flex items-center justify-center bg-white border border-neutral-200 text-neutral-600 rounded-lg hover:bg-red-50 hover:text-red-600 transition" title="Delete"><span className="material-icons text-base">delete</span></button>
+                    </>
+                  )}
+                </div>
+              </div>
+              {contactFieldRow('Full Name', 'name', 'person')}
+              {contactFieldRow('Relationship', 'relationship', 'family_restroom')}
+              {contactFieldRow('Mobile Number', 'phoneNumber', 'phone')}
+              {contactFieldRow('Email', 'email', 'email')}
+              {contactFieldRow('Address', 'address', 'home')}
+              {contactFieldRow('City', 'city', 'location_city')}
+              {contactFieldRow('State', 'state', 'map')}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Add Family Modal */}
+      {showAddFamily && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => { setShowAddFamily(false); setAddFamilyError(''); }}>
+          <div className="bg-white rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <h3 className="font-bold mb-4">Add Family Member</h3>
+            {addFamilyError && <p className="text-sm text-error bg-error/10 border border-error/20 rounded-lg px-3 py-2 mb-3">{addFamilyError}</p>}
+            <input placeholder="Full Name *" value={newFamily.name} onChange={e => setNewFamily({ ...newFamily, name: e.target.value })} className="w-full mb-3 px-3 py-2 border rounded-lg" />
+            <input placeholder="Relationship" value={newFamily.relationship} onChange={e => setNewFamily({ ...newFamily, relationship: e.target.value })} className="w-full mb-3 px-3 py-2 border rounded-lg" />
+            <input placeholder="Phone *" value={newFamily.phoneNumber} onChange={e => setNewFamily({ ...newFamily, phoneNumber: e.target.value })} className="w-full mb-3 px-3 py-2 border rounded-lg" />
+            <input placeholder="Address" value={newFamily.address} onChange={e => setNewFamily({ ...newFamily, address: e.target.value })} className="w-full mb-3 px-3 py-2 border rounded-lg" />
+            <div className="flex gap-3 mb-3">
+              <input placeholder="City" value={newFamily.city} onChange={e => setNewFamily({ ...newFamily, city: e.target.value })} className="flex-1 px-3 py-2 border rounded-lg" />
+              <input placeholder="State" value={newFamily.state} onChange={e => setNewFamily({ ...newFamily, state: e.target.value })} className="flex-1 px-3 py-2 border rounded-lg" />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => { setShowAddFamily(false); setAddFamilyError(''); }} className="px-4 py-2 border rounded-lg">Cancel</button>
+              <button onClick={addFamily} className="px-4 py-2 bg-success text-white rounded-lg">Add</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

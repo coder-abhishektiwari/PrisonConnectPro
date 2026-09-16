@@ -200,9 +200,28 @@ router.get('/registration-status/:serialNumber', asyncRoute(async (req, res) => 
   return sendError(res, 'NOT_FOUND', 'Kiosk registration status not found', 404);
 }));
 
+router.get('/registration-requests/stats', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+  const kiosks = await readDb('kiosks.json');
+  const scoped = kiosks.filter(adminScopeFilter(req));
+  return sendSuccess(res, {
+    total: scoped.length,
+    pendingCount: scoped.filter((k) => k.authorizationStatus === 'pending' || k.status === 'pending').length,
+    approvedCount: scoped.filter((k) => k.authorizationStatus === 'authorized').length,
+    rejectedCount: scoped.filter((k) => k.authorizationStatus === 'unauthorized').length,
+  });
+}));
+
 router.get('/registration-requests', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const [kiosks, prisons] = await Promise.all([readDb('kiosks.json'), readDb('prisons.json')]);
-  const registrationRequests = kiosks.filter((k) => k.status === 'pending' || k.authorizationStatus === 'pending');
+  const statusFilter = req.query.status;
+  let registrationRequests;
+  if (statusFilter && statusFilter !== 'all') {
+    const statusMap = { approved: 'authorized', rejected: 'unauthorized', pending: 'pending' };
+    const authStatus = statusMap[statusFilter] || statusFilter;
+    registrationRequests = kiosks.filter((k) => k.authorizationStatus === authStatus || k.status === statusFilter);
+  } else {
+    registrationRequests = kiosks.filter((k) => k.status === 'pending' || k.authorizationStatus === 'pending' || k.authorizationStatus === 'authorized' || k.authorizationStatus === 'unauthorized');
+  }
   const mapped = (await scopeList(req, registrationRequests)).map((k) => {
     const prison = prisons.find((p) => p.prisonId === k.prisonId);
     return {

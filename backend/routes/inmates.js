@@ -27,8 +27,12 @@ function inmateListHandler(req, res) {
   return asyncRoute(async (req, res) => {
     const inmates = await readDb('inmates.json');
     const scoped = inmates.filter(adminScopeFilter(req)).map(normalizeInmate);
+    const facilityFilter = req.query.facility;
+    const filtered = (facilityFilter && facilityFilter !== 'all')
+      ? scoped.filter((i) => i.facility === facilityFilter)
+      : scoped;
     const result = await paginate({
-      req, data: scoped,
+      req, data: filtered,
       search: (i, q) =>
         (i.name || '').toLowerCase().includes(q) ||
         (i.inmateId || '').toLowerCase().includes(q) ||
@@ -163,6 +167,20 @@ router.patch('/admin/prisoners/:prisonerId/status', requireAuth, requireRole('ad
   return sendSuccess(res, updated);
 }));
 router.delete('/admin/prisoners/:prisonerId', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), asyncRoute(inmateDeleteHandler));
+
+// Toggle inmate active/inactive
+router.patch('/admin/prisoners/:prisonerId/toggle', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+  const { prisonerId } = req.params;
+  const updated = await updateDb('inmates.json', (inmates) => {
+    const idx = inmates.findIndex((i) => i.inmateId === prisonerId && inAdminScope(req, i));
+    if (idx === -1) return { data: inmates, result: null };
+    const newStatus = inmates[idx].status === 'active' ? 'inactive' : 'active';
+    inmates[idx] = { ...inmates[idx], status: newStatus };
+    return { data: inmates, result: inmates[idx] };
+  });
+  if (!updated) return sendError(res, 'NOT_FOUND', 'Inmate not found', 404);
+  return sendSuccess(res, updated);
+}));
 
 // ==================== INMATE ROUTES (parameterized — LAST) ====================
 

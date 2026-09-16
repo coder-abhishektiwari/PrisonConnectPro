@@ -22,7 +22,7 @@ export function KioskRegistrationPage() {
   const fetchRequests = useCallback(async (signal?: AbortSignal) => {
     setLoadError(null);
     try {
-      const params: ListParams = { limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE, search: searchQuery };
+      const params: ListParams = { limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE, search: searchQuery, status: filter !== 'all' ? filter : undefined };
       const data = await wardenApi.getKioskRegistrationRequests(params);
       setRequests(data.items);
       setTotal(data.total);
@@ -34,18 +34,18 @@ export function KioskRegistrationPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [page, searchQuery]);
+  }, [page, searchQuery, filter]);
 
   const fetchCounts = useCallback(async () => {
     try {
-      const data = await wardenApi.getKioskRegistrationRequests({ limit: 1000 });
-      return data.items;
+      const data = await wardenApi.getKioskRegistrationStats();
+      return data;
     } catch {
-      return [];
+      return { total: 0, pendingCount: 0, approvedCount: 0, rejectedCount: 0 };
     }
   }, []);
 
-  const [counts, setCounts] = useState<KioskRegistrationRequestItem[]>([]);
+  const [counts, setCounts] = useState<{ total: number; pendingCount: number; approvedCount: number; rejectedCount: number }>({ total: 0, pendingCount: 0, approvedCount: 0, rejectedCount: 0 });
   useEffect(() => {
     fetchCounts().then(setCounts);
   }, [fetchCounts, actionLoading]);
@@ -95,9 +95,9 @@ export function KioskRegistrationPage() {
     setSearchQuery(value);
   };
 
-  const pendingCount = counts.filter((r) => r.status === 'pending').length;
-  const approvedCount = counts.filter((r) => r.status === 'approved').length;
-  const rejectedCount = counts.filter((r) => r.status === 'rejected').length;
+  const pendingCount = counts.pendingCount;
+  const approvedCount = counts.approvedCount;
+  const rejectedCount = counts.rejectedCount;
 
   const headerIcon = useMemo(() => <span className="material-icons text-primary-600 text-xl">security</span>, []);
 
@@ -162,7 +162,7 @@ export function KioskRegistrationPage() {
             <span className="text-xs font-semibold uppercase text-primary-700">All Requests</span>
             <span className="w-2 h-2 bg-primary-500 rounded-full" />
           </div>
-          <p className="text-3xl font-extrabold text-neutral-900 mt-2">{counts.length}</p>
+          <p className="text-3xl font-extrabold text-neutral-900 mt-2">{counts.total}</p>
           <p className="text-xs text-neutral-500 mt-1">Total Requests</p>
         </button>
       </div>
@@ -185,8 +185,8 @@ export function KioskRegistrationPage() {
             <p className="text-neutral-600">No registration requests match the selected criteria.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
+        <div className="overflow-auto max-h-[calc(100vh-280px)]">
+          <table className="w-full">
               <thead>
                 <tr className="border-b border-neutral-200 bg-neutral-50">
                   <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Request</th>

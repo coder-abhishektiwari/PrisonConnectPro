@@ -82,6 +82,11 @@ export interface ListParams {
   search?: string;
   sortField?: string;
   sortDir?: string;
+  status?: string;
+  type?: string;
+  facility?: string;
+  relationship?: string;
+  inmateId?: string;
 }
 
 export interface Recording {
@@ -153,6 +158,8 @@ export interface Inmate {
   name: string;
   firstName?: string;
   lastName?: string;
+  gender?: string;
+  dateOfAdmission?: string;
   prisonId: string;
   facility: string;
   cellBlock: string;
@@ -174,6 +181,9 @@ export interface Contact {
   phone?: string;
   mobileNumber?: string;
   email?: string;
+  address?: string;
+  city?: string;
+  state?: string;
   active: boolean;
   status?: string;
   verified?: boolean;
@@ -441,6 +451,9 @@ export const wardenApi = {
   createContact: (inmateId: string, data: Partial<Contact>) =>
     apiClient.post<ApiResponse<Contact>>(`/admin/prisoners/${inmateId}/contacts`, data).then((r) => { invalidateCache('contacts'); return r.data?.data; }),
 
+  updateContact: (contactId: string, data: Partial<Contact>) =>
+    apiClient.put<ApiResponse<Contact>>(`/admin/contacts/${contactId}`, data).then((r) => { invalidateCache('contacts'); return r.data?.data; }),
+
   deleteContactApi: (contactId: string) =>
     apiClient.delete<ApiResponse<void>>(`/contacts/${contactId}`).then((r) => { invalidateCache('contacts'); return r.data; }),
 
@@ -631,6 +644,9 @@ export const wardenApi = {
     return apiClient.get<ApiResponse<PaginatedResponse<KioskRegistrationRequestItem>>>(url).then((r) => r.data?.data ?? { items: [], total: 0, limit: 20, offset: 0 });
   },
 
+  getKioskRegistrationStats: () =>
+    apiClient.get<ApiResponse<{ total: number; pendingCount: number; approvedCount: number; rejectedCount: number }>>('/kiosks/registration-requests/stats').then((r) => r.data?.data ?? { total: 0, pendingCount: 0, approvedCount: 0, rejectedCount: 0 }),
+
   approveKioskRegistration: (requestId: string) =>
     apiClient.put<ApiResponse<{ success: boolean }>>(`/kiosks/registration/${requestId}/approve`).then((r) => {
       invalidateCache('kiosks:registration');
@@ -663,6 +679,9 @@ export const wardenApi = {
   getWarden: (wardenId: string) =>
     cachedGet(`wardens:${wardenId}`, () => apiClient.get<ApiResponse<any>>(`/wardens/${wardenId}`).then((r) => r.data?.data)),
 
+  getWardenStats: () =>
+    apiClient.get<ApiResponse<{ total: number; activeCount: number; inactiveCount: number; onLeaveCount: number }>>('/wardens/stats').then((r) => r.data?.data ?? { total: 0, activeCount: 0, inactiveCount: 0, onLeaveCount: 0 }),
+
   // Prisons
   getPrisons: () =>
     cachedGet('prisons', () => apiClient.get<ApiResponse<any[]>>('/prisons').then((r) => r.data?.data ?? [])),
@@ -673,6 +692,34 @@ export const wardenApi = {
   // Subscriptions
   getSubscriptions: () =>
     cachedGet('subscriptions', () => apiClient.get<ApiResponse<any[]>>('/subscriptions').then((r) => r.data?.data ?? [])),
+
+  // Cells
+  getCells: () =>
+    cachedGet('cells', () => apiClient.get<ApiResponse<{ items: any[] }>>('/cells/all').then((r) => r.data?.data?.items ?? [])),
+
+  createCell: (name: string) =>
+    apiClient.post<ApiResponse<any>>('/cells', { name }).then((r) => r.data?.data),
+
+  deleteCell: (cellId: string) =>
+    apiClient.delete(`/cells/${cellId}`),
+
+  // Blocks
+  getBlocks: () =>
+    cachedGet('blocks', () => apiClient.get<ApiResponse<{ items: any[] }>>('/blocks/all').then((r) => r.data?.data?.items ?? [])),
+
+  createBlock: (name: string) =>
+    apiClient.post<ApiResponse<any>>('/blocks', { name }).then((r) => r.data?.data),
+
+  deleteBlock: (blockId: string) =>
+    apiClient.delete(`/blocks/${blockId}`),
+
+  // Toggle inmate active/inactive
+  toggleInmate: (inmateId: string) =>
+    apiClient.patch<ApiResponse<any>>(`/inmates/admin/prisoners/${inmateId}/toggle`).then((r) => r.data?.data),
+
+  // Toggle contact active/inactive
+  toggleContact: (contactId: string) =>
+    apiClient.patch<ApiResponse<any>>(`/contacts/admin/contacts/${contactId}/toggle`).then((r) => r.data?.data),
 };
 
 export interface KioskRegistrationRequestItem {
