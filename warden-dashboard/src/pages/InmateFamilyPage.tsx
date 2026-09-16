@@ -10,10 +10,9 @@ export function InmateFamilyPage() {
   const navigate = useNavigate();
   const [inmates, setInmates] = useState<Inmate[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showAddInmate, setShowAddInmate] = useState(false);
   const [searchPrisoner, setSearchPrisoner] = useState('');
-  const [newInmate, setNewInmate] = useState({ name: '', inmateId: '', facility: '', kioskId: '' });
+  const [newInmate, setNewInmate] = useState({ name: '', inmateId: '', facility: '', assignedKioskId: '' });
   const [kiosks, setKiosks] = useState<{ deviceId: string; name: string; location?: string }[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [prisonerPage, setPrisonerPage] = useState(1);
@@ -22,29 +21,50 @@ export function InmateFamilyPage() {
   const load = useCallback(async () => {
     try {
       setLoadError(null);
-      const params: ListParams = { limit: 20, offset: (prisonerPage - 1) * 20, search: searchPrisoner || undefined };
+      const params: ListParams = { limit: 100, offset: 0, search: searchPrisoner || undefined };
       const [im, dv] = await Promise.all([wardenApi.getInmates(params), wardenApi.getDevices()]);
-      setInmates(im?.items ?? []);
-      setPrisonerTotal(im?.total ?? 0);
+      const items = im?.items ?? [];
+      // Sort: active first, then inactive at bottom
+      items.sort((a, b) => {
+        if (a.status === 'active' && b.status !== 'active') return -1;
+        if (a.status !== 'active' && b.status === 'active') return 1;
+        return 0;
+      });
+      setInmates(items);
+      setPrisonerTotal(im?.total ?? items.length);
       setKiosks((dv?.items ?? []).map((d: any) => ({ deviceId: d.deviceId || d.id, name: d.name || d.deviceId || d.id, location: d.location })));
     } catch (e: any) {
       setLoadError(e?.response?.data?.error?.message || e?.message || 'Failed to load inmates');
       setInmates([]);
     } finally { setLoading(false); }
-  }, [prisonerPage, searchPrisoner]);
+  }, [searchPrisoner]);
 
   useEffect(() => { load(); }, [load]);
 
-  const deleteInmate = async (id: string) => {
-    try { await wardenApi.deleteInmateApi(id); } catch { }
-    setInmates(s => s.filter(i => i.inmateId !== id));
+  const toggleInmate = async (inmateId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const updated = await wardenApi.toggleInmate(inmateId);
+      if (updated) {
+        setInmates(prev => {
+          const next = prev.map(x => x.inmateId === updated.inmateId ? { ...x, ...updated } : x);
+          // Re-sort: active first
+          next.sort((a, b) => {
+            if (a.status === 'active' && b.status !== 'active') return -1;
+            if (a.status !== 'active' && b.status === 'active') return 1;
+            return 0;
+          });
+          return next;
+        });
+      }
+    } catch { }
   };
 
   const addInmate = async () => {
-    if (!newInmate.inmateId || !newInmate.name || !newInmate.kioskId) return;
-    const payload = { inmateId: newInmate.inmateId, name: newInmate.name, facility: newInmate.facility, status: 'active', photoUrl: '', securityLevel: 'medium', sentenceDetails: '', kioskId: newInmate.kioskId } as any;
+    if (!newInmate.inmateId || !newInmate.name || !newInmate.assignedKioskId) return;
+    const payload = { inmateId: newInmate.inmateId, name: newInmate.name, facility: newInmate.facility, status: 'active', photoUrl: '', securityLevel: 'medium', sentenceDetails: '', assignedKioskId: newInmate.assignedKioskId } as any;
     try { const saved = await wardenApi.createInmate(payload); setInmates(s => [...s, (saved || payload) as Inmate]); } catch { setInmates(s => [...s, payload as Inmate]); }
-    setNewInmate({ name: '', inmateId: '', facility: '', kioskId: '' });
+    setNewInmate({ name: '', inmateId: '', facility: '', assignedKioskId: '' });
     setShowAddInmate(false);
   };
 
@@ -62,7 +82,8 @@ export function InmateFamilyPage() {
   if (loading) return <Loading message="Loading..." />;
   if (loadError) return <Card><div className="text-center py-12"><p className="text-error mb-4">{loadError}</p><button onClick={() => { setLoading(true); load(); }} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm">Retry</button></div></Card>;
 
-  const prisonerTotalPages = Math.max(1, Math.ceil(prisonerTotal / 20));
+  const prisonerTotalPages = Math.max(1, Math.ceil(inmates.length / 20));
+  const pageInmates = inmates.slice((prisonerPage - 1) * 20, prisonerPage * 20);
 
   return (
     <div className="space-y-6">
@@ -78,60 +99,65 @@ export function InmateFamilyPage() {
           <table className="w-full">
             <thead><tr className="border-b bg-neutral-50">
               <th className="text-left py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Inmate</th>
+              <th className="text-left py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Cell</th>
               <th className="text-left py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Block</th>
               <th className="text-left py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Kiosk</th>
               <th className="text-left py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Status</th>
             </tr></thead>
             <tbody>
-              {inmates.length === 0 ? (
-                <tr><td colSpan={4} className="py-16 text-center"><div className="w-12 h-12 bg-neutral-100 rounded-xl flex items-center justify-center mx-auto mb-3"><span className="material-icons text-neutral-400 text-2xl">person_off</span></div><p className="text-sm font-semibold text-neutral-900">No Inmates</p><p className="text-xs text-neutral-500">{prisonerTotal === 0 ? 'No inmates registered' : `No match for "${searchPrisoner}"`}</p></td></tr>
-              ) : inmates.map(i => (
-                <tr key={i.inmateId} onClick={() => navigate(`/inmates-family/${i.inmateId}`)} className="border-b hover:bg-neutral-50 cursor-pointer transition-colors even:bg-neutral-50/30">
-                  <td className="py-2.5 px-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full bg-[#E9EEF3] border border-[#D1D7DB] flex items-center justify-center shrink-0">
-                        <span className="material-icons text-[#8696A0] text-lg">person</span>
+              {pageInmates.length === 0 ? (
+                <tr><td colSpan={5} className="py-16 text-center"><div className="w-12 h-12 bg-neutral-100 rounded-xl flex items-center justify-center mx-auto mb-3"><span className="material-icons text-neutral-400 text-2xl">person_off</span></div><p className="text-sm font-semibold text-neutral-900">No Inmates</p><p className="text-xs text-neutral-500">{prisonerTotal === 0 ? 'No inmates registered' : `No match for "${searchPrisoner}"`}</p></td></tr>
+              ) : pageInmates.map(i => {
+                const disabled = i.status !== 'active';
+                return (
+                  <tr key={i.inmateId} onClick={() => navigate(`/inmates-family/${i.inmateId}`)} className={`border-b hover:bg-neutral-50 cursor-pointer transition-colors even:bg-neutral-50/30 ${disabled ? 'opacity-50' : ''}`}>
+                    <td className="py-2.5 px-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-full bg-[#E9EEF3] border border-[#D1D7DB] flex items-center justify-center shrink-0">
+                          <span className="material-icons text-[#8696A0] text-lg">person</span>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-neutral-900 truncate">{i.name}</p>
+                          <p className="text-xs text-neutral-500 font-mono truncate">{i.inmateId}</p>
+                        </div>
                       </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-neutral-900 truncate">{i.name}</p>
-                        <p className="text-xs text-neutral-500 font-mono truncate">{i.inmateId}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="py-2.5 px-3 text-sm text-neutral-600">{i.cellBlock || '—'}</td>
-                  <td className="py-2.5 px-3 text-sm">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium border ${(i as any).kioskId ? 'bg-primary-600 text-white border-primary-600' : 'bg-amber-100 text-amber-700 border-amber-200'}`}>{(i as any).kioskId || 'Unassigned'}</span>
-                  </td>
-                  <td className="py-2.5 px-3">
-                    <button
-                      onClick={e => { e.stopPropagation(); wardenApi.toggleInmate(i.inmateId).then(updated => { if (updated) setInmates(s => s.map(x => x.inmateId === updated.inmateId ? { ...x, ...updated } : x)); }); }}
-                      className={`transition hover:opacity-80 ${i.status === 'active' ? 'text-success' : 'text-neutral-400'}`}
-                      title={i.status === 'active' ? 'Deactivate' : 'Activate'}
-                    >
-                      <span className="material-icons" style={{ fontSize: '32px' }}>{i.status === 'active' ? 'toggle_on' : 'toggle_off'}</span>
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="py-2.5 px-3 text-sm text-neutral-600">{i.cellBlock || '—'}</td>
+                    <td className="py-2.5 px-3 text-sm text-neutral-600">{i.facility || '—'}</td>
+                    <td className="py-2.5 px-3 text-sm">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium border ${i.assignedKioskId ? 'bg-primary-600 text-white border-primary-600' : 'bg-amber-100 text-amber-700 border-amber-200'}`}>{i.assignedKioskId || 'Unassigned'}</span>
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <button
+                        onClick={e => toggleInmate(i.inmateId, e)}
+                        className={`transition hover:opacity-80 ${i.status === 'active' ? 'text-success' : 'text-neutral-400'}`}
+                        title={i.status === 'active' ? 'Deactivate' : 'Activate'}
+                      >
+                        <span className="material-icons" style={{ fontSize: '42px' }}>{i.status === 'active' ? 'toggle_on' : 'toggle_off'}</span>
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
-        {prisonerTotalPages > 1 && <div className="flex items-center justify-between mt-4 px-5 pb-4"><span className="text-xs text-neutral-500">Showing {(prisonerPage - 1) * 20 + 1}-{Math.min(prisonerPage * 20, prisonerTotal)} of {prisonerTotal}</span><div className="flex items-center gap-1"><button disabled={prisonerPage === 1} onClick={() => setPrisonerPage(1)} className="px-2.5 py-1.5 border rounded-lg text-xs disabled:opacity-30 hover:bg-neutral-50">«</button><button disabled={prisonerPage === 1} onClick={() => setPrisonerPage(p => p - 1)} className="px-3 py-1.5 border rounded-lg text-xs disabled:opacity-30 hover:bg-neutral-50">Prev</button><span className="px-3 py-1.5 bg-neutral-900 text-white rounded-lg text-xs font-medium">{prisonerPage} / {prisonerTotalPages}</span><button disabled={prisonerPage === prisonerTotalPages} onClick={() => setPrisonerPage(p => p + 1)} className="px-3 py-1.5 border rounded-lg text-xs disabled:opacity-30 hover:bg-neutral-50">Next</button><button disabled={prisonerPage === prisonerTotalPages} onClick={() => setPrisonerPage(prisonerTotalPages)} className="px-2.5 py-1.5 border rounded-lg text-xs disabled:opacity-30 hover:bg-neutral-50">»</button></div></div>}
+        {prisonerTotalPages > 1 && <div className="flex items-center justify-between mt-4 px-5 pb-4"><span className="text-xs text-neutral-500">Showing {(prisonerPage - 1) * 20 + 1}-{Math.min(prisonerPage * 20, inmates.length)} of {inmates.length}</span><div className="flex items-center gap-1"><button disabled={prisonerPage === 1} onClick={() => setPrisonerPage(1)} className="px-2.5 py-1.5 border rounded-lg text-xs disabled:opacity-30 hover:bg-neutral-50">«</button><button disabled={prisonerPage === 1} onClick={() => setPrisonerPage(p => p - 1)} className="px-3 py-1.5 border rounded-lg text-xs disabled:opacity-30 hover:bg-neutral-50">Prev</button><span className="px-3 py-1.5 bg-neutral-900 text-white rounded-lg text-xs font-medium">{prisonerPage} / {prisonerTotalPages}</span><button disabled={prisonerPage === prisonerTotalPages} onClick={() => setPrisonerPage(p => p + 1)} className="px-3 py-1.5 border rounded-lg text-xs disabled:opacity-30 hover:bg-neutral-50">Next</button><button disabled={prisonerPage === prisonerTotalPages} onClick={() => setPrisonerPage(prisonerTotalPages)} className="px-2.5 py-1.5 border rounded-lg text-xs disabled:opacity-30 hover:bg-neutral-50">»</button></div></div>}
       </Card>
 
       {showAddInmate && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setShowAddInmate(false)}>
           <div className="bg-white rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
             <h3 className="font-bold mb-4">Add Inmate - Assign Kiosk *</h3>
-            <input placeholder="Inmate ID (INM-1026) *" value={newInmate.inmateId} onChange={e => setNewInmate({ ...newInmate, inmateId: e.target.value })} className="w-full mb-3 px-3 py-2 border rounded-lg" />
+            <input placeholder="Inmate ID (100101) *" value={newInmate.inmateId} onChange={e => setNewInmate({ ...newInmate, inmateId: e.target.value })} className="w-full mb-3 px-3 py-2 border rounded-lg" />
             <input placeholder="Name *" value={newInmate.name} onChange={e => setNewInmate({ ...newInmate, name: e.target.value })} className="w-full mb-3 px-3 py-2 border rounded-lg" />
-            <select value={newInmate.kioskId} onChange={e => setNewInmate({ ...newInmate, kioskId: e.target.value })} className="w-full mb-3 px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-primary-500">
+            <select value={newInmate.assignedKioskId} onChange={e => setNewInmate({ ...newInmate, assignedKioskId: e.target.value })} className="w-full mb-3 px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-primary-500">
               <option value="">Select Kiosk * (required)</option>
               {kiosks.map(k => (
                 <option key={k.deviceId} value={k.deviceId}>{k.name}{k.location ? ` - ${k.location}` : ''}</option>
               ))}
             </select>
-            <input placeholder="Facility" value={newInmate.facility} onChange={e => setNewInmate({ ...newInmate, facility: e.target.value })} className="w-full mb-3 px-3 py-2 border rounded-lg" />
+            <input placeholder="Block" value={newInmate.facility} onChange={e => setNewInmate({ ...newInmate, facility: e.target.value })} className="w-full mb-3 px-3 py-2 border rounded-lg" />
             <div className="flex gap-2 justify-end">
               <button onClick={() => setShowAddInmate(false)} className="px-4 py-2 border rounded-lg">Cancel</button>
               <button onClick={addInmate} className="px-4 py-2 bg-primary-600 text-white rounded-lg">Add</button>

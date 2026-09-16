@@ -256,7 +256,7 @@ export function InmateDetailPage() {
   return (
     <div className="flex gap-6 h-[calc(100vh-120px)]">
       {/* LEFT — Inmate Details */}
-      <div className="flex-1 min-w-0 overflow-y-auto">
+      <div className={`flex-1 min-w-0 overflow-y-auto ${inmate.status !== 'active' ? 'opacity-50' : ''}`}>
         <Card className="overflow-hidden">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-bold uppercase tracking-wide text-neutral-700 flex items-center gap-2">
@@ -278,10 +278,14 @@ export function InmateDetailPage() {
                     className={`transition hover:opacity-80 ${inmate.status === 'active' ? 'text-success' : 'text-neutral-400'}`}
                     title={inmate.status === 'active' ? 'Deactivate' : 'Activate'}
                   >
-                    <span className="material-icons" style={{ fontSize: '32px' }}>{inmate.status === 'active' ? 'toggle_on' : 'toggle_off'}</span>
+                    <span className="material-icons" style={{ fontSize: '42px' }}>{inmate.status === 'active' ? 'toggle_on' : 'toggle_off'}</span>
                   </button>
-                  <button onClick={startEditInmate} className="w-8 h-8 flex items-center justify-center bg-white border border-neutral-200 text-neutral-600 rounded-lg hover:bg-neutral-50 hover:text-primary-600 transition" title="Edit"><span className="material-icons text-base">edit</span></button>
-                  <button onClick={deleteInmate} className="w-8 h-8 flex items-center justify-center bg-white border border-neutral-200 text-neutral-600 rounded-lg hover:bg-red-50 hover:text-red-600 transition" title="Delete"><span className="material-icons text-base">delete</span></button>
+                  {inmate.status === 'active' && (
+                    <>
+                      <button onClick={startEditInmate} className="w-8 h-8 flex items-center justify-center bg-white border border-neutral-200 text-neutral-600 rounded-lg hover:bg-neutral-50 hover:text-primary-600 transition" title="Edit"><span className="material-icons text-base">edit</span></button>
+                      <button onClick={deleteInmate} className="w-8 h-8 flex items-center justify-center bg-white border border-neutral-200 text-neutral-600 rounded-lg hover:bg-red-50 hover:text-red-600 transition" title="Delete"><span className="material-icons text-base">delete</span></button>
+                    </>
+                  )}
                 </>
               )}
             </div>
@@ -309,7 +313,7 @@ export function InmateDetailPage() {
       </div>
 
       {/* RIGHT — Family Members */}
-      <div className="w-[420px] shrink-0 flex flex-col bg-white rounded-xl shadow-md border border-neutral-200 overflow-hidden">
+      <div className={`w-[420px] shrink-0 flex flex-col bg-white rounded-xl shadow-md border border-neutral-200 overflow-hidden ${inmate.status !== 'active' ? 'opacity-50' : ''}`}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-200 bg-neutral-50/50 shrink-0">
           <h2 className="text-sm font-bold uppercase tracking-wide text-neutral-700 flex items-center gap-2">
             <span className="w-2 h-2 bg-success rounded-full" />Family Members
@@ -340,7 +344,7 @@ export function InmateDetailPage() {
                     className={`shrink-0 transition hover:opacity-80 ${c.active !== false ? 'text-success' : 'text-neutral-400'}`}
                     title={c.active !== false ? 'Deactivate' : 'Activate'}
                   >
-                    <span className="material-icons" style={{ fontSize: '32px' }}>{c.active !== false ? 'toggle_on' : 'toggle_off'}</span>
+                    <span className="material-icons" style={{ fontSize: '42px' }}>{c.active !== false ? 'toggle_on' : 'toggle_off'}</span>
                   </button>
                   <span className="material-icons text-neutral-300 text-lg">chevron_right</span>
                 </div>

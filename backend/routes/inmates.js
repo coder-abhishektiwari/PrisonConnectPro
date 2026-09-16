@@ -109,8 +109,6 @@ async function inmateUpdateHandler(req, res) {
     return sendError(res, 'FORBIDDEN', 'Cannot reassign an inmate to another kiosk', 403);
   }
   delete updates.prisonId;
-  delete updates.facility;
-  delete updates.assignedKioskId;
   const updated = await updateDb('inmates.json', (inmates) => {
     const idx = inmates.findIndex((i) => i.inmateId === id && inAdminScope(req, i));
     if (idx === -1) return { data: inmates, result: null };
