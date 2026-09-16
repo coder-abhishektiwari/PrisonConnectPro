@@ -27,6 +27,7 @@ export function InmateDetailPage() {
   const [cellNames, setCellNames] = useState<string[]>([]);
   const [blockNames, setBlockNames] = useState<string[]>([]);
   const [kioskNames, setKioskNames] = useState<string[]>([]);
+  const [toggling, setToggling] = useState(false);
 
   const load = useCallback(async () => {
     if (!inmateId) return;
@@ -75,6 +76,17 @@ export function InmateDetailPage() {
     navigate('/inmates-family');
   };
 
+  const toggleInmate = async () => {
+    if (!inmate || toggling) return;
+    setToggling(true);
+    try {
+      const updated = await wardenApi.toggleInmate(inmate.inmateId);
+      if (updated) setInmate(updated);
+      else setInmate({ ...inmate, status: inmate.status === 'active' ? 'inactive' : 'active' });
+    } catch { }
+    setToggling(false);
+  };
+
   const startEditContact = (c: Contact) => {
     setContactEditData({ ...c });
     setSelectedContact(c);
@@ -97,6 +109,16 @@ export function InmateDetailPage() {
     try { await wardenApi.deleteContactApi(contactId); } catch { }
     setContacts(prev => prev.filter(c => c.contactId !== contactId));
     if (selectedContact?.contactId === contactId) { setSelectedContact(null); setEditingContact(false); }
+  };
+
+  const toggleContact = async (contactId: string) => {
+    try {
+      const updated = await wardenApi.toggleContact(contactId);
+      if (updated) {
+        setContacts(prev => prev.map(c => c.contactId === contactId ? { ...c, ...updated } : c));
+        if (selectedContact?.contactId === contactId) setSelectedContact({ ...selectedContact, ...updated } as Contact);
+      }
+    } catch { }
   };
 
   const addFamily = async () => {
@@ -250,6 +272,14 @@ export function InmateDetailPage() {
                 </>
               ) : (
                 <>
+                  <button
+                    onClick={toggleInmate}
+                    disabled={toggling}
+                    className={`transition hover:opacity-80 ${inmate.status === 'active' ? 'text-success' : 'text-neutral-400'}`}
+                    title={inmate.status === 'active' ? 'Deactivate' : 'Activate'}
+                  >
+                    <span className="material-icons" style={{ fontSize: '32px' }}>{inmate.status === 'active' ? 'toggle_on' : 'toggle_off'}</span>
+                  </button>
                   <button onClick={startEditInmate} className="w-8 h-8 flex items-center justify-center bg-white border border-neutral-200 text-neutral-600 rounded-lg hover:bg-neutral-50 hover:text-primary-600 transition" title="Edit"><span className="material-icons text-base">edit</span></button>
                   <button onClick={deleteInmate} className="w-8 h-8 flex items-center justify-center bg-white border border-neutral-200 text-neutral-600 rounded-lg hover:bg-red-50 hover:text-red-600 transition" title="Delete"><span className="material-icons text-base">delete</span></button>
                 </>
@@ -305,6 +335,13 @@ export function InmateDetailPage() {
                     <p className="text-sm font-medium text-neutral-900 truncate">{c.name}</p>
                     <p className="text-xs text-neutral-500">{c.relationship} • {c.phoneNumber}</p>
                   </div>
+                  <button
+                    onClick={e => { e.stopPropagation(); toggleContact(c.contactId); }}
+                    className={`shrink-0 transition hover:opacity-80 ${c.active !== false ? 'text-success' : 'text-neutral-400'}`}
+                    title={c.active !== false ? 'Deactivate' : 'Activate'}
+                  >
+                    <span className="material-icons" style={{ fontSize: '32px' }}>{c.active !== false ? 'toggle_on' : 'toggle_off'}</span>
+                  </button>
                   <span className="material-icons text-neutral-300 text-lg">chevron_right</span>
                 </div>
               ))}
@@ -325,6 +362,13 @@ export function InmateDetailPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => toggleContact(selectedContact.contactId)}
+                    className={`transition hover:opacity-80 ${selectedContact.active !== false ? 'text-success' : 'text-neutral-400'}`}
+                    title={selectedContact.active !== false ? 'Deactivate' : 'Activate'}
+                  >
+                    <span className="material-icons" style={{ fontSize: '32px' }}>{selectedContact.active !== false ? 'toggle_on' : 'toggle_off'}</span>
+                  </button>
                   {editingContact ? (
                     <>
                       <button onClick={() => setEditingContact(false)} className="w-8 h-8 flex items-center justify-center bg-white border border-neutral-200 text-neutral-600 rounded-lg hover:bg-neutral-50 transition" title="Cancel"><span className="material-icons text-base">close</span></button>

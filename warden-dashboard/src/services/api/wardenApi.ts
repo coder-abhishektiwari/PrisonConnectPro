@@ -715,6 +715,14 @@ export const wardenApi = {
 
   deleteBlock: (blockId: string) =>
     apiClient.delete(`/blocks/${blockId}`),
+
+  // Toggle inmate active/inactive
+  toggleInmate: (inmateId: string) =>
+    apiClient.patch<ApiResponse<any>>(`/inmates/admin/prisoners/${inmateId}/toggle`).then((r) => r.data?.data),
+
+  // Toggle contact active/inactive
+  toggleContact: (contactId: string) =>
+    apiClient.patch<ApiResponse<any>>(`/contacts/admin/contacts/${contactId}/toggle`).then((r) => r.data?.data),
 };
 
 export interface KioskRegistrationRequestItem {
