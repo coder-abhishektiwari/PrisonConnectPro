@@ -20,6 +20,9 @@ import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Wallet
+import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Help
 import androidx.compose.material3.*
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
@@ -38,6 +41,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.prisonconnect.kiosk.models.inmate.InmateStatus
 import coil.compose.AsyncImage
 import com.prisonconnect.kiosk.core.UiState
 import com.prisonconnect.kiosk.models.call.CallType
@@ -566,7 +570,7 @@ private fun InmateProfileCard(
                         InmateStatus.ACTIVE -> Icons.Outlined.CheckCircle
                         InmateStatus.INACTIVE, InmateStatus.SUSPENDED, InmateStatus.RESTRICTED -> Icons.Outlined.Warning
                         InmateStatus.RELEASED, InmateStatus.TRANSFERRED -> Icons.Outlined.Info
-                        null -> Icons.Outlined.HelpOutline
+                        null -> Icons.Outlined.Help
                     }
                     val statusText = inmateProfile.status?.name?.uppercase() ?: "UNKNOWN"
 

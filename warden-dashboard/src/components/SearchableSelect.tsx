@@ -13,6 +13,7 @@ interface SearchableSelectProps {
   onAdd?: (val: string) => void;
   placeholder?: string;
   addLabel?: string;
+  fallbackLabel?: string;
 }
 
 function isObjOpt(o: string | SearchableSelectOption): o is SearchableSelectOption {
@@ -27,13 +28,14 @@ function getOptName(o: string | SearchableSelectOption): string {
   return isObjOpt(o) ? o.name : o;
 }
 
-export function SearchableSelect({ value, options, onChange, onAdd, placeholder = 'Select...', addLabel }: SearchableSelectProps) {
+export function SearchableSelect({ value, options, onChange, onAdd, placeholder = 'Select...', addLabel, fallbackLabel }: SearchableSelectProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [adding, setAdding] = useState(false);
   const [addValue, setAddValue] = useState('');
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number }>({ top: 0, left: 0, width: 0 });
   const ref = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const addInputRef = useRef<HTMLInputElement>(null);
 
@@ -59,7 +61,9 @@ export function SearchableSelect({ value, options, onChange, onAdd, placeholder 
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (ref.current?.contains(target) || dropdownRef.current?.contains(target)) return;
+      setOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -76,10 +80,11 @@ export function SearchableSelect({ value, options, onChange, onAdd, placeholder 
 
   // Find the display name for the current value
   const currentOption = options.find(o => getOptId(o) === value);
-  const displayValue = currentOption ? getOptName(currentOption) : value;
+  const displayValue = currentOption ? getOptName(currentOption) : (fallbackLabel || value);
 
   const dropdown = open ? createPortal(
     <div
+      ref={dropdownRef}
       className="bg-white border border-neutral-200 rounded-lg shadow-xl max-h-60 overflow-auto"
       style={{ position: 'absolute', top: dropdownPos.top, left: dropdownPos.left, width: dropdownPos.width, zIndex: 9999 }}
     >

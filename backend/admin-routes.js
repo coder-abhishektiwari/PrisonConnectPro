@@ -105,6 +105,22 @@ router.put('/prisoners/:prisonerId', requireRole(...ALL_ROLES), async (req, res)
   return res.json({ success: true, data: normalizeInmate(updated) });
 });
 
+router.post('/prisoners/:prisonerId/reset-pin', requireRole(...ALL_ROLES), async (req, res) => {
+  const { pin } = req.body;
+  if (!pin || !/^\d{4}$/.test(String(pin))) {
+    return res.status(400).json({ success: false, error: { code: 'INVALID_PIN', message: 'PIN must be exactly 4 digits' } });
+  }
+  const hashedPin = await hashSecret(String(pin));
+  const updated = await updateDb('inmates.json', (inmates) => {
+    const idx = inmates.findIndex((i) => i.inmateId === req.params.prisonerId && inAdminScope(req, i));
+    if (idx === -1) return { data: inmates, result: null };
+    inmates[idx] = { ...inmates[idx], pin: hashedPin };
+    return { data: inmates, result: inmates[idx] };
+  });
+  if (!updated) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Prisoner not found' } });
+  return res.json({ success: true, data: { message: 'PIN reset successfully' } });
+});
+
 router.patch('/prisoners/:prisonerId/status', requireRole(...ALL_ROLES), async (req, res) => {
   const { prisonerId } = req.params;
   const { status } = req.body;

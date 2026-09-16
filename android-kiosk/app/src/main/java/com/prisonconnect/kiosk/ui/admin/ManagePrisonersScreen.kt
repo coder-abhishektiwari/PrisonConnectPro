@@ -29,6 +29,7 @@ fun ManagePrisonersScreen(
     onBackClick: () -> Unit,
     onPrisonerClick: (String) -> Unit,
     onManageContactsClick: (String) -> Unit,
+    onBiometricsClick: (String, String) -> Unit,
     viewModel: ManagePrisonersViewModel = hiltViewModel()
 ) {
     val prisoners by viewModel.prisoners.collectAsState()
@@ -65,6 +66,7 @@ fun ManagePrisonersScreen(
         onBackClick = onBackClick,
         onPrisonerClick = onPrisonerClick,
         onManageContactsClick = onManageContactsClick,
+        onBiometricsClick = onBiometricsClick,
         onSearchQueryChange = { viewModel.updateSearchQuery(it) },
         onDeleteClick = { prisonerId, prisonerName -> showDeleteDialog = Pair(prisonerId, prisonerName) }
     )
@@ -80,6 +82,7 @@ fun ManagePrisonersContent(
     onBackClick: () -> Unit,
     onPrisonerClick: (String) -> Unit,
     onManageContactsClick: (String) -> Unit,
+    onBiometricsClick: (String, String) -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onDeleteClick: (String, String) -> Unit
 ) {
@@ -203,13 +206,14 @@ fun ManagePrisonersContent(
                     contentPadding = PaddingValues(bottom = 16.dp)
                 ) {
                     items(prisoners) { prisoner ->
-                        PrisonerCard(
-                            prisoner = prisoner,
-                            isDeleting = deletingPrisonerId == prisoner.inmateId,
-                            onClick = { onPrisonerClick(prisoner.inmateId) },
-                            onManageContactsClick = { onManageContactsClick(prisoner.inmateId) },
-                            onDeleteClick = { onDeleteClick(prisoner.inmateId, prisoner.displayName) }
-                        )
+                            PrisonerCard(
+                                prisoner = prisoner,
+                                isDeleting = deletingPrisonerId == prisoner.inmateId,
+                                onClick = { onPrisonerClick(prisoner.inmateId) },
+                                onManageContactsClick = { onManageContactsClick(prisoner.inmateId) },
+                                onBiometricsClick = { onBiometricsClick(prisoner.inmateId, prisoner.displayName) },
+                                onDeleteClick = { onDeleteClick(prisoner.inmateId, prisoner.displayName) }
+                            )
                     }
                 }
             }
@@ -223,6 +227,7 @@ private fun PrisonerCard(
     isDeleting: Boolean = false,
     onClick: () -> Unit,
     onManageContactsClick: () -> Unit,
+    onBiometricsClick: () -> Unit,
     onDeleteClick: () -> Unit
 ) {
     Card(
@@ -347,6 +352,11 @@ private fun PrisonerCard(
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("Contacts", fontSize = 14.sp)
                 }
+                TextButton(onClick = onBiometricsClick) {
+                    Icon(Icons.Default.Fingerprint, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Biometrics", fontSize = 14.sp)
+                }
             }
         }
     }
@@ -386,6 +396,7 @@ fun PreviewManagePrisonersMobile() {
             onBackClick = {},
             onPrisonerClick = {},
             onManageContactsClick = {},
+            onBiometricsClick = { _, _ -> },
             onDeleteClick = { _, _ -> },
             onSearchQueryChange = {}
         )

@@ -28,6 +28,10 @@ export function InmateDetailPage() {
   const [blockNames, setBlockNames] = useState<{ id: string; name: string }[]>([]);
   const [kioskNames, setKioskNames] = useState<{ id: string; name: string }[]>([]);
   const [toggling, setToggling] = useState(false);
+  const [showResetPin, setShowResetPin] = useState(false);
+  const [newPin, setNewPin] = useState('');
+  const [resetPinError, setResetPinError] = useState('');
+  const [resetPinSuccess, setResetPinSuccess] = useState(false);
 
   const load = useCallback(async () => {
     if (!inmateId) return;
@@ -121,6 +125,20 @@ export function InmateDetailPage() {
     } catch { }
   };
 
+  const resetPin = async () => {
+    if (!inmate || !newPin.trim()) return;
+    if (!/^\d{4}$/.test(newPin.trim())) { setResetPinError('PIN must be exactly 4 digits'); return; }
+    setResetPinError('');
+    try {
+      await wardenApi.resetInmatePin(inmate.inmateId, newPin.trim());
+      setResetPinSuccess(true);
+      setNewPin('');
+      setTimeout(() => { setShowResetPin(false); setResetPinSuccess(false); }, 1500);
+    } catch (e: any) {
+      setResetPinError(e?.response?.data?.error?.message || 'Failed to reset PIN');
+    }
+  };
+
   const addFamily = async () => {
     if (!newFamily.name.trim() || !newFamily.phoneNumber.trim()) { setAddFamilyError('Full Name and Phone are required'); return; }
     if (!inmateId) return;
@@ -194,8 +212,9 @@ export function InmateDetailPage() {
     );
   };
 
-  const searchableRow = (label: string, key: keyof Inmate, icon: string, options: { id: string; name: string }[], addLabel?: string) => {
+  const searchableRow = (label: string, key: keyof Inmate, icon: string, options: { id: string; name: string }[], addLabel?: string, fallbackKey?: keyof Inmate) => {
     const val = editingInmate ? (editData[key] ?? '') : (inmate[key] ?? '');
+    const fallback = fallbackKey ? String(inmate[fallbackKey] ?? '') : '';
     if (editingInmate) {
       return (
         <div key={key} className="py-3 border-b border-neutral-100 last:border-0">
@@ -204,6 +223,7 @@ export function InmateDetailPage() {
             value={String(val)}
             options={options}
             onChange={v => setEditData({ ...editData, [key]: v })}
+            fallbackLabel={fallback}
             onAdd={async (name) => {
               if (key === 'cellId') {
                 const created = await wardenApi.createCell(name).catch(() => null);
@@ -291,6 +311,7 @@ export function InmateDetailPage() {
                   {inmate.status === 'active' && (
                     <>
                       <button onClick={startEditInmate} className="w-8 h-8 flex items-center justify-center bg-white border border-neutral-200 text-neutral-600 rounded-lg hover:bg-neutral-50 hover:text-primary-600 transition" title="Edit"><span className="material-icons text-base">edit</span></button>
+                      <button onClick={() => setShowResetPin(true)} className="w-8 h-8 flex items-center justify-center bg-white border border-neutral-200 text-neutral-600 rounded-lg hover:bg-neutral-50 hover:text-amber-600 transition" title="Reset PIN"><span className="material-icons text-base">lock_reset</span></button>
                       <button onClick={deleteInmate} className="w-8 h-8 flex items-center justify-center bg-white border border-neutral-200 text-neutral-600 rounded-lg hover:bg-red-50 hover:text-red-600 transition" title="Delete"><span className="material-icons text-base">delete</span></button>
                     </>
                   )}
@@ -312,11 +333,11 @@ export function InmateDetailPage() {
           {fieldRow('Prisoner Number', 'prisonerNumber', 'tag')}
           {fieldRow('Gender', 'gender', 'wc', { radio: ['male', 'female', 'other'] })}
           {fieldRow('Date of Admission', 'dateOfAdmission', 'calendar_today', { type: 'date' })}
-          {searchableRow('Cell', 'cellId', 'domain', cellNames, '+ Add new cell')}
-          {searchableRow('Block', 'blockId', 'location_on', blockNames, '+ Add new block')}
+          {searchableRow('Cell', 'cellId', 'domain', cellNames, '+ Add new cell', 'cellName')}
+          {searchableRow('Block', 'blockId', 'location_on', blockNames, '+ Add new block', 'blockName')}
           {fieldRow('Security Level', 'securityLevel', 'security', { radio: ['minimum', 'medium', 'maximum'] })}
           {fieldRow('Sentence Details', 'sentenceDetails', 'gavel')}
-          {searchableRow('Assigned Kiosk', 'assignedKioskId', 'tablet_mac', kioskNames, '+ Add new kiosk')}
+          {searchableRow('Assigned Kiosk', 'assignedKioskId', 'tablet_mac', kioskNames, '+ Add new kiosk', 'kioskName')}
         </Card>
       </div>
 
@@ -423,6 +444,36 @@ export function InmateDetailPage() {
             <div className="flex gap-2 justify-end">
               <button onClick={() => { setShowAddFamily(false); setAddFamilyError(''); }} className="px-4 py-2 border rounded-lg">Cancel</button>
               <button onClick={addFamily} className="px-4 py-2 bg-success text-white rounded-lg">Add</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Reset PIN Modal */}
+      {showResetPin && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => { setShowResetPin(false); setResetPinError(''); setNewPin(''); setResetPinSuccess(false); }}>
+          <div className="bg-white rounded-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <h3 className="font-bold mb-4">Reset Inmate PIN</h3>
+            {resetPinSuccess ? (
+              <p className="text-sm text-success bg-success/10 border border-success/20 rounded-lg px-3 py-2 mb-3">PIN reset successfully!</p>
+            ) : (
+              <>
+                {resetPinError && <p className="text-sm text-error bg-error/10 border border-error/20 rounded-lg px-3 py-2 mb-3">{resetPinError}</p>}
+                <p className="text-sm text-neutral-600 mb-3">Enter a new 4-digit PIN for <strong>{inmate.name}</strong></p>
+                <input
+                  type="password"
+                  maxLength={4}
+                  pattern="[0-9]*"
+                  inputMode="numeric"
+                  value={newPin}
+                  onChange={e => { setNewPin(e.target.value.replace(/\D/g, '').slice(0, 4)); setResetPinError(''); }}
+                  placeholder="••••"
+                  className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm text-center tracking-[0.5em] font-mono focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </>
+            )}
+            <div className="flex gap-2 justify-end mt-4">
+              <button onClick={() => { setShowResetPin(false); setResetPinError(''); setNewPin(''); setResetPinSuccess(false); }} className="px-4 py-2 border rounded-lg text-sm">Close</button>
+              {!resetPinSuccess && <button onClick={resetPin} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm">Reset PIN</button>}
             </div>
           </div>
         </div>

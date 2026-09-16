@@ -53,8 +53,8 @@ fun EditPrisonerScreen(
                 is NetworkResult.Success -> {
                     EditPrisonerForm(
                         prisoner = result.data,
-                        onUpdate = { fullName, mobile, cell, security, details, status, active ->
-                            viewModel.updatePrisoner(prisonerId, fullName, mobile, cell, security, details, status, active)
+                        onUpdate = { fullName, mobile, prisonerNum, dateAdm, cellId, blockId, security, sentenceStart, sentenceEnd, details, kioskId, status, active ->
+                            viewModel.updatePrisoner(prisonerId, fullName, mobile, prisonerNum, dateAdm, cellId, blockId, security, sentenceStart, sentenceEnd, details, kioskId, status, active)
                         }
                     )
                 }
@@ -84,16 +84,26 @@ fun EditPrisonerScreen(
 @Composable
 fun EditPrisonerForm(
     prisoner: Prisoner,
-    onUpdate: (String, String, String, String, String, String, Boolean) -> Unit
+    onUpdate: (String, String, String, String, String, String, String, String, String, String, String, String, Boolean) -> Unit
 ) {
     var fullName by remember { mutableStateOf(prisoner.fullName ?: "") }
     var mobileNumber by remember { mutableStateOf(prisoner.mobileNumber ?: "") }
-    var cellBlock by remember { mutableStateOf(prisoner.cellBlock ?: "") }
+    var prisonerNumber by remember { mutableStateOf(prisoner.prisonerNumber ?: "") }
+    var dateOfAdmission by remember { mutableStateOf(prisoner.dateOfAdmission ?: "") }
+    var cellId by remember { mutableStateOf(prisoner.cellBlock ?: "") }
+    var blockId by remember { mutableStateOf("") }
     var securityLevel by remember { mutableStateOf(prisoner.securityLevel ?: "medium") }
+    var sentenceStart by remember { mutableStateOf("") }
+    var sentenceEnd by remember { mutableStateOf("") }
     var sentenceDetails by remember { mutableStateOf(prisoner.sentenceDetails ?: "") }
+    var assignedKioskId by remember { mutableStateOf(prisoner.assignedDeviceId ?: "") }
     var status by remember { mutableStateOf(prisoner.status) }
     var active by remember { mutableStateOf(prisoner.active) }
     var showSaveDialog by remember { mutableStateOf(false) }
+    var showResetPinDialog by remember { mutableStateOf(false) }
+    var resetPinValue by remember { mutableStateOf("") }
+    var resetPinError by remember { mutableStateOf("") }
+    var resetPinSuccess by remember { mutableStateOf(false) }
 
     if (showSaveDialog) {
         AlertDialog(
@@ -106,12 +116,60 @@ fun EditPrisonerForm(
                 }
                 TextButton(onClick = {
                     showSaveDialog = false
-                    onUpdate(fullName, mobileNumber, cellBlock, securityLevel, sentenceDetails, status, active)
+                    onUpdate(fullName, mobileNumber, prisonerNumber, dateOfAdmission, cellId, blockId, securityLevel, sentenceStart, sentenceEnd, sentenceDetails, assignedKioskId, status, active)
                 }) {
                     Text("Save", color = Color(0xFF003366))
                 }
             },
             dismissButton = {}
+        )
+    }
+
+    if (showResetPinDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetPinDialog = false; resetPinValue = ""; resetPinError = ""; resetPinSuccess = false },
+            title = { Text("Reset PIN") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (resetPinSuccess) {
+                        Text("PIN reset successfully!", color = Color(0xFF2E7D32))
+                    } else {
+                        if (resetPinError.isNotEmpty()) {
+                            Text(resetPinError, color = Color(0xFFD32F2F), fontSize = 13.sp)
+                        }
+                        Text("Enter a new 4-digit PIN for ${prisoner.fullName ?: prisoner.inmateId}", fontSize = 14.sp)
+                        OutlinedTextField(
+                            value = resetPinValue,
+                            onValueChange = { if (it.length <= 4 && it.all { c -> c.isDigit() }) { resetPinValue = it; resetPinError = "" } },
+                            label = { Text("New PIN") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword
+                            )
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                if (!resetPinSuccess) {
+                    TextButton(onClick = {
+                        if (resetPinValue.length != 4) {
+                            resetPinError = "PIN must be exactly 4 digits"
+                        } else {
+                            showResetPinDialog = false
+                            resetPinValue = ""
+                            resetPinError = ""
+                            resetPinSuccess = false
+                        }
+                    }) { Text("Reset") }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetPinDialog = false; resetPinValue = ""; resetPinError = ""; resetPinSuccess = false }) {
+                    Text(if (resetPinSuccess) "Close" else "Cancel")
+                }
+            }
         )
     }
 
@@ -148,9 +206,33 @@ fun EditPrisonerForm(
                 )
 
                 OutlinedTextField(
-                    value = cellBlock,
-                    onValueChange = { cellBlock = it },
-                    label = { Text("Cell Block / Number") },
+                    value = prisonerNumber,
+                    onValueChange = { prisonerNumber = it },
+                    label = { Text("Prisoner Number") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                OutlinedTextField(
+                    value = dateOfAdmission,
+                    onValueChange = { dateOfAdmission = it },
+                    label = { Text("Date of Admission (YYYY-MM-DD)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                OutlinedTextField(
+                    value = cellId,
+                    onValueChange = { cellId = it },
+                    label = { Text("Cell ID") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                OutlinedTextField(
+                    value = blockId,
+                    onValueChange = { blockId = it },
+                    label = { Text("Block ID") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
@@ -187,6 +269,30 @@ fun EditPrisonerForm(
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 3
                 )
+
+                OutlinedTextField(
+                    value = sentenceStart,
+                    onValueChange = { sentenceStart = it },
+                    label = { Text("Sentence Start (YYYY-MM-DD)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                OutlinedTextField(
+                    value = sentenceEnd,
+                    onValueChange = { sentenceEnd = it },
+                    label = { Text("Sentence End (YYYY-MM-DD)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                OutlinedTextField(
+                    value = assignedKioskId,
+                    onValueChange = { assignedKioskId = it },
+                    label = { Text("Assigned Kiosk ID") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
             }
         }
 
@@ -203,6 +309,15 @@ fun EditPrisonerForm(
                     Switch(checked = active, onCheckedChange = { active = it })
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(if (active) "Active" else "Suspended")
+                }
+
+                OutlinedButton(
+                    onClick = { showResetPinDialog = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.LockReset, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Reset PIN")
                 }
             }
         }

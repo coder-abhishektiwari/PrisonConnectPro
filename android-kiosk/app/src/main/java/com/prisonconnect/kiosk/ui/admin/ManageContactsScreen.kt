@@ -139,8 +139,8 @@ fun ManageContactsScreen(
     if (showAddDialog) {
         AddContactDialog(
             onDismiss = { showAddDialog = false },
-            onConfirm = { name, mobile, relation ->
-                viewModel.addContact(prisonerId, name, mobile, relation)
+            onConfirm = { name, mobile, relation, address, city, state ->
+                viewModel.addContact(prisonerId, name, mobile, relation, address, city, state)
                 showAddDialog = false
             }
         )
@@ -151,8 +151,8 @@ fun ManageContactsScreen(
         EditContactDialog(
             contact = contact,
             onDismiss = { showEditDialog = null },
-            onConfirm = { name, mobile, relation ->
-                viewModel.editContact(contact.contactId, prisonerId, name, mobile, relation)
+            onConfirm = { name, mobile, relation, address, city, state ->
+                viewModel.editContact(contact.contactId, prisonerId, name, mobile, relation, address, city, state)
                 showEditDialog = null
             }
         )
@@ -254,11 +254,14 @@ fun EmptyContactsView(modifier: Modifier = Modifier) {
 @Composable
 fun AddContactDialog(
     onDismiss: () -> Unit,
-    onConfirm: (String, String, String) -> Unit
+    onConfirm: (String, String, String, String, String, String) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var mobile by remember { mutableStateOf("") }
     var relation by remember { mutableStateOf("") }
+    var address by remember { mutableStateOf("") }
+    var city by remember { mutableStateOf("") }
+    var state by remember { mutableStateOf("") }
     var nameError by remember { mutableStateOf(false) }
     var mobileError by remember { mutableStateOf(false) }
 
@@ -290,6 +293,28 @@ fun AddContactDialog(
                     label = { Text("Relationship") },
                     singleLine = true
                 )
+                OutlinedTextField(
+                    value = address,
+                    onValueChange = { address = it },
+                    label = { Text("Address") },
+                    singleLine = true
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = city,
+                        onValueChange = { city = it },
+                        label = { Text("City") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = state,
+                        onValueChange = { state = it },
+                        label = { Text("State") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                }
             }
         },
         confirmButton = {
@@ -297,7 +322,7 @@ fun AddContactDialog(
                 nameError = name.isBlank()
                 mobileError = mobile.isBlank()
                 if (!nameError && !mobileError) {
-                    onConfirm(name.trim(), mobile.trim(), relation.trim())
+                    onConfirm(name.trim(), mobile.trim(), relation.trim(), address.trim(), city.trim(), state.trim())
                 }
             }) { Text("Add") }
         },
@@ -311,11 +336,14 @@ fun AddContactDialog(
 fun EditContactDialog(
     contact: VerifiedContact,
     onDismiss: () -> Unit,
-    onConfirm: (String, String, String) -> Unit
+    onConfirm: (String, String, String, String, String, String) -> Unit
 ) {
     var name by remember { mutableStateOf(contact.displayName) }
     var mobile by remember { mutableStateOf(contact.phone) }
     var relation by remember { mutableStateOf(contact.relationship ?: "") }
+    var address by remember { mutableStateOf(contact.address ?: "") }
+    var city by remember { mutableStateOf("") }
+    var state by remember { mutableStateOf("") }
     var nameError by remember { mutableStateOf(false) }
     var mobileError by remember { mutableStateOf(false) }
 
@@ -347,6 +375,28 @@ fun EditContactDialog(
                     label = { Text("Relationship") },
                     singleLine = true
                 )
+                OutlinedTextField(
+                    value = address,
+                    onValueChange = { address = it },
+                    label = { Text("Address") },
+                    singleLine = true
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = city,
+                        onValueChange = { city = it },
+                        label = { Text("City") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = state,
+                        onValueChange = { state = it },
+                        label = { Text("State") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                }
             }
         },
         confirmButton = {
@@ -354,7 +404,7 @@ fun EditContactDialog(
                 nameError = name.isBlank()
                 mobileError = mobile.isBlank()
                 if (!nameError && !mobileError) {
-                    onConfirm(name.trim(), mobile.trim(), relation.trim())
+                    onConfirm(name.trim(), mobile.trim(), relation.trim(), address.trim(), city.trim(), state.trim())
                 }
             }) { Text("Save") }
         },

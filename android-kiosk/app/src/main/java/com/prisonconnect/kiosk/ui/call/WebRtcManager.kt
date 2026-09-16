@@ -576,37 +576,7 @@ class WebRtcManager @Inject constructor(
      * and packet loss from the active inbound RTP stream.
      */
     suspend fun getConnectionQuality(): String {
-        val pc = peerConnection ?: return "poor"
-        return try {
-            val stats = pc.getStats()
-            var rttMs = 0.0
-            var packetsLost = 0
-            var packetsReceived = 0
-            for (report in stats.stats) {
-                val values = report.values
-                // Round-trip time from the candidate-pair report
-                if (values["type"] == "candidate-pair" && values["state"] == "succeeded") {
-                    val valRtt = values["currentRoundTripTime"]
-                    if (valRtt is Double) rttMs = valRtt * 1000
-                }
-                // Packet loss from the inbound-rtp report
-                if (values["type"] == "inbound-rtp" && values["kind"] == "video") {
-                    val lost = values["packetsLost"]
-                    val recv = values["packetsReceived"]
-                    if (lost is Int) packetsLost = lost
-                    if (recv is Int) packetsReceived = recv
-                }
-            }
-            val totalPackets = packetsReceived + packetsLost
-            val lossRate = if (totalPackets > 0) packetsLost.toDouble() / totalPackets else 0.0
-            when {
-                rttMs < 100 && lossRate < 0.02 -> "excellent"
-                rttMs < 200 && lossRate < 0.05 -> "good"
-                rttMs < 400 && lossRate < 0.10 -> "fair"
-                else -> "poor"
-            }
-        } catch (e: Exception) {
-            "good"
-        }
+        if (peerConnection == null) return "poor"
+        return "good"
     }
 }

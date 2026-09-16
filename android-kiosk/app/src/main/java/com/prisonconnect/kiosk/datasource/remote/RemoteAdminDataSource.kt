@@ -60,6 +60,9 @@ class RemoteAdminDataSource @Inject constructor(
     override suspend fun deleteBiometric(biometricId: String): ApiResponse<Unit> =
         apiService.deleteBiometric(biometricId).also { cache.invalidatePrefix("admin:biometrics") }
 
+    override suspend fun resetPrisonerPin(prisonerId: String, body: Map<String, String>): ApiResponse<Map<String, String>> =
+        apiService.resetPrisonerPin(prisonerId, body)
+
     override suspend fun getDevices(): ApiResponse<List<KioskDevice>> =
         cache.getOrFetch("admin:devices") { apiService.getAdminDevices() }
 

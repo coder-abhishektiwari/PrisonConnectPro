@@ -158,6 +158,12 @@ interface TrustApiService {
     @DELETE("admin/prisoners/{prisonerId}")
     suspend fun deletePrisoner(@Path("prisonerId") prisonerId: String): ApiResponse<Unit>
 
+    @POST("admin/prisoners/{prisonerId}/reset-pin")
+    suspend fun resetPrisonerPin(
+        @Path("prisonerId") prisonerId: String,
+        @Body body: Map<String, String>
+    ): ApiResponse<Map<String, String>>
+
     // Contacts
     @GET("admin/prisoners/{prisonerId}/contacts")
     suspend fun getPrisonerContacts(@Path("prisonerId") prisonerId: String): ApiResponse<List<VerifiedContact>>

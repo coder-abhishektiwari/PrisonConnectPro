@@ -16,6 +16,7 @@ import com.prisonconnect.kiosk.ui.dashboard.DashboardScreen
 import com.prisonconnect.kiosk.models.call.ScheduledCall
 import com.prisonconnect.kiosk.ui.admin.AddPrisonerScreen
 import com.prisonconnect.kiosk.ui.admin.AdminDashboardScreen
+import com.prisonconnect.kiosk.ui.admin.BiometricRegistrationScreen
 import com.prisonconnect.kiosk.ui.admin.DeviceInfoScreen
 import com.prisonconnect.kiosk.ui.admin.ManagePrisonersScreen
 import com.prisonconnect.kiosk.ui.receipt.CallSummaryScreen
@@ -41,6 +42,7 @@ object KioskRoutes {
     const val ADMIN_MANAGE_PRISONERS = "admin_manage_prisoners"
     const val ADMIN_EDIT_PRISONER = "admin_edit_prisoner/{prisonerId}"
     const val ADMIN_PRISONER_CONTACTS = "admin_prisoner_contacts/{prisonerId}"
+    const val ADMIN_PRISONER_BIOMETRICS = "admin_prisoner_biometrics/{prisonerId}/{prisonerName}"
     const val ADMIN_DEVICE_INFO = "admin_device_info"
     const val WALLET = "wallet"
     const val SCHEDULE = "schedule/{contactId}/{contactName}/{callType}"
@@ -204,6 +206,9 @@ fun KioskNavHost(
                 },
                 onManageContactsClick = { prisonerId ->
                     navController.navigate("admin_prisoner_contacts/$prisonerId")
+                },
+                onBiometricsClick = { prisonerId, prisonerName ->
+                    navController.navigate("admin_prisoner_biometrics/$prisonerId/$prisonerName")
                 }
             )
         }
@@ -219,6 +224,15 @@ fun KioskNavHost(
             val prisonerId = backStackEntry.arguments?.getString("prisonerId") ?: ""
             com.prisonconnect.kiosk.ui.admin.ManageContactsScreen(
                 prisonerId = prisonerId,
+                onBackClick = { navController.popBackStack() }
+            )
+        }
+        composable(KioskRoutes.ADMIN_PRISONER_BIOMETRICS) { backStackEntry ->
+            val prisonerId = backStackEntry.arguments?.getString("prisonerId") ?: ""
+            val prisonerName = backStackEntry.arguments?.getString("prisonerName") ?: ""
+            com.prisonconnect.kiosk.ui.admin.BiometricRegistrationScreen(
+                prisonerId = prisonerId,
+                prisonerName = prisonerName,
                 onBackClick = { navController.popBackStack() }
             )
         }

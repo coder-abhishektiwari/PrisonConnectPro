@@ -210,6 +210,19 @@ class AdminRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun resetPrisonerPin(prisonerId: String, pin: String): NetworkResult<String> {
+        return try {
+            val response = dataSource.resetPrisonerPin(prisonerId, mapOf("pin" to pin))
+            if (response.success) {
+                NetworkResult.Success(response.data?.get("message") ?: "PIN reset")
+            } else {
+                NetworkResult.Failure(response.error ?: ApiError("UNKNOWN", "Unknown error"))
+            }
+        } catch (e: Exception) {
+            NetworkResult.Failure(ApiError("EXCEPTION", e.message ?: "Network exception"))
+        }
+    }
+
     override fun getDevices(): Flow<NetworkResult<List<KioskDevice>>> = flow {
         emit(NetworkResult.Loading)
         try {

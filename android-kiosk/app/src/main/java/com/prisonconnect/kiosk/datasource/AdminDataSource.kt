@@ -29,6 +29,9 @@ interface AdminDataSource {
     suspend fun registerBiometric(prisonerId: String, request: RegisterBiometricRequest): ApiResponse<BiometricRegistration>
     suspend fun deleteBiometric(biometricId: String): ApiResponse<Unit>
 
+    // PIN Reset
+    suspend fun resetPrisonerPin(prisonerId: String, body: Map<String, String>): ApiResponse<Map<String, String>>
+
     // Admin Profile
     suspend fun getAdminProfile(): ApiResponse<AdminProfile>
 

@@ -13,6 +13,7 @@ data class Prisoner(
     @SerializedName("lastName") val lastName: String? = null,
     @SerializedName("fullName") val fullName: String? = null,
     @SerializedName("dateOfBirth") val dateOfBirth: String? = null,
+    @SerializedName("dateOfAdmission") val dateOfAdmission: String? = null,
     @SerializedName("gender") val gender: String? = null,
     @SerializedName("prisonId") val prisonId: String? = null,
     @SerializedName("facility") val facility: String? = null,
@@ -60,6 +61,9 @@ data class VerifiedContact(
     @SerializedName("approvalStatus") val approvalStatus: String? = null,
     @SerializedName("verificationStatus") val verificationStatus: String? = null,
     @SerializedName("email") val email: String? = null,
+    @SerializedName("address") val address: String? = null,
+    @SerializedName("city") val city: String? = null,
+    @SerializedName("state") val state: String? = null,
     @SerializedName("photoUrl") val photoUrl: String? = null,
     @SerializedName("lastCall") val lastCall: String? = null,
     @SerializedName("nextScheduledCall") val nextScheduledCall: String? = null,
@@ -167,9 +171,15 @@ data class CreatePrisonerRequest(
 data class EditPrisonerRequest(
     @SerializedName("name") val name: String? = null,
     @SerializedName("mobileNumber") val mobileNumber: String? = null,
-    @SerializedName("cellBlock") val cellBlock: String? = null,
+    @SerializedName("prisonerNumber") val prisonerNumber: String? = null,
+    @SerializedName("dateOfAdmission") val dateOfAdmission: String? = null,
+    @SerializedName("cellId") val cellId: String? = null,
+    @SerializedName("blockId") val blockId: String? = null,
     @SerializedName("securityLevel") val securityLevel: String? = null,
+    @SerializedName("sentenceStart") val sentenceStart: String? = null,
+    @SerializedName("sentenceEnd") val sentenceEnd: String? = null,
     @SerializedName("sentenceDetails") val sentenceDetails: String? = null,
+    @SerializedName("assignedKioskId") val assignedKioskId: String? = null,
     @SerializedName("status") val status: String? = null,
     @SerializedName("active") val active: Boolean? = null
 )
@@ -184,6 +194,9 @@ data class CreateContactRequest(
     @SerializedName("mobileNumber") val mobileNumber: String,
     @SerializedName("relationship") val relationship: String,
     @SerializedName("email") val email: String? = null,
+    @SerializedName("address") val address: String? = null,
+    @SerializedName("city") val city: String? = null,
+    @SerializedName("state") val state: String? = null,
     @SerializedName("verified") val verified: Boolean = false
 )
 
@@ -192,6 +205,9 @@ data class UpdateContactRequest(
     @SerializedName("mobileNumber") val mobileNumber: String? = null,
     @SerializedName("relationship") val relationship: String? = null,
     @SerializedName("email") val email: String? = null,
+    @SerializedName("address") val address: String? = null,
+    @SerializedName("city") val city: String? = null,
+    @SerializedName("state") val state: String? = null,
     @SerializedName("verified") val verified: Boolean? = null
 )
 

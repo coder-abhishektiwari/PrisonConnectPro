@@ -36,9 +36,15 @@ class EditPrisonerViewModel @Inject constructor(
         prisonerId: String,
         fullName: String,
         mobileNumber: String,
-        cellBlock: String,
+        prisonerNumber: String,
+        dateOfAdmission: String,
+        cellId: String,
+        blockId: String,
         securityLevel: String,
+        sentenceStart: String,
+        sentenceEnd: String,
         sentenceDetails: String,
+        assignedKioskId: String,
         status: String,
         active: Boolean
     ) {
@@ -46,9 +52,15 @@ class EditPrisonerViewModel @Inject constructor(
         val request = EditPrisonerRequest(
             name = fullName.ifBlank { null },
             mobileNumber = mobileNumber.ifBlank { null },
-            cellBlock = cellBlock.ifBlank { null },
+            prisonerNumber = prisonerNumber.ifBlank { null },
+            dateOfAdmission = dateOfAdmission.ifBlank { null },
+            cellId = cellId.ifBlank { null },
+            blockId = blockId.ifBlank { null },
             securityLevel = securityLevel.ifBlank { null },
+            sentenceStart = sentenceStart.ifBlank { null },
+            sentenceEnd = sentenceEnd.ifBlank { null },
             sentenceDetails = sentenceDetails.ifBlank { null },
+            assignedKioskId = assignedKioskId.ifBlank { null },
             status = status,
             active = active
         )

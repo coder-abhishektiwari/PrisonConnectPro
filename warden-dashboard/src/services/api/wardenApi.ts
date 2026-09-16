@@ -727,6 +727,10 @@ export const wardenApi = {
   // Toggle contact active/inactive
   toggleContact: (contactId: string) =>
     apiClient.patch<ApiResponse<any>>(`/contacts/admin/contacts/${contactId}/toggle`).then((r) => r.data?.data),
+
+  // Reset inmate PIN
+  resetInmatePin: (inmateId: string, pin: string) =>
+    apiClient.post<ApiResponse<any>>(`/admin/prisoners/${inmateId}/reset-pin`, { pin }).then((r) => r.data?.data),
 };
 
 export interface KioskRegistrationRequestItem {
