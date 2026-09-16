@@ -131,42 +131,6 @@ export function KioskRegistrationPage() {
     <div className="space-y-6">
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
 
-      {/* Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        <button onClick={() => handleFilterChange('pending')} className={`p-4 rounded-xl border text-left transition ${filter === 'pending' ? 'bg-warning/10 border-warning/40' : 'bg-white border-neutral-200 hover:border-warning/30'}`}>
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase text-warning">Pending</span>
-            <span className="w-2 h-2 bg-warning rounded-full animate-pulse" />
-          </div>
-          <p className="text-3xl font-extrabold text-neutral-900 mt-2">{pendingCount}</p>
-          <p className="text-xs text-neutral-500 mt-1">Requires Review</p>
-        </button>
-        <button onClick={() => handleFilterChange('approved')} className={`p-4 rounded-xl border text-left transition ${filter === 'approved' ? 'bg-success/10 border-success/40' : 'bg-white border-neutral-200 hover:border-success/30'}`}>
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase text-success">Approved</span>
-            <span className="w-2 h-2 bg-success rounded-full" />
-          </div>
-          <p className="text-3xl font-extrabold text-neutral-900 mt-2">{approvedCount}</p>
-          <p className="text-xs text-neutral-500 mt-1">Active & Provisioned</p>
-        </button>
-        <button onClick={() => handleFilterChange('rejected')} className={`p-4 rounded-xl border text-left transition ${filter === 'rejected' ? 'bg-error/10 border-error/40' : 'bg-white border-neutral-200 hover:border-error/30'}`}>
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase text-error">Rejected</span>
-            <span className="w-2 h-2 bg-error rounded-full" />
-          </div>
-          <p className="text-3xl font-extrabold text-neutral-900 mt-2">{rejectedCount}</p>
-          <p className="text-xs text-neutral-500 mt-1">Access Denied</p>
-        </button>
-        <button onClick={() => handleFilterChange('all')} className={`p-4 rounded-xl border text-left transition ${filter === 'all' ? 'bg-primary-50 border-primary-300' : 'bg-white border-neutral-200 hover:border-primary-200'}`}>
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase text-primary-700">All Requests</span>
-            <span className="w-2 h-2 bg-primary-500 rounded-full" />
-          </div>
-          <p className="text-3xl font-extrabold text-neutral-900 mt-2">{counts.total}</p>
-          <p className="text-xs text-neutral-500 mt-1">Total Requests</p>
-        </button>
-      </div>
-
       {/* Filter Tabs & Search */}
       <Card>
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 border-b border-neutral-200">

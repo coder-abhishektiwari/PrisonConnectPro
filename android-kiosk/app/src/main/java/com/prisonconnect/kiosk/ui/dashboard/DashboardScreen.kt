@@ -550,8 +550,28 @@ private fun InmateProfileCard(
                         modifier = Modifier.weight(1f, fill = false)
                     )
 
+                    val statusColor = when (inmateProfile.status) {
+                        InmateStatus.ACTIVE -> GreenActiveBg
+                        InmateStatus.INACTIVE, InmateStatus.SUSPENDED, InmateStatus.RESTRICTED -> Color(0xFFFFF3E0)
+                        InmateStatus.RELEASED, InmateStatus.TRANSFERRED -> Color(0xFFE3F2FD)
+                        null -> Color(0xFFF5F5F5)
+                    }
+                    val statusTextColor = when (inmateProfile.status) {
+                        InmateStatus.ACTIVE -> GreenActiveText
+                        InmateStatus.INACTIVE, InmateStatus.SUSPENDED, InmateStatus.RESTRICTED -> Color(0xFFE65100)
+                        InmateStatus.RELEASED, InmateStatus.TRANSFERRED -> Color(0xFF1565C0)
+                        null -> Color(0xFF9E9E9E)
+                    }
+                    val statusIcon = when (inmateProfile.status) {
+                        InmateStatus.ACTIVE -> Icons.Outlined.CheckCircle
+                        InmateStatus.INACTIVE, InmateStatus.SUSPENDED, InmateStatus.RESTRICTED -> Icons.Outlined.Warning
+                        InmateStatus.RELEASED, InmateStatus.TRANSFERRED -> Icons.Outlined.Info
+                        null -> Icons.Outlined.HelpOutline
+                    }
+                    val statusText = inmateProfile.status?.name?.uppercase() ?: "UNKNOWN"
+
                     Surface(
-                        color = GreenActiveBg,
+                        color = statusColor,
                         shape = RoundedCornerShape(50)
                     ) {
                         Row(
@@ -560,14 +580,14 @@ private fun InmateProfileCard(
                             horizontalArrangement = Arrangement.spacedBy(3.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Outlined.CheckCircle,
+                                imageVector = statusIcon,
                                 contentDescription = null,
-                                tint = GreenActiveText,
+                                tint = statusTextColor,
                                 modifier = Modifier.size(11.dp)
                             )
                             Text(
-                                text = inmateProfile.status.name.uppercase(),
-                                color = GreenActiveText,
+                                text = statusText,
+                                color = statusTextColor,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold
                             )

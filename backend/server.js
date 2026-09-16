@@ -348,8 +348,9 @@ const { getStatement, resolveInmate } = require('./lib/jail-account');
 app.get('/inmate/profile/:inmateId', requireAuth, asyncRoute(async (req, res) => {
   const id = req.params.inmateId;
   const inmate = await resolveInmate(id);
-  if (!inmate) return sendError(res, 'NOT_FOUND', 'Inmate not found', 404);
-  if (!(await inScopeOf(req, inmate))) return sendError(res, 'NOT_FOUND', 'Inmate not found', 404);
+  if (!inmate) return sendError(res, 'NOT_FOUND', 'Record not found', 404);
+  if (!(await inScopeOf(req, inmate))) return sendError(res, 'NOT_FOUND', 'Record not found', 404);
+  if (inmate.status && inmate.status !== 'active') return sendError(res, 'NOT_FOUND', 'Record not found', 404);
   return sendSuccess(res, {
     inmateId: inmate.inmateId,
     name: inmate.name || inmate.fullName || [inmate.firstName, inmate.lastName].filter(Boolean).join(' ').trim() || 'Unknown',
@@ -365,11 +366,11 @@ app.get('/inmate/profile/:inmateId', requireAuth, asyncRoute(async (req, res) =>
 
 app.get('/inmate/balance/:inmateId', requireAuth, asyncRoute(async (req, res) => {
   const id = req.params.inmateId;
-  // Scope check
   const inmates = await readDb('inmates.json');
   const inmate = inmates.find((i) => i.inmateId === id);
-  if (!inmate) return sendError(res, 'NOT_FOUND', 'Inmate not found', 404);
-  if (!(await inScopeOf(req, inmate))) return sendError(res, 'NOT_FOUND', 'Inmate not found', 404);
+  if (!inmate) return sendError(res, 'NOT_FOUND', 'Record not found', 404);
+  if (!(await inScopeOf(req, inmate))) return sendError(res, 'NOT_FOUND', 'Record not found', 404);
+  if (inmate.status && inmate.status !== 'active') return sendError(res, 'NOT_FOUND', 'Record not found', 404);
   const statement = await getStatement(id);
   if (!statement) return sendError(res, 'NOT_FOUND', 'Inmate or wallet not found', 404);
   const { wallet } = statement;

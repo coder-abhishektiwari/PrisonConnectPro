@@ -7,22 +7,27 @@ data class InmateProfile(
     @SerializedName("name") val name: String = "",
     @SerializedName("firstName") val firstName: String = "",
     @SerializedName("lastName") val lastName: String = "",
-    @SerializedName("prisonId") val prisonId: String,
-    @SerializedName("facility") val facility: String,
-    @SerializedName("cellBlock") val cellBlock: String,
-    @SerializedName("status") val status: InmateStatus,
+    @SerializedName("prisonId") val prisonId: String = "",
+    @SerializedName("facility") val facility: String = "",
+    @SerializedName("cellBlock") val cellBlock: String = "",
+    @SerializedName("status") val status: InmateStatus? = null,
     @SerializedName("photoUrl") val photoUrl: String? = null,
     @SerializedName("securityLevel") val securityLevel: String? = null,
     @SerializedName("sentenceDetails") val sentenceDetails: String? = null
 ) {
     val displayName: String
         get() = name.ifEmpty { "$firstName $lastName".trim() }.ifEmpty { "Unknown" }
+    val isActive: Boolean
+        get() = status == InmateStatus.ACTIVE
 }
 
 enum class InmateStatus {
     @SerializedName("active") ACTIVE,
+    @SerializedName("inactive") INACTIVE,
     @SerializedName("restricted") RESTRICTED,
-    @SerializedName("suspended") SUSPENDED
+    @SerializedName("suspended") SUSPENDED,
+    @SerializedName("released") RELEASED,
+    @SerializedName("transferred") TRANSFERRED
 }
 
 data class InmateBalance(
