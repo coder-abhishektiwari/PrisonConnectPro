@@ -33,28 +33,32 @@ export function InmateDetailPage() {
   const [newPin, setNewPin] = useState('');
   const [resetPinError, setResetPinError] = useState('');
   const [resetPinSuccess, setResetPinSuccess] = useState(false);
+  const [nextId, setNextId] = useState<string>('');
 
   const load = useCallback(async () => {
     try {
       setLoadError(null);
-      const dropdowns = Promise.all([
-        wardenApi.getCells().catch(() => []),
-        wardenApi.getBlocks().catch(() => []),
-        apiClient.get('/kiosks').then(r => r.data?.data?.items ?? r.data?.data ?? []).catch(() => []),
-      ]);
       if (isNew) {
-        const [cells, blocks, kiosks] = await dropdowns;
+        const [cells, blocks, kiosks, generatedId] = await Promise.all([
+          wardenApi.getCells().catch(() => []),
+          wardenApi.getBlocks().catch(() => []),
+          apiClient.get('/kiosks').then(r => r.data?.data?.items ?? r.data?.data ?? []).catch(() => []),
+          wardenApi.getNextInmateId().catch(() => ''),
+        ]);
         setCellNames(cells.map((c: any) => ({ id: c.cellId, name: c.name })).filter(c => c.id && c.name));
         setBlockNames(blocks.map((b: any) => ({ id: b.blockId, name: b.name })).filter(b => b.id && b.name));
         setKioskNames(kiosks.map((k: any) => ({ id: k.kioskId, name: k.kioskId })).filter(k => k.id));
+        setNextId(generatedId || '');
         setLoading(false);
         return;
       }
       const [im, co, cells, blocks, kiosks] = await Promise.all([
         wardenApi.getInmate(inmateId),
         apiClient.get(`/contacts/admin/prisoners/${inmateId}/contacts`).then(r => r.data?.data ?? []),
-        dropdowns,
-      ]).then(([im, co, dd]) => [im, co, dd[0], dd[1], dd[2]]);
+        wardenApi.getCells().catch(() => []),
+        wardenApi.getBlocks().catch(() => []),
+        apiClient.get('/kiosks').then(r => r.data?.data?.items ?? r.data?.data ?? []).catch(() => []),
+      ]);
       setInmate(im ?? null);
       setContacts(Array.isArray(co) ? co : []);
       setCellNames(cells.map((c: any) => ({ id: c.cellId, name: c.name })).filter(c => c.id && c.name));
@@ -78,8 +82,7 @@ export function InmateDetailPage() {
     setSaving(true);
     try {
       if (isNew) {
-        const payload = { ...editData, status: 'active', photoUrl: '' } as any;
-        delete payload.inmateId;
+        const payload = { ...editData, inmateId: nextId, status: 'active', photoUrl: '' } as any;
         const saved = await wardenApi.createInmate(payload);
         if (saved) navigate(`/inmates-family/${saved.inmateId}`, { replace: true });
       } else {
@@ -358,8 +361,9 @@ export function InmateDetailPage() {
               <span className="material-icons text-neutral-400 text-lg">badge</span>
               <div>
                 <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">Inmate ID</p>
-                <p className="text-sm text-neutral-400 italic">Auto-generated on save</p>
+                <p className="text-sm text-neutral-900 font-mono font-bold">{nextId || 'Generating...'}</p>
               </div>
+              <span className="ml-auto px-2 py-0.5 bg-primary-50 text-primary-700 text-[10px] font-bold rounded-full uppercase">Auto-generated</span>
             </div>
           ) : fieldRow('Inmate ID', 'inmateId', 'badge', { readOnly: true })}
           {fieldRow('Prisoner Number', 'prisonerNumber', 'tag')}

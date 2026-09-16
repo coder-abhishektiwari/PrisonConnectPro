@@ -439,6 +439,9 @@ export const wardenApi = {
   getInmate: (inmateId: string) =>
     cachedGet(`inmates:${inmateId}`, () => apiClient.get<ApiResponse<Inmate>>(`/inmates/${inmateId}`).then((r) => r.data?.data)),
 
+  getNextInmateId: () =>
+    apiClient.get<ApiResponse<{ nextId: string }>>('/inmates/next-id').then((r) => r.data?.data?.nextId),
+
   createInmate: (data: Partial<Inmate> & {kioskId?:string}) =>
     apiClient.post<ApiResponse<Inmate>>('/inmates', data).then((r) => { invalidateCache('inmates'); return r.data?.data; }),
 

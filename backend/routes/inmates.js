@@ -172,6 +172,15 @@ async function inmateDeleteHandler(req, res) {
 
 // ==================== SHORT ALIASES (must be before /:inmateId) ====================
 
+router.get('/next-id', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+  const inmates = await readDb('inmates.json');
+  const maxId = inmates.reduce((max, i) => {
+    const n = parseInt(i.inmateId, 10);
+    return !isNaN(n) && n > max ? n : max;
+  }, 100000);
+  return sendSuccess(res, { nextId: String(maxId + 1) });
+}));
+
 router.get('/prisoners', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(inmateListHandler));
 router.get('/prisoners/:inmateId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(inmateGetHandler));
 router.post('/prisoners', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(inmateCreateHandler));
