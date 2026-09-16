@@ -121,7 +121,7 @@ interface TrustApiService {
     @POST("recordings/upload")
     suspend fun uploadRecording(@Body request: RecordingUploadRequest): ApiResponse<RecordingUploadResponse>
 
-    @DELETE("schedule/cancel/{bookingId}")
+    @PATCH("schedule/cancel/{bookingId}")
     suspend fun cancelBooking(@Path("bookingId") bookingId: String): ApiResponse<Unit>
 
     @GET("settings")

@@ -135,18 +135,18 @@ router.post('/book', requireAuth, asyncRoute(async (req, res) => {
   return sendSuccess(res, newSchedule, 201);
 }));
 
-router.delete('/cancel/:bookingId', requireAuth, asyncRoute(async (req, res) => {
+router.patch('/cancel/:bookingId', requireAuth, asyncRoute(async (req, res) => {
   const existing = (await readDb('schedule.json')).find((s) => s.scheduleId === req.params.bookingId);
   if (!existing || !(await inScopeOf(req, existing))) {
     return sendError(res, 'NOT_FOUND', 'Booking not found', 404);
   }
-  const deleted = await updateDb('schedule.json', (schedules) => {
+  const updated = await updateDb('schedule.json', (schedules) => {
     const idx = schedules.findIndex((s) => s.scheduleId === req.params.bookingId);
     if (idx === -1) return { data: schedules, result: null };
-    schedules.splice(idx, 1);
+    schedules[idx] = { ...schedules[idx], status: 'cancelled' };
     return { data: schedules, result: true };
   });
-  if (!deleted) return sendError(res, 'NOT_FOUND', 'Booking not found', 404);
+  if (!updated) return sendError(res, 'NOT_FOUND', 'Booking not found', 404);
   return sendSuccess(res, { message: 'Booking cancelled successfully' });
 }));
 

@@ -511,8 +511,10 @@ fun ScheduleDetailDialog(
     timeSlot: String,
     callType: String,
     status: String,
+    scheduleId: String = "",
     onDismiss: () -> Unit,
     onStartCall: (contactId: String, roomId: String, isVideo: Boolean) -> Unit,
+    onCancelSchedule: ((scheduleId: String) -> Unit)? = null,
     viewModel: RoomViewModel = hiltViewModel()
 ) {
     val createRoomState by viewModel.createRoomState.collectAsState()
@@ -621,6 +623,21 @@ fun ScheduleDetailDialog(
                         Text("Start Call", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.White)
                     }
                 }
+
+                if (onCancelSchedule != null && scheduleId.isNotEmpty() && status.equals("booked", true)) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = { onCancelSchedule(scheduleId) },
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red),
+                        border = BorderStroke(1.dp, Color.Red.copy(alpha = 0.5f))
+                    ) {
+                        Icon(Icons.Default.Cancel, contentDescription = null, tint = Color.Red)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Cancel Schedule", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.Red)
+                    }
+                }
             }
         },
         confirmButton = {},
@@ -660,3 +677,4 @@ private fun DetailRow(label: String, value: String) {
         Text(text = value, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextDark)
     }
 }
+

@@ -51,6 +51,9 @@ class DashboardViewModel @Inject constructor(
     private val _scheduledCalls = MutableStateFlow<List<ScheduledCall>>(emptyList())
     val scheduledCalls = _scheduledCalls.asStateFlow()
 
+    private val _cancelState = MutableStateFlow<UiState<Unit>>(UiState.Idle)
+    val cancelState = _cancelState.asStateFlow()
+
     private val _callHistory = MutableStateFlow<List<CallHistory>>(emptyList())
     val callHistory = _callHistory.asStateFlow()
 
@@ -140,6 +143,29 @@ class DashboardViewModel @Inject constructor(
         viewModelScope.launch {
             authRepository.logout().collect { }
         }
+    }
+
+    fun cancelSchedule(scheduleId: String) {
+        viewModelScope.launch {
+            _cancelState.value = UiState.Loading
+            callRepository.cancelBooking(scheduleId).collect { result ->
+                when (result) {
+                    is NetworkResult.Success -> {
+                        _cancelState.value = UiState.Success(Unit)
+                        _scheduledCalls.value = _scheduledCalls.value.filter { it.id != scheduleId }
+                    }
+                    is NetworkResult.Failure -> {
+                        _cancelState.value = UiState.Error(result.error?.message ?: "Failed to cancel")
+                    }
+                    is NetworkResult.Loading -> { }
+                    is NetworkResult.Idle -> { }
+                }
+            }
+        }
+    }
+
+    fun resetCancelState() {
+        _cancelState.value = UiState.Idle
     }
 
     private fun parseScheduleDateTime(dateStr: String, timeStr: String): Long {

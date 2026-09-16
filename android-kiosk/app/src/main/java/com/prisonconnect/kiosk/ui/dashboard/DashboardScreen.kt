@@ -193,10 +193,15 @@ fun DashboardScreen(
             timeSlot = detailTimeSlot,
             callType = detailCallType,
             status = detailStatus,
+            scheduleId = detailScheduleId,
             onDismiss = { showScheduleDetailDialog = false },
             onStartCall = { contactId, roomId, isVideo ->
                 showScheduleDetailDialog = false
                 onStartCall(contactId, detailContactName, roomId, isVideo)
+            },
+            onCancelSchedule = { scheduleId ->
+                viewModel.cancelSchedule(scheduleId)
+                showScheduleDetailDialog = false
             }
         )
     }

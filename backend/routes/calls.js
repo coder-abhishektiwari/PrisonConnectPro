@@ -278,7 +278,7 @@ function createCallsRouter(broadcastEvent, signaling) {
     if (!inmate || !(await inScopeOf(req, inmate))) {
       return sendError(res, 'NOT_FOUND', 'Inmate not found in your kiosk/jail', 404);
     }
-    const matches = schedules.filter((s) => s.inmateId === inmate.inmateId || s.kioskId === inmate.assignedKioskId);
+    const matches = schedules.filter((s) => s.inmateId === inmate.inmateId);
     const scoped = await scopeList(req, matches);
     const contactName = (contactId) => contacts.find((c) => c.contactId === contactId)?.fullName || null;
     // Only live bookings: completed calls and past dates leave the list. A
@@ -302,7 +302,7 @@ function createCallsRouter(broadcastEvent, signaling) {
     if (!inmate || !(await inScopeOf(req, inmate))) {
       return sendError(res, 'NOT_FOUND', 'Inmate not found in your kiosk/jail', 404);
     }
-    const matches = calls.filter((c) => c.inmateId === inmate.inmateId || c.kioskId === inmate.assignedKioskId);
+    const matches = calls.filter((c) => c.inmateId === inmate.inmateId);
     const scoped = await scopeList(req, matches);
     const contactName = (contactId) => contacts.find((c) => c.contactId === contactId)?.fullName || null;
     const history = scoped

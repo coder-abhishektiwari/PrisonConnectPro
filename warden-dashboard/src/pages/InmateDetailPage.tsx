@@ -361,7 +361,11 @@ export function InmateDetailPage() {
               <span className="material-icons text-neutral-400 text-lg">badge</span>
               <div>
                 <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">Inmate ID</p>
-                <p className="text-sm text-neutral-900 font-mono font-bold">{nextId || 'Generating...'}</p>
+                {nextId ? (
+                  <p className="text-sm text-neutral-900 font-mono font-bold">{nextId}</p>
+                ) : (
+                  <div className="h-4 w-20 bg-neutral-200 rounded animate-pulse" />
+                )}
               </div>
               <span className="ml-auto px-2 py-0.5 bg-primary-50 text-primary-700 text-[10px] font-bold rounded-full uppercase">Auto-generated</span>
             </div>
