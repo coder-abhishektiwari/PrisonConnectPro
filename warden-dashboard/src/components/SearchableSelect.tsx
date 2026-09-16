@@ -43,13 +43,29 @@ export function SearchableSelect({ value, options, onChange, onAdd, placeholder 
   const showAdd = onAdd && !adding && query.trim() && !options.some(o => getOptName(o).toLowerCase() === query.trim().toLowerCase());
 
   const updatePosition = useCallback(() => {
-    if (ref.current) {
-      const rect = ref.current.getBoundingClientRect();
-      setDropdownPos({ top: rect.bottom + window.scrollY + 4, left: rect.left + window.scrollX, width: rect.width });
-    }
-  }, []);
+    if (!ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const dropdownHeight = Math.min(filtered.length * 40 + 80, 260);
+    const openAbove = spaceBelow < dropdownHeight + 8;
+    setDropdownPos({
+      top: openAbove ? rect.top - dropdownHeight - 4 : rect.bottom + 4,
+      left: rect.left,
+      width: rect.width,
+    });
+  }, [filtered.length]);
 
-  useEffect(() => { if (open) updatePosition(); }, [open, updatePosition]);
+  useEffect(() => {
+    if (open) {
+      updatePosition();
+      window.addEventListener('scroll', updatePosition, true);
+      window.addEventListener('resize', updatePosition);
+    }
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [open, updatePosition]);
 
   useEffect(() => {
     if (!open) { setQuery(''); setAdding(false); setAddValue(''); }
@@ -86,7 +102,7 @@ export function SearchableSelect({ value, options, onChange, onAdd, placeholder 
     <div
       ref={dropdownRef}
       className="bg-white border border-neutral-200 rounded-lg shadow-xl max-h-60 overflow-auto"
-      style={{ position: 'absolute', top: dropdownPos.top, left: dropdownPos.left, width: dropdownPos.width, zIndex: 9999 }}
+      style={{ position: 'fixed', top: dropdownPos.top, left: dropdownPos.left, width: dropdownPos.width, zIndex: 9999 }}
     >
       <div className="p-2 border-b border-neutral-100 sticky top-0 bg-white">
         <input

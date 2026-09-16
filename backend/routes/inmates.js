@@ -87,15 +87,31 @@ async function inmateCreateHandler(req, res) {
   }
   try {
     const newInmate = await updateDb('inmates.json', async (inmates) => {
-      if (inmates.find((i) => i.inmateId === inmateData.inmateId) ||
-          (inmateData.prisonerNumber && inmates.find((i) => i.prisonerNumber === inmateData.prisonerNumber))) {
-        const err = new Error('Inmate with this ID or prisoner number already exists');
+      if (inmateData.prisonerNumber && inmates.find((i) => i.prisonerNumber === inmateData.prisonerNumber)) {
+        const err = new Error('Inmate with this prisoner number already exists');
+        err.code = 'DUPLICATE';
+        throw err;
+      }
+      let inmateId = inmateData.inmateId;
+      if (!inmateId) {
+        const existingIds = new Set(inmates.map(i => i.inmateId));
+        for (let attempt = 0; attempt < 50; attempt++) {
+          const candidate = String(Math.floor(100000 + Math.random() * 900000));
+          if (!existingIds.has(candidate)) { inmateId = candidate; break; }
+        }
+        if (!inmateId) {
+          const err = new Error('Failed to generate unique inmate ID');
+          err.code = 'GENERATION_FAILED';
+          throw err;
+        }
+      } else if (inmates.find((i) => i.inmateId === inmateId)) {
+        const err = new Error('Inmate with this ID already exists');
         err.code = 'DUPLICATE';
         throw err;
       }
       const record = {
         ...inmateData,
-        inmateId: inmateData.inmateId || `INM-${uuidv4().substring(0, 8).toUpperCase()}`,
+        inmateId: inmateId,
         prisonId: jailId || inmateData.prisonId || inmateData.facility,
         facility: jailId || inmateData.facility || inmateData.prisonId,
         assignedKioskId: kioskId || inmateData.assignedKioskId,

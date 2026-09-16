@@ -1,55 +1,23 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '@/components/Card';
 import { Loading } from '@/components/States';
 import { wardenApi } from '@/services/api/wardenApi';
 import { usePageHeader } from '@/context/PageHeaderContext';
+import { FilterDropdown } from '@/components/FilterDropdown';
+import type { ColumnFilter } from '@/components/FilterDropdown';
 import type { Inmate, ListParams } from '@/services/api/wardenApi';
-
-interface ColumnFilter { value: string; open: boolean; }
-
-function FilterDropdown({ label, options, filter, setFilter }: {
-  label: string; options: { value: string; label: string }[];
-  filter: ColumnFilter; setFilter: (f: ColumnFilter) => void;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setFilter({ ...filter, open: false }); };
-    if (filter.open) document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, [filter.open, setFilter]);
-  return (
-    <div ref={ref} className="relative inline-block">
-      <button onClick={() => setFilter({ ...filter, open: !filter.open })}
-        className={`inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wider hover:text-primary-600 transition-colors ${filter.value !== 'all' ? 'text-primary-600' : 'text-neutral-500'}`}>
-        {label}
-        {filter.value !== 'all' && <span className="w-4 h-4 bg-primary-600 text-white rounded-full text-[9px] flex items-center justify-center">1</span>}
-        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-      </button>
-      {filter.open && (
-        <div className="absolute top-full left-0 mt-1 bg-white border border-neutral-200 rounded-xl shadow-xl z-50 min-w-[140px] py-1">
-          <button onClick={() => setFilter({ value: 'all', open: false })} className={`w-full text-left px-3 py-2 text-sm hover:bg-neutral-50 ${filter.value === 'all' ? 'font-bold text-primary-600' : 'text-neutral-700'}`}>All {label}</button>
-          {options.map((o) => (
-            <button key={o.value} onClick={() => setFilter({ value: o.value, open: false })} className={`w-full text-left px-3 py-2 text-sm hover:bg-neutral-50 ${filter.value === o.value ? 'font-bold text-primary-600' : 'text-neutral-700'}`}>{o.label}</button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 export function InmateFamilyPage() {
   const navigate = useNavigate();
   const [inmates, setInmates] = useState<Inmate[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showAddInmate, setShowAddInmate] = useState(false);
   const [searchPrisoner, setSearchPrisoner] = useState('');
   const [filterGender, setFilterGender] = useState<ColumnFilter>({ value: 'all', open: false });
   const [filterSecurity, setFilterSecurity] = useState<ColumnFilter>({ value: 'all', open: false });
   const [filterCell, setFilterCell] = useState<ColumnFilter>({ value: 'all', open: false });
   const [filterBlock, setFilterBlock] = useState<ColumnFilter>({ value: 'all', open: false });
   const [filterKiosk, setFilterKiosk] = useState<ColumnFilter>({ value: 'all', open: false });
-  const [newInmate, setNewInmate] = useState({ name: '', inmateId: '', facility: '', assignedKioskId: '' });
   const [loadError, setLoadError] = useState<string | null>(null);
   const [prisonerPage, setPrisonerPage] = useState(1);
   const [prisonerTotal, setPrisonerTotal] = useState(0);
@@ -96,13 +64,6 @@ export function InmateFamilyPage() {
     } catch { }
   };
 
-  const addInmate = async () => {
-    if (!newInmate.inmateId || !newInmate.name || !newInmate.assignedKioskId) return;
-    const payload = { inmateId: newInmate.inmateId, name: newInmate.name, facility: newInmate.facility, status: 'active', photoUrl: '', securityLevel: 'medium', sentenceDetails: '', assignedKioskId: newInmate.assignedKioskId } as any;
-    try { const saved = await wardenApi.createInmate(payload); setInmates(s => [...s, (saved || payload) as Inmate]); } catch { setInmates(s => [...s, payload as Inmate]); }
-    setNewInmate({ name: '', inmateId: '', facility: '', assignedKioskId: '' });
-    setShowAddInmate(false);
-  };
 
   const headerIcon = useMemo(() => <span className="material-icons text-primary-600 text-xl">family_restroom</span>, []);
 
@@ -139,7 +100,7 @@ export function InmateFamilyPage() {
     subtitle: `${prisonerTotal} prisoners`,
     icon: headerIcon,
     actions: useMemo(() => (
-      <button onClick={() => setShowAddInmate(true)} className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-primary-600 text-white rounded-xl text-sm font-bold hover:bg-primary-700 shadow-sm">+ Add Inmate</button>
+      <button onClick={() => navigate('/inmates-family/new')} className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-primary-600 text-white rounded-xl text-sm font-bold hover:bg-primary-700 shadow-sm">+ Add Inmate</button>
     ), []),
   });
 
@@ -224,26 +185,6 @@ export function InmateFamilyPage() {
         {prisonerTotalPages > 1 && <div className="flex items-center justify-between mt-4 px-5 pb-4"><span className="text-xs text-neutral-500">Showing {(prisonerPage - 1) * 20 + 1}-{Math.min(prisonerPage * 20, inmates.length)} of {inmates.length}</span><div className="flex items-center gap-1"><button disabled={prisonerPage === 1} onClick={() => setPrisonerPage(1)} className="px-2.5 py-1.5 border rounded-lg text-xs disabled:opacity-30 hover:bg-neutral-50">«</button><button disabled={prisonerPage === 1} onClick={() => setPrisonerPage(p => p - 1)} className="px-3 py-1.5 border rounded-lg text-xs disabled:opacity-30 hover:bg-neutral-50">Prev</button><span className="px-3 py-1.5 bg-neutral-900 text-white rounded-lg text-xs font-medium">{prisonerPage} / {prisonerTotalPages}</span><button disabled={prisonerPage === prisonerTotalPages} onClick={() => setPrisonerPage(p => p + 1)} className="px-3 py-1.5 border rounded-lg text-xs disabled:opacity-30 hover:bg-neutral-50">Next</button><button disabled={prisonerPage === prisonerTotalPages} onClick={() => setPrisonerPage(prisonerTotalPages)} className="px-2.5 py-1.5 border rounded-lg text-xs disabled:opacity-30 hover:bg-neutral-50">»</button></div></div>}
       </Card>
 
-      {showAddInmate && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setShowAddInmate(false)}>
-          <div className="bg-white rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
-            <h3 className="font-bold mb-4">Add Inmate - Assign Kiosk *</h3>
-            <input placeholder="Inmate ID (100101) *" value={newInmate.inmateId} onChange={e => setNewInmate({ ...newInmate, inmateId: e.target.value })} className="w-full mb-3 px-3 py-2 border rounded-lg" />
-            <input placeholder="Name *" value={newInmate.name} onChange={e => setNewInmate({ ...newInmate, name: e.target.value })} className="w-full mb-3 px-3 py-2 border rounded-lg" />
-            <select value={newInmate.assignedKioskId} onChange={e => setNewInmate({ ...newInmate, assignedKioskId: e.target.value })} className="w-full mb-3 px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-primary-500">
-              <option value="">Select Kiosk * (required)</option>
-              {kioskOptions.map(k => (
-                <option key={k.value} value={k.value}>{k.label}</option>
-              ))}
-            </select>
-            <input placeholder="Block" value={newInmate.facility} onChange={e => setNewInmate({ ...newInmate, facility: e.target.value })} className="w-full mb-3 px-3 py-2 border rounded-lg" />
-            <div className="flex gap-2 justify-end">
-              <button onClick={() => setShowAddInmate(false)} className="px-4 py-2 border rounded-lg">Cancel</button>
-              <button onClick={addInmate} className="px-4 py-2 bg-primary-600 text-white rounded-lg">Add</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

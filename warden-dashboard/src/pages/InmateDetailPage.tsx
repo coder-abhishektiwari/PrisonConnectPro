@@ -11,12 +11,13 @@ import type { Inmate, Contact } from '@/services/api/wardenApi';
 export function InmateDetailPage() {
   const { inmateId } = useParams<{ inmateId: string }>();
   const navigate = useNavigate();
+  const isNew = !inmateId || inmateId === 'new';
   const [inmate, setInmate] = useState<Inmate | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!isNew);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [editingInmate, setEditingInmate] = useState(false);
-  const [editData, setEditData] = useState<Partial<Inmate>>({});
+  const [editingInmate, setEditingInmate] = useState(isNew);
+  const [editData, setEditData] = useState<Partial<Inmate>>(isNew ? { status: 'active', securityLevel: 'medium', gender: 'male' } : {});
   const [saving, setSaving] = useState(false);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [editingContact, setEditingContact] = useState(false);
@@ -34,16 +35,26 @@ export function InmateDetailPage() {
   const [resetPinSuccess, setResetPinSuccess] = useState(false);
 
   const load = useCallback(async () => {
-    if (!inmateId) return;
     try {
       setLoadError(null);
-      const [im, co, cells, blocks, kiosks] = await Promise.all([
-        wardenApi.getInmate(inmateId),
-        apiClient.get(`/contacts/admin/prisoners/${inmateId}/contacts`).then(r => r.data?.data ?? []),
+      const dropdowns = Promise.all([
         wardenApi.getCells().catch(() => []),
         wardenApi.getBlocks().catch(() => []),
         apiClient.get('/kiosks').then(r => r.data?.data?.items ?? r.data?.data ?? []).catch(() => []),
       ]);
+      if (isNew) {
+        const [cells, blocks, kiosks] = await dropdowns;
+        setCellNames(cells.map((c: any) => ({ id: c.cellId, name: c.name })).filter(c => c.id && c.name));
+        setBlockNames(blocks.map((b: any) => ({ id: b.blockId, name: b.name })).filter(b => b.id && b.name));
+        setKioskNames(kiosks.map((k: any) => ({ id: k.kioskId, name: k.kioskId })).filter(k => k.id));
+        setLoading(false);
+        return;
+      }
+      const [im, co, cells, blocks, kiosks] = await Promise.all([
+        wardenApi.getInmate(inmateId),
+        apiClient.get(`/contacts/admin/prisoners/${inmateId}/contacts`).then(r => r.data?.data ?? []),
+        dropdowns,
+      ]).then(([im, co, dd]) => [im, co, dd[0], dd[1], dd[2]]);
       setInmate(im ?? null);
       setContacts(Array.isArray(co) ? co : []);
       setCellNames(cells.map((c: any) => ({ id: c.cellId, name: c.name })).filter(c => c.id && c.name));
@@ -52,7 +63,7 @@ export function InmateDetailPage() {
     } catch (e: any) {
       setLoadError(e?.response?.data?.error?.message || 'Failed to load inmate details');
     } finally { setLoading(false); }
-  }, [inmateId]);
+  }, [inmateId, isNew]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -63,15 +74,22 @@ export function InmateDetailPage() {
   };
 
   const saveInmate = async () => {
-    if (!editData.inmateId) return;
+    if (!editData.name) return;
     setSaving(true);
     try {
-      const updated = await wardenApi.updateInmate(editData.inmateId, editData);
-      if (updated) setInmate(updated);
-      else setInmate({ ...inmate!, ...editData } as Inmate);
+      if (isNew) {
+        const payload = { ...editData, status: 'active', photoUrl: '' } as any;
+        delete payload.inmateId;
+        const saved = await wardenApi.createInmate(payload);
+        if (saved) navigate(`/inmates-family/${saved.inmateId}`, { replace: true });
+      } else {
+        const updated = await wardenApi.updateInmate(editData.inmateId, editData);
+        if (updated) setInmate(updated);
+        else setInmate({ ...inmate!, ...editData } as Inmate);
+        setEditingInmate(false);
+      }
     } catch { }
     setSaving(false);
-    setEditingInmate(false);
   };
 
   const deleteInmate = async () => {
@@ -154,10 +172,10 @@ export function InmateDetailPage() {
     setShowAddFamily(false);
   };
 
-  const headerIcon = useMemo(() => <span className="material-icons text-primary-600 text-xl">person</span>, []);
+  const headerIcon = useMemo(() => <span className="material-icons text-primary-600 text-xl">{isNew ? 'person_add' : 'person'}</span>, [isNew]);
   usePageHeader({
-    title: inmate?.name || 'Inmate Details',
-    subtitle: inmate ? `${inmate.inmateId} • ${inmate.cellBlock || 'No block'}` : '',
+    title: isNew ? 'Add New Inmate' : (inmate?.name || 'Inmate Details'),
+    subtitle: isNew ? 'Fill in inmate details' : (inmate ? `${inmate.inmateId} • ${inmate.cellBlock || 'No block'}` : ''),
     icon: headerIcon,
     actions: useMemo(() => (
       <button onClick={() => navigate('/inmates-family')} className="inline-flex items-center gap-1.5 px-4 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-lg text-sm font-medium transition">
@@ -168,10 +186,10 @@ export function InmateDetailPage() {
 
   if (loading) return <Loading message="Loading inmate details..." />;
   if (loadError) return <Card><div className="text-center py-12"><p className="text-error mb-4">{loadError}</p><button onClick={() => { setLoading(true); load(); }} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm">Retry</button></div></Card>;
-  if (!inmate) return <Card><div className="text-center py-12"><p className="text-neutral-600">Inmate not found</p></div></Card>;
+  if (!isNew && !inmate) return <Card><div className="text-center py-12"><p className="text-neutral-600">Inmate not found</p></div></Card>;
 
   const fieldRow = (label: string, key: keyof Inmate, icon: string, opts?: { type?: string; radio?: string[]; placeholder?: string; readOnly?: boolean }) => {
-    const val = editingInmate ? (editData[key] ?? '') : (inmate[key] ?? '');
+    const val = editingInmate ? (editData[key] ?? '') : (inmate?.[key] ?? '');
     if (editingInmate && !opts?.readOnly) {
       if (opts?.radio) {
         return (
@@ -213,8 +231,8 @@ export function InmateDetailPage() {
   };
 
   const searchableRow = (label: string, key: keyof Inmate, icon: string, options: { id: string; name: string }[], addLabel?: string, fallbackKey?: keyof Inmate) => {
-    const val = editingInmate ? (editData[key] ?? '') : (inmate[key] ?? '');
-    const fallback = fallbackKey ? String(inmate[fallbackKey] ?? '') : '';
+    const val = editingInmate ? (editData[key] ?? '') : (inmate?.[key] ?? '');
+    const fallback = fallbackKey ? String(inmate?.[fallbackKey] ?? '') : '';
     if (editingInmate) {
       return (
         <div key={key} className="py-3 border-b border-neutral-100 last:border-0">
@@ -282,23 +300,26 @@ export function InmateDetailPage() {
   };
 
   return (
-    <div className="flex gap-6 h-[calc(100vh-120px)]">
+    <div className={`flex gap-6 h-[calc(100vh-120px)] ${isNew ? 'justify-center' : ''}`}>
       {/* LEFT — Inmate Details */}
-      <div className={`flex-1 min-w-0 overflow-y-auto ${inmate.status !== 'active' ? 'opacity-50' : ''}`}>
+      <div className={`flex-1 min-w-0 overflow-y-auto ${!isNew && inmate?.status !== 'active' ? 'opacity-50' : ''}`}>
         <Card className="overflow-hidden">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-bold uppercase tracking-wide text-neutral-700 flex items-center gap-2">
-              <span className="w-2 h-2 bg-primary-600 rounded-full" />Inmate Details
+              <button onClick={() => navigate(-1)} className="p-1 rounded-lg hover:bg-neutral-100 transition-colors" title="Go back">
+                <span className="material-icons text-neutral-500 text-xl">arrow_back</span>
+              </button>
+              <span className="w-2 h-2 bg-primary-600 rounded-full" />{isNew ? 'New Inmate' : 'Inmate Details'}
             </h2>
             <div className="flex items-center gap-2">
               {editingInmate ? (
                 <>
-                  <button onClick={() => setEditingInmate(false)} className="px-3 py-1.5 bg-white border border-neutral-200 text-neutral-700 rounded-lg text-xs font-medium hover:bg-neutral-50 transition">Cancel</button>
-                  <button onClick={saveInmate} disabled={saving} className="px-3 py-1.5 bg-primary-600 text-white rounded-lg text-xs font-medium hover:bg-primary-700 transition disabled:opacity-50">
-                    {saving ? 'Saving...' : 'Save'}
+                  {!isNew && <button onClick={() => setEditingInmate(false)} className="px-3 py-1.5 bg-white border border-neutral-200 text-neutral-700 rounded-lg text-xs font-medium hover:bg-neutral-50 transition">Cancel</button>}
+                  <button onClick={saveInmate} disabled={saving || !editData.name} className="px-3 py-1.5 bg-primary-600 text-white rounded-lg text-xs font-medium hover:bg-primary-700 transition disabled:opacity-50">
+                    {saving ? 'Saving...' : isNew ? 'Create Inmate' : 'Save'}
                   </button>
                 </>
-              ) : (
+              ) : !isNew && inmate ? (
                 <>
                   <button
                     onClick={toggleInmate}
@@ -316,20 +337,31 @@ export function InmateDetailPage() {
                     </>
                   )}
                 </>
-              )}
+              ) : null}
             </div>
           </div>
-          <div className="flex items-center gap-4 mb-6 pb-6 border-b border-neutral-200">
-            <div className="w-16 h-16 rounded-full bg-[#E9EEF3] border border-[#D1D7DB] flex items-center justify-center shrink-0">
-              <span className="material-icons text-[#8696A0] text-3xl">person</span>
+          {!isNew && inmate && (
+            <div className="flex items-center gap-4 mb-6 pb-6 border-b border-neutral-200">
+              <div className="w-16 h-16 rounded-full bg-[#E9EEF3] border border-[#D1D7DB] flex items-center justify-center shrink-0">
+                <span className="material-icons text-[#8696A0] text-3xl">person</span>
+              </div>
+              <div>
+                <p className="font-bold text-lg text-neutral-900">{inmate.name}</p>
+                <p className="text-sm text-neutral-500 font-mono">{inmate.inmateId}</p>
+              </div>
             </div>
-            <div>
-              <p className="font-bold text-lg text-neutral-900">{inmate.name}</p>
-              <p className="text-sm text-neutral-500 font-mono">{inmate.inmateId}</p>
-            </div>
-          </div>
+          )}
+          {isNew && <div className="mb-4" />}
           {fieldRow('Full Name', 'name', 'person')}
-          {fieldRow('Inmate ID', 'inmateId', 'badge', { readOnly: true })}
+          {isNew ? (
+            <div className="py-3 border-b border-neutral-100 last:border-0 flex items-center gap-3">
+              <span className="material-icons text-neutral-400 text-lg">badge</span>
+              <div>
+                <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">Inmate ID</p>
+                <p className="text-sm text-neutral-400 italic">Auto-generated on save</p>
+              </div>
+            </div>
+          ) : fieldRow('Inmate ID', 'inmateId', 'badge', { readOnly: true })}
           {fieldRow('Prisoner Number', 'prisonerNumber', 'tag')}
           {fieldRow('Gender', 'gender', 'wc', { radio: ['male', 'female', 'other'] })}
           {fieldRow('Date of Admission', 'dateOfAdmission', 'calendar_today', { type: 'date' })}
@@ -341,7 +373,8 @@ export function InmateDetailPage() {
         </Card>
       </div>
 
-      {/* RIGHT — Family Members */}
+      {/* RIGHT — Family Members (hidden in add mode) */}
+      {!isNew && (
       <div className={`w-[420px] shrink-0 flex flex-col bg-white rounded-xl shadow-md border border-neutral-200 overflow-hidden ${inmate.status !== 'active' ? 'opacity-50' : ''}`}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-200 bg-neutral-50/50 shrink-0">
           <h2 className="text-sm font-bold uppercase tracking-wide text-neutral-700 flex items-center gap-2">
@@ -426,6 +459,7 @@ export function InmateDetailPage() {
           )}
         </div>
       </div>
+      )}
 
       {/* Add Family Modal */}
       {showAddFamily && (

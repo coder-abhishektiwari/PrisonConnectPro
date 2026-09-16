@@ -6,43 +6,13 @@ import { wardenApi } from '@/services/api/wardenApi';
 import { apiClient } from '@/services/api/client';
 import { useWardenSocket } from '@/hooks/useWardenSocket';
 import { usePageHeader } from '@/context/PageHeaderContext';
+import { FilterDropdown } from '@/components/FilterDropdown';
+import type { ColumnFilter } from '@/components/FilterDropdown';
 import ExcelJS from 'exceljs';
 
 import type { CallHistoryItem, Recording, Inmate, CallHistoryParams } from '@/services/api/wardenApi';
 
 const PAGE_SIZE = 20;
-
-interface ColumnFilter { value: string; open: boolean; }
-
-function FilterDropdown({ label, options, filter, setFilter }: {
-  label: string; options: { value: string; label: string }[];
-  filter: ColumnFilter; setFilter: (f: ColumnFilter) => void;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setFilter({ ...filter, open: false }); };
-    if (filter.open) document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, [filter.open, setFilter]);
-  return (
-    <div ref={ref} className="relative inline-block">
-      <button onClick={() => setFilter({ ...filter, open: !filter.open })}
-        className={`inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wider hover:text-primary-600 transition-colors ${filter.value !== 'all' ? 'text-primary-600' : 'text-neutral-500'}`}>
-        {label}
-        {filter.value !== 'all' && <span className="w-4 h-4 bg-primary-600 text-white rounded-full text-[9px] flex items-center justify-center">1</span>}
-        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-      </button>
-      {filter.open && (
-        <div className="absolute top-full left-0 mt-1 bg-white border border-neutral-200 rounded-xl shadow-xl z-50 min-w-[160px] py-1">
-          <button onClick={() => setFilter({ value: 'all', open: false })} className={`w-full text-left px-3 py-2 text-sm hover:bg-neutral-50 ${filter.value === 'all' ? 'font-bold text-primary-600' : 'text-neutral-700'}`}>All {label}</button>
-          {options.map((o) => (
-            <button key={o.value} onClick={() => setFilter({ value: o.value, open: false })} className={`w-full text-left px-3 py-2 text-sm hover:bg-neutral-50 ${filter.value === o.value ? 'font-bold text-primary-600' : 'text-neutral-700'}`}>{o.label}</button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 export function CallHistoryPage() {
   const [isLoading, setIsLoading] = useState(true);
