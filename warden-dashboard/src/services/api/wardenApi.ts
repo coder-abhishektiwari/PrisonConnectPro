@@ -437,6 +437,9 @@ export const wardenApi = {
   createInmate: (data: Partial<Inmate> & {kioskId?:string}) =>
     apiClient.post<ApiResponse<Inmate>>('/inmates', data).then((r) => { invalidateCache('inmates'); return r.data?.data; }),
 
+  updateInmate: (inmateId: string, data: Partial<Inmate>) =>
+    apiClient.put<ApiResponse<Inmate>>(`/inmates/admin/prisoners/${inmateId}`, data).then((r) => { invalidateCache('inmates'); return r.data?.data; }),
+
   deleteInmateApi: (inmateId: string) =>
     apiClient.delete<ApiResponse<void>>(`/inmates/${inmateId}`).then((r) => { invalidateCache('inmates'); return r.data; }),
 
@@ -712,14 +715,6 @@ export const wardenApi = {
 
   deleteBlock: (blockId: string) =>
     apiClient.delete(`/blocks/${blockId}`),
-
-  // Toggle inmate active/inactive
-  toggleInmate: (inmateId: string) =>
-    apiClient.patch<ApiResponse<any>>(`/inmates/admin/prisoners/${inmateId}/toggle`).then((r) => r.data?.data),
-
-  // Toggle contact active/inactive
-  toggleContact: (contactId: string) =>
-    apiClient.patch<ApiResponse<any>>(`/contacts/admin/contacts/${contactId}/toggle`).then((r) => r.data?.data),
 };
 
 export interface KioskRegistrationRequestItem {

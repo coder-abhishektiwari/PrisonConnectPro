@@ -17,33 +17,33 @@ export function InmateDetailPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [editingInmate, setEditingInmate] = useState(false);
   const [editData, setEditData] = useState<Partial<Inmate>>({});
+  const [saving, setSaving] = useState(false);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [editingContact, setEditingContact] = useState(false);
   const [contactEditData, setContactEditData] = useState<Partial<Contact>>({});
   const [showAddFamily, setShowAddFamily] = useState(false);
-  const [newFamily, setNewFamily] = useState({ inmateId: '', name: '', relationship: '', phoneNumber: '', address: '', city: '', state: '' });
+  const [newFamily, setNewFamily] = useState({ name: '', relationship: '', phoneNumber: '', address: '', city: '', state: '' });
   const [addFamilyError, setAddFamilyError] = useState('');
   const [cellNames, setCellNames] = useState<string[]>([]);
   const [blockNames, setBlockNames] = useState<string[]>([]);
-  const [allInmates, setAllInmates] = useState<Inmate[]>([]);
-  const [toggling, setToggling] = useState(false);
+  const [kioskNames, setKioskNames] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     if (!inmateId) return;
     try {
       setLoadError(null);
-      const [im, co, cells, blocks, allIm] = await Promise.all([
+      const [im, co, cells, blocks, kiosks] = await Promise.all([
         wardenApi.getInmate(inmateId),
         apiClient.get(`/contacts/admin/prisoners/${inmateId}/contacts`).then(r => r.data?.data ?? []),
         wardenApi.getCells().catch(() => []),
         wardenApi.getBlocks().catch(() => []),
-        wardenApi.getInmates(),
+        apiClient.get('/kiosks').then(r => r.data?.data?.items ?? r.data?.data ?? []).catch(() => []),
       ]);
       setInmate(im ?? null);
       setContacts(Array.isArray(co) ? co : []);
       setCellNames(cells.map((c: any) => c.name).filter(Boolean));
       setBlockNames(blocks.map((b: any) => b.name).filter(Boolean));
-      setAllInmates(Array.isArray(allIm) ? allIm : []);
+      setKioskNames(kiosks.map((k: any) => k.deviceId || k.name).filter(Boolean));
     } catch (e: any) {
       setLoadError(e?.response?.data?.error?.message || 'Failed to load inmate details');
     } finally { setLoading(false); }
@@ -59,10 +59,13 @@ export function InmateDetailPage() {
 
   const saveInmate = async () => {
     if (!editData.inmateId) return;
+    setSaving(true);
     try {
-      await wardenApi.createInmate(editData as any);
-      setInmate({ ...inmate!, ...editData } as Inmate);
+      const updated = await wardenApi.updateInmate(editData.inmateId, editData);
+      if (updated) setInmate(updated);
+      else setInmate({ ...inmate!, ...editData } as Inmate);
     } catch { }
+    setSaving(false);
     setEditingInmate(false);
   };
 
@@ -70,17 +73,6 @@ export function InmateDetailPage() {
     if (!inmate) return;
     try { await wardenApi.deleteInmateApi(inmate.inmateId); } catch { }
     navigate('/inmates-family');
-  };
-
-  const toggleInmate = async () => {
-    if (!inmate || toggling) return;
-    setToggling(true);
-    try {
-      const updated = await wardenApi.toggleInmate(inmate.inmateId);
-      if (updated) setInmate(updated);
-      else setInmate({ ...inmate, status: inmate.status === 'active' ? 'inactive' : 'active' });
-    } catch { }
-    setToggling(false);
   };
 
   const startEditContact = (c: Contact) => {
@@ -107,16 +99,6 @@ export function InmateDetailPage() {
     if (selectedContact?.contactId === contactId) { setSelectedContact(null); setEditingContact(false); }
   };
 
-  const toggleContact = async (contactId: string) => {
-    try {
-      const updated = await wardenApi.toggleContact(contactId);
-      if (updated) {
-        setContacts(prev => prev.map(c => c.contactId === contactId ? { ...c, ...updated } : c));
-        if (selectedContact?.contactId === contactId) setSelectedContact({ ...selectedContact, ...updated } as Contact);
-      }
-    } catch { }
-  };
-
   const addFamily = async () => {
     if (!newFamily.name.trim() || !newFamily.phoneNumber.trim()) { setAddFamilyError('Full Name and Phone are required'); return; }
     if (!inmateId) return;
@@ -128,7 +110,7 @@ export function InmateDetailPage() {
     } catch {
       setContacts(prev => [...prev, { contactId: `FAM-${Date.now()}`, inmateId, name: payload.name, relationship: payload.relationship, phoneNumber: payload.phoneNumber, active: true } as Contact]);
     }
-    setNewFamily({ inmateId: '', name: '', relationship: '', phoneNumber: '', address: '', city: '', state: '' });
+    setNewFamily({ name: '', relationship: '', phoneNumber: '', address: '', city: '', state: '' });
     setShowAddFamily(false);
   };
 
@@ -148,17 +130,15 @@ export function InmateDetailPage() {
   if (loadError) return <Card><div className="text-center py-12"><p className="text-error mb-4">{loadError}</p><button onClick={() => { setLoading(true); load(); }} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm">Retry</button></div></Card>;
   if (!inmate) return <Card><div className="text-center py-12"><p className="text-neutral-600">Inmate not found</p></div></Card>;
 
-  const kioskOptions = Array.from(new Set(allInmates.map(i => i.assignedKioskId).filter(Boolean))) as string[];
-
-  const fieldRow = (label: string, key: keyof Inmate, icon: string, options?: { type?: string; radio?: string[]; placeholder?: string }) => {
+  const fieldRow = (label: string, key: keyof Inmate, icon: string, opts?: { type?: string; radio?: string[]; placeholder?: string; readOnly?: boolean }) => {
     const val = editingInmate ? (editData[key] ?? '') : (inmate[key] ?? '');
-    if (editingInmate) {
-      if (options?.radio) {
+    if (editingInmate && !opts?.readOnly) {
+      if (opts?.radio) {
         return (
           <div key={key} className="py-3 border-b border-neutral-100 last:border-0">
             <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">{label}</p>
             <div className="flex gap-3">
-              {options.radio.map(r => (
+              {opts.radio.map(r => (
                 <label key={r} className="flex items-center gap-2 cursor-pointer">
                   <input type="radio" name={key} value={r} checked={val === r} onChange={() => setEditData({ ...editData, [key]: r })} className="text-primary-600 focus:ring-primary-500" />
                   <span className="text-sm capitalize">{r}</span>
@@ -172,10 +152,10 @@ export function InmateDetailPage() {
         <div key={key} className="py-3 border-b border-neutral-100 last:border-0">
           <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">{label}</p>
           <input
-            type={options?.type || 'text'}
+            type={opts?.type || 'text'}
             value={String(val)}
             onChange={e => setEditData({ ...editData, [key]: e.target.value })}
-            placeholder={options?.placeholder || label}
+            placeholder={opts?.placeholder || label}
             className="w-full px-3 py-2 bg-white border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
           />
         </div>
@@ -203,13 +183,9 @@ export function InmateDetailPage() {
             options={options}
             onChange={v => setEditData({ ...editData, [key]: v })}
             onAdd={async (name) => {
-              if (key === 'cellBlock') {
-                const created = await wardenApi.createCell(name).catch(() => null);
-                setCellNames(prev => [...prev, name]);
-              } else if (key === 'facility') {
-                const created = await wardenApi.createBlock(name).catch(() => null);
-                setBlockNames(prev => [...prev, name]);
-              }
+              if (key === 'cellBlock') { await wardenApi.createCell(name).catch(() => null); setCellNames(prev => [...prev, name]); }
+              else if (key === 'facility') { await wardenApi.createBlock(name).catch(() => null); setBlockNames(prev => [...prev, name]); }
+              else if (key === 'assignedKioskId') { setKioskNames(prev => [...prev, name]); }
             }}
             addLabel={addLabel}
             placeholder={`Select ${label}`}
@@ -268,18 +244,12 @@ export function InmateDetailPage() {
               {editingInmate ? (
                 <>
                   <button onClick={() => setEditingInmate(false)} className="px-3 py-1.5 bg-white border border-neutral-200 text-neutral-700 rounded-lg text-xs font-medium hover:bg-neutral-50 transition">Cancel</button>
-                  <button onClick={saveInmate} className="px-3 py-1.5 bg-primary-600 text-white rounded-lg text-xs font-medium hover:bg-primary-700 transition">Save</button>
+                  <button onClick={saveInmate} disabled={saving} className="px-3 py-1.5 bg-primary-600 text-white rounded-lg text-xs font-medium hover:bg-primary-700 transition disabled:opacity-50">
+                    {saving ? 'Saving...' : 'Save'}
+                  </button>
                 </>
               ) : (
                 <>
-                  <button
-                    onClick={toggleInmate}
-                    disabled={toggling}
-                    className={`transition hover:opacity-80 ${inmate.status === 'active' ? 'text-success' : 'text-neutral-400'}`}
-                    title={inmate.status === 'active' ? 'Deactivate' : 'Activate'}
-                  >
-                    <span className="material-icons" style={{ fontSize: '32px' }}>{inmate.status === 'active' ? 'toggle_on' : 'toggle_off'}</span>
-                  </button>
                   <button onClick={startEditInmate} className="w-8 h-8 flex items-center justify-center bg-white border border-neutral-200 text-neutral-600 rounded-lg hover:bg-neutral-50 hover:text-primary-600 transition" title="Edit"><span className="material-icons text-base">edit</span></button>
                   <button onClick={deleteInmate} className="w-8 h-8 flex items-center justify-center bg-white border border-neutral-200 text-neutral-600 rounded-lg hover:bg-red-50 hover:text-red-600 transition" title="Delete"><span className="material-icons text-base">delete</span></button>
                 </>
@@ -296,16 +266,15 @@ export function InmateDetailPage() {
             </div>
           </div>
           {fieldRow('Full Name', 'name', 'person')}
-          {fieldRow('Inmate ID', 'inmateId', 'badge')}
+          {fieldRow('Inmate ID', 'inmateId', 'badge', { readOnly: true })}
           {fieldRow('Prisoner Number', 'prisonerNumber', 'tag')}
           {fieldRow('Gender', 'gender', 'wc', { radio: ['male', 'female', 'other'] })}
           {fieldRow('Date of Admission', 'dateOfAdmission', 'calendar_today', { type: 'date' })}
-          {fieldRow('Status', 'status', 'info', { radio: ['active', 'inactive', 'suspended', 'released', 'transferred'] })}
           {searchableRow('Cell', 'cellBlock', 'domain', cellNames, '+ Add new cell')}
           {searchableRow('Block', 'facility', 'location_on', blockNames, '+ Add new block')}
           {fieldRow('Security Level', 'securityLevel', 'security', { radio: ['minimum', 'medium', 'maximum'] })}
           {fieldRow('Sentence Details', 'sentenceDetails', 'gavel')}
-          {searchableRow('Assigned Kiosk', 'assignedKioskId', 'tablet_mac', kioskOptions, '+ Add new kiosk')}
+          {searchableRow('Assigned Kiosk', 'assignedKioskId', 'tablet_mac', kioskNames, '+ Add new kiosk')}
         </Card>
       </div>
 
@@ -316,7 +285,7 @@ export function InmateDetailPage() {
             <span className="w-2 h-2 bg-success rounded-full" />Family Members
             <span className="px-2 py-0.5 bg-white border border-neutral-200 rounded-full text-xs font-bold text-neutral-900">{contacts.length}</span>
           </h2>
-          <button onClick={() => { setShowAddFamily(true); setNewFamily({ ...newFamily, inmateId: inmate.inmateId }); }} className="w-8 h-8 flex items-center justify-center bg-success text-white rounded-lg hover:bg-success-700 transition" title="Add Family"><span className="material-icons text-base">person_add</span></button>
+          <button onClick={() => setShowAddFamily(true)} className="w-8 h-8 flex items-center justify-center bg-success text-white rounded-lg hover:bg-success-700 transition" title="Add Family"><span className="material-icons text-base">person_add</span></button>
         </div>
         <div className="flex-1 overflow-y-auto min-h-0">
           {!selectedContact ? (
@@ -336,13 +305,6 @@ export function InmateDetailPage() {
                     <p className="text-sm font-medium text-neutral-900 truncate">{c.name}</p>
                     <p className="text-xs text-neutral-500">{c.relationship} • {c.phoneNumber}</p>
                   </div>
-                  <button
-                    onClick={e => { e.stopPropagation(); toggleContact(c.contactId); }}
-                    className={`shrink-0 transition hover:opacity-80 ${c.active !== false ? 'text-success' : 'text-neutral-400'}`}
-                    title={c.active !== false ? 'Deactivate' : 'Activate'}
-                  >
-                    <span className="material-icons" style={{ fontSize: '32px' }}>{c.active !== false ? 'toggle_on' : 'toggle_off'}</span>
-                  </button>
                   <span className="material-icons text-neutral-300 text-lg">chevron_right</span>
                 </div>
               ))}
@@ -363,13 +325,6 @@ export function InmateDetailPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => toggleContact(selectedContact.contactId)}
-                    className={`transition hover:opacity-80 ${selectedContact.active !== false ? 'text-success' : 'text-neutral-400'}`}
-                    title={selectedContact.active !== false ? 'Deactivate' : 'Activate'}
-                  >
-                    <span className="material-icons" style={{ fontSize: '32px' }}>{selectedContact.active !== false ? 'toggle_on' : 'toggle_off'}</span>
-                  </button>
                   {editingContact ? (
                     <>
                       <button onClick={() => setEditingContact(false)} className="w-8 h-8 flex items-center justify-center bg-white border border-neutral-200 text-neutral-600 rounded-lg hover:bg-neutral-50 transition" title="Cancel"><span className="material-icons text-base">close</span></button>
