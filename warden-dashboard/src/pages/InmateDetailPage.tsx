@@ -275,11 +275,10 @@ export function InmateDetailPage() {
                   <button
                     onClick={toggleInmate}
                     disabled={toggling}
-                    className={`px-3 py-2 flex items-center gap-2 rounded-lg transition font-medium text-sm ${inmate.status === 'active' ? 'bg-success/10 text-success hover:bg-success/20' : 'bg-neutral-100 text-neutral-500 hover:bg-neutral-200'}`}
+                    className={`transition hover:opacity-80 ${inmate.status === 'active' ? 'text-success' : 'text-neutral-400'}`}
                     title={inmate.status === 'active' ? 'Deactivate' : 'Activate'}
                   >
-                    <span className="material-icons text-xl">{inmate.status === 'active' ? 'toggle_on' : 'toggle_off'}</span>
-                    {inmate.status === 'active' ? 'Active' : 'Inactive'}
+                    <span className="material-icons" style={{ fontSize: '32px' }}>{inmate.status === 'active' ? 'toggle_on' : 'toggle_off'}</span>
                   </button>
                   <button onClick={startEditInmate} className="w-8 h-8 flex items-center justify-center bg-white border border-neutral-200 text-neutral-600 rounded-lg hover:bg-neutral-50 hover:text-primary-600 transition" title="Edit"><span className="material-icons text-base">edit</span></button>
                   <button onClick={deleteInmate} className="w-8 h-8 flex items-center justify-center bg-white border border-neutral-200 text-neutral-600 rounded-lg hover:bg-red-50 hover:text-red-600 transition" title="Delete"><span className="material-icons text-base">delete</span></button>
@@ -339,11 +338,10 @@ export function InmateDetailPage() {
                   </div>
                   <button
                     onClick={e => { e.stopPropagation(); toggleContact(c.contactId); }}
-                    className={`shrink-0 px-2 py-1 flex items-center gap-1 rounded-lg transition font-medium text-xs ${c.active !== false ? 'bg-success/10 text-success hover:bg-success/20' : 'bg-neutral-100 text-neutral-500 hover:bg-neutral-200'}`}
+                    className={`shrink-0 transition hover:opacity-80 ${c.active !== false ? 'text-success' : 'text-neutral-400'}`}
                     title={c.active !== false ? 'Deactivate' : 'Activate'}
                   >
-                    <span className="material-icons text-lg">{c.active !== false ? 'toggle_on' : 'toggle_off'}</span>
-                    {c.active !== false ? 'Active' : 'Inactive'}
+                    <span className="material-icons" style={{ fontSize: '32px' }}>{c.active !== false ? 'toggle_on' : 'toggle_off'}</span>
                   </button>
                   <span className="material-icons text-neutral-300 text-lg">chevron_right</span>
                 </div>
@@ -367,11 +365,10 @@ export function InmateDetailPage() {
                 <div className="flex items-center gap-1.5">
                   <button
                     onClick={() => toggleContact(selectedContact.contactId)}
-                    className={`px-3 py-2 flex items-center gap-2 rounded-lg transition font-medium text-sm ${selectedContact.active !== false ? 'bg-success/10 text-success hover:bg-success/20' : 'bg-neutral-100 text-neutral-500 hover:bg-neutral-200'}`}
+                    className={`transition hover:opacity-80 ${selectedContact.active !== false ? 'text-success' : 'text-neutral-400'}`}
                     title={selectedContact.active !== false ? 'Deactivate' : 'Activate'}
                   >
-                    <span className="material-icons text-xl">{selectedContact.active !== false ? 'toggle_on' : 'toggle_off'}</span>
-                    {selectedContact.active !== false ? 'Active' : 'Inactive'}
+                    <span className="material-icons" style={{ fontSize: '32px' }}>{selectedContact.active !== false ? 'toggle_on' : 'toggle_off'}</span>
                   </button>
                   {editingContact ? (
                     <>

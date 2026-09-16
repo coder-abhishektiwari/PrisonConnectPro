@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 
 interface SearchableSelectProps {
   value: string;
@@ -14,12 +15,24 @@ export function SearchableSelect({ value, options, onChange, onAdd, placeholder 
   const [query, setQuery] = useState('');
   const [adding, setAdding] = useState(false);
   const [addValue, setAddValue] = useState('');
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number }>({ top: 0, left: 0, width: 0 });
   const ref = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const addInputRef = useRef<HTMLInputElement>(null);
 
   const filtered = options.filter(o => o.toLowerCase().includes(query.toLowerCase()));
   const showAdd = onAdd && !adding && query.trim() && !options.some(o => o.toLowerCase() === query.trim().toLowerCase());
+
+  const updatePosition = useCallback(() => {
+    if (ref.current) {
+      const rect = ref.current.getBoundingClientRect();
+      setDropdownPos({ top: rect.bottom + window.scrollY + 4, left: rect.left + window.scrollX, width: rect.width });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (open) updatePosition();
+  }, [open, updatePosition]);
 
   useEffect(() => {
     if (!open) { setQuery(''); setAdding(false); setAddValue(''); }
@@ -47,6 +60,58 @@ export function SearchableSelect({ value, options, onChange, onAdd, placeholder 
     setAddValue('');
   }, [addValue, onAdd, onChange]);
 
+  const dropdown = open ? createPortal(
+    <div
+      className="bg-white border border-neutral-200 rounded-lg shadow-xl max-h-60 overflow-auto"
+      style={{ position: 'absolute', top: dropdownPos.top, left: dropdownPos.left, width: dropdownPos.width, zIndex: 9999 }}
+    >
+      <div className="p-2 border-b border-neutral-100 sticky top-0 bg-white">
+        <input
+          ref={inputRef}
+          type="text"
+          value={adding ? addValue : query}
+          onChange={e => { if (adding) setAddValue(e.target.value); else setQuery(e.target.value); }}
+          onKeyDown={e => { if (adding && e.key === 'Enter') handleAdd(); if (e.key === 'Escape') setOpen(false); }}
+          placeholder={adding ? (addLabel || 'Type name...') : 'Search...'}
+          className="w-full px-3 py-1.5 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+        />
+      </div>
+      {adding ? (
+        <div className="p-2">
+          <button onClick={handleAdd} className="w-full px-3 py-2 bg-success text-white rounded-lg text-sm hover:bg-success-700 transition">
+            + Add "{addValue.trim()}"
+          </button>
+        </div>
+      ) : (
+        <div className="py-1">
+          {filtered.length === 0 && !showAdd && (
+            <p className="px-4 py-2 text-sm text-neutral-400">No options found</p>
+          )}
+          {filtered.map(opt => (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => { onChange(opt); setOpen(false); }}
+              className={`w-full px-4 py-2 text-sm text-left hover:bg-neutral-50 transition ${opt === value ? 'bg-primary-50 text-primary-700 font-medium' : 'text-neutral-700'}`}
+            >
+              {opt}
+            </button>
+          ))}
+          {showAdd && (
+            <button
+              type="button"
+              onClick={() => { setAdding(true); setAddValue(query.trim()); }}
+              className="w-full px-4 py-2 text-sm text-left text-success hover:bg-success/5 font-medium flex items-center gap-2 border-t border-neutral-100 mt-1"
+            >
+              <span className="material-icons text-base">add</span> {addLabel || `Add "${query.trim()}"`}
+            </button>
+          )}
+        </div>
+      )}
+    </div>,
+    document.body
+  ) : null;
+
   return (
     <div ref={ref} className="relative">
       <button
@@ -57,53 +122,7 @@ export function SearchableSelect({ value, options, onChange, onAdd, placeholder 
         <span className={value ? 'text-neutral-900' : 'text-neutral-400'}>{value || placeholder}</span>
         <span className="material-icons text-neutral-400 text-base">{open ? 'expand_less' : 'expand_more'}</span>
       </button>
-      {open && (
-        <div className="absolute z-50 mt-1 w-full bg-white border border-neutral-200 rounded-lg shadow-lg max-h-60 overflow-auto">
-          <div className="p-2 border-b border-neutral-100 sticky top-0 bg-white">
-            <input
-              ref={inputRef}
-              type="text"
-              value={adding ? addValue : query}
-              onChange={e => { if (adding) setAddValue(e.target.value); else setQuery(e.target.value); }}
-              onKeyDown={e => { if (adding && e.key === 'Enter') handleAdd(); if (e.key === 'Escape') setOpen(false); }}
-              placeholder={adding ? (addLabel || 'Type name...') : 'Search...'}
-              className="w-full px-3 py-1.5 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
-          </div>
-          {adding ? (
-            <div className="p-2">
-              <button onClick={handleAdd} className="w-full px-3 py-2 bg-success text-white rounded-lg text-sm hover:bg-success-700 transition">
-                + Add "{addValue.trim()}"
-              </button>
-            </div>
-          ) : (
-            <div className="py-1">
-              {filtered.length === 0 && !showAdd && (
-                <p className="px-4 py-2 text-sm text-neutral-400">No options found</p>
-              )}
-              {filtered.map(opt => (
-                <button
-                  key={opt}
-                  type="button"
-                  onClick={() => { onChange(opt); setOpen(false); }}
-                  className={`w-full px-4 py-2 text-sm text-left hover:bg-neutral-50 transition ${opt === value ? 'bg-primary-50 text-primary-700 font-medium' : 'text-neutral-700'}`}
-                >
-                  {opt}
-                </button>
-              ))}
-              {showAdd && (
-                <button
-                  type="button"
-                  onClick={() => { setAdding(true); setAddValue(query.trim()); }}
-                  className="w-full px-4 py-2 text-sm text-left text-success hover:bg-success/5 font-medium flex items-center gap-2 border-t border-neutral-100 mt-1"
-                >
-                  <span className="material-icons text-base">add</span> {addLabel || `Add "${query.trim()}"`}
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+      {dropdown}
     </div>
   );
 }

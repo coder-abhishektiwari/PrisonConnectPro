@@ -105,11 +105,10 @@ export function InmateFamilyPage() {
                   <td className="py-2.5 px-3">
                     <button
                       onClick={e => { e.stopPropagation(); wardenApi.toggleInmate(i.inmateId).then(updated => { if (updated) setInmates(s => s.map(x => x.inmateId === updated.inmateId ? { ...x, ...updated } : x)); }); }}
-                      className={`px-3 py-2 flex items-center gap-2 rounded-lg transition font-medium text-sm ${i.status === 'active' ? 'bg-success/10 text-success hover:bg-success/20' : 'bg-neutral-100 text-neutral-500 hover:bg-neutral-200'}`}
+                      className={`transition hover:opacity-80 ${i.status === 'active' ? 'text-success' : 'text-neutral-400'}`}
                       title={i.status === 'active' ? 'Deactivate' : 'Activate'}
                     >
-                      <span className="material-icons text-xl">{i.status === 'active' ? 'toggle_on' : 'toggle_off'}</span>
-                      {i.status === 'active' ? 'Active' : 'Inactive'}
+                      <span className="material-icons" style={{ fontSize: '32px' }}>{i.status === 'active' ? 'toggle_on' : 'toggle_off'}</span>
                     </button>
                   </td>
                 </tr>
