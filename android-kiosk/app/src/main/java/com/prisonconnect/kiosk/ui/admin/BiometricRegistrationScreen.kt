@@ -177,7 +177,7 @@ fun BiometricRegistrationScreen(
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(bio.type.uppercase(), fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                        Text((bio.type ?: "unknown").uppercase(), fontSize = 13.sp, fontWeight = FontWeight.Medium)
                                         Text(formatDate(bio.registeredAt), fontSize = 11.sp, color = Color(0xFF999999))
                                     }
                                     Surface(
@@ -185,7 +185,7 @@ fun BiometricRegistrationScreen(
                                         color = if (bio.status == "registered") Color(0xFFE8F5E9) else Color(0xFFFFEBEE)
                                     ) {
                                         Text(
-                                            bio.status.uppercase(),
+                                            (bio.status ?: "unknown").uppercase(),
                                             fontSize = 10.sp,
                                             color = if (bio.status == "registered") Color(0xFF2E7D32) else Color(0xFFD32F2F),
                                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),

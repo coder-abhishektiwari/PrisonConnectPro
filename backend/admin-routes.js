@@ -293,17 +293,14 @@ router.get('/prisoners/:prisonerId/biometrics', requireRole(...ALL_ROLES), async
   const inmates = await readDb('inmates.json');
   const inmate = inmates.find((i) => i.inmateId === prisonerId && inAdminScope(req, i));
   if (!inmate) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Prisoner not found' } });
-  const biometrics = inmate.biometricData || {};
-  return res.json({
-    success: true,
-    data: [{
-      prisonerId, biometrics,
-      hasFace: biometrics.faceRegistered || false,
-      hasFingerprint: biometrics.fingerprintRegistered || false,
-      hasRfid: biometrics.rfidRegistered || false,
-      lastUpdate: biometrics.lastBiometricUpdate
-    }]
-  });
+  const biometricData = inmate.biometricData || {};
+  const biometricsList = inmate.biometrics || [];
+  const result = biometricsList.length > 0 ? biometricsList : [
+    biometricData.faceRegistered ? { biometricId: `BIO-${prisonerId}-FACE`, prisonerId, type: 'face', status: 'registered', registeredAt: biometricData.lastBiometricUpdate } : null,
+    biometricData.fingerprintRegistered ? { biometricId: `BIO-${prisonerId}-FGP`, prisonerId, type: 'fingerprint', status: 'registered', registeredAt: biometricData.lastBiometricUpdate } : null,
+    biometricData.rfidRegistered ? { biometricId: `BIO-${prisonerId}-RFID`, prisonerId, type: 'rfid', status: 'registered', registeredAt: biometricData.lastBiometricUpdate } : null,
+  ].filter(Boolean);
+  return res.json({ success: true, data: result });
 });
 
 router.post('/prisoners/:prisonerId/biometrics', requireRole(...ALL_ROLES), async (req, res) => {

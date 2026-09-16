@@ -211,7 +211,11 @@ export function TrustAccountPage() {
                     {total===0 ? 'No trust accounts found' : `No wallets match "${search}"`}
                   </td>
                 </tr>
-              ) : wallets.map(w=>{
+              ) : [...wallets].sort((a, b) => {
+                const aPending = requests.some(r => r.inmateId === a.inmateId && r.status === 'pending') ? 0 : 1;
+                const bPending = requests.some(r => r.inmateId === b.inmateId && r.status === 'pending') ? 0 : 1;
+                return aPending - bPending;
+              }).map(w=>{
                 const audioMin = Math.floor(w.balance / (pricing.audioRate || 1));
                 const videoMin = Math.floor(w.balance / (pricing.videoRate || 2.5));
                 const inmate = inmates[w.inmateId];
@@ -278,7 +282,7 @@ export function TrustAccountPage() {
                     </td>
 
                     <td className="py-3.5 px-5 text-center" onClick={e=>e.stopPropagation()}>
-                      <button onClick={()=>setRechargeTarget(w.inmateId)} className="inline-flex items-center gap-1.5 px-3 py-2.5 bg-emerald-600 hover:bg-emerald-800 text-white rounded-xl text-xs font-semibold transition-all shadow-sm">
+                      <button onClick={()=>setRechargeTarget(w.inmateId)} className="inline-flex items-center gap-1.5 px-3 py-2.5 bg-success-600 hover:bg-emerald-800 text-white rounded-xl text-xs font-semibold transition-all shadow-sm">
                         <span className="material-icons text-xs">add</span>Recharge
                       </button>
                     </td>

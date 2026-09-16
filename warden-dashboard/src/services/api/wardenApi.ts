@@ -167,6 +167,7 @@ export interface Inmate {
   blockId?: string;
   cellName?: string;
   blockName?: string;
+  kioskName?: string;
   status: string;
   photoUrl: string;
   securityLevel: string;
