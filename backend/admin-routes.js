@@ -44,7 +44,7 @@ router.get('/prisoners', requireRole(...ALL_ROLES), async (req, res) => {
     searchFields: [],
     defaultSort: 'name',
   });
-  return res.json({ success: true, data: result });
+  return res.json({ success: true, data: result.items });
 });
 
 router.get('/prisoners/:prisonerId', requireRole(...ALL_ROLES), async (req, res) => {
@@ -260,7 +260,7 @@ router.get('/devices', requireRole(...ALL_ROLES), async (req, res) => {
     searchFields: [],
     defaultSort: 'deviceId',
   });
-  return res.json({ success: true, data: result });
+  return res.json({ success: true, data: result.items });
 });
 
 router.get('/devices/:deviceId', requireRole(...ALL_ROLES), async (req, res) => {
@@ -280,13 +280,13 @@ router.get('/prisoners/:prisonerId/biometrics', requireRole(...ALL_ROLES), async
   const biometrics = inmate.biometricData || {};
   return res.json({
     success: true,
-    data: {
+    data: [{
       prisonerId, biometrics,
       hasFace: biometrics.faceRegistered || false,
       hasFingerprint: biometrics.fingerprintRegistered || false,
       hasRfid: biometrics.rfidRegistered || false,
       lastUpdate: biometrics.lastBiometricUpdate
-    }
+    }]
   });
 });
 
