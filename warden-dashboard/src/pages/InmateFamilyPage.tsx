@@ -122,10 +122,10 @@ export function InmateFamilyPage() {
                         </div>
                       </div>
                     </td>
-                    <td className="py-2.5 px-3 text-sm text-neutral-600">{i.cellBlock || '—'}</td>
-                    <td className="py-2.5 px-3 text-sm text-neutral-600">{i.facility || '—'}</td>
+                    <td className="py-2.5 px-3 text-sm text-neutral-600">{i.cellName || i.cellBlock || '—'}</td>
+                    <td className="py-2.5 px-3 text-sm text-neutral-600">{i.blockName || i.facility || '—'}</td>
                     <td className="py-2.5 px-3 text-sm">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium border ${i.assignedKioskId ? 'bg-primary-600 text-white border-primary-600' : 'bg-amber-100 text-amber-700 border-amber-200'}`}>{i.assignedKioskId || 'Unassigned'}</span>
+                      <span className={`text-sm  ${i.assignedKioskId ? 'text-neutral-600 ' : ' text-neutral-300 '}`}>{i.assignedKioskId || 'Unassigned'}</span>
                     </td>
                     <td className="py-2.5 px-3">
                       <button

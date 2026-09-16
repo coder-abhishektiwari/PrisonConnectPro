@@ -24,9 +24,9 @@ export function InmateDetailPage() {
   const [showAddFamily, setShowAddFamily] = useState(false);
   const [newFamily, setNewFamily] = useState({ name: '', relationship: '', phoneNumber: '', address: '', city: '', state: '' });
   const [addFamilyError, setAddFamilyError] = useState('');
-  const [cellNames, setCellNames] = useState<string[]>([]);
-  const [blockNames, setBlockNames] = useState<string[]>([]);
-  const [kioskNames, setKioskNames] = useState<string[]>([]);
+  const [cellNames, setCellNames] = useState<{ id: string; name: string }[]>([]);
+  const [blockNames, setBlockNames] = useState<{ id: string; name: string }[]>([]);
+  const [kioskNames, setKioskNames] = useState<{ id: string; name: string }[]>([]);
   const [toggling, setToggling] = useState(false);
 
   const load = useCallback(async () => {
@@ -42,9 +42,9 @@ export function InmateDetailPage() {
       ]);
       setInmate(im ?? null);
       setContacts(Array.isArray(co) ? co : []);
-      setCellNames(cells.map((c: any) => c.name).filter(Boolean));
-      setBlockNames(blocks.map((b: any) => b.name).filter(Boolean));
-      setKioskNames(kiosks.map((k: any) => k.deviceId || k.name).filter(Boolean));
+      setCellNames(cells.map((c: any) => ({ id: c.cellId, name: c.name })).filter(c => c.id && c.name));
+      setBlockNames(blocks.map((b: any) => ({ id: b.blockId, name: b.name })).filter(b => b.id && b.name));
+      setKioskNames(kiosks.map((k: any) => ({ id: k.kioskId, name: k.kioskId })).filter(k => k.id));
     } catch (e: any) {
       setLoadError(e?.response?.data?.error?.message || 'Failed to load inmate details');
     } finally { setLoading(false); }
@@ -194,7 +194,7 @@ export function InmateDetailPage() {
     );
   };
 
-  const searchableRow = (label: string, key: keyof Inmate, icon: string, options: string[], addLabel?: string) => {
+  const searchableRow = (label: string, key: keyof Inmate, icon: string, options: { id: string; name: string }[], addLabel?: string) => {
     const val = editingInmate ? (editData[key] ?? '') : (inmate[key] ?? '');
     if (editingInmate) {
       return (
@@ -205,9 +205,17 @@ export function InmateDetailPage() {
             options={options}
             onChange={v => setEditData({ ...editData, [key]: v })}
             onAdd={async (name) => {
-              if (key === 'cellBlock') { await wardenApi.createCell(name).catch(() => null); setCellNames(prev => [...prev, name]); }
-              else if (key === 'facility') { await wardenApi.createBlock(name).catch(() => null); setBlockNames(prev => [...prev, name]); }
-              else if (key === 'assignedKioskId') { setKioskNames(prev => [...prev, name]); }
+              if (key === 'cellId') {
+                const created = await wardenApi.createCell(name).catch(() => null);
+                if (created) setCellNames(prev => [...prev, { id: created.cellId, name }]);
+                else setCellNames(prev => [...prev, { id: `temp-${Date.now()}`, name }]);
+              } else if (key === 'blockId') {
+                const created = await wardenApi.createBlock(name).catch(() => null);
+                if (created) setBlockNames(prev => [...prev, { id: created.blockId, name }]);
+                else setBlockNames(prev => [...prev, { id: `temp-${Date.now()}`, name }]);
+              } else if (key === 'assignedKioskId') {
+                setKioskNames(prev => [...prev, { id: name, name }]);
+              }
             }}
             addLabel={addLabel}
             placeholder={`Select ${label}`}
@@ -304,8 +312,8 @@ export function InmateDetailPage() {
           {fieldRow('Prisoner Number', 'prisonerNumber', 'tag')}
           {fieldRow('Gender', 'gender', 'wc', { radio: ['male', 'female', 'other'] })}
           {fieldRow('Date of Admission', 'dateOfAdmission', 'calendar_today', { type: 'date' })}
-          {searchableRow('Cell', 'cellBlock', 'domain', cellNames, '+ Add new cell')}
-          {searchableRow('Block', 'facility', 'location_on', blockNames, '+ Add new block')}
+          {searchableRow('Cell', 'cellId', 'domain', cellNames, '+ Add new cell')}
+          {searchableRow('Block', 'blockId', 'location_on', blockNames, '+ Add new block')}
           {fieldRow('Security Level', 'securityLevel', 'security', { radio: ['minimum', 'medium', 'maximum'] })}
           {fieldRow('Sentence Details', 'sentenceDetails', 'gavel')}
           {searchableRow('Assigned Kiosk', 'assignedKioskId', 'tablet_mac', kioskNames, '+ Add new kiosk')}

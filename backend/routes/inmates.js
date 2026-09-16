@@ -23,6 +23,23 @@ function normalizeInmate(i) {
   return out;
 }
 
+async function enrichInmates(inmates) {
+  const [cells, blocks, kiosks] = await Promise.all([
+    readDb('cells.json').catch(() => []),
+    readDb('blocks.json').catch(() => []),
+    readDb('kiosks.json').catch(() => []),
+  ]);
+  const cellMap = new Map(cells.map(c => [c.cellId, c.name]));
+  const blockMap = new Map(blocks.map(b => [b.blockId, b.name]));
+  const kioskMap = new Map(kiosks.map(k => [k.kioskId, k.kioskId]));
+  return inmates.map(i => ({
+    ...i,
+    cellName: i.cellId ? (cellMap.get(i.cellId) || i.cellBlock || '') : (i.cellBlock || ''),
+    blockName: i.blockId ? (blockMap.get(i.blockId) || i.facility || '') : (i.facility || ''),
+    kioskName: i.assignedKioskId ? (kioskMap.get(i.assignedKioskId) || i.assignedKioskId) : '',
+  }));
+}
+
 function inmateListHandler(req, res) {
   return asyncRoute(async (req, res) => {
     const inmates = await readDb('inmates.json');
@@ -31,12 +48,14 @@ function inmateListHandler(req, res) {
     const filtered = (facilityFilter && facilityFilter !== 'all')
       ? scoped.filter((i) => i.facility === facilityFilter)
       : scoped;
+    const enriched = await enrichInmates(filtered);
     const result = await paginate({
-      req, data: filtered,
+      req, data: enriched,
       search: (i, q) =>
         (i.name || '').toLowerCase().includes(q) ||
         (i.inmateId || '').toLowerCase().includes(q) ||
-        (i.facility || '').toLowerCase().includes(q) ||
+        (i.cellName || '').toLowerCase().includes(q) ||
+        (i.blockName || '').toLowerCase().includes(q) ||
         (i.prisonId || '').toLowerCase().includes(q),
       searchFields: [],
       defaultSort: 'name',
@@ -51,7 +70,8 @@ function inmateGetHandler(req, res) {
     const id = req.params.inmateId || req.params.prisonerId;
     const inmate = inmates.find((i) => i.inmateId === id && inAdminScope(req, i));
     if (!inmate) return sendError(res, 'NOT_FOUND', 'Inmate not found', 404);
-    return sendSuccess(res, normalizeInmate(inmate));
+    const [enriched] = await enrichInmates([normalizeInmate(inmate)]);
+    return sendSuccess(res, enriched);
   })(req, res);
 }
 

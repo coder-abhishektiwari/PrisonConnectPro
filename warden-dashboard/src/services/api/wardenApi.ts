@@ -163,6 +163,10 @@ export interface Inmate {
   prisonId: string;
   facility: string;
   cellBlock: string;
+  cellId?: string;
+  blockId?: string;
+  cellName?: string;
+  blockName?: string;
   status: string;
   photoUrl: string;
   securityLevel: string;

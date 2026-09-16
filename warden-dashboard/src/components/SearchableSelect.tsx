@@ -1,13 +1,30 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 
+interface SearchableSelectOption {
+  id: string;
+  name: string;
+}
+
 interface SearchableSelectProps {
   value: string;
-  options: string[];
+  options: (string | SearchableSelectOption)[];
   onChange: (val: string) => void;
   onAdd?: (val: string) => void;
   placeholder?: string;
   addLabel?: string;
+}
+
+function isObjOpt(o: string | SearchableSelectOption): o is SearchableSelectOption {
+  return typeof o === 'object' && o !== null && 'id' in o;
+}
+
+function getOptId(o: string | SearchableSelectOption): string {
+  return isObjOpt(o) ? o.id : o;
+}
+
+function getOptName(o: string | SearchableSelectOption): string {
+  return isObjOpt(o) ? o.name : o;
 }
 
 export function SearchableSelect({ value, options, onChange, onAdd, placeholder = 'Select...', addLabel }: SearchableSelectProps) {
@@ -20,8 +37,8 @@ export function SearchableSelect({ value, options, onChange, onAdd, placeholder 
   const inputRef = useRef<HTMLInputElement>(null);
   const addInputRef = useRef<HTMLInputElement>(null);
 
-  const filtered = options.filter(o => o.toLowerCase().includes(query.toLowerCase()));
-  const showAdd = onAdd && !adding && query.trim() && !options.some(o => o.toLowerCase() === query.trim().toLowerCase());
+  const filtered = options.filter(o => getOptName(o).toLowerCase().includes(query.toLowerCase()));
+  const showAdd = onAdd && !adding && query.trim() && !options.some(o => getOptName(o).toLowerCase() === query.trim().toLowerCase());
 
   const updatePosition = useCallback(() => {
     if (ref.current) {
@@ -30,9 +47,7 @@ export function SearchableSelect({ value, options, onChange, onAdd, placeholder 
     }
   }, []);
 
-  useEffect(() => {
-    if (open) updatePosition();
-  }, [open, updatePosition]);
+  useEffect(() => { if (open) updatePosition(); }, [open, updatePosition]);
 
   useEffect(() => {
     if (!open) { setQuery(''); setAdding(false); setAddValue(''); }
@@ -54,11 +69,14 @@ export function SearchableSelect({ value, options, onChange, onAdd, placeholder 
     const name = addValue.trim();
     if (!name || !onAdd) return;
     onAdd(name);
-    onChange(name);
     setOpen(false);
     setAdding(false);
     setAddValue('');
-  }, [addValue, onAdd, onChange]);
+  }, [addValue, onAdd]);
+
+  // Find the display name for the current value
+  const currentOption = options.find(o => getOptId(o) === value);
+  const displayValue = currentOption ? getOptName(currentOption) : value;
 
   const dropdown = open ? createPortal(
     <div
@@ -87,16 +105,20 @@ export function SearchableSelect({ value, options, onChange, onAdd, placeholder 
           {filtered.length === 0 && !showAdd && (
             <p className="px-4 py-2 text-sm text-neutral-400">No options found</p>
           )}
-          {filtered.map(opt => (
-            <button
-              key={opt}
-              type="button"
-              onClick={() => { onChange(opt); setOpen(false); }}
-              className={`w-full px-4 py-2 text-sm text-left hover:bg-neutral-50 transition ${opt === value ? 'bg-primary-50 text-primary-700 font-medium' : 'text-neutral-700'}`}
-            >
-              {opt}
-            </button>
-          ))}
+          {filtered.map(opt => {
+            const id = getOptId(opt);
+            const name = getOptName(opt);
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => { onChange(id); setOpen(false); }}
+                className={`w-full px-4 py-2 text-sm text-left hover:bg-neutral-50 transition ${id === value ? 'bg-primary-50 text-primary-700 font-medium' : 'text-neutral-700'}`}
+              >
+                {name}
+              </button>
+            );
+          })}
           {showAdd && (
             <button
               type="button"
@@ -119,7 +141,7 @@ export function SearchableSelect({ value, options, onChange, onAdd, placeholder 
         onClick={() => setOpen(!open)}
         className="w-full px-3 py-2 bg-white border border-neutral-300 rounded-lg text-sm text-left flex items-center justify-between hover:border-neutral-400 transition"
       >
-        <span className={value ? 'text-neutral-900' : 'text-neutral-400'}>{value || placeholder}</span>
+        <span className={value ? 'text-neutral-900' : 'text-neutral-400'}>{displayValue || placeholder}</span>
         <span className="material-icons text-neutral-400 text-base">{open ? 'expand_less' : 'expand_more'}</span>
       </button>
       {dropdown}
