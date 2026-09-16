@@ -383,19 +383,20 @@ router.delete('/biometrics/:biometricId', requireRole(...ALL_ROLES), async (req,
   const parts = biometricId.split('-');
   if (parts.length < 3) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'Invalid biometric ID' } });
   const type = parts[parts.length - 1].toLowerCase();
-  const prisonerId = req.query.prisonerId || req.body.prisonerId;
+  const prisonerId = req.query.prisonerId || parts.slice(1, -1).join('-');
   if (!prisonerId) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'prisonerId is required' } });
 
   const updated = await updateDb('inmates.json', (inmates) => {
     const idx = inmates.findIndex((i) => i.inmateId === prisonerId && inAdminScope(req, i));
     if (idx === -1) return { data: inmates, result: null };
-    const biometricData = { ...inmates[idx].biometricData };
+    const biometricData = { ...(inmates[idx].biometricData || {}) };
     if (type === 'face') { biometricData.faceRegistered = false; biometricData.faceEmbedding = null; }
     else if (type === 'fingerprint') { biometricData.fingerprintRegistered = false; biometricData.fingerprintTemplate = null; }
     else if (type === 'rfid') { biometricData.rfidRegistered = false; biometricData.rfidToken = null; }
     else return { data: inmates, result: null };
     biometricData.lastBiometricUpdate = new Date().toISOString();
-    inmates[idx] = { ...inmates[idx], biometricData };
+    const biometrics = (inmates[idx].biometrics || []).filter(b => b.biometricId !== biometricId);
+    inmates[idx] = { ...inmates[idx], biometricData, biometrics };
     return { data: inmates, result: inmates[idx] };
   });
   if (!updated) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Prisoner not found' } });
