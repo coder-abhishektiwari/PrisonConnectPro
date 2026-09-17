@@ -198,10 +198,18 @@ function createCallsRouter(broadcastEvent, signaling) {
     let calls = await readDb('calls.json');
     const contacts = await readDb('contacts.json').catch(() => []);
     const contactName = (contactId, inmateId) => {
+      // First: find contacts belonging to THIS inmate
+      const inmateContacts = contacts.filter((c) => c.inmateId === inmateId);
+      if (inmateContacts.length > 0) {
+        // Among those, try matching contactId
+        const exact = inmateContacts.find((c) => c.contactId === contactId);
+        if (exact) return exact.fullName || null;
+        // Fall back to first contact of this inmate
+        return inmateContacts[0].fullName || null;
+      }
+      // No contacts for this inmate — try contactId alone (seeded data fallback)
       const byId = contacts.find((c) => c.contactId === contactId);
-      if (byId) return byId.fullName || null;
-      const byInmate = contacts.find((c) => c.inmateId === inmateId);
-      return byInmate ? (byInmate.fullName || null) : null;
+      return byId ? (byId.fullName || null) : null;
     };
     if (req.auth.role === 'inmate') {
       calls = calls.filter((c) => c.inmateId === req.auth.inmateId);
@@ -308,10 +316,14 @@ function createCallsRouter(broadcastEvent, signaling) {
     const matches = schedules.filter((s) => s.inmateId === inmate.inmateId);
     const scoped = await scopeList(req, matches);
     const contactName = (contactId, inmateId) => {
+      const inmateContacts = contacts.filter((c) => c.inmateId === inmateId);
+      if (inmateContacts.length > 0) {
+        const exact = inmateContacts.find((c) => c.contactId === contactId);
+        if (exact) return exact.fullName || null;
+        return inmateContacts[0].fullName || null;
+      }
       const byId = contacts.find((c) => c.contactId === contactId);
-      if (byId) return byId.fullName || null;
-      const byInmate = contacts.find((c) => c.inmateId === inmateId);
-      return byInmate ? (byInmate.fullName || null) : null;
+      return byId ? (byId.fullName || null) : null;
     };
     // Only live bookings: completed calls and past dates leave the list. A
     // booking for TODAY stays visible until midnight (its slot may still be
@@ -337,10 +349,14 @@ function createCallsRouter(broadcastEvent, signaling) {
     const matches = calls.filter((c) => c.inmateId === inmate.inmateId);
     const scoped = await scopeList(req, matches);
     const contactName = (contactId, inmateId) => {
+      const inmateContacts = contacts.filter((c) => c.inmateId === inmateId);
+      if (inmateContacts.length > 0) {
+        const exact = inmateContacts.find((c) => c.contactId === contactId);
+        if (exact) return exact.fullName || null;
+        return inmateContacts[0].fullName || null;
+      }
       const byId = contacts.find((c) => c.contactId === contactId);
-      if (byId) return byId.fullName || null;
-      const byInmate = contacts.find((c) => c.inmateId === inmateId);
-      return byInmate ? (byInmate.fullName || null) : null;
+      return byId ? (byId.fullName || null) : null;
     };
     const history = scoped
       .filter((c) => c.status === 'completed' && (c.mediaConnectedAt || c.durationMinutes > 0))
