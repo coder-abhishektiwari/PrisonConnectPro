@@ -104,8 +104,9 @@ data class KioskRegistrationResponse(
 )
 
 data class RegistrationStatusResponse(
-    @SerializedName("status") val status: String? = "pending", // 💡 Make Nullable
+    @SerializedName("status") val status: String? = "pending",
     @SerializedName("requestId") val requestId: String? = null,
     @SerializedName("prisonId") val prisonId: String? = null,
-    @SerializedName("authorized") val authorized: Boolean = false
+    @SerializedName("authorized") val authorized: Boolean = false,
+    @SerializedName("rejectionReason") val rejectionReason: String? = null
 )

@@ -17,6 +17,9 @@ export function KioskRegistrationPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectTargetId, setRejectTargetId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
   const { toasts, success, error: toastError, removeToast } = useToast();
 
   const fetchRequests = useCallback(async (signal?: AbortSignal) => {
@@ -71,11 +74,20 @@ export function KioskRegistrationPage() {
   };
 
   const handleReject = async (requestId: string) => {
-    if (!confirm('Are you sure you want to reject this device registration request?')) return;
+    setRejectTargetId(requestId);
+    setRejectReason('');
+    setShowRejectModal(true);
+  };
+
+  const confirmReject = async () => {
+    if (!rejectTargetId) return;
     try {
-      setActionLoading(requestId);
-      await wardenApi.rejectKioskRegistration(requestId);
+      setActionLoading(rejectTargetId);
+      await wardenApi.rejectKioskRegistration(rejectTargetId, rejectReason.trim() || undefined);
       success('Device registration rejected');
+      setShowRejectModal(false);
+      setRejectTargetId(null);
+      setRejectReason('');
       await fetchRequests();
     } catch (err) {
       console.error('Failed to reject request:', err);
@@ -186,6 +198,9 @@ export function KioskRegistrationPage() {
                         req.status === 'rejected' ? 'bg-error/10 text-error border border-error/20' :
                         'bg-warning/10 text-warning border border-warning/20'
                       }`}>{req.status}</span>
+                      {req.status === 'rejected' && req.rejectionReason && (
+                        <p className="text-xs text-error mt-1 max-w-[200px] truncate" title={req.rejectionReason}>{req.rejectionReason}</p>
+                      )}
                     </td>
                     <td className="py-3 px-4">
                       {req.status === 'pending' && (
@@ -223,6 +238,30 @@ export function KioskRegistrationPage() {
           </div>
         )}
       </Card>
+
+      {/* Reject Reason Modal */}
+      {showRejectModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => { setShowRejectModal(false); setRejectTargetId(null); setRejectReason(''); }}>
+          <div className="bg-white rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <h3 className="font-bold mb-2">Reject Registration</h3>
+            <p className="text-sm text-neutral-600 mb-4">Optionally provide a reason so the kiosk operator knows why it was rejected.</p>
+            <textarea
+              value={rejectReason}
+              onChange={e => setRejectReason(e.target.value)}
+              placeholder="Reason for rejection (optional)"
+              rows={3}
+              maxLength={500}
+              className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+            />
+            <div className="flex gap-2 justify-end mt-4">
+              <button onClick={() => { setShowRejectModal(false); setRejectTargetId(null); setRejectReason(''); }} className="px-4 py-2 border rounded-lg text-sm">Cancel</button>
+              <button onClick={confirmReject} disabled={actionLoading === rejectTargetId} className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50">
+                {actionLoading === rejectTargetId ? 'Rejecting...' : 'Reject'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -9,6 +9,31 @@ const { paginate } = require('../lib/paginate');
 
 const router = express.Router();
 
+// ==================== INPUT SANITIZATION ====================
+function sanitize(str) {
+  if (typeof str !== 'string') return str;
+  return str.replace(/[<>]/g, '').replace(/['";]/g, '').replace(/\n/g, ' ').trim().slice(0, 500);
+}
+function sanitizeObj(obj) {
+  if (!obj || typeof obj !== 'object') return obj;
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    out[k] = typeof v === 'string' ? sanitize(v) : v;
+  }
+  return out;
+}
+
+// ==================== RATE LIMITING (in-memory) ====================
+const pinValidationAttempts = new Map();
+function checkRateLimit(key, maxAttempts = 5, windowMs = 60000) {
+  const now = Date.now();
+  const record = pinValidationAttempts.get(key) || { count: 0, resetAt: now + windowMs };
+  if (now > record.resetAt) { record.count = 0; record.resetAt = now + windowMs; }
+  record.count++;
+  pinValidationAttempts.set(key, record);
+  return record.count <= maxAttempts;
+}
+
 // ==================== KIOSK VERIFICATION (public — pre-auth) ====================
 
 router.post('/verify', asyncRoute(async (req, res) => {
@@ -53,7 +78,7 @@ router.post('/verify', asyncRoute(async (req, res) => {
 // ==================== KIOSK REGISTRATION (public — after PIN validation) ====================
 
 router.post('/register', asyncRoute(async (req, res) => {
-  const { 
+  const raw = { 
     deviceSerialNumber, 
     prisonId, 
     deviceModel, 
@@ -78,6 +103,17 @@ router.post('/register', asyncRoute(async (req, res) => {
   // Check if kiosk already exists
   const existingKiosk = kiosks.find((k) => k.deviceSerialNumber === deviceSerialNumber);
   if (existingKiosk) {
+    // If already pending, return existing request (no duplicate)
+    if (existingKiosk.authorizationStatus === 'pending' && existingKiosk.status === 'pending') {
+      return sendSuccess(res, {
+        success: true,
+        kiosk: existingKiosk,
+        requestId: existingKiosk.kioskId,
+        kioskId: existingKiosk.kioskId,
+        status: 'pending',
+        message: 'Registration request already pending'
+      });
+    }
     // Re-registering a previously rejected/disabled device queues a fresh approval
     const needsReapproval =
       existingKiosk.authorizationStatus !== 'authorized' ||
@@ -91,11 +127,12 @@ router.post('/register', asyncRoute(async (req, res) => {
       kiosks[idx] = {
         ...kiosks[idx],
         ...(needsReapproval
-          ? { status: 'pending', authorizationStatus: 'pending', reviewedBy: null, reviewedAt: null }
+          ? { status: 'pending', authorizationStatus: 'pending', reviewedBy: null, reviewedAt: null, rejectionReason: null }
           : {}),
         ipAddress: ipAddress || kiosks[idx].ipAddress,
-        location: location || kiosks[idx].location,
+        location: sanitize(location) || kiosks[idx].location,
         firmwareVersion: appVersion || kiosks[idx].firmwareVersion,
+        androidVersion: androidVersion || kiosks[idx].androidVersion,
         lastSeen: new Date().toISOString(),
         deviceFingerprint: deviceFingerprint || kiosks[idx].deviceFingerprint,
         prisonName: prison.name
@@ -115,20 +152,21 @@ router.post('/register', asyncRoute(async (req, res) => {
   
   // Create new kiosk registration request
   const newKiosk = {
-    kioskId: `KIOSK-${Date.now().toString(36).toUpperCase()}`,
-    deviceSerialNumber,
+    kioskId: `KIOSK-${uuidv4().substring(0, 8).toUpperCase()}`,
+    deviceSerialNumber: sanitize(deviceSerialNumber),
     prisonId,
     prisonName: prison.name,
     status: 'pending',
     authorizationStatus: 'pending',
-    location: location || 'Unknown',
+    location: sanitize(location) || 'Unknown',
     ipAddress: ipAddress || 'Unknown',
     firmwareVersion: appVersion || 'Unknown',
+    androidVersion: androidVersion || 'Unknown',
     lastSeen: new Date().toISOString(),
     hardware: {
-      model: deviceModel || 'Unknown',
-      manufacturer: deviceBrand || 'Unknown',
-      serialNumber: deviceSerialNumber,
+      model: sanitize(deviceModel) || 'Unknown',
+      manufacturer: sanitize(deviceBrand) || 'Unknown',
+      serialNumber: sanitize(deviceSerialNumber),
       screenSize: 'Unknown',
       touchScreen: true,
       processor: 'Unknown',
@@ -145,6 +183,7 @@ router.post('/register', asyncRoute(async (req, res) => {
     assignedBlock: null,
     assignedCellArea: null,
     deviceFingerprint: deviceFingerprint || 'Unknown',
+    rejectionReason: null,
     createdAt: new Date().toISOString()
   };
   
@@ -166,12 +205,24 @@ router.post('/register', asyncRoute(async (req, res) => {
 // ==================== KIOSK REGISTRATION REQUESTS ====================
 
 // Public endpoint used by kiosk devices to check registration status by serial number
-router.get('/registration-status/:serialNumber', asyncRoute(async (req, res) => {
-  const serial = req.params.serialNumber;
+router.get('/registration-status/:identifier', asyncRoute(async (req, res) => {
+  const identifier = req.params.identifier;
   // Check existing kiosks first
   const kiosks = await readDb('kiosks.json');
-  const kiosk = kiosks.find((k) => k.deviceSerialNumber === serial || k.kioskId === serial);
+  const kiosk = kiosks.find((k) => k.deviceSerialNumber === identifier || k.kioskId === identifier);
   if (kiosk) {
+    // Expire pending requests older than 7 days
+    const createdAt = new Date(kiosk.createdAt).getTime();
+    const sevenDays = 7 * 24 * 60 * 60 * 1000;
+    if ((kiosk.authorizationStatus === 'pending' || kiosk.status === 'pending') && (Date.now() - createdAt > sevenDays)) {
+      return sendSuccess(res, {
+        status: 'expired',
+        requestId: kiosk.kioskId,
+        prisonId: kiosk.prisonId || null,
+        authorized: false,
+        rejectionReason: 'Registration request expired after 7 days'
+      });
+    }
     const mappedStatus = kiosk.authorizationStatus === 'authorized'
       ? 'approved'
       : kiosk.authorizationStatus === 'unauthorized'
@@ -181,19 +232,8 @@ router.get('/registration-status/:serialNumber', asyncRoute(async (req, res) => 
       status: mappedStatus,
       requestId: kiosk.kioskId,
       prisonId: kiosk.prisonId || null,
-      authorized: kiosk.authorizationStatus === 'authorized'
-    });
-  }
-
-  // Fall back to registration requests file
-  const requests = await readDb('kiosk-registration-requests.json');
-  const reqRec = requests.find((r) => r.deviceSerialNumber === serial);
-  if (reqRec) {
-    return sendSuccess(res, {
-      status: reqRec.status || 'pending',
-      requestId: reqRec.requestId,
-      prisonId: reqRec.prisonId || null,
-      authorized: reqRec.status === 'approved'
+      authorized: kiosk.authorizationStatus === 'authorized',
+      rejectionReason: kiosk.rejectionReason || null
     });
   }
 
@@ -233,7 +273,7 @@ router.get('/registration-requests', requireAuth, requireRole('admin', 'warden',
       deviceBrand: k.hardware?.manufacturer || 'Unknown',
       ipAddress: k.ipAddress,
       location: k.location,
-      androidVersion: 'Unknown',
+      androidVersion: k.androidVersion || 'Unknown',
       appVersion: k.firmwareVersion || 'Unknown',
       registrationTimestamp: k.createdAt,
       deviceFingerprint: k.deviceSerialNumber || 'Unknown',
@@ -255,47 +295,68 @@ router.get('/registration-requests', requireAuth, requireRole('admin', 'warden',
   return sendSuccess(res, result);
 }));
 
-router.put('/registration/:requestId/approve', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+router.patch('/registration/:requestId/approve', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const { requestId } = req.params;
-  const kiosk = (await readDb('kiosks.json')).find((k) => k.kioskId === requestId);
+  const [kiosks, prisons] = await Promise.all([readDb('kiosks.json'), readDb('prisons.json')]);
+  const kiosk = kiosks.find((k) => k.kioskId === requestId);
   if (!kiosk || !(await inScopeOf(req, kiosk))) {
     return sendError(res, 'NOT_FOUND', 'Registration request not found', 404);
+  }
+  // Race condition guard — only approve if still pending
+  if (kiosk.authorizationStatus !== 'pending') {
+    return sendError(res, 'CONFLICT', `Request already ${kiosk.authorizationStatus}`, 409);
+  }
+  // Validate prison still exists and is active
+  const prison = prisons.find((p) => p.prisonId === kiosk.prisonId);
+  if (!prison || prison.status !== 'active') {
+    return sendError(res, 'FORBIDDEN', 'Cannot approve — prison not found or inactive', 403);
   }
   const updated = await updateDb('kiosks.json', (kiosks) => {
     const idx = kiosks.findIndex((k) => k.kioskId === requestId);
     if (idx === -1) return { data: kiosks, result: null };
+    // Re-check status inside mutex
+    if (kiosks[idx].authorizationStatus !== 'pending') return { data: kiosks, result: null };
     kiosks[idx] = { 
       ...kiosks[idx], 
       authorizationStatus: 'authorized',
       status: 'active',
       reviewedBy: req.auth.sub,
-      reviewedAt: new Date().toISOString()
+      reviewedAt: new Date().toISOString(),
+      rejectionReason: null
     };
     return { data: kiosks, result: kiosks[idx] };
   });
-  if (!updated) return sendError(res, 'NOT_FOUND', 'Registration request not found', 404);
+  if (!updated) return sendError(res, 'NOT_FOUND', 'Registration request not found or already processed', 404);
   return sendSuccess(res, { success: true });
 }));
 
-router.put('/registration/:requestId/reject', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+router.patch('/registration/:requestId/reject', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const { requestId } = req.params;
+  const { reason } = req.body;
   const kiosk = (await readDb('kiosks.json')).find((k) => k.kioskId === requestId);
   if (!kiosk || !(await inScopeOf(req, kiosk))) {
     return sendError(res, 'NOT_FOUND', 'Registration request not found', 404);
   }
+  // Race condition guard — only reject if still pending
+  if (kiosk.authorizationStatus !== 'pending') {
+    return sendError(res, 'CONFLICT', `Request already ${kiosk.authorizationStatus}`, 409);
+  }
   const updated = await updateDb('kiosks.json', (kiosks) => {
     const idx = kiosks.findIndex((k) => k.kioskId === requestId);
     if (idx === -1) return { data: kiosks, result: null };
+    // Re-check status inside mutex
+    if (kiosks[idx].authorizationStatus !== 'pending') return { data: kiosks, result: null };
     kiosks[idx] = { 
       ...kiosks[idx], 
       authorizationStatus: 'unauthorized',
       status: 'disabled',
       reviewedBy: req.auth.sub,
-      reviewedAt: new Date().toISOString()
+      reviewedAt: new Date().toISOString(),
+      rejectionReason: sanitize(reason) || 'No reason provided'
     };
     return { data: kiosks, result: kiosks[idx] };
   });
-  if (!updated) return sendError(res, 'NOT_FOUND', 'Registration request not found', 404);
+  if (!updated) return sendError(res, 'NOT_FOUND', 'Registration request not found or already processed', 404);
   return sendSuccess(res, { success: true });
 }));
 
@@ -371,6 +432,12 @@ router.post('/validate-setup-pin', asyncRoute(async (req, res) => {
   const { pin, prisonId } = req.body;
   if (!pin || !prisonId) {
     return sendError(res, 'INVALID_REQUEST', 'pin and prisonId are required', 400);
+  }
+  
+  // Rate limiting — max 5 attempts per minute per IP+prisonId
+  const rateKey = `${req.ip}:${prisonId}`;
+  if (!checkRateLimit(rateKey, 5, 60000)) {
+    return sendError(res, 'RATE_LIMITED', 'Too many attempts. Try again in 1 minute.', 429);
   }
   
   // Validate PIN length (6 digits)

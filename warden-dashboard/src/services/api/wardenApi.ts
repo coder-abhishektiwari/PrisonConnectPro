@@ -659,13 +659,13 @@ export const wardenApi = {
     apiClient.get<ApiResponse<{ total: number; pendingCount: number; approvedCount: number; rejectedCount: number }>>('/kiosks/registration-requests/stats').then((r) => r.data?.data ?? { total: 0, pendingCount: 0, approvedCount: 0, rejectedCount: 0 }),
 
   approveKioskRegistration: (requestId: string) =>
-    apiClient.put<ApiResponse<{ success: boolean }>>(`/kiosks/registration/${requestId}/approve`).then((r) => {
+    apiClient.patch<ApiResponse<{ success: boolean }>>(`/kiosks/registration/${requestId}/approve`).then((r) => {
       invalidateCache('kiosks:registration');
       return r.data?.data ?? { success: false };
     }),
 
-  rejectKioskRegistration: (requestId: string) =>
-    apiClient.put<ApiResponse<{ success: boolean }>>(`/kiosks/registration/${requestId}/reject`).then((r) => {
+  rejectKioskRegistration: (requestId: string, reason?: string) =>
+    apiClient.patch<ApiResponse<{ success: boolean }>>(`/kiosks/registration/${requestId}/reject`, { reason }).then((r) => {
       invalidateCache('kiosks:registration');
       return r.data?.data ?? { success: false };
     }),
@@ -760,6 +760,7 @@ export interface KioskRegistrationRequestItem {
   status: 'pending' | 'approved' | 'rejected';
   reviewedBy?: string | null;
   reviewedAt?: string | null;
+  rejectionReason?: string | null;
 }
 
 export interface SetupPinData {

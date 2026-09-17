@@ -264,10 +264,19 @@ class KioskRegistrationViewModel @Inject constructor(
                                 sessionManager.saveRegistrationState("approved", requestId = kioskId)
                                 shouldStop = true
                             } else if (status == "rejected" || status == "unauthorized") {
+                                val reason = result.data.rejectionReason ?: "Registration was rejected by the Warden. Please contact administration."
                                 _uiState.update {
                                     it.copy(
                                         approvalStatus = "rejected",
-                                        errorMessage = "Registration was rejected by the Warden. Please contact administration."
+                                        errorMessage = reason
+                                    )
+                                }
+                                shouldStop = true
+                            } else if (status == "expired") {
+                                _uiState.update {
+                                    it.copy(
+                                        approvalStatus = "rejected",
+                                        errorMessage = result.data.rejectionReason ?: "Registration request expired. Please register again."
                                     )
                                 }
                                 shouldStop = true
