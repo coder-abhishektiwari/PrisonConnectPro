@@ -735,6 +735,13 @@ export const wardenApi = {
   // Reset inmate PIN
   resetInmatePin: (inmateId: string, pin: string) =>
     apiClient.post<ApiResponse<any>>(`/admin/prisoners/${inmateId}/reset-pin`, { pin }).then((r) => r.data?.data),
+
+  // Biometrics
+  getInmateBiometrics: (inmateId: string) =>
+    apiClient.get<ApiResponse<any[]>>(`/admin/prisoners/${inmateId}/biometrics`).then((r) => r.data?.data ?? []),
+
+  deleteBiometric: (biometricId: string, prisonerId: string) =>
+    apiClient.delete<ApiResponse<any>>(`/admin/biometrics/${biometricId}`, { params: { prisonerId } }).then((r) => r.data?.data),
 };
 
 export interface KioskRegistrationRequestItem {

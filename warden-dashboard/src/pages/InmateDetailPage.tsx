@@ -34,6 +34,9 @@ export function InmateDetailPage() {
   const [resetPinError, setResetPinError] = useState('');
   const [resetPinSuccess, setResetPinSuccess] = useState(false);
   const [nextId, setNextId] = useState<string>('');
+  const [biometrics, setBiometrics] = useState<any[]>([]);
+  const [biometricsLoading, setBiometricsLoading] = useState(false);
+  const [deletingBiometric, setDeletingBiometric] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -64,6 +67,11 @@ export function InmateDetailPage() {
       setCellNames(cells.map((c: any) => ({ id: c.cellId, name: c.name })).filter(c => c.id && c.name));
       setBlockNames(blocks.map((b: any) => ({ id: b.blockId, name: b.name })).filter(b => b.id && b.name));
       setKioskNames(kiosks.map((k: any) => ({ id: k.kioskId, name: k.kioskId })).filter(k => k.id));
+      // Load biometrics
+      setBiometricsLoading(true);
+      wardenApi.getInmateBiometrics(inmateId).then(bm => {
+        setBiometrics(Array.isArray(bm) ? bm : []);
+      }).catch(() => setBiometrics([])).finally(() => setBiometricsLoading(false));
     } catch (e: any) {
       setLoadError(e?.response?.data?.error?.message || 'Failed to load inmate details');
     } finally { setLoading(false); }
@@ -158,6 +166,16 @@ export function InmateDetailPage() {
     } catch (e: any) {
       setResetPinError(e?.response?.data?.error?.message || 'Failed to reset PIN');
     }
+  };
+
+  const deleteBiometric = async (biometricId: string) => {
+    if (!inmate || deletingBiometric) return;
+    setDeletingBiometric(biometricId);
+    try {
+      await wardenApi.deleteBiometric(biometricId, inmate.inmateId);
+      setBiometrics(prev => prev.filter(b => b.biometricId !== biometricId));
+    } catch { }
+    setDeletingBiometric(null);
   };
 
   const addFamily = async () => {
@@ -378,6 +396,63 @@ export function InmateDetailPage() {
           {fieldRow('Security Level', 'securityLevel', 'security', { radio: ['minimum', 'medium', 'maximum'] })}
           {fieldRow('Sentence Details', 'sentenceDetails', 'gavel')}
           {searchableRow('Assigned Kiosk', 'assignedKioskId', 'tablet_mac', kioskNames, '+ Add new kiosk', 'kioskName')}
+
+          {/* Biometrics Section */}
+          {!isNew && (
+            <div className="mt-4 pt-4 border-t border-neutral-200">
+              <h3 className="text-xs font-bold uppercase tracking-wide text-neutral-500 mb-3 flex items-center gap-2">
+                <span className="material-icons text-sm">fingerprint</span> Biometrics
+                <span className="text-[10px] text-neutral-400 normal-case tracking-normal ml-1">(Register from kiosk only)</span>
+              </h3>
+              {biometricsLoading ? (
+                <div className="space-y-2">
+                  {[1, 2, 3].map(i => <div key={i} className="h-12 bg-neutral-100 rounded-lg animate-pulse" />)}
+                </div>
+              ) : biometrics.length === 0 ? (
+                <div className="text-center py-6 bg-neutral-50 rounded-lg border border-dashed border-neutral-200">
+                  <span className="material-icons text-neutral-300 text-3xl">fingerprint</span>
+                  <p className="text-xs text-neutral-500 mt-1">No biometrics registered</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {biometrics.map((bio) => {
+                    const typeLabel = bio.type === 'face' ? 'Face' : bio.type === 'fingerprint' ? 'Fingerprint' : bio.type === 'rfid' ? 'RFID' : bio.type;
+                    const typeIcon = bio.type === 'face' ? 'face' : bio.type === 'fingerprint' ? 'fingerprint' : 'credit_card';
+                    const isRegistered = bio.status?.toLowerCase() === 'registered';
+                    return (
+                      <div key={bio.biometricId} className="flex items-center justify-between px-3 py-2.5 bg-neutral-50 rounded-lg border border-neutral-100">
+                        <div className="flex items-center gap-3">
+                          <span className="material-icons text-neutral-500 text-lg">{typeIcon}</span>
+                          <div>
+                            <p className="text-sm font-medium text-neutral-800">{typeLabel}</p>
+                            <p className="text-[11px] text-neutral-400">
+                              {isRegistered ? 'Registered' : bio.status || 'Unknown'}
+                              {bio.registeredAt && ` • ${new Date(bio.registeredAt).toLocaleDateString()}`}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${isRegistered ? 'bg-green-100 text-green-700' : 'bg-neutral-200 text-neutral-500'}`}>
+                            {isRegistered ? 'ACTIVE' : 'NONE'}
+                          </span>
+                          {isRegistered && (
+                            <button
+                              onClick={() => deleteBiometric(bio.biometricId)}
+                              disabled={deletingBiometric === bio.biometricId}
+                              className="w-7 h-7 flex items-center justify-center text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition disabled:opacity-50"
+                              title={`Remove ${typeLabel}`}
+                            >
+                              <span className="material-icons text-sm">{deletingBiometric === bio.biometricId ? 'hourglass_empty' : 'delete'}</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </Card>
       </div>
 
