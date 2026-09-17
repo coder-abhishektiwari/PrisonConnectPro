@@ -571,14 +571,14 @@ fun WelcomeSelectionLayout(
             PremiumAuthCard(
                 title = "Face ID",
                 icon = Icons.Default.Face,
-                description = "Secure Recognition",
+                description = "Face Scanning",
                 onClick = onFaceClick,
                 modifier = Modifier.weight(1f)
             )
             PremiumAuthCard(
                 title = "Fingerprint",
                 icon = Icons.Default.Fingerprint,
-                description = "USB Scanner",
+                description = "Finger Scanning",
                 onClick = onFingerprintClick,
                 modifier = Modifier.weight(1f)
             )

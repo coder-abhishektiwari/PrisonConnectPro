@@ -129,7 +129,7 @@ export function InmateFamilyPage() {
         </div>
         <div className="overflow-auto max-h-[calc(100vh-280px)]">
           <table className="w-full">
-            <thead>
+            <thead className="sticky top-0 z-10">
               <tr className="border-b bg-neutral-50">
                 <th className="text-left py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Inmate</th>
                 <th className="text-center py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Prisoner Number</th>

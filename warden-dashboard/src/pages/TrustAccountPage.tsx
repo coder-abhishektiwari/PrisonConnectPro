@@ -195,7 +195,7 @@ export function TrustAccountPage() {
 
         <div className="overflow-auto max-h-[calc(100vh-280px)]">
           <table className="w-full text-left">
-            <thead>
+            <thead className="sticky top-0 z-10">
               <tr className="border-b border-slate-100 bg-slate-50/80 text-slate-500">
                 <th className="py-3.5 px-5 text-xs font-semibold uppercase tracking-wider">Inmate</th>
                 <th className="text-right py-3.5 px-5 text-xs font-semibold uppercase tracking-wider">Wallet Balance</th>

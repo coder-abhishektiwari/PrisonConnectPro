@@ -624,7 +624,7 @@ fun ScheduleDetailDialog(
                     }
                 }
 
-                if (onCancelSchedule != null && scheduleId.isNotEmpty() && status.equals("booked", true)) {
+                if (onCancelSchedule != null && scheduleId.isNotEmpty() && (status.equals("booked", true) || status.equals("scheduled", true))) {
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedButton(
                         onClick = { onCancelSchedule(scheduleId) },

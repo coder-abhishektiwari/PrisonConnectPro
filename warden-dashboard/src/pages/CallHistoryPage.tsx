@@ -242,8 +242,8 @@ export function CallHistoryPage() {
         ) : (
           <div className="overflow-auto max-h-[calc(100vh-280px)]">
             <table className="w-full">
-              <thead>
-                <tr className="border-b bg-neutral-50">
+               <thead className="sticky top-0 z-10">
+                 <tr className="border-b bg-neutral-50">
                   <th className="px-4 py-3 w-10"><input type="checkbox" checked={calls.length > 0 && calls.every((c) => selectedIds.has(c.callId))} onChange={toggleAll} className="rounded border-neutral-300" /></th>
                   <th className="text-left py-3 px-4"><FilterDropdown label="Type" options={[{ value: 'video', label: 'Video' }, { value: 'audio', label: 'Audio' }]} filter={typeFilter} setFilter={setTypeFilter} /></th>
                   <th className="text-left py-3 px-4"><button onClick={() => setSortDir((d) => d === 'asc' ? 'desc' : 'asc')} className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-neutral-500 hover:text-primary-600 transition-colors">Date {sortDir === 'asc' ? '↑' : '↓'}</button></th>
