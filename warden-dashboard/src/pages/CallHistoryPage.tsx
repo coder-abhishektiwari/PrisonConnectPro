@@ -206,6 +206,7 @@ export function CallHistoryPage() {
   const fmtDateTime = (iso: string) => { if (!iso) return '—'; const d = new Date(iso); return isNaN(d.getTime()) ? '—' : d.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' }); };
 
   const getFailReason = (c: CallHistoryItem) => {
+    if (c.endReason) return c.endReason;
     if (c.failReason) return c.failReason;
     if (!c.mediaConnectedAt) return 'Family member did not join the call';
     if (c.durationMinutes === 0) return 'Call ended immediately after connecting';
@@ -250,7 +251,7 @@ export function CallHistoryPage() {
                   <th className="text-left py-3 px-4"><span className="text-xs font-bold uppercase tracking-wider text-neutral-500">Inmate ⇄ Family</span></th>
                   <th className="text-left py-3 px-4"><FilterDropdown label="Kiosk" options={allKiosks} filter={kioskFilter} setFilter={setKioskFilter} /></th>
                   <th className="text-left py-3 px-4"><span className="text-xs font-bold uppercase tracking-wider text-neutral-500">Duration</span></th>
-                  <th className="text-left py-3 px-4"><FilterDropdown label="Status" options={[{ value: 'completed', label: 'Completed' }, { value: 'failed', label: 'Failed' }, { value: 'active', label: 'Active' }]} filter={statusFilter} setFilter={setStatusFilter} /></th>
+                  <th className="text-left py-3 px-4"><FilterDropdown label="Status" options={[{ value: 'completed', label: 'Completed' }, { value: 'missed', label: 'Missed' }, { value: 'failed', label: 'Failed' }, { value: 'cancelled', label: 'Cancelled' }, { value: 'rejected', label: 'Rejected' }, { value: 'active', label: 'Active' }]} filter={statusFilter} setFilter={setStatusFilter} /></th>
                   <th className="text-left py-3 px-4"><FilterDropdown label="Quality" options={[{ value: 'excellent', label: 'Excellent' }, { value: 'good', label: 'Good' }, { value: 'fair', label: 'Fair' }, { value: 'poor', label: 'Poor' }]} filter={qualityFilter} setFilter={setQualityFilter} /></th>
                   <th className="text-left py-3 px-4"><FilterDropdown label="Recording" options={[{ value: 'available', label: 'Available' }, { value: 'none', label: 'None' }]} filter={recordingFilter} setFilter={setRecordingFilter} /></th>
                 </tr>
@@ -260,7 +261,7 @@ export function CallHistoryPage() {
                   const rec = recordings[call.callId];
                   const inmate = inmates[call.inmateId];
                   const isInmateName = inmate?.name || call.inmateName || call.inmateId;
-                  const familyName = call.familyMemberName || '—';
+                  const familyName = call.contactName || call.familyMemberName || '—';
                   const isLive = call.status === 'active';
 
                   return (
@@ -295,12 +296,12 @@ export function CallHistoryPage() {
                             <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
                             Live
                           </span>
-                        ) : call.status === 'failed' ? (
+                        ) : (call.status === 'missed' || call.status === 'cancelled' || call.status === 'rejected' || call.status === 'failed') ? (
                           <div className="relative group">
-                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border bg-error/10 text-error border-error/20 cursor-help">Failed</span>
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border bg-error/10 text-error border-error/20 cursor-help capitalize">{call.status}</span>
                             <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block z-50 w-72">
                               <div className="bg-neutral-900 text-white text-xs rounded-xl p-3 shadow-xl leading-relaxed">
-                                <p className="font-bold mb-1">Failure Reason</p>
+                                <p className="font-bold mb-1">Reason</p>
                                 <p className="text-neutral-300">{getFailReason(call)}</p>
                               </div>
                               <div className="w-2 h-2 bg-neutral-900 transform rotate-45 absolute -bottom-1 left-4" />
@@ -386,7 +387,7 @@ export function CallHistoryPage() {
                     <div className="space-y-2">
                       <div className="flex justify-between"><span className="text-sm text-neutral-600">Inmate</span><span className="text-sm font-semibold text-neutral-900">{inmates[selected.inmateId]?.name || selected.inmateName || selected.inmateId}</span></div>
                       <div className="flex justify-between"><span className="text-sm text-neutral-600">Inmate ID</span><span className="text-sm font-mono text-neutral-900">{selected.inmateId}</span></div>
-                      <div className="flex justify-between"><span className="text-sm text-neutral-600">Family Member</span><span className="text-sm font-semibold text-neutral-900">{selected.familyMemberName || '—'}</span></div>
+                      <div className="flex justify-between"><span className="text-sm text-neutral-600">Family Member</span><span className="text-sm font-semibold text-neutral-900">{selected.contactName || selected.familyMemberName || '—'}</span></div>
                       <div className="flex justify-between"><span className="text-sm text-neutral-600">Contact ID</span><span className="text-sm font-mono text-neutral-900">{selected.contactId}</span></div>
                     </div>
                   </div>
@@ -412,9 +413,9 @@ export function CallHistoryPage() {
                     </div>
                   </div>
 
-                  {selected.status === 'failed' && (
+                  {(selected.status !== 'completed' && selected.status !== 'active') && (
                     <div className="bg-error/5 rounded-xl p-4 border border-error/20">
-                      <p className="text-[11px] font-bold text-error uppercase tracking-wide mb-2">Failure Details</p>
+                      <p className="text-[11px] font-bold text-error uppercase tracking-wide mb-2">Reason</p>
                       <p className="text-sm text-neutral-700">{getFailReason(selected)}</p>
                     </div>
                   )}

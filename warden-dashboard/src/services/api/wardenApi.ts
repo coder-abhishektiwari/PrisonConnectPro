@@ -41,7 +41,9 @@ export interface CallHistoryItem {
   connectionQuality?: string;
   inmateName?: string;
   familyMemberName?: string;
+  contactName?: string;
   failReason?: string;
+  endReason?: string;
   mediaConnectedAt?: string;
   chargeAmount?: number;
   ratePerMinute?: number;

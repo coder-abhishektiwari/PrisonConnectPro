@@ -29,7 +29,7 @@ const ALLOWED_TRANSITIONS = {
  * mid-call still gets billed (capped at the max duration) and never blocks
  * future calls with a stuck 'active' record.
  */
-async function finalizeCall(call, requestedEndTimeMs, broadcastEvent) {
+async function finalizeCall(call, requestedEndTimeMs, broadcastEvent, endReason) {
   const startMs = new Date(call.startTime).getTime();
   const maxMs = (Number(call.maxDurationMinutes) || 15) * 60000;
 
@@ -39,6 +39,22 @@ async function finalizeCall(call, requestedEndTimeMs, broadcastEvent) {
     ? new Date(call.mediaConnectedAt).getTime()
     : startMs;
   const neverConnected = !call.mediaConnectedAt;
+
+  // Determine actual status based on whether media ever connected
+  let finalStatus = 'completed';
+  let finalReason = endReason || null;
+  if (neverConnected) {
+    if (endReason === 'cancelled' || endReason === 'kiosk_cancelled') {
+      finalStatus = 'cancelled';
+    } else if (endReason === 'timeout' || endReason === 'sweep') {
+      finalStatus = 'missed';
+    } else if (endReason === 'rejected') {
+      finalStatus = 'rejected';
+    } else {
+      finalStatus = 'missed';
+      finalReason = finalReason || 'Call was not answered';
+    }
+  }
 
   // A call that outlived its max duration (kiosk died) is billed only up to
   // the cap — time after the app died must not be charged.
@@ -55,10 +71,11 @@ async function finalizeCall(call, requestedEndTimeMs, broadcastEvent) {
     if (idx === -1) return { data: calls, result: null };
     calls[idx] = {
       ...calls[idx],
-      status: 'completed',
+      status: finalStatus,
       endTime: new Date(endMs).toISOString(),
       durationMinutes: billedMinutes,
-      chargeAmount
+      chargeAmount,
+      endReason: finalReason
     };
     return { data: calls, result: calls[idx] };
   });
@@ -179,6 +196,8 @@ function createCallsRouter(broadcastEvent, signaling) {
 
   router.get('/history', requireAuth, asyncRoute(async (req, res) => {
     let calls = await readDb('calls.json');
+    const contacts = await readDb('contacts.json').catch(() => []);
+    const contactName = (contactId) => contacts.find((c) => c.contactId === contactId)?.fullName || null;
     if (req.auth.role === 'inmate') {
       calls = calls.filter((c) => c.inmateId === req.auth.inmateId);
     } else if (req.auth.role === 'warden') {
@@ -262,7 +281,10 @@ function createCallsRouter(broadcastEvent, signaling) {
     const total = calls.length;
     const limit = Math.min(Math.max(parseInt(req.query.limit) || 20, 1), 100);
     const offset = Math.max(parseInt(req.query.offset) || 0, 0);
-    const paged = calls.slice(offset, offset + limit);
+    const paged = calls.slice(offset, offset + limit).map((c) => ({
+      ...c,
+      contactName: contactName(c.contactId) || c.familyMemberName || null
+    }));
 
     return sendSuccess(res, { calls: paged, total, limit, offset });
   }));
@@ -306,7 +328,7 @@ function createCallsRouter(broadcastEvent, signaling) {
     const scoped = await scopeList(req, matches);
     const contactName = (contactId) => contacts.find((c) => c.contactId === contactId)?.fullName || null;
     const history = scoped
-      .filter((c) => TERMINAL_STATES.includes(c.status))
+      .filter((c) => c.status === 'completed' && (c.mediaConnectedAt || c.durationMinutes > 0))
       .sort((a, b) => new Date(b.startTime || 0) - new Date(a.startTime || 0))
       .map((c) => ({ ...c, contactName: contactName(c.contactId) || c.familyMemberName || null }));
     return sendSuccess(res, history);
@@ -374,7 +396,7 @@ function createCallsRouter(broadcastEvent, signaling) {
       const startMs = new Date(alreadyActive.startTime || Date.now()).getTime();
       if (Date.now() - startMs > maxMs + graceMs) {
         console.warn(`[calls] sweeping stale active call ${alreadyActive.callId}`);
-        await finalizeCall(alreadyActive, startMs + maxMs, broadcastEvent);
+        await finalizeCall(alreadyActive, startMs + maxMs, broadcastEvent, 'sweep');
       } else {
         return sendError(res, 'CALL_IN_PROGRESS', 'Inmate already has an active call', 409);
       }
@@ -564,7 +586,7 @@ function createCallsRouter(broadcastEvent, signaling) {
       // Run billing if this PATCH transitioned the call to a terminal state.
       if (updated._needsBilling) {
         delete updated._needsBilling;
-        const billed = await finalizeCall(updated, Date.now(), broadcastEvent);
+        const billed = await finalizeCall(updated, Date.now(), broadcastEvent, updated.status);
         if (billed) updated.chargeAmount = billed.chargeAmount;
       }
       broadcastEvent('call-updated', updated);
@@ -583,7 +605,7 @@ function createCallsRouter(broadcastEvent, signaling) {
       return sendError(res, 'NOT_FOUND', 'Call not found', 404);
     }
 
-    const updatedCall = await finalizeCall(existing, Date.now(), broadcastEvent);
+    const updatedCall = await finalizeCall(existing, Date.now(), broadcastEvent, 'completed');
     if (!updatedCall) return sendError(res, 'NOT_FOUND', 'Call not found', 404);
 
 
@@ -673,7 +695,7 @@ async function sweepStaleCalls(broadcastEvent) {
       const startMs = new Date(call.startTime || Date.now()).getTime();
       if (now - startMs > maxMs + graceMs) {
         console.warn(`[calls] periodic sweep: finalizing stale call ${call.callId}`);
-        await finalizeCall(call, startMs + maxMs, broadcastEvent);
+        await finalizeCall(call, startMs + maxMs, broadcastEvent, 'sweep');
         swept++;
       }
     }
