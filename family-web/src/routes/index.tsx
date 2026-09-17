@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { createBrowserRouter, Navigate, useSearchParams } from 'react-router-dom';
 import { CallLayout } from '@/layouts/CallLayout';
 import { LinkVerificationPage } from '@/pages/LinkVerificationPage';
 import { DeviceVerificationPage } from '@/pages/DeviceVerificationPage';
@@ -28,6 +28,13 @@ function Home() {
   );
 }
 
+function QueryLinkRedirect() {
+  const [searchParams] = useSearchParams();
+  const firstKey = searchParams.keys().next().value;
+  if (firstKey) return <Navigate to={`/c/${firstKey}`} replace />;
+  return <Navigate to="/" replace />;
+}
+
 export const router = createBrowserRouter([
   {
     path: '/',
@@ -38,6 +45,7 @@ export const router = createBrowserRouter([
     ),
     children: [
       { index: true, element: <Home /> },
+      { path: 'c', element: <QueryLinkRedirect /> },
       { path: RoutePaths.linkVerification, element: <LinkVerificationPage /> },
       {
         path: RoutePaths.deviceVerification,

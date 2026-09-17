@@ -1,4 +1,5 @@
 const express = require('express');
+const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const { readDb, updateDb } = require('../lib/db');
 const { requireAuth } = require('../middleware/auth');
@@ -97,7 +98,7 @@ router.post('/book', requireAuth, asyncRoute(async (req, res) => {
     inmateId, contactId, kioskId, date, timeSlot,
     callType: callType || 'video', status: 'scheduled', createdAt: new Date().toISOString()
   };
-  const linkToken = `L-${uuidv4().replace(/-/g, '').slice(0, 10).toUpperCase()}`;
+  const linkToken = `L-${Array.from(crypto.randomBytes(6), (b) => '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'[b % 36]).join('')}`;
   newSchedule.linkToken = linkToken;
   await updateDb('schedule.json', (s) => ({ data: [...s, newSchedule], result: newSchedule }));
 

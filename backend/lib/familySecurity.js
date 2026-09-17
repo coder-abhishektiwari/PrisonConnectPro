@@ -43,7 +43,7 @@ function maskedPhone(phone) {
 
 /** Build the clickable family-web link for a call. */
 function buildCallLink(linkToken) {
-  return `${FAMILY_WEB_URL}/c/${encodeURIComponent(linkToken)}`;
+  return `${FAMILY_WEB_URL}/c?${encodeURIComponent(linkToken)}`;
 }
 
 const LOOKUP_KEYS = ['contactId', 'phone', 'phoneNumber', 'fullName'];

@@ -382,7 +382,7 @@ function createCallsRouter(broadcastEvent, signaling) {
 
     // Family secure-call token material. A scheduled call reuses the token
     // already texted at booking time; an instant call mints a fresh one.
-    const linkToken = scheduledLinkToken || `L-${uuidv4().replace(/-/g, '').slice(0, 10).toUpperCase()}`;
+    const linkToken = scheduledLinkToken || `L-${Array.from(crypto.randomBytes(6), (b) => '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'[b % 36]).join('')}`;
     const otp = String(crypto.randomInt(100000, 999999));
 
     const [settingsDocs, pricingDocs] = await Promise.all([readDb('settings.json'), readDb('pricing.json')]);
