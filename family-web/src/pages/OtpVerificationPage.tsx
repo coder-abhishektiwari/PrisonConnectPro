@@ -24,7 +24,9 @@ export function OtpVerificationPage() {
   useEffect(() => {
     navigator.mediaDevices?.getUserMedia({ video: true, audio: true })
       .then((s) => s.getTracks().forEach((t) => t.stop()))
-      .catch(() => {});
+      .catch((err) => {
+        console.warn('[OTP] Camera/mic warm-up failed — permissions may need to be granted:', err.name);
+      });
   }, []);
 
   const listenForOtp = useCallback(() => {

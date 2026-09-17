@@ -107,14 +107,20 @@ class WebRtcService {
     audio: true,
   }): Promise<MediaStream> {
     try {
-      this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+      const defaultStream = await navigator.mediaDevices.getUserMedia(constraints);
       const preferred = await this.selectPreferredDevices();
       if (preferred.video || preferred.audio) {
         try {
           const preferredStream = await navigator.mediaDevices.getUserMedia(preferred);
-          this.localStream.getTracks().forEach((t) => t.stop());
+          // Only stop default stream AFTER preferred stream is confirmed working
+          defaultStream.getTracks().forEach((t) => t.stop());
           this.localStream = preferredStream;
-        } catch (_) {}
+        } catch (_) {
+          // Preferred device failed — use the default stream (do NOT stop it)
+          this.localStream = defaultStream;
+        }
+      } else {
+        this.localStream = defaultStream;
       }
 
       this.emit('local-stream', this.localStream);

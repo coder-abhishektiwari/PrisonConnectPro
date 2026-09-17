@@ -163,7 +163,14 @@ export function CallPage() {
 
           // Kiosk still waiting — rebuild the peer connection from scratch.
           webRtcService.close();
-          await webRtcService.setupLocalMedia({ video: true, audio: true });
+          try {
+            await webRtcService.setupLocalMedia({ video: true, audio: true });
+          } catch (mediaErr) {
+            console.error('[Call] Reconnect media acquisition failed:', mediaErr);
+            setStatus('error');
+            setError('Camera/microphone access lost. Please grant permissions and try again.');
+            return;
+          }
           await webRtcService.initialize(session!, []);
           joinStartedRef.current = true;
           await webRtcService.handleJoined(resp);
