@@ -12,6 +12,7 @@ import { InmateFamilyPage } from '@/pages/InmateFamilyPage';
 import { InmateDetailPage } from '@/pages/InmateDetailPage';
 import { TrustAccountPage } from '@/pages/TrustAccountPage';
 import { KioskRegistrationPage } from '@/pages/KioskRegistrationPage';
+import { KiosksPage } from '@/pages/KiosksPage';
 import { UsersPage } from '@/pages/UsersPage';
 import { CallConfigurationPage } from '@/pages/CallConfigurationPage';
 import { RequireAuth, RedirectIfAuthenticated } from '@/components/auth/RouteGuards';
@@ -29,6 +30,7 @@ export const RoutePaths = {
   inmateDetail: '/inmates-family/:inmateId',
   trustAccount: '/inmate-wallet',
   kioskRegistrations: '/kiosk-registrations',
+  kiosks: '/kiosks',
   users: '/users',
   callConfiguration: '/call-configuration',
 } as const;
@@ -66,6 +68,7 @@ export const router = createBrowserRouter([
       { path: RoutePaths.inmateDetail, element: <InmateDetailPage /> },
       { path: RoutePaths.trustAccount, element: <TrustAccountPage /> },
       { path: RoutePaths.kioskRegistrations, element: <KioskRegistrationPage /> },
+      { path: RoutePaths.kiosks, element: <KiosksPage /> },
       { path: RoutePaths.users, element: <UsersPage /> },
       { path: RoutePaths.callConfiguration, element: <CallConfigurationPage /> },
       { path: '*', element: <Navigate to="/calls" replace /> },

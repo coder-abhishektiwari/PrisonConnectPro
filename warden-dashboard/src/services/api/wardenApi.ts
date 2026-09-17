@@ -648,6 +648,9 @@ export const wardenApi = {
   },
 
   // Kiosk Registration & Authorization
+  getKiosks: () =>
+    cachedGet('kiosks:list', () => apiClient.get<ApiResponse<KioskItem[]>>('/kiosks/').then((r) => r.data?.data ?? [])),
+
   getKioskRegistrationRequests: (params?: ListParams) => {
     const qs = new URLSearchParams();
     if (params) Object.entries(params).forEach(([k, v]) => { if (v != null && v !== '') qs.set(k, String(v)); });
@@ -743,6 +746,33 @@ export const wardenApi = {
   deleteBiometric: (biometricId: string, prisonerId: string) =>
     apiClient.delete<ApiResponse<any>>(`/admin/biometrics/${biometricId}`, { params: { prisonerId } }).then((r) => r.data?.data),
 };
+
+export interface KioskItem {
+  kioskId: string;
+  uid?: number;
+  prisonId: string;
+  prisonName?: string;
+  deviceSerialNumber?: string;
+  deviceFingerprint?: string;
+  status?: string;
+  authorizationStatus?: string;
+  location?: string;
+  ipAddress?: string;
+  androidVersion?: string;
+  firmwareVersion?: string;
+  appVersion?: string;
+  lastSeen?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  hardware?: Record<string, unknown>;
+  camera?: Record<string, unknown>;
+  microphone?: Record<string, unknown>;
+  speaker?: Record<string, unknown>;
+  printer?: Record<string, unknown>;
+  network?: Record<string, unknown>;
+  assignedBlock?: string;
+  assignedCellArea?: string;
+}
 
 export interface KioskRegistrationRequestItem {
   requestId: string;

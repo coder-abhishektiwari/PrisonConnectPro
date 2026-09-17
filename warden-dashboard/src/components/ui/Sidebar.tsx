@@ -13,6 +13,7 @@ const navItems: NavItem[] = [
   { to: '/inmate-wallet', label: 'Inmate Wallet', icon: 'account_balance_wallet' },
   { to: '/inmates-family', label: 'Prisoner & Family', icon: 'family_restroom' },
   { to: '/kiosk-registrations', label: 'Kiosk Registration', icon: 'security' },
+  { to: '/kiosks', label: 'Kiosks', icon: 'devices_other' },
   { to: '/users', label: 'Users', icon: 'people' },
   { to: '/call-configuration', label: 'Call Configuration', icon: 'tune' },
 ];
