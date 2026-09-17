@@ -408,26 +408,24 @@ export function InmateDetailPage() {
                 <div className="space-y-2">
                   {[1, 2, 3].map(i => <div key={i} className="h-12 bg-neutral-100 rounded-lg animate-pulse" />)}
                 </div>
-              ) : biometrics.length === 0 ? (
-                <div className="text-center py-6 bg-neutral-50 rounded-lg border border-dashed border-neutral-200">
-                  <span className="material-icons text-neutral-300 text-3xl">fingerprint</span>
-                  <p className="text-xs text-neutral-500 mt-1">No biometrics registered</p>
-                </div>
               ) : (
                 <div className="space-y-2">
-                  {biometrics.map((bio) => {
-                    const typeLabel = bio.type === 'face' ? 'Face' : bio.type === 'fingerprint' ? 'Fingerprint' : bio.type === 'rfid' ? 'RFID' : bio.type;
-                    const typeIcon = bio.type === 'face' ? 'face' : bio.type === 'fingerprint' ? 'fingerprint' : 'credit_card';
-                    const isRegistered = bio.status?.toLowerCase() === 'registered';
+                  {([
+                    { type: 'face', label: 'Face', icon: 'face' },
+                    { type: 'fingerprint', label: 'Fingerprint', icon: 'fingerprint' },
+                    { type: 'rfid', label: 'RFID', icon: 'credit_card' },
+                  ]).map(({ type, label, icon }) => {
+                    const bio = biometrics.find(b => b.type === type);
+                    const isRegistered = bio?.status?.toLowerCase() === 'registered';
                     return (
-                      <div key={bio.biometricId} className="flex items-center justify-between px-3 py-2.5 bg-neutral-50 rounded-lg border border-neutral-100">
+                      <div key={type} className="flex items-center justify-between px-3 py-2.5 bg-neutral-50 rounded-lg border border-neutral-100">
                         <div className="flex items-center gap-3">
-                          <span className="material-icons text-neutral-500 text-lg">{typeIcon}</span>
+                          <span className="material-icons text-neutral-500 text-lg">{icon}</span>
                           <div>
-                            <p className="text-sm font-medium text-neutral-800">{typeLabel}</p>
+                            <p className="text-sm font-medium text-neutral-800">{label}</p>
                             <p className="text-[11px] text-neutral-400">
-                              {isRegistered ? 'Registered' : bio.status || 'Unknown'}
-                              {bio.registeredAt && ` • ${new Date(bio.registeredAt).toLocaleDateString()}`}
+                              {isRegistered ? 'Registered' : 'Not registered'}
+                              {bio?.registeredAt && ` • ${new Date(bio.registeredAt).toLocaleDateString()}`}
                             </p>
                           </div>
                         </div>
@@ -435,12 +433,12 @@ export function InmateDetailPage() {
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${isRegistered ? 'bg-green-100 text-green-700' : 'bg-neutral-200 text-neutral-500'}`}>
                             {isRegistered ? 'ACTIVE' : 'NONE'}
                           </span>
-                          {isRegistered && (
+                          {isRegistered && bio && (
                             <button
                               onClick={() => deleteBiometric(bio.biometricId)}
                               disabled={deletingBiometric === bio.biometricId}
                               className="w-7 h-7 flex items-center justify-center text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition disabled:opacity-50"
-                              title={`Remove ${typeLabel}`}
+                              title={`Remove ${label}`}
                             >
                               <span className="material-icons text-sm">{deletingBiometric === bio.biometricId ? 'hourglass_empty' : 'delete'}</span>
                             </button>
