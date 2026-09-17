@@ -26,7 +26,17 @@ router.post('/refresh', async (req, res) => {
   const roleKey = String(session.role || '').toLowerCase().replace(/[-_]/g, '');
   let claims = { sub: session.sub, role: session.role };
   try {
-    if (roleKey === 'admin' || roleKey === 'superadmin' || roleKey === 'warden') {
+    if (roleKey === 'warden') {
+      const wardens = await readDb('wardens.json');
+      const warden = wardens.find((w) => w.wardenId === session.sub);
+      if (warden) {
+        claims = {
+          sub: warden.wardenId,
+          role: 'warden',
+          prisonId: warden.prisonId
+        };
+      }
+    } else if (roleKey === 'admin' || roleKey === 'superadmin' || roleKey === 'kioskadmin') {
       const admins = await readDb('admins.json');
       const admin = admins.find((a) => a.adminId === session.sub);
       if (admin) {
@@ -57,8 +67,7 @@ router.post('/refresh', async (req, res) => {
       }
     }
   } catch (err) {
-    // Keep only sub/role on read failure — the access token stays valid but
-    // loses jail scoping; this is safe (fail closed to global-view only on error).
+    // On read failure, keep original claims — scoped to nothing rather than everything.
   }
 
   const next = await sessions.createSession(claims, req);

@@ -85,6 +85,18 @@ async function inmateCreateHandler(req, res) {
   if (kioskId && inmateData.assignedKioskId && inmateData.assignedKioskId !== kioskId) {
     return sendError(res, 'FORBIDDEN', 'Cannot create an inmate for another kiosk', 403);
   }
+  // Verify assigned kiosk belongs to the same prison
+  const assignedKiosk = inmateData.assignedKioskId;
+  if (jailId && assignedKiosk) {
+    const kiosks = await readDb('kiosks.json');
+    const kiosk = kiosks.find((k) => k.kioskId === assignedKiosk);
+    if (!kiosk) {
+      return sendError(res, 'NOT_FOUND', 'Assigned kiosk not found', 404);
+    }
+    if (kiosk.prisonId && kiosk.prisonId !== jailId) {
+      return sendError(res, 'FORBIDDEN', 'Cannot assign a kiosk from another prison', 403);
+    }
+  }
   try {
     const newInmate = await updateDb('inmates.json', async (inmates) => {
       if (inmateData.prisonerNumber && inmates.find((i) => i.prisonerNumber === inmateData.prisonerNumber)) {
@@ -146,6 +158,17 @@ async function inmateUpdateHandler(req, res) {
   }
   if (kioskId && updates.assignedKioskId && updates.assignedKioskId !== kioskId) {
     return sendError(res, 'FORBIDDEN', 'Cannot reassign an inmate to another kiosk', 403);
+  }
+  // Verify assigned kiosk belongs to the same prison
+  if (jailId && updates.assignedKioskId) {
+    const kiosks = await readDb('kiosks.json');
+    const kiosk = kiosks.find((k) => k.kioskId === updates.assignedKioskId);
+    if (!kiosk) {
+      return sendError(res, 'NOT_FOUND', 'Assigned kiosk not found', 404);
+    }
+    if (kiosk.prisonId && kiosk.prisonId !== jailId) {
+      return sendError(res, 'FORBIDDEN', 'Cannot assign a kiosk from another prison', 403);
+    }
   }
   delete updates.prisonId;
   const updated = await updateDb('inmates.json', (inmates) => {

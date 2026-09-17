@@ -219,7 +219,7 @@ router.post('/change-password', requireAuth, authLimiter, asyncRoute(async (req,
     idField = 'wardenId';
     const wardens = await readDb(dbFile);
     userRec = wardens.find((w) => w.wardenId === sub);
-  } else if (role === 'admin' || role === 'super_admin') {
+  } else if (role === 'admin' || role === 'super_admin' || role === 'kiosk_admin') {
     dbFile = 'admins.json';
     idField = 'adminId';
     const admins = await readDb(dbFile);
