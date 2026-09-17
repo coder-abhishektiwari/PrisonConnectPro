@@ -197,7 +197,12 @@ function createCallsRouter(broadcastEvent, signaling) {
   router.get('/history', requireAuth, asyncRoute(async (req, res) => {
     let calls = await readDb('calls.json');
     const contacts = await readDb('contacts.json').catch(() => []);
-    const contactName = (contactId) => contacts.find((c) => c.contactId === contactId)?.fullName || null;
+    const contactName = (contactId, inmateId) => {
+      const byId = contacts.find((c) => c.contactId === contactId);
+      if (byId) return byId.fullName || null;
+      const byInmate = contacts.find((c) => c.inmateId === inmateId);
+      return byInmate ? (byInmate.fullName || null) : null;
+    };
     if (req.auth.role === 'inmate') {
       calls = calls.filter((c) => c.inmateId === req.auth.inmateId);
     } else if (req.auth.role === 'warden') {
@@ -283,7 +288,7 @@ function createCallsRouter(broadcastEvent, signaling) {
     const offset = Math.max(parseInt(req.query.offset) || 0, 0);
     const paged = calls.slice(offset, offset + limit).map((c) => ({
       ...c,
-      contactName: contactName(c.contactId) || c.familyMemberName || null
+      contactName: contactName(c.contactId, c.inmateId) || c.familyMemberName || null
     }));
 
     return sendSuccess(res, { calls: paged, total, limit, offset });
@@ -302,7 +307,12 @@ function createCallsRouter(broadcastEvent, signaling) {
     }
     const matches = schedules.filter((s) => s.inmateId === inmate.inmateId);
     const scoped = await scopeList(req, matches);
-    const contactName = (contactId) => contacts.find((c) => c.contactId === contactId)?.fullName || null;
+    const contactName = (contactId, inmateId) => {
+      const byId = contacts.find((c) => c.contactId === contactId);
+      if (byId) return byId.fullName || null;
+      const byInmate = contacts.find((c) => c.inmateId === inmateId);
+      return byInmate ? (byInmate.fullName || null) : null;
+    };
     // Only live bookings: completed calls and past dates leave the list. A
     // booking for TODAY stays visible until midnight (its slot may still be
     // current), everything else ages out by date.
@@ -310,7 +320,7 @@ function createCallsRouter(broadcastEvent, signaling) {
     return sendSuccess(res, scoped
       .filter((s) => (s.status || 'scheduled') === 'scheduled' && (s.date || '') >= today)
       .sort((a, b) => `${a.date}${a.timeSlot}`.localeCompare(`${b.date}${b.timeSlot}`))
-      .map((s) => ({ ...s, contactName: contactName(s.contactId) })));
+      .map((s) => ({ ...s, contactName: contactName(s.contactId, s.inmateId) })));
   }));
 
   router.get('/history/:id', requireAuth, asyncRoute(async (req, res) => {
@@ -326,11 +336,16 @@ function createCallsRouter(broadcastEvent, signaling) {
     }
     const matches = calls.filter((c) => c.inmateId === inmate.inmateId);
     const scoped = await scopeList(req, matches);
-    const contactName = (contactId) => contacts.find((c) => c.contactId === contactId)?.fullName || null;
+    const contactName = (contactId, inmateId) => {
+      const byId = contacts.find((c) => c.contactId === contactId);
+      if (byId) return byId.fullName || null;
+      const byInmate = contacts.find((c) => c.inmateId === inmateId);
+      return byInmate ? (byInmate.fullName || null) : null;
+    };
     const history = scoped
       .filter((c) => c.status === 'completed' && (c.mediaConnectedAt || c.durationMinutes > 0))
       .sort((a, b) => new Date(b.startTime || 0) - new Date(a.startTime || 0))
-      .map((c) => ({ ...c, contactName: contactName(c.contactId) || c.familyMemberName || null }));
+      .map((c) => ({ ...c, contactName: contactName(c.contactId, c.inmateId) || c.familyMemberName || null }));
     return sendSuccess(res, history);
   }));
 
