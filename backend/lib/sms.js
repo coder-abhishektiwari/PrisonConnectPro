@@ -19,7 +19,7 @@ const LOG_DIR = path.join(__dirname, '..', 'logs');
 const LOG_FILE = path.join(LOG_DIR, 'sms.jsonl');
 
 // ─── ENV configuration ────────────────────────────────────────────────────────
-const PROVIDER = process.env.SMS_PROVIDER || 'log';
+const GLOBAL_PROVIDER = process.env.SMS_PROVIDER || 'log';
 const FAST2SMS_API_KEY = process.env.FAST2SMS_API_KEY;
 const FAST2SMS_SENDER_ID = process.env.FAST2SMS_SENDER_ID || '';
 const FAST2SMS_ENTITY_ID = process.env.FAST2SMS_ENTITY_ID || '';
@@ -28,8 +28,25 @@ const FAST2SMS_LINK_TEMPLATE_ID = process.env.FAST2SMS_LINK_TEMPLATE_ID || '';
 const FAST2SMS_SCHEDULED_TEMPLATE_ID = process.env.FAST2SMS_SCHEDULED_TEMPLATE_ID || '';
 const SMS_OTP_DOMAIN = process.env.SMS_OTP_DOMAIN || '';
 
+/**
+ * Per-template provider override: if a template ID env var is set to "log",
+ * that specific kind is logged only (not sent via DLT), even when the global
+ * provider is "fast2sms".  Numeric template IDs always go through DLT.
+ */
+function effectiveProvider(kind) {
+  const tplMap = {
+    otp: FAST2SMS_OTP_TEMPLATE_ID,
+    link: FAST2SMS_LINK_TEMPLATE_ID,
+    scheduled: FAST2SMS_SCHEDULED_TEMPLATE_ID,
+  };
+  const val = (tplMap[kind] || '').trim().toLowerCase();
+  if (val === 'log') return 'log';
+  if (val === 'fast2sms') return 'fast2sms';
+  return GLOBAL_PROVIDER;
+}
+
 console.log(
-  `[sms] provider=${PROVIDER} hasKey=${!!FAST2SMS_API_KEY} ` +
+  `[sms] provider=${GLOBAL_PROVIDER} hasKey=${!!FAST2SMS_API_KEY} ` +
   `sender=${FAST2SMS_SENDER_ID || '(none)'} ` +
   `entity=${FAST2SMS_ENTITY_ID || '(none)'} ` +
   `otpTpl=${FAST2SMS_OTP_TEMPLATE_ID || '(none)'} linkTpl=${FAST2SMS_LINK_TEMPLATE_ID || '(none)'} ` +
@@ -237,7 +254,9 @@ async function sendSms({ phone, message, kind = 'generic', callId = null, templa
     transport: 'log',
   };
 
-  if (PROVIDER === 'fast2sms') {
+  const provider = effectiveProvider(kind);
+
+  if (provider === 'fast2sms') {
     // Log preview of what the family member will receive
     const preview = previewSms(kind, templateVars || []);
     if (preview) {
@@ -301,5 +320,6 @@ module.exports = {
   linkTemplateVars,
   scheduledTemplateVars,
   normalizePhone,
-  PROVIDER,
+  PROVIDER: GLOBAL_PROVIDER,
+  effectiveProvider,
 };
