@@ -368,7 +368,7 @@ router.post('/face-register', requireAuth, asyncRoute(async (req, res) => {
   if (!inmateId || !kioskId) return sendError(res, 'INVALID_REQUEST', 'inmateId and kioskId are required', 400);
 
   const [inmates, kiosks] = await Promise.all([readDb('inmates.json'), readDb('kiosks.json')]);
-  const inmate = inmates.find((i) => i.inmateId === inmateId);
+  const inmate = inmates.find((i) => i.inmateId === inmateId && inAdminScope(req, i));
   if (!inmate) return sendError(res, 'NOT_FOUND', 'Inmate not found', 404);
 
   const kiosk = kiosks.find((k) => k.kioskId === kioskId);
@@ -407,6 +407,10 @@ router.post('/face-register', requireAuth, asyncRoute(async (req, res) => {
         faceAntispoof: probeResult.antispoof,
         lastBiometricUpdate: new Date().toISOString()
       };
+      const biometricRecord = { biometricId: `BIO-${inmateId}-FACE`, prisonerId: inmateId, type: 'face', status: 'registered', registeredAt: new Date().toISOString() };
+      const existingBiometrics = all[idx].biometrics || [];
+      const withoutFace = existingBiometrics.filter(b => b.type !== 'face');
+      all[idx].biometrics = [...withoutFace, biometricRecord];
       return { data: all, result: all[idx] };
     });
 
@@ -436,7 +440,7 @@ router.post('/rfid-identify', asyncRoute(async (req, res) => {
 
   // Find inmate with matching RFID in same prison + assigned to this kiosk + active
   const inmate = inmates.find((i) =>
-    i.rfidToken === rfidToken &&
+    i.biometricData?.rfidToken === rfidToken &&
     (!kiosk.prisonId || !i.prisonId || kiosk.prisonId === i.prisonId) &&
     (!i.assignedKioskId || i.assignedKioskId === kioskId) &&
     (!i.status || i.status === 'active')

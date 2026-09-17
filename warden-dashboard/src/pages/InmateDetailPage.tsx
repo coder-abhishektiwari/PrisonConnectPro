@@ -173,7 +173,8 @@ export function InmateDetailPage() {
     setDeletingBiometric(biometricId);
     try {
       await wardenApi.deleteBiometric(biometricId, inmate.inmateId);
-      setBiometrics(prev => prev.filter(b => b.biometricId !== biometricId));
+      const refreshed = await wardenApi.getInmateBiometrics(inmate.inmateId);
+      setBiometrics(Array.isArray(refreshed) ? refreshed : []);
     } catch { }
     setDeletingBiometric(null);
   };

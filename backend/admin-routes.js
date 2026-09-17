@@ -344,7 +344,7 @@ router.post('/prisoners/:prisonerId/biometrics', requireRole(...ALL_ROLES), asyn
           lastBiometricUpdate: new Date().toISOString()
         }
       };
-      biometricRecord = { biometricId: `BIO-${Date.now()}-FACE`, prisonerId, type: 'face', status: 'registered', registeredAt: new Date().toISOString() };
+      biometricRecord = { biometricId: `BIO-${prisonerId}-FACE`, prisonerId, type: 'face', status: 'registered', registeredAt: new Date().toISOString() };
     } catch (err) {
       if (err.message === 'NO_FACE_DETECTED') return res.status(400).json({ success: false, error: { code: 'NO_FACE', message: 'No face detected' } });
       if (err.message === 'MULTIPLE_FACES_DETECTED') return res.status(400).json({ success: false, error: { code: 'MULTIPLE_FACES', message: 'Multiple faces detected' } });
@@ -356,13 +356,13 @@ router.post('/prisoners/:prisonerId/biometrics', requireRole(...ALL_ROLES), asyn
     updateFields = {
       biometricData: { ...inmates[inmateIdx].biometricData, fingerprintRegistered: true, fingerprintTemplate: capture, lastBiometricUpdate: new Date().toISOString() }
     };
-    biometricRecord = { biometricId: `BIO-${Date.now()}-FGP`, prisonerId, type: 'fingerprint', status: 'registered', registeredAt: new Date().toISOString() };
+    biometricRecord = { biometricId: `BIO-${prisonerId}-FGP`, prisonerId, type: 'fingerprint', status: 'registered', registeredAt: new Date().toISOString() };
   } else if (type === 'rfid') {
     if (!rfidToken) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'rfidToken is required for RFID' } });
     updateFields = {
       biometricData: { ...inmates[inmateIdx].biometricData, rfidRegistered: true, rfidToken, lastBiometricUpdate: new Date().toISOString() }
     };
-    biometricRecord = { biometricId: `BIO-${Date.now()}-RFID`, prisonerId, type: 'rfid', status: 'registered', registeredAt: new Date().toISOString() };
+    biometricRecord = { biometricId: `BIO-${prisonerId}-RFID`, prisonerId, type: 'rfid', status: 'registered', registeredAt: new Date().toISOString() };
   }
 
   const updated = await updateDb('inmates.json', (inmates) => {
@@ -370,7 +370,8 @@ router.post('/prisoners/:prisonerId/biometrics', requireRole(...ALL_ROLES), asyn
     if (idx === -1) return { data: inmates, result: null };
     inmates[idx] = { ...inmates[idx], ...updateFields };
     const existingBiometrics = inmates[idx].biometrics || [];
-    inmates[idx].biometrics = [...existingBiometrics, biometricRecord];
+    const withoutType = existingBiometrics.filter(b => b.type !== type);
+    inmates[idx].biometrics = [...withoutType, biometricRecord];
     return { data: inmates, result: inmates[idx] };
   });
 
@@ -380,11 +381,15 @@ router.post('/prisoners/:prisonerId/biometrics', requireRole(...ALL_ROLES), asyn
 
 router.delete('/biometrics/:biometricId', requireRole(...ALL_ROLES), async (req, res) => {
   const { biometricId } = req.params;
+  const prisonerId = req.query.prisonerId;
+  if (!prisonerId) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'prisonerId query param is required' } });
+
   const parts = biometricId.split('-');
   if (parts.length < 3) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'Invalid biometric ID' } });
   const type = parts[parts.length - 1].toLowerCase();
-  const prisonerId = req.query.prisonerId || parts.slice(1, -1).join('-');
-  if (!prisonerId) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'prisonerId is required' } });
+  if (!['face', 'fingerprint', 'rfid'].includes(type)) {
+    return res.status(400).json({ success: false, error: { code: 'INVALID_TYPE', message: 'Invalid biometric type in ID' } });
+  }
 
   const updated = await updateDb('inmates.json', (inmates) => {
     const idx = inmates.findIndex((i) => i.inmateId === prisonerId && inAdminScope(req, i));
