@@ -30,6 +30,28 @@ data class CreateCallRequest(
     @SerializedName("scheduleId") val scheduleId: String? = null
 )
 
+data class EndCallRequest(
+    @SerializedName("endReason") val endReason: String = "completed",
+    @SerializedName("endReasonDescription") val endReasonDescription: String? = null,
+    @SerializedName("familyStage") val familyStage: String? = null,
+    @SerializedName("familyLeft") val familyLeft: Boolean = false,
+    @SerializedName("deviceVerifyFailed") val deviceVerifyFailed: Boolean = false,
+    @SerializedName("otpVerifyFailed") val otpVerifyFailed: Boolean = false,
+    @SerializedName("hasAudio") val hasAudio: Boolean = true,
+    @SerializedName("hasVideo") val hasVideo: Boolean = true,
+    @SerializedName("familyAudioConnected") val familyAudioConnected: Boolean = true,
+    @SerializedName("familyVideoConnected") val familyVideoConnected: Boolean = true,
+    @SerializedName("inmateAudioConnected") val inmateAudioConnected: Boolean = true,
+    @SerializedName("inmateVideoConnected") val inmateVideoConnected: Boolean = true,
+    @SerializedName("resolution") val resolution: String? = null,
+    @SerializedName("iceFailed") val iceFailed: Boolean = false,
+    @SerializedName("dtlsFailed") val dtlsFailed: Boolean = false,
+    @SerializedName("signalingFailed") val signalingFailed: Boolean = false,
+    @SerializedName("packetLoss") val packetLoss: Float = 0f,
+    @SerializedName("jitter") val jitter: Float = 0f,
+    @SerializedName("bitrate") val bitrate: Float = 0f,
+)
+
 enum class CallType {
     @SerializedName("audio") AUDIO,
     @SerializedName("video") VIDEO

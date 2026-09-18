@@ -38,7 +38,7 @@ interface CallRepository {
     fun uploadRecording(request: RecordingUploadRequest): Flow<NetworkResult<RecordingUploadResponse>>
 
     /** Finalize the backend call record (duration/billing) once the call ends. */
-    fun notifyCallEnded(callId: String)
+    fun notifyCallEnded(callId: String, request: EndCallRequest = EndCallRequest())
     fun observeSignalingEvents(): Flow<SignalingEvent>
 
     /** Periodic stats report during an active call (quality, recording status). */

@@ -44,6 +44,8 @@ export interface CallHistoryItem {
   contactName?: string;
   failReason?: string;
   endReason?: string;
+  endReasonDescription?: string;
+  callIssues?: Array<{ type: string; description: string; severity: string }>;
   mediaConnectedAt?: string;
   chargeAmount?: number;
   ratePerMinute?: number;

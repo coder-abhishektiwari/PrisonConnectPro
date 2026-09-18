@@ -8,6 +8,7 @@ import android.net.NetworkRequest
 import com.prisonconnect.kiosk.core.Constants
 import com.prisonconnect.kiosk.core.Logger
 import com.prisonconnect.kiosk.models.call.CallStatusSnapshot
+import com.prisonconnect.kiosk.models.call.EndCallRequest
 import com.prisonconnect.kiosk.models.contacts.Contact
 import com.prisonconnect.kiosk.models.inmate.InmateProfile
 import com.prisonconnect.kiosk.network.NetworkResult
@@ -502,7 +503,41 @@ class CallEngine @Inject constructor(
         webRtcManager.endCall()
         _timerSeconds.value = 0
         _callState.value = CallUIState.DISCONNECTED
-        activeCallId?.let { callRepository.notifyCallEnded(it) }
+
+        // Build end-call payload with all diagnostic data
+        val callState = _callState.value
+        val familyStage = _familyStage.value
+        val wasConnected = _callFailedAfterConnect.value || callState == CallUIState.CONNECTED ||
+                callState == CallUIState.RECONNECTING
+        val endReason = when {
+            familyStage == FamilyStage.LINK_SENT -> "completed"
+            familyStage == FamilyStage.LINK_OPENED -> "completed"
+            familyStage == FamilyStage.DEVICE_VERIFIED -> "completed"
+            familyStage == FamilyStage.OTP_VERIFIED -> "completed"
+            else -> "completed"
+        }
+        val endDescription = when {
+            _familyLeft.value -> "Family member left the verification screen"
+            _deviceVerifyFailed.value -> "Device verification failed"
+            _otpVerifyFailed.value -> "OTP verification failed"
+            familyStage == FamilyStage.LINK_SENT -> "Call link was sent but not opened"
+            familyStage == FamilyStage.LINK_OPENED -> "Family opened the link but did not complete verification"
+            callState == CallUIState.FAILED && !wasConnected -> "Call media connection failed"
+            callState == CallUIState.FAILED && wasConnected -> "Call connection lost"
+            callState == CallUIState.RECONNECTING -> "Call ended — connection unstable"
+            else -> null
+        }
+        val request = EndCallRequest(
+            endReason = endReason,
+            endReasonDescription = endDescription,
+            familyStage = familyStage.name,
+            familyLeft = _familyLeft.value,
+            deviceVerifyFailed = _deviceVerifyFailed.value,
+            otpVerifyFailed = _otpVerifyFailed.value,
+            hasAudio = true,
+            hasVideo = true,
+        )
+        activeCallId?.let { callRepository.notifyCallEnded(it, request) }
     }
 
     fun teardownIfIdle() {

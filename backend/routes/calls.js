@@ -29,7 +29,87 @@ const ALLOWED_TRANSITIONS = {
  * mid-call still gets billed (capped at the max duration) and never blocks
  * future calls with a stuck 'active' record.
  */
-async function finalizeCall(call, requestedEndTimeMs, broadcastEvent, endReason) {
+
+// ---- End-reason helpers ----
+
+function buildEndReasonDescription(status, reason, call, neverConnected, extra) {
+  // If kiosk sent a specific description, use it
+  if (extra?.endReasonDescription) return extra.endReasonDescription;
+
+  const familyStage = call.familyStage || extra?.familyStage || null;
+  const linkSent = !!call.linkToken;
+  const linkOpened = !!call.linkOpenedAt;
+  const deviceVerified = !!call.deviceVerifiedAt;
+  const otpVerified = !!call.otpVerifiedAt;
+  const familyLeft = extra?.familyLeft || false;
+  const deviceFailed = extra?.deviceVerifyFailed || false;
+  const otpFailed = extra?.otpVerifyFailed || false;
+
+  if (neverConnected) {
+    // Inmate cancelled before call started
+    if (reason === 'cancelled' || reason === 'kiosk_cancelled') {
+      return 'Inmate cancelled the call before it started';
+    }
+    // Call was never picked up
+    if (status === 'missed') {
+      if (familyLeft) return 'Family member left the verification screen';
+      if (otpFailed) return 'OTP verification failed';
+      if (deviceFailed) return 'Device verification failed';
+      if (!linkSent) return 'Call link was not sent to family member';
+      if (linkSent && !linkOpened) return 'Family member did not open the call link';
+      if (linkOpened && !deviceVerified) return 'Family member did not complete device verification';
+      if (deviceVerified && !otpVerified) return 'Family member did not complete OTP verification';
+      if (otpVerified) return 'Call media connection failed after verification';
+      return 'Call was not answered';
+    }
+    if (status === 'rejected') return 'Call was rejected by family member';
+    if (status === 'cancelled') return 'Call was cancelled';
+    return 'Call did not connect';
+  }
+
+  // Connected calls
+  if (reason === 'timeout') return 'Call ended — maximum duration reached';
+  if (reason === 'sweep') return 'Call ended — session timed out (kiosk may have disconnected)';
+  if (reason === 'completed') return 'Call completed successfully';
+  if (reason === 'kiosk_cancelled') return 'Call ended by kiosk';
+  if (reason === 'peer_left') return 'Other party left the call';
+  if (reason === 'network_lost') return 'Call ended — network connection lost';
+  if (reason === 'webrtc_failed') return 'Call ended — media connection failed';
+  return 'Call ended';
+}
+
+function buildCallIssues(call, neverConnected, extra) {
+  const issues = [];
+  if (neverConnected) return issues;
+
+  const hasAudio = extra?.hasAudio ?? true;
+  const hasVideo = extra?.hasVideo ?? true;
+  const familyAudio = extra?.familyAudioConnected ?? true;
+  const familyVideo = extra?.familyVideoConnected ?? true;
+  const inmateAudio = extra?.inmateAudioConnected ?? true;
+  const inmateVideo = extra?.inmateVideoConnected ?? true;
+  const resolution = extra?.resolution || null;
+  const packetLoss = extra?.packetLoss || call.packetLoss || 0;
+  const jitter = extra?.jitter || call.jitter || 0;
+  const bitrate = extra?.bitrate || call.bitrate || 0;
+
+  if (!hasAudio) issues.push({ type: 'audio', description: 'Audio was not connected', severity: 'critical' });
+  if (!hasVideo) issues.push({ type: 'video', description: 'Video was not connected', severity: 'critical' });
+  if (!familyAudio) issues.push({ type: 'family_audio', description: 'Family member audio not connected', severity: 'major' });
+  if (!inmateAudio) issues.push({ type: 'inmate_audio', description: 'Inmate audio not connected', severity: 'major' });
+  if (!familyVideo) issues.push({ type: 'family_video', description: 'Family member video not connected', severity: 'major' });
+  if (!inmateVideo) issues.push({ type: 'inmate_video', description: 'Inmate video not connected', severity: 'major' });
+  if (resolution && resolution !== '1080p') issues.push({ type: 'resolution', description: `Call connected at ${resolution} instead of 1080p`, severity: 'minor' });
+  if (packetLoss > 5) issues.push({ type: 'packet_loss', description: `High packet loss: ${packetLoss}%`, severity: packetLoss > 15 ? 'critical' : 'major' });
+  if (jitter > 50) issues.push({ type: 'jitter', description: `High jitter: ${jitter}ms`, severity: jitter > 100 ? 'critical' : 'major' });
+  if (extra?.iceFailed) issues.push({ type: 'ice', description: 'ICE connection failed — NAT traversal issue', severity: 'critical' });
+  if (extra?.dtlsFailed) issues.push({ type: 'dtls', description: 'DTLS handshake failed', severity: 'critical' });
+  if (extra?.signalingFailed) issues.push({ type: 'signaling', description: 'Signaling server connection failed', severity: 'critical' });
+
+  return issues;
+}
+
+async function finalizeCall(call, requestedEndTimeMs, broadcastEvent, endReason, extraData) {
   const startMs = new Date(call.startTime).getTime();
   const maxMs = (Number(call.maxDurationMinutes) || 15) * 60000;
 
@@ -56,6 +136,19 @@ async function finalizeCall(call, requestedEndTimeMs, broadcastEvent, endReason)
     }
   }
 
+  // Human-readable end reason description
+  const endReasonDescription = buildEndReasonDescription(finalStatus, finalReason, call, neverConnected, extraData);
+
+  // Quality-related issues collected during the call
+  const callIssues = buildCallIssues(call, neverConnected, extraData);
+
+  // Quality: N/A if never connected, otherwise use reported quality
+  let finalQuality = neverConnected ? 'N/A' : (call.connectionQuality || 'unknown');
+  // If we have issues and quality is still 'good', downgrade based on issues
+  if (!neverConnected && callIssues.length > 0 && finalQuality === 'good') {
+    finalQuality = callIssues.some(i => i.severity === 'critical') ? 'poor' : 'fair';
+  }
+
   // A call that outlived its max duration (kiosk died) is billed only up to
   // the cap — time after the app died must not be charged.
   const endMs = neverConnected
@@ -76,8 +169,9 @@ async function finalizeCall(call, requestedEndTimeMs, broadcastEvent, endReason)
       durationMinutes: billedMinutes,
       chargeAmount,
       endReason: finalReason,
-      // Quality makes no sense for calls that never connected
-      connectionQuality: neverConnected ? 'N/A' : (calls[idx].connectionQuality || 'unknown'),
+      endReasonDescription,
+      callIssues,
+      connectionQuality: finalQuality,
     };
     return { data: calls, result: calls[idx] };
   });
@@ -617,13 +711,14 @@ function createCallsRouter(broadcastEvent, signaling) {
 
   router.post('/:callId/end', requireAuth, asyncRoute(async (req, res) => {
     const { callId } = req.params;
+    const extra = req.body && typeof req.body === 'object' ? req.body : {};
 
     const existing = (await readDb('calls.json')).find((c) => c.callId === callId);
     if (!existing || !inAdminScope(req, existing)) {
       return sendError(res, 'NOT_FOUND', 'Call not found', 404);
     }
 
-    const updatedCall = await finalizeCall(existing, Date.now(), broadcastEvent, 'completed');
+    const updatedCall = await finalizeCall(existing, Date.now(), broadcastEvent, extra.endReason || 'completed', extra);
     if (!updatedCall) return sendError(res, 'NOT_FOUND', 'Call not found', 404);
 
 

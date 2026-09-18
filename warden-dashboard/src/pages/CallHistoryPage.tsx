@@ -206,6 +206,7 @@ export function CallHistoryPage() {
   const fmtDateTime = (iso: string) => { if (!iso) return '—'; const d = new Date(iso); return isNaN(d.getTime()) ? '—' : d.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' }); };
 
   const getFailReason = (c: CallHistoryItem) => {
+    if (c.endReasonDescription) return c.endReasonDescription;
     if (c.endReason) return c.endReason;
     if (c.failReason) return c.failReason;
     if (!c.mediaConnectedAt) return 'Family member did not join the call';
@@ -407,16 +408,30 @@ export function CallHistoryPage() {
                   <div className="bg-neutral-50 rounded-xl p-4 border border-neutral-200">
                     <p className="text-[11px] font-bold text-primary-600 uppercase tracking-wide mb-2">Technical</p>
                     <div className="space-y-2">
-                      <div className="flex justify-between"><span className="text-sm text-neutral-600">Quality</span><span className={`text-sm font-semibold ${selected.connectionQuality === 'excellent' ? 'text-success' : selected.connectionQuality === 'good' ? 'text-info' : selected.connectionQuality === 'fair' ? 'text-warning' : 'text-error'}`}>{selected.connectionQuality || '—'}</span></div>
+                      <div className="flex justify-between"><span className="text-sm text-neutral-600">Quality</span><span className={`text-sm font-semibold ${selected.connectionQuality === 'excellent' ? 'text-success' : selected.connectionQuality === 'good' ? 'text-info' : selected.connectionQuality === 'fair' ? 'text-warning' : selected.connectionQuality === 'N/A' ? 'text-neutral-400' : 'text-error'}`}>{selected.connectionQuality || '—'}</span></div>
                       <div className="flex justify-between"><span className="text-sm text-neutral-600">Media Connected</span><span className="text-sm text-neutral-900">{selected.mediaConnectedAt ? fmtDateTime(selected.mediaConnectedAt) : 'Never'}</span></div>
                       <div className="flex justify-between"><span className="text-sm text-neutral-600">Recording</span><span className="text-sm text-neutral-900">{selected.recordingStatus || '—'}</span></div>
                     </div>
                   </div>
 
-                  {(selected.status !== 'completed' && selected.status !== 'active') && (
-                    <div className="bg-error/5 rounded-xl p-4 border border-error/20">
-                      <p className="text-[11px] font-bold text-error uppercase tracking-wide mb-2">Reason</p>
-                      <p className="text-sm text-neutral-700">{getFailReason(selected)}</p>
+                  {selected.endReasonDescription && (
+                    <div className={`rounded-xl p-4 border ${selected.status === 'completed' ? 'bg-success/5 border-success/20' : 'bg-error/5 border-error/20'}`}>
+                      <p className={`text-[11px] font-bold uppercase tracking-wide mb-2 ${selected.status === 'completed' ? 'text-success' : 'text-error'}`}>Reason</p>
+                      <p className="text-sm text-neutral-700">{selected.endReasonDescription}</p>
+                    </div>
+                  )}
+
+                  {selected.callIssues && selected.callIssues.length > 0 && (
+                    <div className="bg-warning/5 rounded-xl p-4 border border-warning/20">
+                      <p className="text-[11px] font-bold text-warning uppercase tracking-wide mb-2">Call Issues ({selected.callIssues.length})</p>
+                      <ul className="space-y-1.5">
+                        {selected.callIssues.map((issue, idx) => (
+                          <li key={idx} className="flex items-start gap-2">
+                            <span className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${issue.severity === 'critical' ? 'bg-error' : issue.severity === 'major' ? 'bg-warning' : 'bg-neutral-400'}`} />
+                            <span className="text-sm text-neutral-700">{issue.description}</span>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
                   )}
 

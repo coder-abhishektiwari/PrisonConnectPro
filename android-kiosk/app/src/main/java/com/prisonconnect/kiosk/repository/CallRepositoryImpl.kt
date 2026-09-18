@@ -228,12 +228,12 @@ class CallRepositoryImpl @Inject constructor(
         }
     }.flowOn(Dispatchers.IO)
 
-    override fun notifyCallEnded(callId: String) {
+    override fun notifyCallEnded(callId: String, request: EndCallRequest) {
         // Fire-and-forget: finalizes duration/billing on the backend. Failure
         // (e.g. transient network) is non-fatal — the call has already ended.
         repositoryScope.launch {
             try {
-                apiService.endCall(callId)
+                apiService.endCall(callId, request)
                 Logger.d("Call record finalized for $callId")
             } catch (e: Exception) {
                 Logger.w("Failed to finalize call $callId: ${e.message}")
