@@ -25,6 +25,7 @@ export function InmateDetailPage() {
   const [showAddFamily, setShowAddFamily] = useState(false);
   const [newFamily, setNewFamily] = useState({ name: '', relationship: '', phoneNumber: '', address: '', city: '', state: '' });
   const [addFamilyError, setAddFamilyError] = useState('');
+  const [saveContactError, setSaveContactError] = useState('');
   const [cellNames, setCellNames] = useState<{ id: string; name: string }[]>([]);
   const [blockNames, setBlockNames] = useState<{ id: string; name: string }[]>([]);
   const [kioskNames, setKioskNames] = useState<{ id: string; name: string }[]>([]);
@@ -128,13 +129,17 @@ export function InmateDetailPage() {
 
   const saveContact = async () => {
     if (!contactEditData.contactId) return;
+    setSaveContactError('');
     try {
       await wardenApi.updateContact(contactEditData.contactId, contactEditData as any);
       setContacts(prev => prev.map(c => c.contactId === contactEditData.contactId ? { ...c, ...contactEditData } as Contact : c));
       if (selectedContact?.contactId === contactEditData.contactId) {
         setSelectedContact({ ...selectedContact, ...contactEditData } as Contact);
       }
-    } catch { }
+    } catch (e: any) {
+      setSaveContactError(e?.response?.data?.error?.message || 'Failed to update contact. Please try again.');
+      return;
+    }
     setEditingContact(false);
   };
 
@@ -186,9 +191,15 @@ export function InmateDetailPage() {
     const payload = { name: newFamily.name.trim(), relationship: newFamily.relationship.trim() || 'Family', phoneNumber: newFamily.phoneNumber.trim(), address: newFamily.address.trim(), city: newFamily.city.trim(), state: newFamily.state.trim() } as any;
     try {
       const saved = await wardenApi.createContact(inmateId, payload);
-      setContacts(prev => [...prev, (saved || { contactId: `FAM-${Date.now()}`, ...payload, inmateId, active: true }) as Contact]);
-    } catch {
-      setContacts(prev => [...prev, { contactId: `FAM-${Date.now()}`, inmateId, name: payload.name, relationship: payload.relationship, phoneNumber: payload.phoneNumber, active: true } as Contact]);
+      if (saved) {
+        setContacts(prev => [...prev, saved as Contact]);
+      } else {
+        setAddFamilyError('Failed to save contact — server returned empty response');
+        return;
+      }
+    } catch (e: any) {
+      setAddFamilyError(e?.response?.data?.error?.message || 'Failed to save contact. Please try again.');
+      return;
     }
     setNewFamily({ name: '', relationship: '', phoneNumber: '', address: '', city: '', state: '' });
     setShowAddFamily(false);
@@ -519,7 +530,7 @@ export function InmateDetailPage() {
                   </button>
                   {editingContact ? (
                     <>
-                      <button onClick={() => setEditingContact(false)} className="w-8 h-8 flex items-center justify-center bg-white border border-neutral-200 text-neutral-600 rounded-lg hover:bg-neutral-50 transition" title="Cancel"><span className="material-icons text-base">close</span></button>
+                      <button onClick={() => { setEditingContact(false); setSaveContactError(''); }} className="w-8 h-8 flex items-center justify-center bg-white border border-neutral-200 text-neutral-600 rounded-lg hover:bg-neutral-50 transition" title="Cancel"><span className="material-icons text-base">close</span></button>
                       <button onClick={saveContact} className="w-8 h-8 flex items-center justify-center bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition" title="Save"><span className="material-icons text-base">check</span></button>
                     </>
                   ) : (
@@ -529,6 +540,7 @@ export function InmateDetailPage() {
                     </>
                   )}
                 </div>
+                {saveContactError && <p className="text-xs text-red-500 mt-2">{saveContactError}</p>}
               </div>
               {contactFieldRow('Full Name', 'name', 'person')}
               {contactFieldRow('Relationship', 'relationship', 'family_restroom')}
