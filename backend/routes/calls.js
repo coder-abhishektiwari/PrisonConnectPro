@@ -75,7 +75,9 @@ async function finalizeCall(call, requestedEndTimeMs, broadcastEvent, endReason)
       endTime: new Date(endMs).toISOString(),
       durationMinutes: billedMinutes,
       chargeAmount,
-      endReason: finalReason
+      endReason: finalReason,
+      // Quality makes no sense for calls that never connected
+      connectionQuality: neverConnected ? 'N/A' : (calls[idx].connectionQuality || 'unknown'),
     };
     return { data: calls, result: calls[idx] };
   });
