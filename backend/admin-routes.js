@@ -379,17 +379,43 @@ router.post('/prisoners/:prisonerId/biometrics', requireRole(...ALL_ROLES), asyn
   return res.json({ success: true, data: { biometricId: biometricRecord.biometricId, type, status: 'registered' } });
 });
 
+// Type suffixes actually used by the ID convention BIO-<prisonerId>-<SUFFIX>.
+// Fingerprint's suffix is FGP (not the word "fingerprint"), so an ID parse
+// alone used to reject the only biometric people delete most often.
+const BIOMETRIC_TYPES = ['face', 'fingerprint', 'rfid'];
+const TYPE_FROM_SUFFIX = {
+  face: 'face',
+  fingerprint: 'fingerprint',
+  fgp: 'fingerprint',
+  finger: 'fingerprint',
+  rfid: 'rfid',
+  tag: 'rfid'
+};
+
+/**
+ * Resolve the biometric type for an ID. Prefers the record's own `type`
+ * field (authoritative) and only falls back to the ID suffix, because IDs
+ * may be synthesized (BIO-<prisonerId>-FGP) when no record is stored.
+ */
+function resolveBiometricType(inmate, biometricId) {
+  const record = (inmate.biometrics || []).find((b) => b.biometricId === biometricId);
+  if (record && BIOMETRIC_TYPES.includes(record.type)) return record.type;
+  const suffix = String(biometricId).split('-').pop().toLowerCase();
+  return TYPE_FROM_SUFFIX[suffix] || null;
+}
+
 router.delete('/biometrics/:biometricId', requireRole(...ALL_ROLES), async (req, res) => {
   const { biometricId } = req.params;
   const prisonerId = req.query.prisonerId;
   if (!prisonerId) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'prisonerId query param is required' } });
 
-  const parts = biometricId.split('-');
-  if (parts.length < 3) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'Invalid biometric ID' } });
-  const type = parts[parts.length - 1].toLowerCase();
-  if (!['face', 'fingerprint', 'rfid'].includes(type)) {
-    return res.status(400).json({ success: false, error: { code: 'INVALID_TYPE', message: 'Invalid biometric type in ID' } });
-  }
+  // Resolve first so an unrecognised id or an out-of-scope prisoner never
+  // reaches the write.
+  const current = await readDb('inmates.json');
+  const inmate = current.find((i) => i.inmateId === prisonerId && inAdminScope(req, i));
+  if (!inmate) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Prisoner not found' } });
+  const type = resolveBiometricType(inmate, biometricId);
+  if (!type) return res.status(400).json({ success: false, error: { code: 'INVALID_TYPE', message: 'Invalid biometric type in ID' } });
 
   const updated = await updateDb('inmates.json', (inmates) => {
     const idx = inmates.findIndex((i) => i.inmateId === prisonerId && inAdminScope(req, i));
@@ -398,9 +424,10 @@ router.delete('/biometrics/:biometricId', requireRole(...ALL_ROLES), async (req,
     if (type === 'face') { biometricData.faceRegistered = false; biometricData.faceEmbedding = null; }
     else if (type === 'fingerprint') { biometricData.fingerprintRegistered = false; biometricData.fingerprintTemplate = null; }
     else if (type === 'rfid') { biometricData.rfidRegistered = false; biometricData.rfidToken = null; }
-    else return { data: inmates, result: null };
     biometricData.lastBiometricUpdate = new Date().toISOString();
-    const biometrics = (inmates[idx].biometrics || []).filter(b => b.biometricId !== biometricId);
+    // Drop by id AND by type: one record per type is allowed, so a stale or
+    // differently-formatted id must not leave the biometric behind.
+    const biometrics = (inmates[idx].biometrics || []).filter(b => b.biometricId !== biometricId && b.type !== type);
     inmates[idx] = { ...inmates[idx], biometricData, biometrics };
     return { data: inmates, result: inmates[idx] };
   });

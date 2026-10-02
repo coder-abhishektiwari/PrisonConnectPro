@@ -104,6 +104,7 @@ export function InmateDetailPage() {
   const [biometrics, setBiometrics] = useState<any[]>([]);
   const [biometricsLoading, setBiometricsLoading] = useState(false);
   const [deletingBiometric, setDeletingBiometric] = useState<string | null>(null);
+  const [biometricError, setBiometricError] = useState('');
   const [removingDevice, setRemovingDevice] = useState<string | null>(null);
   const [deviceError, setDeviceError] = useState('');
 
@@ -282,12 +283,16 @@ export function InmateDetailPage() {
   const deleteBiometric = async (biometricId: string) => {
     if (!inmate || deletingBiometric) return;
     setDeletingBiometric(biometricId);
+    setBiometricError('');
     try {
       await wardenApi.deleteBiometric(biometricId, inmate.inmateId);
       const refreshed = await wardenApi.getInmateBiometrics(inmate.inmateId);
       setBiometrics(Array.isArray(refreshed) ? refreshed : []);
-    } catch { }
-    setDeletingBiometric(null);
+    } catch (e: any) {
+      setBiometricError(e?.response?.data?.error?.message || 'Failed to delete biometric. Please try again.');
+    } finally {
+      setDeletingBiometric(null);
+    }
   };
 
   const addFamily = async () => {
@@ -603,6 +608,9 @@ export function InmateDetailPage() {
                 <span className="material-icons text-sm">fingerprint</span> Biometrics
                 <span className="text-[10px] text-neutral-400 normal-case tracking-normal ml-1">(Register from kiosk only)</span>
               </h3>
+              {biometricError && (
+                <p className="text-xs text-error bg-error/10 border border-error/20 rounded-lg px-3 py-2 mb-3">{biometricError}</p>
+              )}
               {biometricsLoading ? (
                 <div className="space-y-2">
                   {[1, 2, 3].map(i => <div key={i} className="h-12 bg-neutral-100 rounded-lg animate-pulse" />)}
