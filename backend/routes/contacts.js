@@ -70,6 +70,29 @@ function createContactsRouter(broadcastEvent) {
     return sendSuccess(res, cleared);
   }));
 
+  // Remove ONE registered family device (fingerprint) from a contact. The
+  // next call opens a fresh registration flow for that number.
+  router.delete('/:contactId/devices/:fingerprintId', requireAuth, asyncRoute(async (req, res) => {
+    const { contactId, fingerprintId } = req.params;
+    const contacts = await readDb('contacts.json');
+    const contact = contacts.find((c) => c.contactId === contactId);
+    if (!contact || !(await inAdminScope(req, contact))) {
+      return sendError(res, 'NOT_FOUND', 'Contact not found', 404);
+    }
+    const removed = await updateDb('contacts.json', (all) => {
+      const idx = all.findIndex((c) => c.contactId === contactId);
+      if (idx === -1) return { data: all, result: null };
+      const list = Array.isArray(all[idx].deviceFingerprints) ? all[idx].deviceFingerprints : [];
+      const target = list.find((f) => f.fingerprintId === fingerprintId);
+      if (!target) return { data: all, result: null };
+      all[idx].deviceFingerprints = list.filter((f) => f.fingerprintId !== fingerprintId);
+      return { data: all, result: { contactId, fingerprintId, phone: target.phone || null, removedAt: new Date().toISOString() } };
+    });
+    if (!removed) return sendError(res, 'NOT_FOUND', 'Device not found for this contact', 404);
+    broadcastEvent('contact-device-removed', removed);
+    return sendSuccess(res, removed);
+  }));
+
   // Single route (was two colliding '/contacts/:param' routes — the second
   // could never match). Tries contactId first, falls back to kiosk-scoped list.
   router.get('/:id', requireAuth, asyncRoute(async (req, res) => {
@@ -165,6 +188,10 @@ function createContactsRouter(broadcastEvent) {
       const merged = { ...all[idx], ...updates };
       if (updates.name) { merged.fullName = updates.name; merged.firstName = updates.name.split(' ')[0]; merged.lastName = updates.name.split(' ').slice(1).join(' '); }
       if (updates.mobileNumber) { merged.phoneNumber = updates.mobileNumber; merged.phone = updates.mobileNumber; }
+      // Device fingerprints are server-owned: a stale client copy must never
+      // resurrect a device the warden already removed (or wipe new ones).
+      if (Array.isArray(all[idx].deviceFingerprints)) merged.deviceFingerprints = all[idx].deviceFingerprints;
+      else delete merged.deviceFingerprints;
       all[idx] = merged;
       return { data: all, result: all[idx] };
     });

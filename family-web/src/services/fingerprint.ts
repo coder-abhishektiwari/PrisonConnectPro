@@ -21,18 +21,32 @@ function uuid(): string {
   });
 }
 
+function readStore(key: string): string | null {
+  try { return localStorage.getItem(key); } catch { /* blocked */ }
+  try { return sessionStorage.getItem(key); } catch { /* blocked */ }
+  const m = new RegExp('(?:^|;\\s*)' + key + '=([^;]*)').exec(document.cookie || '');
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+function writeStore(key: string, value: string): void {
+  try { localStorage.setItem(key, value); return; } catch { /* blocked */ }
+  try { sessionStorage.setItem(key, value); return; } catch { /* blocked */ }
+  try { document.cookie = `${key}=${encodeURIComponent(value)};path=/;max-age=31536000;samesite=lax`; } catch { /* blocked */ }
+}
+
+/**
+ * Device id that survives across page loads. Falls back through
+ * localStorage -> sessionStorage -> cookie so a blocked storage API never
+ * silently regenerates the id (which would make verification fail forever).
+ */
 function getOrCreateDeviceId(): string {
-  try {
-    let id = localStorage.getItem(DEVICE_ID_KEY);
-    if (!id) {
-      id = uuid();
-      localStorage.setItem(DEVICE_ID_KEY, id);
-    }
-    return id;
-  } catch {
-    // localStorage unavailable (private mode / blocked) — fall back to volatile id.
-    return uuid();
-  }
+  const existing = readStore(DEVICE_ID_KEY);
+  if (existing) return existing;
+  const id = uuid();
+  writeStore(DEVICE_ID_KEY, id);
+  // Re-read: if all writes failed, the id will not persist and the next load
+  // gets a fresh one — nothing more we can do without server-side storage.
+  return readStore(DEVICE_ID_KEY) || id;
 }
 
 export interface FingerprintSignal {
@@ -97,23 +111,25 @@ export function collectSignals(): FingerprintSignal {
 /**
  * SHA-256 hash of the canonical signal string.
  *
- * Only stable signals are included in the hash — volatile values like
- * canvasHash, online status, pixelRatio and colorDepth are excluded so the
- * fingerprint survives browser updates and minor environment changes.
+ * ONLY stable signals are hashed. Volatile values (userAgent, language,
+ * timezone, raw screen resolution) are deliberately excluded:
+ *   - userAgent changes on every browser auto-update
+ *   - timezone/language change when the user travels or changes settings
+ *   - screen width/height swap on mobile rotation
+ * Including any of them made the same phone fail verification for reasons
+ * that have nothing to do with the device changing.
+ *
+ * MUST stay in sync with hashSignals() in backend/lib/familySecurity.js.
  */
 export async function fingerprintHash(signals?: FingerprintSignal): Promise<string> {
   const data = signals || collectSignals();
   const stable = {
-    deviceId: data.deviceId,
-    userAgent: data.userAgent,
-    language: data.language,
-    languages: data.languages,
-    platform: data.platform,
-    hardwareConcurrency: data.hardwareConcurrency,
-    deviceMemory: data.deviceMemory,
-    screen: data.screen,
-    timezone: data.timezone,
-    touchPoints: data.touchPoints,
+    deviceId: String(data.deviceId || ''),
+    platform: String(data.platform || ''),
+    hardwareConcurrency: Number(data.hardwareConcurrency) || 0,
+    deviceMemory: typeof data.deviceMemory === 'number' ? data.deviceMemory : null,
+    screen: normalizeScreen(data.screen),
+    touchPoints: Number(data.touchPoints) || 0,
   };
   const canonical = JSON.stringify(stable);
   const bytes = new TextEncoder().encode(canonical);
@@ -121,4 +137,13 @@ export async function fingerprintHash(signals?: FingerprintSignal): Promise<stri
   return Array.from(new Uint8Array(digest))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
+}
+
+/** Orientation-independent resolution: always "smaller x bigger". */
+function normalizeScreen(screen: string): string {
+  const m = /^(\d+)x(\d+)$/.exec(screen || '');
+  if (!m) return screen || '';
+  const a = Number(m[1]);
+  const b = Number(m[2]);
+  return `${Math.min(a, b)}x${Math.max(a, b)}`;
 }

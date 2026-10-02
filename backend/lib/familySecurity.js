@@ -12,6 +12,7 @@
  * they travel with the JSONB round-trip already used across the API.
  */
 
+const crypto = require('crypto');
 const { readDb, updateDb } = require('./db');
 
 const FAMILY_WEB_URL = (process.env.FAMILY_WEB_URL || '').replace(/\/+$/, '');
@@ -25,12 +26,22 @@ if (process.env.NODE_ENV === 'production' && /^https?:\/\/(127\.\d+\.\d+\.\d+|lo
   throw new Error('FAMILY_WEB_URL must be a public https URL in production (got: ' + FAMILY_WEB_URL + ') - call links would otherwise point at localhost');
 }
 
-/** Normalize a phone to a canonical comparable form: +91XXXXXXXXXX. */
+/**
+ * Normalize a phone to a canonical comparable form: +91XXXXXXXXXX.
+ *
+ * Handles the trunk-prefix / country-code variants people actually type
+ * (0XXXXXXXXXX, 91XXXXXXXXXX, 0091...) so the SAME phone always resolves to
+ * the SAME device-fingerprint entry instead of registering a duplicate.
+ * Non-Indian numbers are left alone.
+ */
 function normalizePhone(phone) {
   let p = String(phone || '').replace(/[^\d+]/g, '');
   if (p.startsWith('00')) p = '+' + p.slice(2);
-  if (!p.startsWith('+')) p = '+' + p;
-  return p;
+  if (p.startsWith('+')) return p;
+  let d = p.replace(/^0+/, '');
+  if (d.length > 10 && d.startsWith('91')) d = d.slice(2);
+  if (d.length === 10) d = '91' + d;
+  return '+' + (d || p);
 }
 
 /** Mask for safe display in the browser, e.g. +91******3210. Keep country + last4. */
@@ -65,6 +76,47 @@ function fingerprintFor(contact, phone) {
   return contact.deviceFingerprints.find((f) => normalizePhone(f.phone) === key) || null;
 }
 
+/** Orientation-independent resolution: always "smaller x bigger". */
+function normalizeScreen(screen) {
+  const m = /^(\d+)x(\d+)$/.exec(String(screen || ''));
+  if (!m) return String(screen || '');
+  const a = Number(m[1]);
+  const b = Number(m[2]);
+  return `${Math.min(a, b)}x${Math.max(a, b)}`;
+}
+
+/**
+ * Recompute a fingerprint hash from a stored signals blob using the CURRENT
+ * algorithm. MUST stay in sync with fingerprintHash() in family-web.
+ *
+ * Only device-stable signals are hashed — userAgent, language and timezone
+ * were removed because they change (browser update, settings, travel) on an
+ * unchanged device and caused false DEVICE_MISMATCH rejections.
+ */
+function hashSignals(signals) {
+  if (!signals || !signals.deviceId) return null;
+  const stable = {
+    deviceId: String(signals.deviceId),
+    platform: String(signals.platform || ''),
+    hardwareConcurrency: Number(signals.hardwareConcurrency) || 0,
+    deviceMemory: typeof signals.deviceMemory === 'number' ? signals.deviceMemory : null,
+    screen: normalizeScreen(signals.screen),
+    touchPoints: Number(signals.touchPoints) || 0,
+  };
+  return crypto.createHash('sha256').update(JSON.stringify(stable), 'utf8').digest('hex');
+}
+
+/** Compare an incoming hash against every fingerprint stored for a phone. */
+function hashMatchesStored(storedList, incomingHash) {
+  return storedList.find((f) => {
+    if (f.hash === incomingHash) return true;
+    // Legacy entries were hashed with an older signal set — recompute from
+    // the stored signals with the current algorithm before giving up.
+    const recomputed = hashSignals(f.signals);
+    return recomputed !== null && recomputed === incomingHash;
+  }) || null;
+}
+
 /**
  * Register (first-time) OR verify (returning) a device fingerprint for the
  * phone number a call's link is addressed to.
@@ -90,45 +142,62 @@ async function registerOrVerifyFingerprint(contactId, phone, fingerprintPayload)
   }
 
   const normalized = normalizePhone(targetPhone);
-  const stored = fingerprintFor(contact, normalized);
+  const entriesForPhone = (contact.deviceFingerprints || []).filter(
+    (f) => normalizePhone(f.phone) === normalized
+  );
 
-  const { hash, signals } = fingerprintPayload || {};
+  const { hash, signals, deviceInfo } = fingerprintPayload || {};
   if (!hash) {
     return { verified: false, isFirstTime: false, reason: 'NO_FINGERPRINT' };
   }
 
-  if (!stored) {
+  if (entriesForPhone.length === 0) {
     // First call to this number — register the device fingerprint.
-    await updateDb('contacts.json', (all) => {
+    const writeResult = await updateDb('contacts.json', (all) => {
       const idx = all.findIndex((c) => c.contactId === contactId);
       if (idx === -1) return { data: all, result: null };
-      const fingerprints = Array.isArray(all[idx].deviceFingerprints) ? all[idx].deviceFingerprints : [];
-      all[idx].deviceFingerprints = [
-        ...fingerprints,
-        {
-          fingerprintId: `DEV-${Date.now().toString(36).toUpperCase()}`,
-          phone: normalized,
-          hash,
-          signals: signals || {},
-          firstSeenAt: new Date().toISOString(),
-          lastVerifiedAt: new Date().toISOString(),
-          verifiedCount: 1
-        }
-      ];
-      return { data: all, result: all[idx] };
+      const list = Array.isArray(all[idx].deviceFingerprints) ? all[idx].deviceFingerprints : [];
+      // Re-check inside the write: a concurrent request may have registered
+      // this phone already — never store two entries for the same number.
+      const dupe = list.find((f) => normalizePhone(f.phone) === normalized);
+      if (dupe) {
+        dupe.lastVerifiedAt = new Date().toISOString();
+        dupe.verifiedCount = (dupe.verifiedCount || 0) + 1;
+        if (deviceInfo && !dupe.deviceInfo) dupe.deviceInfo = deviceInfo;
+        return { data: all, result: { registered: false, record: dupe } };
+      }
+      const record = {
+        fingerprintId: `DEV-${Date.now().toString(36).toUpperCase()}`,
+        phone: normalized,
+        hash,
+        signals: signals || {},
+        deviceInfo: deviceInfo || null,
+        firstSeenAt: new Date().toISOString(),
+        lastVerifiedAt: new Date().toISOString(),
+        verifiedCount: 1
+      };
+      list.push(record);
+      all[idx].deviceFingerprints = list;
+      return { data: all, result: { registered: true, record } };
     });
-    return { verified: true, isFirstTime: true };
+    if (!writeResult) return { verified: false, isFirstTime: false, reason: 'CONTACT_NOT_FOUND' };
+    return { verified: true, isFirstTime: writeResult.registered === true };
   }
 
-  if (stored.hash === hash) {
+  // Returning device: exact hash match, OR a recompute of the stored signals
+  // with the current algorithm (legacy registrations). NO silent re-register.
+  const matched = hashMatchesStored(entriesForPhone, hash);
+  if (matched) {
     await updateDb('contacts.json', (all) => {
       const idx = all.findIndex((c) => c.contactId === contactId);
       if (idx === -1) return { data: all, result: null };
-      const fp = all[idx].deviceFingerprints;
-      const fi = fp.findIndex((f) => f.fingerprintId === stored.fingerprintId);
+      const fp = all[idx].deviceFingerprints || [];
+      const fi = fp.findIndex((f) => f.fingerprintId === matched.fingerprintId);
       if (fi !== -1) {
         fp[fi].lastVerifiedAt = new Date().toISOString();
         fp[fi].verifiedCount = (fp[fi].verifiedCount || 0) + 1;
+        if (deviceInfo) fp[fi].deviceInfo = deviceInfo;
+        if (signals) fp[fi].signals = signals;
       }
       return { data: all, result: all[idx] };
     });

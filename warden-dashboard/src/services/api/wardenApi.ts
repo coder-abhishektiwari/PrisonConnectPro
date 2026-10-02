@@ -180,6 +180,27 @@ export interface Inmate {
   prisonerNumber?: string;
 }
 
+export interface DeviceFingerprint {
+  fingerprintId: string;
+  phone?: string;
+  hash?: string;
+  deviceInfo?: { browser?: string; os?: string; screen?: string; language?: string } | null;
+  signals?: {
+    userAgent?: string;
+    platform?: string;
+    screen?: string;
+    timezone?: string;
+    language?: string;
+    deviceId?: string;
+    hardwareConcurrency?: number;
+    deviceMemory?: number | null;
+    touchPoints?: number;
+  };
+  firstSeenAt?: string;
+  lastVerifiedAt?: string;
+  verifiedCount?: number;
+}
+
 export interface Contact {
   contactId: string;
   inmateId: string;
@@ -199,6 +220,7 @@ export interface Contact {
   photoUrl?: string;
   lastCallDate?: string;
   nextScheduledCallDate?: string | null;
+  deviceFingerprints?: DeviceFingerprint[];
 }
 
 export interface Wallet {
@@ -470,7 +492,16 @@ export const wardenApi = {
     apiClient.put<ApiResponse<Contact>>(`/admin/contacts/${contactId}`, data).then((r) => { invalidateCache('contacts'); return r.data?.data; }),
 
   deleteContactApi: (contactId: string) =>
-    apiClient.delete<ApiResponse<void>>(`/contacts/${contactId}`).then((r) => { invalidateCache('contacts'); return r.data; }),
+    apiClient.delete<ApiResponse<void>>(`/admin/contacts/${contactId}`).then((r) => { invalidateCache('contacts'); return r.data; }),
+
+  // Registered family devices (fingerprint registry)
+  removeContactDevice: (contactId: string, fingerprintId: string) =>
+    apiClient.delete<ApiResponse<{ contactId: string; fingerprintId: string }>>(`/contacts/${contactId}/devices/${fingerprintId}`)
+      .then((r) => { invalidateCache('contacts'); return r.data?.data; }),
+
+  clearContactDevices: (contactId: string) =>
+    apiClient.delete<ApiResponse<{ removedDevices: number }>>(`/contacts/${contactId}/devices`)
+      .then((r) => { invalidateCache('contacts'); return r.data?.data; }),
 
   // Wallets
   getWallets: (params?: ListParams) => {

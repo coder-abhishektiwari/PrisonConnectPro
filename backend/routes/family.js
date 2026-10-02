@@ -182,7 +182,11 @@ router.post('/secure-call/device/:linkToken', asyncRoute(async (req, res) => {
 
   // First call to this number -> register the fingerprint.
   // Returning call  -> require the fingerprint to match the stored one.
-  const result = await registerOrVerifyFingerprint(call.contactId, familyPhone, { hash: String(fingerprint), signals });
+  const result = await registerOrVerifyFingerprint(call.contactId, familyPhone, {
+    hash: String(fingerprint),
+    signals,
+    deviceInfo: body.deviceInfo || null
+  });
 
   if (!result.verified) {
     // Track failed attempts so the kiosk can show the step in red.

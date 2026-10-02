@@ -6,7 +6,7 @@ import { SearchableSelect } from '@/components/SearchableSelect';
 import { wardenApi } from '@/services/api/wardenApi';
 import { apiClient } from '@/services/api/client';
 import { usePageHeader } from '@/context/PageHeaderContext';
-import type { Inmate, Contact } from '@/services/api/wardenApi';
+import type { Inmate, Contact, DeviceFingerprint } from '@/services/api/wardenApi';
 
 export function InmateDetailPage() {
   const { inmateId } = useParams<{ inmateId: string }>();
@@ -38,6 +38,8 @@ export function InmateDetailPage() {
   const [biometrics, setBiometrics] = useState<any[]>([]);
   const [biometricsLoading, setBiometricsLoading] = useState(false);
   const [deletingBiometric, setDeletingBiometric] = useState<string | null>(null);
+  const [removingDevice, setRemovingDevice] = useState<string | null>(null);
+  const [deviceError, setDeviceError] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -144,7 +146,13 @@ export function InmateDetailPage() {
   };
 
   const deleteContact = async (contactId: string) => {
-    try { await wardenApi.deleteContactApi(contactId); } catch { }
+    setSaveContactError('');
+    try {
+      await wardenApi.deleteContactApi(contactId);
+    } catch (e: any) {
+      setSaveContactError(e?.response?.data?.error?.message || 'Failed to delete contact. Please try again.');
+      return;
+    }
     setContacts(prev => prev.filter(c => c.contactId !== contactId));
     if (selectedContact?.contactId === contactId) { setSelectedContact(null); setEditingContact(false); }
   };
@@ -157,6 +165,38 @@ export function InmateDetailPage() {
         if (selectedContact?.contactId === contactId) setSelectedContact({ ...selectedContact, ...updated } as Contact);
       }
     } catch { }
+  };
+
+  const removeDevice = async (contactId: string, fingerprintId: string) => {
+    if (removingDevice) return;
+    setDeviceError('');
+    setRemovingDevice(fingerprintId);
+    try {
+      await wardenApi.removeContactDevice(contactId, fingerprintId);
+      const strip = (c: Contact): Contact => ({ ...c, deviceFingerprints: (c.deviceFingerprints || []).filter(d => d.fingerprintId !== fingerprintId) });
+      setContacts(prev => prev.map(c => c.contactId === contactId ? strip(c) : c));
+      if (selectedContact?.contactId === contactId) setSelectedContact(strip(selectedContact));
+    } catch (e: any) {
+      setDeviceError(e?.response?.data?.error?.message || 'Failed to remove device. Please try again.');
+    } finally {
+      setRemovingDevice(null);
+    }
+  };
+
+  const clearDevices = async (contactId: string) => {
+    if (removingDevice) return;
+    setDeviceError('');
+    setRemovingDevice('__all__');
+    try {
+      await wardenApi.clearContactDevices(contactId);
+      const strip = (c: Contact): Contact => ({ ...c, deviceFingerprints: [] });
+      setContacts(prev => prev.map(c => c.contactId === contactId ? strip(c) : c));
+      if (selectedContact?.contactId === contactId) setSelectedContact(strip(selectedContact));
+    } catch (e: any) {
+      setDeviceError(e?.response?.data?.error?.message || 'Failed to clear devices. Please try again.');
+    } finally {
+      setRemovingDevice(null);
+    }
   };
 
   const resetPin = async () => {
@@ -321,13 +361,90 @@ export function InmateDetailPage() {
         </div>
       );
     }
+    const display = val == null || typeof val === 'object' ? '' : String(val);
     return (
       <div key={key} className="py-3 border-b border-neutral-100 last:border-0 flex items-center gap-3">
         <span className="material-icons text-neutral-400 text-lg">{icon}</span>
         <div>
           <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">{label}</p>
-          <p className="text-sm text-neutral-900">{val || '—'}</p>
+          <p className="text-sm text-neutral-900">{display || '—'}</p>
         </div>
+      </div>
+    );
+  };
+
+  const fmtDate = (iso?: string) => {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
+  };
+
+  const renderDevices = (contact: Contact) => {
+    const devices = contact.deviceFingerprints || [];
+    return (
+      <div className="pt-4 border-t border-neutral-100 mt-1">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider flex items-center gap-1.5">
+            <span className="material-icons text-sm">devices</span> Verified Devices ({devices.length})
+          </p>
+          {devices.length > 0 && (
+            <button
+              onClick={() => clearDevices(contact.contactId)}
+              disabled={removingDevice !== null}
+              className="text-[11px] text-neutral-500 hover:text-red-600 transition disabled:opacity-50"
+              title="Remove every registered device for this contact"
+            >
+              Clear all
+            </button>
+          )}
+        </div>
+        {deviceError && <p className="text-xs text-red-500 mb-2">{deviceError}</p>}
+        {devices.length === 0 ? (
+          <p className="text-xs text-neutral-400">No devices registered yet. A device is registered the first time this contact opens a call link on their phone.</p>
+        ) : (
+          <div className="space-y-2">
+            {devices.map(d => {
+              const s = d.signals || {};
+              const info = d.deviceInfo || {};
+              const label = info.browser || info.os
+                || (s.userAgent ? String(s.userAgent).replace(/\s*\(.*?\)\s*/g, ' ').trim().split(/\s+/).slice(0, 3).join(' ') : '')
+                || 'Device';
+              const deviceId = s.deviceId || '';
+              return (
+                <div key={d.fingerprintId} className="flex items-start gap-3 p-3 bg-neutral-50 border border-neutral-200 rounded-lg">
+                  <span className="material-icons text-neutral-400 mt-0.5">smartphone</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-neutral-900 truncate">{label}</p>
+                    <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-0.5 text-[11px] text-neutral-500">
+                      {d.phone && <span>Phone: {d.phone}</span>}
+                      {(s.screen || info.screen) && <span>Screen: {s.screen || info.screen}</span>}
+                      {s.timezone && <span>TZ: {s.timezone}</span>}
+                      {s.platform && <span>Platform: {s.platform}</span>}
+                      {s.deviceMemory != null && <span>Memory: {s.deviceMemory} GB</span>}
+                      {typeof s.hardwareConcurrency === 'number' && <span>Cores: {s.hardwareConcurrency}</span>}
+                      <span>Uses: {d.verifiedCount || 0}×</span>
+                      {d.lastVerifiedAt && <span>Last: {fmtDate(d.lastVerifiedAt)}</span>}
+                      {d.firstSeenAt && <span>First: {fmtDate(d.firstSeenAt)}</span>}
+                    </div>
+                    {deviceId && (
+                      <p className="mt-1 text-[10px] font-mono text-neutral-400 truncate">ID: {deviceId}</p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => removeDevice(contact.contactId, d.fingerprintId)}
+                    disabled={removingDevice !== null}
+                    className="w-8 h-8 shrink-0 flex items-center justify-center bg-white border border-neutral-200 text-neutral-600 rounded-lg hover:bg-red-50 hover:text-red-600 transition disabled:opacity-50"
+                    title="Remove this device"
+                  >
+                    <span className="material-icons text-base">{removingDevice === d.fingerprintId ? 'hourglass_top' : 'delete'}</span>
+                  </button>
+                </div>
+              );
+            })}
+            <p className="text-[11px] text-neutral-400">Removing a device forces that phone to register again on its next call.</p>
+          </div>
+        )}
       </div>
     );
   };
@@ -549,6 +666,7 @@ export function InmateDetailPage() {
               {contactFieldRow('Address', 'address', 'home')}
               {contactFieldRow('City', 'city', 'location_city')}
               {contactFieldRow('State', 'state', 'map')}
+              {renderDevices(selectedContact)}
             </div>
           )}
         </div>
