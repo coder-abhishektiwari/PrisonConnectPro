@@ -43,6 +43,10 @@ class AddPrisonerViewModel @Inject constructor(
             _registrationState.value = RegistrationState.Error("Prisoner name is required")
             return
         }
+        if (pin.length != 6) {
+            _registrationState.value = RegistrationState.Error("PIN must be exactly 6 digits")
+            return
+        }
 
         _registrationState.value = RegistrationState.Loading
 

@@ -24,6 +24,9 @@ class EditPrisonerViewModel @Inject constructor(
     private val _updateState = MutableStateFlow<NetworkResult<Prisoner>>(NetworkResult.Idle)
     val updateState: StateFlow<NetworkResult<Prisoner>> = _updateState.asStateFlow()
 
+    private val _resetPinState = MutableStateFlow<NetworkResult<String>>(NetworkResult.Idle)
+    val resetPinState: StateFlow<NetworkResult<String>> = _resetPinState.asStateFlow()
+
     fun loadPrisoner(prisonerId: String) {
         viewModelScope.launch {
             adminRepository.getPrisoner(prisonerId).collect { result ->
@@ -32,44 +35,24 @@ class EditPrisonerViewModel @Inject constructor(
         }
     }
 
-    fun updatePrisoner(
-        prisonerId: String,
-        fullName: String,
-        mobileNumber: String,
-        prisonerNumber: String,
-        dateOfAdmission: String,
-        cellId: String,
-        blockId: String,
-        securityLevel: String,
-        sentenceStart: String,
-        sentenceEnd: String,
-        sentenceDetails: String,
-        assignedKioskId: String,
-        status: String,
-        active: Boolean
-    ) {
+    fun updatePrisoner(prisonerId: String, request: EditPrisonerRequest) {
         _updateState.value = NetworkResult.Loading
-        val request = EditPrisonerRequest(
-            name = fullName.ifBlank { null },
-            mobileNumber = mobileNumber.ifBlank { null },
-            prisonerNumber = prisonerNumber.ifBlank { null },
-            dateOfAdmission = dateOfAdmission.ifBlank { null },
-            cellId = cellId.ifBlank { null },
-            blockId = blockId.ifBlank { null },
-            securityLevel = securityLevel.ifBlank { null },
-            sentenceStart = sentenceStart.ifBlank { null },
-            sentenceEnd = sentenceEnd.ifBlank { null },
-            sentenceDetails = sentenceDetails.ifBlank { null },
-            assignedKioskId = assignedKioskId.ifBlank { null },
-            status = status,
-            active = active
-        )
-
         viewModelScope.launch {
             adminRepository.editPrisoner(prisonerId, request).collect { result ->
                 _updateState.value = result
             }
         }
+    }
+
+    fun resetPin(prisonerId: String, pin: String) {
+        _resetPinState.value = NetworkResult.Loading
+        viewModelScope.launch {
+            _resetPinState.value = adminRepository.resetPrisonerPin(prisonerId, pin)
+        }
+    }
+
+    fun resetResetPinState() {
+        _resetPinState.value = NetworkResult.Idle
     }
 
     fun resetUpdateState() {

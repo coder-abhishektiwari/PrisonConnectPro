@@ -18,8 +18,8 @@ function createSettingsRouter(broadcastEvent) {
       const result = deepMerge(base, patch);
       return { data: [result], result };
     });
-    broadcastEvent('settings-updated', merged.result);
-    return sendSuccess(res, merged.result);
+    broadcastEvent('settings-updated', merged);
+    return sendSuccess(res, merged);
   }));
 
   // Reports
@@ -41,8 +41,8 @@ function createSettingsRouter(broadcastEvent) {
       const result = deepMerge(base, { ...req.body });
       return { data: [result], result };
     });
-    broadcastEvent('pricing-updated', merged.result);
-    return sendSuccess(res, merged.result);
+    broadcastEvent('pricing-updated', merged);
+    return sendSuccess(res, merged);
   }));
 
   // Subscriptions, servers, storage

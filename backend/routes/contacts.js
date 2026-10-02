@@ -272,7 +272,7 @@ function createContactsRouter(broadcastEvent) {
       const filtered = all.filter((c) => c.contactId !== contactId);
       return { data: filtered, result: { deleted: true, contactId } };
     });
-    return sendSuccess(res, deleted.result);
+    return sendSuccess(res, deleted);
   }));
 
   // Toggle contact active/inactive

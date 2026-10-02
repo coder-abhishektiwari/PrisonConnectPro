@@ -15,6 +15,12 @@ function normalizeContact(c) {
   const out = { ...c };
   if (!out.name && out.fullName) out.name = out.fullName;
   delete out.fullName;
+  const phone = out.mobileNumber || out.phoneNumber || out.phone;
+  if (phone) {
+    if (!out.mobileNumber) out.mobileNumber = phone;
+    if (!out.phoneNumber) out.phoneNumber = phone;
+    if (!out.phone) out.phone = phone;
+  }
   return out;
 }
 
@@ -71,6 +77,7 @@ router.post('/prisoners', requireRole(...ALL_ROLES), async (req, res) => {
     facility: jailId || inmateData.facility,
     assignedKioskId: kioskId || inmateData.assignedKioskId,
     status: inmateData.status || 'active',
+    dateOfAdmission: inmateData.dateOfAdmission || new Date().toISOString().slice(0, 10),
     biometricData: inmateData.biometricData || {
       faceRegistered: false, faceEmbedding: null,
       fingerprintRegistered: false, rfidRegistered: false, lastBiometricUpdate: null
@@ -85,7 +92,7 @@ router.post('/prisoners', requireRole(...ALL_ROLES), async (req, res) => {
     record.lastName = record.name.split(' ').slice(1).join(' ');
   }
   const updated = await updateDb('inmates.json', (inmates) => ({ data: [...inmates, record], result: record }));
-  return res.status(201).json({ success: true, data: normalizeInmate(updated.result) });
+  return res.status(201).json({ success: true, data: normalizeInmate(updated) });
 });
 
 router.put('/prisoners/:prisonerId', requireRole(...ALL_ROLES), async (req, res) => {
@@ -107,8 +114,8 @@ router.put('/prisoners/:prisonerId', requireRole(...ALL_ROLES), async (req, res)
 
 router.post('/prisoners/:prisonerId/reset-pin', requireRole(...ALL_ROLES), async (req, res) => {
   const { pin } = req.body;
-  if (!pin || !/^\d{4}$/.test(String(pin))) {
-    return res.status(400).json({ success: false, error: { code: 'INVALID_PIN', message: 'PIN must be exactly 4 digits' } });
+  if (!pin || !/^\d{6}$/.test(String(pin))) {
+    return res.status(400).json({ success: false, error: { code: 'INVALID_PIN', message: 'PIN must be exactly 6 digits' } });
   }
   const hashedPin = await hashSecret(String(pin));
   const updated = await updateDb('inmates.json', (inmates) => {
@@ -173,7 +180,7 @@ router.post('/prisoners/:prisonerId/contacts', requireRole(...ALL_ROLES), async 
     createdAt: new Date().toISOString()
   };
   const updated = await updateDb('contacts.json', (contacts) => ({ data: [...contacts, newContact], result: newContact }));
-  return res.status(201).json({ success: true, data: normalizeContact(updated.result) });
+  return res.status(201).json({ success: true, data: normalizeContact(updated) });
 });
 
 // ==================== CONTACT CRUD (direct contactId) ====================
@@ -461,7 +468,7 @@ router.post('/', requireRole('super-admin', 'super_admin'), async (req, res) => 
   if (record.pin && !/^\$2[aby]\$/.test(record.pin)) record.pin = await hashSecret(String(record.pin));
   if (record.password && !/^\$2[aby]\$/.test(record.password)) record.password = await hashSecret(String(record.password));
   const updated = await updateDb('admins.json', (all) => ({ data: [...all, record], result: record }));
-  return res.status(201).json({ success: true, data: updated.result });
+  return res.status(201).json({ success: true, data: updated });
 });
 
 router.patch('/:adminId', requireRole('super-admin', 'super_admin'), async (req, res) => {
@@ -476,7 +483,7 @@ router.patch('/:adminId', requireRole('super-admin', 'super_admin'), async (req,
     return { data: all, result: all[idx] };
   });
   if (!updated) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Admin not found' } });
-  return res.json({ success: true, data: updated.result });
+  return res.json({ success: true, data: updated });
 });
 
 router.delete('/:adminId', requireRole('super-admin', 'super_admin'), async (req, res) => {

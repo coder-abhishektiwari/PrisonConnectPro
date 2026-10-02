@@ -143,8 +143,8 @@ app.patch('/pricing', requireAuth, requireRole('admin', 'warden', 'super-admin',
     const result = deepMerge(base, { ...req.body });
     return { data: result, result };
   });
-  broadcastEvent('pricing-updated', merged.result);
-  return sendSuccess(res, merged.result);
+  broadcastEvent('pricing-updated', merged);
+  return sendSuccess(res, merged);
 }));
 app.get('/subscriptions', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('subscriptions.json')))));
 app.get('/reports', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('reports.json')))));

@@ -267,6 +267,7 @@ fun AddPrisonerContent(
                                 if (currentStep == PrisonerRegistrationStep.BIOMETRIC_DATA) {
                                     // Validate PIN match before submitting
                                     if (pin != confirmPin) return@Button
+                                    if (pin.length != 6) return@Button
                                     onRegister(
                                         firstName, lastName, mobileNumber, dateOfBirth, gender,
                                         prisonerNumber, cellBlock, cellNumber, securityLevel,
@@ -685,7 +686,7 @@ private fun BiometricDataStep(
             )
 
             Text(
-                text = "Set up a 4-digit PIN for the prisoner. This PIN will be required for authentication.",
+                text = "Set up a 6-digit PIN for the prisoner. This PIN will be required for authentication.",
                 fontSize = 14.sp,
                 color = Color(0xFF687A8F)
             )
@@ -693,11 +694,11 @@ private fun BiometricDataStep(
             OutlinedTextField(
                 value = pin,
                 onValueChange = {
-                    if (it.length <= 4 && it.all { char -> char.isDigit() }) {
+                    if (it.length <= 6 && it.all { char -> char.isDigit() }) {
                         onPinChange(it)
                     }
                 },
-                label = { Text("4-Digit PIN *") },
+                label = { Text("6-Digit PIN *") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
@@ -709,7 +710,7 @@ private fun BiometricDataStep(
             OutlinedTextField(
                 value = confirmPin,
                 onValueChange = {
-                    if (it.length <= 4 && it.all { char -> char.isDigit() }) {
+                    if (it.length <= 6 && it.all { char -> char.isDigit() }) {
                         onConfirmPinChange(it)
                     }
                 },
@@ -726,6 +727,13 @@ private fun BiometricDataStep(
             if (pin.isNotEmpty() && confirmPin.isNotEmpty() && pin != confirmPin) {
                 Text(
                     text = "PINs do not match",
+                    color = Color(0xFFD32F2F),
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(start = 16.dp)
+                )
+            } else if (pin.length != 6) {
+                Text(
+                    text = "PIN must be exactly 6 digits",
                     color = Color(0xFFD32F2F),
                     fontSize = 12.sp,
                     modifier = Modifier.padding(start = 16.dp)

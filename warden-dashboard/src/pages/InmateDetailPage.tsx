@@ -268,7 +268,7 @@ export function InmateDetailPage() {
 
   const resetPin = async () => {
     if (!inmate || !newPin.trim()) return;
-    if (!/^\d{4}$/.test(newPin.trim())) { setResetPinError('PIN must be exactly 4 digits'); return; }
+    if (!/^\d{6}$/.test(newPin.trim())) { setResetPinError('PIN must be exactly 6 digits'); return; }
     setResetPinError('');
     try {
       await wardenApi.resetInmatePin(inmate.inmateId, newPin.trim());
@@ -782,15 +782,15 @@ export function InmateDetailPage() {
             ) : (
               <>
                 {resetPinError && <p className="text-sm text-error bg-error/10 border border-error/20 rounded-lg px-3 py-2 mb-3">{resetPinError}</p>}
-                <p className="text-sm text-neutral-600 mb-3">Enter a new 4-digit PIN for <strong>{inmate.name}</strong></p>
+                <p className="text-sm text-neutral-600 mb-3">Enter a new 6-digit PIN for <strong>{inmate.name}</strong></p>
                 <input
                   type="password"
-                  maxLength={4}
+                  maxLength={6}
                   pattern="[0-9]*"
                   inputMode="numeric"
                   value={newPin}
-                  onChange={e => { setNewPin(e.target.value.replace(/\D/g, '').slice(0, 4)); setResetPinError(''); }}
-                  placeholder="••••"
+                  onChange={e => { setNewPin(e.target.value.replace(/\D/g, '').slice(0, 6)); setResetPinError(''); }}
+                  placeholder="••••••"
                   className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm text-center tracking-[0.5em] font-mono focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </>
