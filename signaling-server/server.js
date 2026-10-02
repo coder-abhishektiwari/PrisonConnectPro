@@ -94,7 +94,15 @@ function scheduleRoomTeardown(roomId, reason) {
 
 function roomPeers(roomId) {
   if (!rooms.has(roomId)) rooms.set(roomId, new Map());
-  return rooms.get(roomId);
+  const peers = rooms.get(roomId);
+  // A socket whose disconnect never arrived (dead client, half-open TCP) would
+  // otherwise occupy a peer slot forever: it inflates the participant count,
+  // makes the room look full, and — worst — shows up in `existingPeers`, so the
+  // next real joiner sends an SDP offer at a ghost that never answers.
+  for (const [pid, s] of [...peers]) {
+    if (!s || !s.connected) peers.delete(pid);
+  }
+  return peers;
 }
 
 io.use((socket, next) => {
@@ -140,6 +148,20 @@ io.on('connection', (socket) => {
     }
 
     const peers = roomPeers(roomId);
+
+    // This socket already belongs to a DIFFERENT room (an endCall that never
+    // sent leave-room, then a new call). Move it properly, otherwise the old
+    // room keeps a live-socket entry forever and reports this socket as a peer.
+    if (currentRoomId && currentRoomId !== roomId) {
+      await doLeave({ immediate: true });
+    }
+
+    // One socket = one peer slot. Rejoining the same room under a different
+    // peerId (a retried startCall) would otherwise leave the old entry behind
+    // and make a 1-1 room look full.
+    if (currentRoomId === roomId && currentPeerId && currentPeerId !== peerId) {
+      peers.delete(currentPeerId);
+    }
     const roomMax = parseInt(process.env.ROOM_MAX_PARTICIPANTS || '2', 10);
     const activePeers = [...peers.values()].filter((s) => s.id !== socket.id);
 
@@ -157,7 +179,7 @@ io.on('connection', (socket) => {
 
     // Notify room of existing peers and notify other peer about this join
     const existingPeers = [...peers.keys()].filter((p) => p !== peerId);
-    socket.to(roomId).emit('peer-joined', { peerId, role: auth.role });
+    socket.to(roomId).emit('peer-joined', { roomId, peerId, role: auth.role });
 
     console.log(`[join-room] OK roomId=${roomId} peerId=${peerId} existingPeers=${existingPeers.length}`);
     return callback?.({
@@ -255,12 +277,26 @@ io.on('connection', (socket) => {
     const roomId = currentRoomId;
     const peerId = currentPeerId;
     if (!roomId || !peerId) return;
-    rooms.get(roomId)?.delete(peerId);
-    const remaining = rooms.get(roomId)?.size || 0;
-    socket.to(roomId).emit('peer-left', { peerId });
+    const peers = rooms.get(roomId);
+    // The map is keyed by peerId, but peerIds are reused across reconnects.
+    // If this entry now points at a NEWER socket (the client already rejoined
+    // on a fresh connection), deleting it would evict the live peer: the room
+    // would report itself empty, targeted SDP/ICE would be dropped, and the
+    // teardown timer would fire `call-ended` on an active call. Only the owner
+    // of the entry may remove it.
+    const ownsEntry = !!peers && peers.get(peerId) === socket;
+    if (ownsEntry) peers.delete(peerId);
     socket.leave(roomId);
     currentRoomId = null;
     currentPeerId = null;
+
+    if (!ownsEntry) {
+      console.log(`[signaling] stale socket left room=${roomId} peerId=${peerId} (entry already replaced)`);
+      return;
+    }
+
+    const remaining = peers ? peers.size : 0;
+    socket.to(roomId).emit('peer-left', { roomId, peerId });
     if (remaining === 0) {
       if (immediate) {
         teardownRoom(roomId, 'call ended');

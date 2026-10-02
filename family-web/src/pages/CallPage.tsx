@@ -234,6 +234,12 @@ export function CallPage() {
           console.log('[Call] Socket connected');
           if (!joinStartedRef.current) {
             joinRoom();
+          } else if (shouldRejoinRoom()) {
+            // Socket.IO reconnects drop room membership server-side, and the
+            // lobby/waiting states never reach startReconnect (it bails unless
+            // the call already reached media). Without this rejoin the family
+            // silently falls out of the room and the call never connects.
+            void rejoinRoom();
           }
           break;
         case 'disconnected':
@@ -478,6 +484,37 @@ export function CallPage() {
       setStatus('error');
       setError(error instanceof Error ? error.message : 'Failed to join room');
       addToast('Failed to join room', 'error');
+    }
+  };
+
+  /**
+   * Room membership is socket-scoped: every reconnect silently drops us from
+   * the room. Only the media-connected path notices (startReconnect bails
+   * unless wasConnectedRef), so the lobby has to re-join on its own.
+   * `reconnectingRef` covers both "call is ending" and "startReconnect owns
+   * the rejoin" — never race the two.
+   */
+  const shouldRejoinRoom = (): boolean => {
+    if (reconnectingRef.current) return false;
+    const s = statusRef.current;
+    return s === 'initializing' || s === 'waiting' || s === 'connecting';
+  };
+
+  /** Re-enter the room after a socket reconnect. Safe to re-run handleJoined:
+   *  createPeerConnection() is a no-op once a PC exists and the offer path is
+   *  guarded by `signalingState === 'stable'`. */
+  const rejoinRoom = async () => {
+    if (!session || !shouldRejoinRoom()) return;
+    try {
+      const response = await socketService.joinRoom(session.roomId, peerIdRef.current);
+      if (response?.success) {
+        console.log('[Call] Re-joined room after socket reconnect');
+        await webRtcService.handleJoined(response);
+      } else {
+        console.warn('[Call] Room rejoin rejected:', response?.message || response?.error);
+      }
+    } catch (err) {
+      console.warn('[Call] Room rejoin failed:', err);
     }
   };
 

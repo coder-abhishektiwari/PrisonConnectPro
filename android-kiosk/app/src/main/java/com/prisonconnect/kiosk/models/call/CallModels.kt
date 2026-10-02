@@ -159,5 +159,11 @@ data class CallStatusSnapshot(
 data class CallStatsReport(
     @SerializedName("connectionQuality") val connectionQuality: String? = null,
     @SerializedName("recordingStatus") val recordingStatus: String? = null,
-    @SerializedName("iceState") val iceState: String? = null
+    @SerializedName("iceState") val iceState: String? = null,
+    /** Inbound packet loss in percent — feeds the backend's callIssues list. */
+    @SerializedName("packetLoss") val packetLoss: Double? = null,
+    /** Inbound jitter in milliseconds. */
+    @SerializedName("jitter") val jitter: Double? = null,
+    /** Inbound bitrate in kbps. */
+    @SerializedName("bitrate") val bitrate: Double? = null
 )

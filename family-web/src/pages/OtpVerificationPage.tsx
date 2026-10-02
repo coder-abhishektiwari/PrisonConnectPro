@@ -19,6 +19,10 @@ export function OtpVerificationPage() {
   const [waitingForSms, setWaitingForSms] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const submittingRef = useRef(false);
+  // Last 6-digit code we already POSTed. The auto-submit effect re-runs every
+  // time `loading` flips, so without this a failed verification immediately
+  // re-submits the same code — an infinite loop hammering /verify-otp.
+  const lastSubmittedCodeRef = useRef<string | null>(null);
 
   // Warm up camera/mic NOW so the call page doesn't pay the getUserMedia cost.
   useEffect(() => {
@@ -44,9 +48,11 @@ export function OtpVerificationPage() {
         } as unknown as CredentialRequestOptions;
         const cred = await navigator.credentials.get(options);
         if (cred && (cred as any).code) {
-          const code = (cred as any).code;
-          setOtp(code);
-          handleSubmit(code);
+          // Only hand the code to state — the auto-submit effect below is the
+          // single place that POSTs. Calling handleSubmit from here would use
+          // the first render's closure (stale `session`), and would race the
+          // effect into a second submit.
+          setOtp((cred as any).code);
         }
       } catch (err) {
         if ((err as any)?.name !== 'AbortError') {
@@ -62,6 +68,9 @@ export function OtpVerificationPage() {
     setWaitingForSms(true);
     setError(null);
     setOtp('');
+    // A resend starts a fresh attempt: allow the same code to be POSTed again
+    // (the backend may re-issue the identical OTP).
+    lastSubmittedCodeRef.current = null;
     try {
       const result = await callApi.sendOtp(linkToken);
       setPhoneMasked(result.phoneMasked);
@@ -71,10 +80,7 @@ export function OtpVerificationPage() {
       if (import.meta.env.DEV && session) {
         try {
           const dev = await callApi.getDevOtp(linkToken);
-          if (dev?.otp) {
-            setOtp(dev.otp);
-            await handleSubmit(dev.otp);
-          }
+          if (dev?.otp) setOtp(dev.otp);
         } catch (err) {
           console.warn('[otp] dev auto-fill unavailable:', err);
         }
@@ -91,6 +97,7 @@ export function OtpVerificationPage() {
     if (code.length !== 6 || !linkToken || !session) return;
 
     submittingRef.current = true;
+    lastSubmittedCodeRef.current = code;
     setLoading(true);
     setError(null);
 
@@ -119,11 +126,14 @@ export function OtpVerificationPage() {
     await dispatchOtp();
   };
 
+  const cooldownActive = resendCooldown > 0;
   useEffect(() => {
-    if (resendCooldown <= 0) return;
-    const timer = setInterval(() => setResendCooldown((c) => c - 1), 1000);
+    if (!cooldownActive) return;
+    // One interval for the whole countdown — the previous version re-ran on
+    // every `resendCooldown` change and rebuilt the timer once per second.
+    const timer = setInterval(() => setResendCooldown((c) => (c > 1 ? c - 1 : 0)), 1000);
     return () => clearInterval(timer);
-  }, [resendCooldown]);
+  }, [cooldownActive]);
 
   useEffect(() => {
     dispatchOtp();
@@ -131,12 +141,19 @@ export function OtpVerificationPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [linkToken]);
 
-  // Auto-submit when 6 digits arrive via WebOTP
+  // Auto-submit when 6 digits arrive via WebOTP (or the dev auto-fill).
+  // `loading` flipping true->false re-runs this, so a code is only posted
+  // once — a failed verify must not immediately retry the same code forever.
   useEffect(() => {
-    if (otp.length === 6 && !submittingRef.current && !loading) {
-      handleSubmit(otp);
+    if (otp.length !== 6) {
+      lastSubmittedCodeRef.current = null;
+      return;
     }
-  }, [otp, loading]);
+    if (loading || submittingRef.current) return;
+    if (lastSubmittedCodeRef.current === otp) return;
+    void handleSubmit(otp);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [otp, loading, session]);
 
   const otpDigits = otp.split('');
   while (otpDigits.length < 6) otpDigits.push('');

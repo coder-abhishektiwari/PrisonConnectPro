@@ -192,29 +192,50 @@ app.post('/wallet-requests', requireAuth, requireRole('admin', 'warden', 'super-
 
 app.patch('/wallet-requests/:requestId/approve', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const { requestId } = req.params;
-  const all = await readDb('wallet-requests.json');
-  const idx = all.findIndex((r) => r.requestId === requestId);
-  if (idx === -1) return sendError(res, 'NOT_FOUND', 'Request not found');
-  if (all[idx].status !== 'pending') return sendError(res, 'BAD_REQUEST', 'Request already processed');
 
-  all[idx].status = 'approved';
-  all[idx].reviewedBy = req.auth?.sub || 'system';
-  all[idx].reviewedAt = new Date().toISOString();
-
-  await updateDb('wallet-requests.json', (data) => {
+  // Claim the request INSIDE the wallet-requests mutex. The `pending` check
+  // has to be part of the same atomic write it flips: reading it first and
+  // writing later let two concurrent approves both see 'pending' and both
+  // credit the wallet.
+  const claim = await updateDb('wallet-requests.json', (data) => {
     const i = data.findIndex((r) => r.requestId === requestId);
-    if (i !== -1) data[i] = all[idx];
-    return { data, result: all[idx] };
+    if (i === -1) return { data, result: { notFound: true } };
+    if (data[i].status !== 'pending') {
+      return { data, result: { alreadyProcessed: true, request: data[i] } };
+    }
+    data[i] = {
+      ...data[i],
+      status: 'approved',
+      reviewedBy: req.auth?.sub || 'system',
+      reviewedAt: new Date().toISOString(),
+    };
+    return { data, result: { request: data[i] } };
   });
 
-  // Auto-recharge wallet on approval
-  const { inmateId, amount } = all[idx];
-  const wallets = await readDb('wallets.json');
-  let wallet = wallets.find((w) => w.inmateId === inmateId);
+  if (!claim || !claim.request) return sendError(res, 'NOT_FOUND', 'Request not found', 404);
+  if (claim.alreadyProcessed) return sendError(res, 'BAD_REQUEST', 'Request already processed', 400);
+
+  const approvedRequest = claim.request;
+  const { inmateId, amount } = approvedRequest;
+
+  // Second line of defence: the ledger is what the balance is derived from,
+  // so never write a second recharge row for the same request.
+  const priorCredit = (await readDb('transactions.json'))
+    .find((t) => t.requestId === requestId && t.type === 'recharge');
+  if (priorCredit) {
+    console.warn(`[wallet] request ${requestId} already credited (${priorCredit.transactionId}) — skipping`);
+    const existing = await readDb('wallets.json');
+    return sendSuccess(res, {
+      request: approvedRequest,
+      wallet: existing.find((w) => w.inmateId === inmateId) || null,
+      transaction: priorCredit,
+    });
+  }
 
   const transaction = {
     transactionId: `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
-    walletId: wallet ? wallet.walletId : null,
+    walletId: null,
+    requestId,
     inmateId,
     type: 'recharge',
     status: 'completed',
@@ -224,21 +245,22 @@ app.patch('/wallet-requests/:requestId/approve', requireAuth, requireRole('admin
     performedBy: req.auth?.sub || 'system'
   };
 
-  if (wallet) {
-    await updateDb('wallets.json', (data) => {
-      const i = data.findIndex((w) => w.inmateId === inmateId);
-      if (i !== -1) {
-        data[i].balance = (data[i].balance || 0) + Number(amount);
-        data[i].lastRecharge = new Date().toISOString();
-        data[i].lastRechargeAmount = Number(amount);
-        data[i].totalRecharged = (data[i].totalRecharged || 0) + Number(amount);
-        data[i].updatedAt = new Date().toISOString();
-        wallet = data[i];
-      }
+  // Create-or-credit in ONE write: a concurrent request may have created this
+  // wallet between our read and this update.
+  const walletRes = await updateDb('wallets.json', (data) => {
+    const i = data.findIndex((w) => w.inmateId === inmateId);
+    if (i !== -1) {
+      data[i] = {
+        ...data[i],
+        balance: (data[i].balance || 0) + Number(amount),
+        lastRecharge: new Date().toISOString(),
+        lastRechargeAmount: Number(amount),
+        totalRecharged: (data[i].totalRecharged || 0) + Number(amount),
+        updatedAt: new Date().toISOString()
+      };
       return { data, result: data[i] };
-    });
-  } else {
-    wallet = {
+    }
+    const created = {
       walletId: `WAL-${Date.now()}`,
       inmateId,
       balance: Number(amount),
@@ -251,40 +273,45 @@ app.patch('/wallet-requests/:requestId/approve', requireAuth, requireRole('admin
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
-    await updateDb('wallets.json', (data) => {
-      data.push(wallet);
-      return { data, result: wallet };
-    });
-  }
+    data.push(created);
+    return { data, result: created };
+  });
+  const wallet = walletRes && typeof walletRes.walletId === 'string' ? walletRes : null;
+  if (wallet) transaction.walletId = wallet.walletId;
 
   await updateDb('transactions.json', (data) => {
     data.push(transaction);
     return { data, result: transaction };
   });
 
-  return sendSuccess(res, { request: all[idx], wallet, transaction });
+  return sendSuccess(res, { request: approvedRequest, wallet, transaction });
 }));
 
 app.patch('/wallet-requests/:requestId/reject', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const { requestId } = req.params;
   const { reason } = req.body;
-  const all = await readDb('wallet-requests.json');
-  const idx = all.findIndex((r) => r.requestId === requestId);
-  if (idx === -1) return sendError(res, 'NOT_FOUND', 'Request not found');
-  if (all[idx].status !== 'pending') return sendError(res, 'BAD_REQUEST', 'Request already processed');
 
-  all[idx].status = 'rejected';
-  all[idx].reviewedBy = req.auth?.sub || 'system';
-  all[idx].reviewedAt = new Date().toISOString();
-  all[idx].rejectionReason = reason || '';
-
-  await updateDb('wallet-requests.json', (data) => {
+  // Same atomic claim as approve — the pending check must live in the write.
+  const claim = await updateDb('wallet-requests.json', (data) => {
     const i = data.findIndex((r) => r.requestId === requestId);
-    if (i !== -1) data[i] = all[idx];
-    return { data, result: all[idx] };
+    if (i === -1) return { data, result: { notFound: true } };
+    if (data[i].status !== 'pending') {
+      return { data, result: { alreadyProcessed: true, request: data[i] } };
+    }
+    data[i] = {
+      ...data[i],
+      status: 'rejected',
+      reviewedBy: req.auth?.sub || 'system',
+      reviewedAt: new Date().toISOString(),
+      rejectionReason: reason || ''
+    };
+    return { data, result: { request: data[i] } };
   });
 
-  return sendSuccess(res, all[idx]);
+  if (!claim || !claim.request) return sendError(res, 'NOT_FOUND', 'Request not found', 404);
+  if (claim.alreadyProcessed) return sendError(res, 'BAD_REQUEST', 'Request already processed', 400);
+
+  return sendSuccess(res, claim.request);
 }));
 
 // ==================== WARDENS ====================

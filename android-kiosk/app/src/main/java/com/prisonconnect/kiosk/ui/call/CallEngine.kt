@@ -164,6 +164,16 @@ class CallEngine @Inject constructor(
     private var statsReportJob: Job? = null
     @Volatile private var callSessionActive = false
 
+    /**
+     * Room this session is joined to. Signaling events carry a roomId and any
+     * event for a different room belongs to a previous session — it must never
+     * end the current call.
+     */
+    @Volatile private var activeRoomId: String? = null
+
+    /** Kept at class scope so initCall/endSession can cancel a pending one. */
+    private var peerLeftGraceJob: Job? = null
+
     private val connectivityManager =
         context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
@@ -191,15 +201,28 @@ class CallEngine @Inject constructor(
         loadProfiles()
     }
 
+    /**
+     * True when a signaling event belongs to THIS session. Events from another
+     * room (a previous call on this kiosk, or a room torn down earlier) are
+     * dropped. Payloads without a roomId fall back to the session-active check
+     * so an older signaling server still works.
+     */
+    private fun isCurrentRoom(data: Any?): Boolean {
+        val eventRoomId = (data as? org.json.JSONObject)?.optString("roomId").orEmpty()
+        if (eventRoomId.isEmpty()) return true
+        val current = activeRoomId ?: return false
+        return eventRoomId == current
+    }
+
     /** Stops the session cleanly when the other side (or warden) ends it. */
     private fun observeRemoteEnd() {
         scope.launch {
-            var peerLeftGraceJob: Job? = null
             callRepository.observeSignalingEvents().collect { event ->
                 when (event.type) {
                     // An explicit remote hang-up (or warden disconnect) is
                     // final — end immediately, no grace.
                     "call-ended" -> {
+                        if (!isCurrentRoom(event.data)) return@collect
                         peerLeftGraceJob?.cancel(); peerLeftGraceJob = null
                         if (callSessionActive) {
                             Logger.d("Call ended remotely (call-ended) - stopping session")
@@ -211,7 +234,7 @@ class CallEngine @Inject constructor(
                     // grace window so a transient drop doesn't kill the call.
                     // If the peer rejoins inside the window, cancel the pending end.
                     "peer-left" -> {
-                        if (!callSessionActive) return@collect
+                        if (!callSessionActive || !isCurrentRoom(event.data)) return@collect
                         Logger.d("Peer left - starting ${PEER_LEFT_GRACE_MS}ms grace")
                         peerLeftGraceJob?.cancel()
                         peerLeftGraceJob = scope.launch {
@@ -223,6 +246,7 @@ class CallEngine @Inject constructor(
                         }
                     }
                     "peer-joined" -> {
+                        if (!isCurrentRoom(event.data)) return@collect
                         // The other side came back (its socket reconnected) —
                         // a peer-left was just a transient blip. Cancel ending.
                         if (peerLeftGraceJob?.isActive == true) {
@@ -287,12 +311,12 @@ class CallEngine @Inject constructor(
                         ) {
                             _callFailedAfterConnect.value = true
                         }
-                        _callState.value = CallUIState.FAILED
-                        // Tear down media NOW so the OS camera/mic privacy
-                        // indicators (green dot) clear instead of staying lit.
-                        pollJob?.cancel(); pollJob = null
-                        timerJob?.cancel(); timerJob = null
-                        webRtcManager.endCall()
+                        // Full teardown + backend finalize. Without this the
+                        // session stayed "active": the stats loop kept PATCHing
+                        // a dead call and the record only cleared on the 2-min
+                        // sweep. The UI keeps FAILED (not DISCONNECTED) so the
+                        // "Call Failed" screen still shows.
+                        endSession(terminalState = CallUIState.FAILED)
                     }
                     PeerConnection.PeerConnectionState.CLOSED -> {
                         if (_callState.value == CallUIState.CONNECTED ||
@@ -325,6 +349,10 @@ class CallEngine @Inject constructor(
     /** Starts a call session. No-ops when the same room is already live. */
     fun initCall(context: Context, roomId: String, isVideoCall: Boolean = true, callId: String?) {
         if (callSessionActive && roomId == webRtcManager.activeRoomId()) return
+        // Scope signaling events to this room and drop any grace timer that
+        // still belongs to the previous session.
+        activeRoomId = roomId
+        peerLeftGraceJob?.cancel(); peerLeftGraceJob = null
         activeCallId = callId
         _familyStage.value = FamilyStage.LINK_SENT
         _callFailedAfterConnect.value = false
@@ -370,7 +398,9 @@ class CallEngine @Inject constructor(
                         Logger.d("Call status poll unavailable ($consecutiveFailures/${POLL_FAIL_THRESHOLD}), retrying...")
                         if (consecutiveFailures >= POLL_FAIL_THRESHOLD) {
                             Logger.e("Call record never appeared - failing call")
-                            _callState.value = CallUIState.FAILED
+                            // Full teardown: without this callSessionActive
+                            // stayed true and the stats loop kept running.
+                            endSession(terminalState = CallUIState.FAILED)
                             return@launch
                         }
                     }
@@ -448,7 +478,10 @@ class CallEngine @Inject constructor(
                         // Fully tear down the session (state -> DISCONNECTED,
                         // finalize the backend record) so the UI navigates off
                         // instead of leaving a dead call screen.
-                        endSession()
+                        endSession(
+                            reason = "timeout",
+                            description = "Call ended — maximum duration reached"
+                        )
                     }
                 }
             }
@@ -465,14 +498,17 @@ class CallEngine @Inject constructor(
             while (callSessionActive) {
                 delay(5000)
                 val callId = activeCallId ?: continue
-                val quality = webRtcManager.getConnectionQuality()
+                val snapshot = webRtcManager.getQualitySnapshot()
                 val recordingStatus = if (_isRecording.value) "recording" else "inactive"
                 callRepository.reportStats(
                     callId,
                     com.prisonconnect.kiosk.models.call.CallStatsReport(
-                        connectionQuality = quality,
+                        connectionQuality = snapshot.quality,
                         recordingStatus = recordingStatus,
-                        iceState = rtcConnectionState.value.name.lowercase()
+                        iceState = rtcConnectionState.value.name.lowercase(),
+                        packetLoss = snapshot.packetLoss,
+                        jitter = snapshot.jitter,
+                        bitrate = snapshot.bitrate
                     )
                 )
             }
@@ -492,41 +528,60 @@ class CallEngine @Inject constructor(
      * Fully tears down an active call session: marks it inactive, cancels all
      * background jobs, closes the WebRTC media path, finalizes the backend call
      * record (so `POST /calls/:callId/end` persists duration/billing) and moves
-     * the UI state to DISCONNECTED so the call screen navigates away.
+     * the UI state to [terminalState] so the call screen navigates away.
+     *
+     * The state the call was IN is read before anything is mutated — reading it
+     * after the DISCONNECTED assignment makes every diagnostic branch below
+     * dead code.
+     *
+     * @param terminalState FAILED keeps the "Call Failed" screen instead of the
+     *   plain "Call ended" one.
+     * @param reason backend `endReason`; null derives one from the real state.
+     * @param description backend `endReasonDescription`; null derives one too.
      */
-    private fun endSession() {
+    private fun endSession(
+        terminalState: CallUIState = CallUIState.DISCONNECTED,
+        reason: String? = null,
+        description: String? = null,
+    ) {
+        // Capture BEFORE mutating — this is the whole point of the fix.
+        val endedInState = _callState.value
+        val familyStage = _familyStage.value
+        val wasConnected = _callFailedAfterConnect.value ||
+                endedInState == CallUIState.CONNECTED ||
+                endedInState == CallUIState.RECONNECTING
+
+        val wasActive = callSessionActive
         callSessionActive = false
         pollJob?.cancel(); pollJob = null
         timerJob?.cancel(); timerJob = null
         statsReportJob?.cancel(); statsReportJob = null
         reconnectJob?.cancel(); reconnectJob = null
+        peerLeftGraceJob?.cancel(); peerLeftGraceJob = null
         webRtcManager.endCall()
         _timerSeconds.value = 0
-        _callState.value = CallUIState.DISCONNECTED
+        _callState.value = terminalState
+        activeRoomId = null
 
-        // Build end-call payload with all diagnostic data
-        val callState = _callState.value
-        val familyStage = _familyStage.value
-        val wasConnected = _callFailedAfterConnect.value || callState == CallUIState.CONNECTED ||
-                callState == CallUIState.RECONNECTING
-        val endReason = when {
-            familyStage == FamilyStage.LINK_SENT -> "completed"
-            familyStage == FamilyStage.LINK_OPENED -> "completed"
-            familyStage == FamilyStage.DEVICE_VERIFIED -> "completed"
-            familyStage == FamilyStage.OTP_VERIFIED -> "completed"
+        // Backend end reason: real state drives it, so a failed call no longer
+        // reports itself as "completed".
+        val endReason = reason ?: when {
+            terminalState == CallUIState.FAILED && wasConnected -> "network_lost"
+            terminalState == CallUIState.FAILED -> "webrtc_failed"
             else -> "completed"
         }
-        val endDescription = when {
+        val endDescription = description ?: when {
             _familyLeft.value -> "Family member left the verification screen"
             _deviceVerifyFailed.value -> "Device verification failed"
             _otpVerifyFailed.value -> "OTP verification failed"
             familyStage == FamilyStage.LINK_SENT -> "Call link was sent but not opened"
             familyStage == FamilyStage.LINK_OPENED -> "Family opened the link but did not complete verification"
-            callState == CallUIState.FAILED && !wasConnected -> "Call media connection failed"
-            callState == CallUIState.FAILED && wasConnected -> "Call connection lost"
-            callState == CallUIState.RECONNECTING -> "Call ended — connection unstable"
+            terminalState == CallUIState.FAILED && !wasConnected -> "Call media connection failed"
+            terminalState == CallUIState.FAILED && wasConnected -> "Call connection lost"
+            endedInState == CallUIState.RECONNECTING -> "Call ended — connection unstable"
             else -> null
         }
+        if (!wasActive) return
         val request = EndCallRequest(
             endReason = endReason,
             endReasonDescription = endDescription,

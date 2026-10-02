@@ -13,6 +13,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import org.json.JSONArray
 import org.json.JSONObject
 import org.webrtc.AudioSource
@@ -25,6 +26,8 @@ import org.webrtc.IceCandidate
 import org.webrtc.MediaConstraints
 import org.webrtc.PeerConnection
 import org.webrtc.PeerConnectionFactory
+import org.webrtc.RTCStatsCollectorCallback
+import org.webrtc.RTCStatsReport
 import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
 import org.webrtc.SoftwareVideoEncoderFactory
@@ -33,6 +36,7 @@ import org.webrtc.VideoCapturer
 import org.webrtc.VideoSource
 import org.webrtc.VideoTrack
 import org.webrtc.audio.JavaAudioDeviceModule
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -91,6 +95,18 @@ class WebRtcManager @Inject constructor(
 
     fun activeRoomId(): String = currentRoomId
 
+    /**
+     * True when a signaling event belongs to this session. Payloads without a
+     * roomId (older signaling server) always pass — the generation guard above
+     * still covers those.
+     */
+    private fun isCurrentRoom(data: Any?): Boolean {
+        val eventRoomId = (data as? JSONObject)?.optString("roomId").orEmpty()
+        if (eventRoomId.isEmpty()) return true
+        val mine = currentRoomId
+        return mine.isNotEmpty() && eventRoomId == mine
+    }
+
     // Session generation: incremented on every startCall()/endCall(). Async
     // callbacks arriving after teardown capture their gen and bail out if it
     // no longer matches, so stale socket events can't touch a closed session.
@@ -99,6 +115,16 @@ class WebRtcManager @Inject constructor(
     // Remote ICE candidates that arrive before the remote description is set.
     private val pendingIceCandidates = mutableListOf<IceCandidate>()
     private var remoteDescriptionSet = false
+
+    // An offer relayed before the peer connection existed (the server puts our
+    // socket in the room before handleJoined() finishes building the PC).
+    // Dropping it deadlocks the call — buffer it and answer once ready.
+    @Volatile private var pendingRemoteOffer: JSONObject? = null
+
+    // createOffer() is async: between calling it and setLocalDescription()
+    // completing, signalingState() still reads STABLE. A remote offer landing
+    // in that window would be accepted and then clobbered by our own offer.
+    @Volatile private var localOfferInFlight = false
 
     fun init(context: Context, eglContext: EglBase.Context) {
         if (peerConnectionFactory != null) {
@@ -150,6 +176,8 @@ class WebRtcManager @Inject constructor(
         this.peerId = "kiosk-${System.currentTimeMillis()}"
         remoteDescriptionSet = false
         pendingIceCandidates.clear()
+        pendingRemoteOffer = null
+        localOfferInFlight = false
 
         setupLocalMedia(context, isVideoCall)
 
@@ -184,10 +212,16 @@ class WebRtcManager @Inject constructor(
                         addRemoteCandidate(data.optJSONObject("candidate") ?: return@collect)
                     }
                     "peer-left" -> {
+                        if (gen != sessionGen) return@collect
+                        if (!isCurrentRoom(event.data)) return@collect
                         Logger.d("Peer left room")
                         _remoteVideoTrack.value = null
                     }
                     "call-ended" -> {
+                        if (gen != sessionGen) return@collect
+                        // Room-scoped: a hang-up relayed for a previous room
+                        // must not tear down this session's media.
+                        if (!isCurrentRoom(event.data)) return@collect
                         endCall(context)
                     }
                 }
@@ -230,6 +264,13 @@ class WebRtcManager @Inject constructor(
         try {
             val iceServers = parseIceServers(joinAck.optJSONArray("iceServers"))
             createPeerConnection(iceServers)
+
+            // An offer that raced ahead of the peer connection: answer it now
+            // instead of also putting an offer on the table (that would glare).
+            if (flushPendingRemoteOffer()) {
+                Logger.d("Answered offer that arrived before the connection was ready")
+                return
+            }
 
             // Glare-free rule: the party joining an occupied room makes the
             // offer. The party already in the room waits and answers.
@@ -334,13 +375,27 @@ class WebRtcManager @Inject constructor(
 
     private fun makeOffer() {
         val pc = peerConnection ?: return
+        if (pc.signalingState() != PeerConnection.SignalingState.STABLE) {
+            Logger.w("makeOffer skipped - signaling state ${pc.signalingState()}")
+            return
+        }
+        localOfferInFlight = true
         val constraints = MediaConstraints().apply {
             mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
             mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "true"))
         }
         pc.createOffer(object : SdpObserverImpl() {
             override fun onCreateSuccess(sdp: SessionDescription) {
-                pc.setLocalDescription(SdpObserverImpl(), sdp)
+                pc.setLocalDescription(object : SdpObserverImpl() {
+                    override fun onSetSuccess() {
+                        Logger.d("Local SDP offer set")
+                    }
+
+                    override fun onSetFailure(error: String?) {
+                        localOfferInFlight = false
+                        Logger.e("setLocalDescription(offer) failed: $error")
+                    }
+                }, sdp)
                 val payload = JSONObject().apply {
                     put("type", sdp.type.canonicalForm())
                     put("sdp", sdp.description)
@@ -350,14 +405,42 @@ class WebRtcManager @Inject constructor(
             }
 
             override fun onCreateFailure(error: String?) {
+                localOfferInFlight = false
                 Logger.e("createOffer failed: $error")
             }
         }, constraints)
     }
 
     private fun handleRemoteOffer(gen: Int, sdpJson: JSONObject) {
+        val pc = peerConnection
+        if (pc == null) {
+            pendingRemoteOffer = sdpJson
+            Logger.w("Offer received before connection ready - buffering")
+            return
+        }
+        applyRemoteOffer(pc, sdpJson)
+    }
+
+    /** Replays an offer that arrived before the peer connection existed. */
+    private fun flushPendingRemoteOffer(): Boolean {
+        val sdp = pendingRemoteOffer ?: return false
+        pendingRemoteOffer = null
         val pc = peerConnection ?: run {
-            Logger.w("Offer received before connection ready - ignoring")
+            pendingRemoteOffer = sdp
+            return false
+        }
+        applyRemoteOffer(pc, sdp)
+        return true
+    }
+
+    private fun applyRemoteOffer(pc: PeerConnection, sdpJson: JSONObject) {
+        // IMPOLITE peer (perfect negotiation): if we already put an offer on
+        // the table, ours stands — the family rolls its offer back and answers
+        // ours. Accepting theirs too would leave both sides answering a
+        // description the other side discarded (double-glare deadlock).
+        val state = pc.signalingState()
+        if (state != PeerConnection.SignalingState.STABLE || localOfferInFlight) {
+            Logger.w("Ignoring remote offer in state $state (offer in flight=$localOfferInFlight) - keeping local offer (glare)")
             return
         }
         val sdp = SessionDescription(
@@ -565,18 +648,122 @@ class WebRtcManager @Inject constructor(
         _connectionState.value = PeerConnection.PeerConnectionState.CLOSED
         pendingIceCandidates.clear()
         remoteDescriptionSet = false
+        pendingRemoteOffer = null
+        localOfferInFlight = false
         roomId = ""
         currentRoomId = ""
         peerId = ""
     }
 
-    /**
-     * Read WebRTC stats to determine connection quality.
-     * Returns "excellent", "good", "fair", or "poor" based on round-trip time
-     * and packet loss from the active inbound RTP stream.
-     */
-    suspend fun getConnectionQuality(): String {
-        if (peerConnection == null) return "poor"
-        return "good"
+    // ---- Live call quality, read straight from libwebrtc's stats ----
+
+    /** Bitrate is a rate, so it needs the previous sample to diff against. */
+    @Volatile private var lastInboundBytes: Long = -1L
+    @Volatile private var lastStatsUs: Double = 0.0
+
+    suspend fun getQualitySnapshot(): QualitySnapshot = suspendCancellableCoroutine { cont ->
+        val pc = peerConnection
+        if (pc == null) {
+            cont.resumeWith(Result.success(QualitySnapshot("poor", 0.0, 0.0, 0.0)))
+            return@suspendCancellableCoroutine
+        }
+        val delivered = AtomicBoolean(false)
+        try {
+            pc.getStats(object : RTCStatsCollectorCallback {
+                override fun onStatsDelivered(report: RTCStatsReport) {
+                    if (!delivered.compareAndSet(false, true)) return
+                    cont.resumeWith(Result.success(computeQuality(report)))
+                }
+            })
+        } catch (e: Throwable) {
+            Logger.w("getStats failed: ${e.message}")
+            if (delivered.compareAndSet(false, true)) {
+                cont.resumeWith(Result.success(QualitySnapshot("unknown", 0.0, 0.0, 0.0)))
+            }
+        }
     }
+
+    /** "excellent" | "good" | "fair" | "poor" — see [QualitySnapshot]. */
+    suspend fun getConnectionQuality(): String = getQualitySnapshot().quality
+
+    private fun computeQuality(report: RTCStatsReport): QualitySnapshot {
+        var inbound: Map<String, Any> = emptyMap()
+        var inboundKind = ""
+        var nominatedRttMs = 0.0
+        var anyRttMs = 0.0
+
+        for (stats in report.statsMap.values) {
+            val members: Map<String, Any> = stats.members ?: continue
+            when (stats.type) {
+                "inbound-rtp" -> {
+                    val kind = statStr(members, "kind") ?: statStr(members, "mediaType") ?: ""
+                    // Prefer the video stream; fall back to audio.
+                    if (inbound.isEmpty() || (kind == "video" && inboundKind != "video")) {
+                        inbound = members
+                        inboundKind = kind
+                    }
+                }
+                "candidate-pair" -> {
+                    if (statStr(members, "state") != "succeeded") continue
+                    val rttMs = statNum(members, "currentRoundTripTime") * 1000.0
+                    if (rttMs <= 0.0) continue
+                    if (anyRttMs == 0.0) anyRttMs = rttMs
+                    if (statBool(members, "nominated")) nominatedRttMs = rttMs
+                }
+            }
+        }
+        val rttMs = if (nominatedRttMs > 0.0) nominatedRttMs else anyRttMs
+
+        val received = statNum(inbound, "packetsReceived").toLong()
+        val lost = statNum(inbound, "packetsLost").toLong()
+        val jitterMs = statNum(inbound, "jitter") * 1000.0
+        val bytes = statNum(inbound, "bytesReceived").toLong()
+
+        val total = received + lost
+        val lossPct = if (total > 0) lost * 100.0 / total else 0.0
+
+        // kbps = deltaBits * 1000 / deltaMicros
+        val nowUs = report.timestampUs
+        var bitrateKbps = 0.0
+        if (lastInboundBytes >= 0 && lastStatsUs > 0 && nowUs > lastStatsUs && bytes >= lastInboundBytes) {
+            bitrateKbps = (bytes - lastInboundBytes) * 8.0 * 1000.0 / (nowUs - lastStatsUs)
+        }
+        lastInboundBytes = bytes
+        lastStatsUs = nowUs
+
+        val state = peerConnection?.connectionState()
+        val quality = when {
+            state == PeerConnection.PeerConnectionState.FAILED ||
+                state == PeerConnection.PeerConnectionState.CLOSED -> "poor"
+            inbound.isEmpty() -> "good"
+            lossPct > 15 || rttMs > 500 || jitterMs > 100 -> "poor"
+            lossPct > 5 || rttMs > 250 || jitterMs > 50 -> "fair"
+            lossPct > 1 || rttMs > 150 -> "good"
+            else -> "excellent"
+        }
+        return QualitySnapshot(quality, round2(lossPct), round1(jitterMs), round1(bitrateKbps))
+    }
+
+    private fun statNum(m: Map<String, Any>, key: String): Double =
+        (m[key] as? Number)?.toDouble() ?: 0.0
+
+    private fun statStr(m: Map<String, Any>, key: String): String? = m[key] as? String
+
+    private fun statBool(m: Map<String, Any>, key: String): Boolean = m[key] as? Boolean ?: false
+
+    private fun round1(v: Double): Double = Math.round(v * 10.0) / 10.0
+
+    private fun round2(v: Double): Double = Math.round(v * 100.0) / 100.0
 }
+
+/** One sample of live call quality read straight from libwebrtc's stats. */
+data class QualitySnapshot(
+    /** "excellent" | "good" | "fair" | "poor" | "unknown" */
+    val quality: String,
+    /** Inbound packet loss, percent (0..100). */
+    val packetLoss: Double,
+    /** Inbound jitter, milliseconds. */
+    val jitter: Double,
+    /** Current inbound bitrate, kbps. */
+    val bitrate: Double,
+)

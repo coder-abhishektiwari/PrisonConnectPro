@@ -109,61 +109,92 @@ function buildCallIssues(call, neverConnected, extra) {
   return issues;
 }
 
-async function finalizeCall(call, requestedEndTimeMs, broadcastEvent, endReason, extraData) {
-  const startMs = new Date(call.startTime).getTime();
-  const maxMs = (Number(call.maxDurationMinutes) || 15) * 60000;
+/**
+ * Finalize a call record and charge the inmate's wallet.
+ *
+ * Idempotent: four different callers can race to end the same call — the
+ * kiosk's /end, a warden force-end, the 2-minute stale sweep and the
+ * create-call self-heal. `finalizedAt` is stamped inside the calls.json mutex
+ * BEFORE any billing write, so only the first one bills; the rest get the
+ * already-finalized record back with `_alreadyFinalized: true`.
+ *
+ * Billing inputs are read from the record loaded under that mutex, not from
+ * the `call` snapshot the caller passed in — mediaConnectedAt may have been
+ * PATCHed between that read and this write, which would under-bill.
+ *
+ * @param {object} [opts]
+ * @param {boolean} [opts.force] caller already transitioned the record to a
+ *   terminal state (PATCH billing path) — finalize it anyway.
+ */
+async function finalizeCall(call, requestedEndTimeMs, broadcastEvent, endReason, extraData, opts) {
+  const force = !!(opts && opts.force);
 
-  // Billing starts from media connection, NOT from call creation.
-  // If media never connected (family left in lobby), charge is 0.
-  const billingStartMs = call.mediaConnectedAt
-    ? new Date(call.mediaConnectedAt).getTime()
-    : startMs;
-  const neverConnected = !call.mediaConnectedAt;
-
-  // Determine actual status based on whether media ever connected
-  let finalStatus = 'completed';
-  let finalReason = endReason || null;
-  if (neverConnected) {
-    if (endReason === 'cancelled' || endReason === 'kiosk_cancelled') {
-      finalStatus = 'cancelled';
-    } else if (endReason === 'timeout' || endReason === 'sweep') {
-      finalStatus = 'missed';
-    } else if (endReason === 'rejected') {
-      finalStatus = 'rejected';
-    } else {
-      finalStatus = 'missed';
-      finalReason = finalReason || 'Call was not answered';
-    }
-  }
-
-  // Human-readable end reason description
-  const endReasonDescription = buildEndReasonDescription(finalStatus, finalReason, call, neverConnected, extraData);
-
-  // Quality-related issues collected during the call
-  const callIssues = buildCallIssues(call, neverConnected, extraData);
-
-  // Quality: N/A if never connected, otherwise use reported quality
-  let finalQuality = neverConnected ? 'N/A' : (call.connectionQuality || 'unknown');
-  // If we have issues and quality is still 'good', downgrade based on issues
-  if (!neverConnected && callIssues.length > 0 && finalQuality === 'good') {
-    finalQuality = callIssues.some(i => i.severity === 'critical') ? 'poor' : 'fair';
-  }
-
-  // A call that outlived its max duration (kiosk died) is billed only up to
-  // the cap — time after the app died must not be charged.
-  const endMs = neverConnected
-    ? billingStartMs  // No charge if never connected
-    : Math.min(Math.max(requestedEndTimeMs, billingStartMs), billingStartMs + maxMs);
-  const durationSec = Math.max(0, (endMs - billingStartMs) / 1000);
-  const billedMinutes = Math.ceil(durationSec / 60);
-  const ratePerMinute = Number(call.ratePerMinute) || 0;
-  const chargeAmount = neverConnected ? 0 : +(billedMinutes * ratePerMinute).toFixed(2);
-
-  const updatedCall = await updateDb('calls.json', (calls) => {
+  // ---- Phase 1: claim the finalization (holds the calls.json mutex) ----
+  const claimed = await updateDb('calls.json', (calls) => {
     const idx = calls.findIndex((c) => c.callId === call.callId);
     if (idx === -1) return { data: calls, result: null };
+
+    const current = calls[idx];
+    if (current.finalizedAt || (!force && TERMINAL_STATES.includes(current.status))) {
+      return { data: calls, result: { ...current, _alreadyFinalized: true } };
+    }
+
+    const startMs = new Date(current.startTime).getTime();
+    const maxMs = (Number(current.maxDurationMinutes) || 15) * 60000;
+
+    // Billing starts from media connection, NOT from call creation.
+    // If media never connected (family left in lobby), charge is 0.
+    const billingStartMs = current.mediaConnectedAt
+      ? new Date(current.mediaConnectedAt).getTime()
+      : startMs;
+    const neverConnected = !current.mediaConnectedAt;
+
+    // Determine actual status based on whether media ever connected
+    let finalStatus = 'completed';
+    let finalReason = endReason || null;
+    if (neverConnected) {
+      if (endReason === 'cancelled' || endReason === 'kiosk_cancelled') {
+        finalStatus = 'cancelled';
+      } else if (endReason === 'timeout' || endReason === 'sweep') {
+        finalStatus = 'missed';
+      } else if (endReason === 'rejected') {
+        finalStatus = 'rejected';
+      } else {
+        finalStatus = 'missed';
+        finalReason = finalReason || 'Call was not answered';
+      }
+    }
+
+    const endReasonDescription = buildEndReasonDescription(finalStatus, finalReason, current, neverConnected, extraData);
+    const callIssues = buildCallIssues(current, neverConnected, extraData);
+
+    // Quality: N/A if never connected, otherwise use reported quality
+    let finalQuality = neverConnected ? 'N/A' : (current.connectionQuality || 'unknown');
+    // Real issues must be able to pull ANY reported grade down. Only 'good'
+    // was downgraded before, so a kiosk reporting "excellent" while audio never
+    // connected kept showing "excellent" on the dashboard.
+    if (!neverConnected && callIssues.length > 0 && finalQuality !== 'poor' && finalQuality !== 'fair') {
+      if (callIssues.some((i) => i.severity === 'critical')) {
+        finalQuality = 'poor';
+      } else {
+        const rank = ['excellent', 'good', 'fair', 'poor'];
+        const from = finalQuality === 'excellent' ? 0 : 1; // unknown counts as good
+        finalQuality = rank[Math.min(rank.length - 1, from + 1)];
+      }
+    }
+
+    // A call that outlived its max duration (kiosk died) is billed only up to
+    // the cap — time after the app died must not be charged.
+    const endMs = neverConnected
+      ? billingStartMs  // No charge if never connected
+      : Math.min(Math.max(requestedEndTimeMs, billingStartMs), billingStartMs + maxMs);
+    const durationSec = Math.max(0, (endMs - billingStartMs) / 1000);
+    const billedMinutes = Math.ceil(durationSec / 60);
+    const ratePerMinute = Number(current.ratePerMinute) || 0;
+    const chargeAmount = neverConnected ? 0 : +(billedMinutes * ratePerMinute).toFixed(2);
+
     calls[idx] = {
-      ...calls[idx],
+      ...current,
       status: finalStatus,
       endTime: new Date(endMs).toISOString(),
       durationMinutes: billedMinutes,
@@ -172,59 +203,79 @@ async function finalizeCall(call, requestedEndTimeMs, broadcastEvent, endReason,
       endReasonDescription,
       callIssues,
       connectionQuality: finalQuality,
+      finalizedAt: current.finalizedAt || new Date().toISOString(),
     };
-    return { data: calls, result: calls[idx] };
+    return {
+      data: calls,
+      result: { ...calls[idx], _billing: { chargeAmount, billedMinutes, ratePerMinute } },
+    };
   });
-  if (!updatedCall) return null;
 
-  if (chargeAmount > 0 && updatedCall.inmateId) {
+  // updateDb returns the mutator's `result`; with no DB pool it returns
+  // { data: [], result: null }. Only a real call record means "finalized".
+  if (!claimed || typeof claimed.callId !== 'string') return null;
+  if (claimed._alreadyFinalized) return claimed;
+
+  const billing = claimed._billing || { chargeAmount: 0, billedMinutes: 0, ratePerMinute: 0 };
+  delete claimed._billing;
+  const { chargeAmount, billedMinutes, ratePerMinute } = billing;
+
+  // ---- Phase 2: charge the wallet (outside the calls.json mutex) ----
+  if (chargeAmount > 0 && claimed.inmateId) {
     try {
-      const inmates = await readDb('inmates.json');
-      const inmate =
-        inmates.find((i) => i.inmateId === updatedCall.inmateId) ||
-        inmates.find((i) => i.assignedKioskId === updatedCall.inmateId) ||
-        null;
-      const wallets = await readDb('wallets.json');
-      const wallet =
-        wallets.find((w) => inmate?.walletId && w.walletId === inmate.walletId) ||
-        wallets.find((w) => w.inmateId === updatedCall.inmateId) ||
-        wallets.find((w) => w.inmateId === `INM-${updatedCall.inmateId}`) ||
-        null;
-
-      if (wallet) {
-        await updateDb('transactions.json', (all) => {
-          const tx = {
-            transactionId: `TXN-${uuidv4().substring(0, 8).toUpperCase()}`,
-            walletId: wallet.walletId,
-            inmateId: updatedCall.inmateId,
-            callId: updatedCall.callId,
-            type: 'charge',
-            amount: chargeAmount,
-            currency: wallet.currency || 'INR',
-            status: 'completed',
-            description: `Call charge (${billedMinutes} min @ ₹${ratePerMinute}/min)`,
-            timestamp: new Date().toISOString()
-          };
-          return { data: [...all, tx], result: tx };
-        });
-        await updateDb('wallets.json', (all) => {
-          const idx = all.findIndex((w) => w.walletId === wallet.walletId);
-          if (idx === -1) return { data: all, result: null };
-          // Clamp at zero — never negative.
-          all[idx].balance = Math.max(0, (Number(all[idx].balance) || 0) - chargeAmount);
-          all[idx].totalSpent = (Number(all[idx].totalSpent) || 0) + chargeAmount;
-          return { data: all, result: all[idx] };
-        });
-        console.log(`[wallet] charged ₹${chargeAmount} to ${wallet.walletId} for ${updatedCall.callId}`);
+      // Second line of defence: never write a second charge row for a call.
+      const priorCharge = (await readDb('transactions.json'))
+        .find((t) => t.callId === claimed.callId && t.type === 'charge');
+      if (priorCharge) {
+        console.warn(`[wallet] charge already recorded for ${claimed.callId} (${priorCharge.transactionId}) — skipping`);
       } else {
-        console.warn(`[wallet] no wallet found for inmate ${updatedCall.inmateId} — charge skipped`);
+        const inmates = await readDb('inmates.json');
+        const inmate =
+          inmates.find((i) => i.inmateId === claimed.inmateId) ||
+          inmates.find((i) => i.assignedKioskId === claimed.inmateId) ||
+          null;
+        const wallets = await readDb('wallets.json');
+        const wallet =
+          wallets.find((w) => inmate?.walletId && w.walletId === inmate.walletId) ||
+          wallets.find((w) => w.inmateId === claimed.inmateId) ||
+          wallets.find((w) => w.inmateId === `INM-${claimed.inmateId}`) ||
+          null;
+
+        if (wallet) {
+          await updateDb('transactions.json', (all) => {
+            const tx = {
+              transactionId: `TXN-${uuidv4().substring(0, 8).toUpperCase()}`,
+              walletId: wallet.walletId,
+              inmateId: claimed.inmateId,
+              callId: claimed.callId,
+              type: 'charge',
+              amount: chargeAmount,
+              currency: wallet.currency || 'INR',
+              status: 'completed',
+              description: `Call charge (${billedMinutes} min @ ₹${ratePerMinute}/min)`,
+              timestamp: new Date().toISOString()
+            };
+            return { data: [...all, tx], result: tx };
+          });
+          await updateDb('wallets.json', (all) => {
+            const idx = all.findIndex((w) => w.walletId === wallet.walletId);
+            if (idx === -1) return { data: all, result: null };
+            // Clamp at zero — never negative.
+            all[idx].balance = Math.max(0, (Number(all[idx].balance) || 0) - chargeAmount);
+            all[idx].totalSpent = (Number(all[idx].totalSpent) || 0) + chargeAmount;
+            return { data: all, result: all[idx] };
+          });
+          console.log(`[wallet] charged ₹${chargeAmount} to ${wallet.walletId} for ${claimed.callId}`);
+        } else {
+          console.warn(`[wallet] no wallet found for inmate ${claimed.inmateId} — charge skipped`);
+        }
       }
     } catch (err) {
       // A failed deduction must never fail the call end itself.
       console.error('[wallet] deduction failed:', err.message);
     }
   }
-  return updatedCall;
+  return claimed;
 }
 
 function createCallsRouter(broadcastEvent, signaling) {
@@ -698,8 +749,13 @@ function createCallsRouter(broadcastEvent, signaling) {
       // Run billing if this PATCH transitioned the call to a terminal state.
       if (updated._needsBilling) {
         delete updated._needsBilling;
-        const billed = await finalizeCall(updated, Date.now(), broadcastEvent, updated.status);
-        if (billed) updated.chargeAmount = billed.chargeAmount;
+        // force: this PATCH already wrote the terminal status, so the guard
+        // would otherwise see a terminal record and skip billing entirely.
+        const billed = await finalizeCall(updated, Date.now(), broadcastEvent, updated.status, null, { force: true });
+        if (billed) {
+          delete billed._alreadyFinalized;
+          updated.chargeAmount = billed.chargeAmount;
+        }
       }
       broadcastEvent('call-updated', updated);
       return sendSuccess(res, updated);
@@ -721,6 +777,12 @@ function createCallsRouter(broadcastEvent, signaling) {
     const updatedCall = await finalizeCall(existing, Date.now(), broadcastEvent, extra.endReason || 'completed', extra);
     if (!updatedCall) return sendError(res, 'NOT_FOUND', 'Call not found', 404);
 
+    // A duplicate /end (retry, or a race with the warden's force-end) must be
+    // a no-op: the call is already finalized and billed. Room/recording
+    // cleanup below is idempotent, so only the broadcast is skipped —
+    // re-sending 'call-ended' can knock a live call off the family screen.
+    const alreadyFinalized = !!updatedCall._alreadyFinalized;
+    delete updatedCall._alreadyFinalized;
 
     await updateDb('recordings.json', (recordings) => {
       const idx = recordings.findIndex((r) => r.callId === callId);
@@ -753,7 +815,7 @@ function createCallsRouter(broadcastEvent, signaling) {
       return { data: rooms, result: room };
     });
 
-    broadcastEvent('call-ended', { callId, status: 'completed' });
+    if (!alreadyFinalized) broadcastEvent('call-ended', { callId, status: 'completed' });
     return sendSuccess(res, updatedCall);
   }));
 

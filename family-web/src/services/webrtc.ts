@@ -36,6 +36,18 @@ class WebRtcService {
   ];
   private pendingCandidates: RTCIceCandidateInit[] = [];
 
+  /**
+   * An SDP offer relayed before handleJoined() built the peer connection.
+   * The server puts us in the room before the ack is processed, so the kiosk
+   * can send an offer within microseconds — dropping it deadlocks the call.
+   */
+  private pendingRemoteOffer: RTCSessionDescriptionInit | null = null;
+
+  /** In-flight setupLocalMedia() — shared so setups never overlap. */
+  private mediaSetup: Promise<MediaStream> | null = null;
+  /** Bumped by close(): streams opened under an older epoch are discarded. */
+  private mediaEpoch = 0;
+
   async initialize(_session: CallSession, customIceServers?: RTCIceServer[]): Promise<void> {
     if (customIceServers && customIceServers.length > 0) {
       this.iceServers = customIceServers;
@@ -51,6 +63,9 @@ class WebRtcService {
         console.warn('[WebRTC] Invalid VITE_WEBRTC_ICE_SERVERS, keeping defaults:', e);
       }
     }
+    // Register BEFORE joinRoom(): signaling events that beat handleJoined()
+    // must land on a listener, not fall on the floor.
+    this.registerSignalingListeners();
   }
 
   private isVirtualDevice(label: string): boolean {
@@ -106,6 +121,38 @@ class WebRtcService {
     video: true,
     audio: true,
   }): Promise<MediaStream> {
+    // Two overlapping setups would open two camera streams and orphan the
+    // loser — its tracks are never stopped, so the camera light stays on with
+    // no reference to it. Share one in-flight setup instead.
+    if (this.mediaSetup) return this.mediaSetup;
+
+    const epoch = this.mediaEpoch;
+    const run = (async (): Promise<MediaStream> => {
+      const stream = await this.acquireLocalMedia(constraints);
+      if (epoch !== this.mediaEpoch) {
+        // close() ran (hang-up / reconnect teardown) while getUserMedia was
+        // pending. Nobody owns this stream — release it now.
+        console.warn('[WebRTC] Discarding media acquired after teardown');
+        stream.getTracks().forEach((t) => t.stop());
+        throw new Error('Camera setup was cancelled');
+      }
+      if (this.localStream && this.localStream !== stream) {
+        this.localStream.getTracks().forEach((t) => t.stop());
+      }
+      this.localStream = stream;
+      this.emit('local-stream', this.localStream);
+      return this.localStream;
+    })();
+
+    let tracked: Promise<MediaStream>;
+    tracked = run.finally(() => {
+      if (this.mediaSetup === tracked) this.mediaSetup = null;
+    });
+    this.mediaSetup = tracked;
+    return tracked;
+  }
+
+  private async acquireLocalMedia(constraints: MediaStreamConstraints): Promise<MediaStream> {
     try {
       const defaultStream = await navigator.mediaDevices.getUserMedia(constraints);
       const preferred = await this.selectPreferredDevices();
@@ -114,17 +161,13 @@ class WebRtcService {
           const preferredStream = await navigator.mediaDevices.getUserMedia(preferred);
           // Only stop default stream AFTER preferred stream is confirmed working
           defaultStream.getTracks().forEach((t) => t.stop());
-          this.localStream = preferredStream;
+          return preferredStream;
         } catch (_) {
           // Preferred device failed — use the default stream (do NOT stop it)
-          this.localStream = defaultStream;
+          return defaultStream;
         }
-      } else {
-        this.localStream = defaultStream;
       }
-
-      this.emit('local-stream', this.localStream);
-      return this.localStream;
+      return defaultStream;
     } catch (error) {
       console.error('[WebRTC] Failed to get local media:', error);
       throw error;
@@ -138,6 +181,16 @@ class WebRtcService {
       }
       this.createPeerConnection();
       this.registerSignalingListeners();
+
+      // An offer that raced ahead of us: answer it with the (now correctly
+      // configured) peer connection instead of also putting an offer out.
+      if (this.pendingRemoteOffer) {
+        const buffered = this.pendingRemoteOffer;
+        this.pendingRemoteOffer = null;
+        console.log('[WebRTC] Answering offer that arrived before join completed');
+        await this.handleOffer(buffered);
+        return;
+      }
 
       // If existing peers are already in the room when we join, create SDP Offer
       if (joinData && Array.isArray(joinData.existingPeers) && joinData.existingPeers.length > 0) {
@@ -288,10 +341,28 @@ class WebRtcService {
   private async handleOffer(offerSdp: RTCSessionDescriptionInit): Promise<void> {
     return this.runExclusive(async () => {
       try {
-        const pc = this.createPeerConnection();
-        // Glare guard: we are the designated offerer. An offer arriving while
-        // our own offer is outstanding means a stale/duplicate relay — drop it.
-        if (pc.signalingState !== 'stable') {
+        if (!this.pc) {
+          // Not ready yet — hold the offer. handleJoined() replays it once the
+          // peer connection exists (with the room's real ICE servers).
+          this.pendingRemoteOffer = offerSdp;
+          console.log('[WebRTC] Buffering remote offer until peer connection exists');
+          return;
+        }
+        const pc = this.pc;
+        if (pc.signalingState === 'have-local-offer') {
+          // Perfect negotiation: the family is the POLITE peer. Our own offer
+          // yielded to the kiosk's — roll it back, then answer theirs. Without
+          // this, both sides sit in have-local-offer forever ignoring each
+          // other's offers (glare deadlock).
+          console.warn('[WebRTC] Offer glare — rolling back local offer to answer peer');
+          try {
+            await pc.setLocalDescription({ type: 'rollback' });
+          } catch (rollbackErr) {
+            // No explicit rollback support — fall through and let
+            // setRemoteDescription() do JSEP's implicit rollback instead.
+            console.warn('[WebRTC] Explicit rollback unavailable, trying implicit:', rollbackErr);
+          }
+        } else if (pc.signalingState !== 'stable') {
           console.warn('[WebRTC] Ignoring offer in state:', pc.signalingState);
           return;
         }
@@ -392,6 +463,11 @@ class WebRtcService {
   }
 
   close(): void {
+    // Invalidate any in-flight getUserMedia first: its result must be
+    // discarded rather than assigned after the tracks were just released.
+    this.mediaEpoch++;
+    this.mediaSetup = null;
+
     if (this.pc) {
       this.pc.close();
       this.pc = null;
@@ -404,6 +480,7 @@ class WebRtcService {
 
     this.remoteStream = null;
     this.pendingCandidates = [];
+    this.pendingRemoteOffer = null;
   }
 
   on(event: string, callback: WebRtcEventCallback): void {
