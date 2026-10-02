@@ -118,12 +118,16 @@ function hashMatchesStored(storedList, incomingHash) {
 }
 
 /**
- * Register (first-time) OR verify (returning) a device fingerprint for the
- * phone number a call's link is addressed to.
+ * Register (first-time) OR verify (returning) the device fingerprint for a
+ * contact.
+ *
+ * CONTRACT: a contact has AT MOST ONE registered device. Every write assigns
+ * a 1-element array, so legacy duplicate/phone-entry records collapse as soon
+ * as the contact's device is used (or re-registered).
  *
  * @param {string} contactId  The contact tied to the call.
  * @param {string|null} phone Explicit phone (optional — falls back to contact).
- * @param {object} fingerprintPayload { hash, signals }
+ * @param {object} fingerprintPayload { hash, signals, deviceInfo }
  * @returns {Promise<{verified: boolean, isFirstTime: boolean, reason?: string}>}
  *   - first time  -> { verified: true, isFirstTime: true }   (registered)
  *   - match       -> { verified: true, isFirstTime: false }
@@ -141,70 +145,63 @@ async function registerOrVerifyFingerprint(contactId, phone, fingerprintPayload)
     return { verified: false, isFirstTime: false, reason: 'NO_PHONE' };
   }
 
-  const normalized = normalizePhone(targetPhone);
-  const entriesForPhone = (contact.deviceFingerprints || []).filter(
-    (f) => normalizePhone(f.phone) === normalized
-  );
-
   const { hash, signals, deviceInfo } = fingerprintPayload || {};
   if (!hash) {
     return { verified: false, isFirstTime: false, reason: 'NO_FINGERPRINT' };
   }
 
-  if (entriesForPhone.length === 0) {
-    // First call to this number — register the device fingerprint.
-    const writeResult = await updateDb('contacts.json', (all) => {
-      const idx = all.findIndex((c) => c.contactId === contactId);
-      if (idx === -1) return { data: all, result: null };
-      const list = Array.isArray(all[idx].deviceFingerprints) ? all[idx].deviceFingerprints : [];
-      // Re-check inside the write: a concurrent request may have registered
-      // this phone already — never store two entries for the same number.
-      const dupe = list.find((f) => normalizePhone(f.phone) === normalized);
-      if (dupe) {
-        dupe.lastVerifiedAt = new Date().toISOString();
-        dupe.verifiedCount = (dupe.verifiedCount || 0) + 1;
-        if (deviceInfo && !dupe.deviceInfo) dupe.deviceInfo = deviceInfo;
-        return { data: all, result: { registered: false, record: dupe } };
-      }
-      const record = {
+  const normalizedPhone = normalizePhone(targetPhone);
+  const storedList = Array.isArray(contact.deviceFingerprints) ? contact.deviceFingerprints : [];
+
+  // Cheap pre-check so a known-mismatching device never reaches a DB write.
+  if (storedList.length > 0 && !hashMatchesStored(storedList, hash)) {
+    return { verified: false, isFirstTime: false, reason: 'DEVICE_MISMATCH' };
+  }
+
+  const now = new Date().toISOString();
+
+  // All decisions happen INSIDE the write so the one-device contract holds
+  // even if another request registers between the read above and this write.
+  const outcome = await updateDb('contacts.json', (all) => {
+    const idx = all.findIndex((c) => c.contactId === contactId);
+    if (idx === -1) return { data: all, result: null };
+
+    const list = Array.isArray(all[idx].deviceFingerprints) ? all[idx].deviceFingerprints : [];
+
+    if (list.length === 0) {
+      all[idx].deviceFingerprints = [{
         fingerprintId: `DEV-${Date.now().toString(36).toUpperCase()}`,
-        phone: normalized,
+        phone: normalizedPhone,
         hash,
         signals: signals || {},
         deviceInfo: deviceInfo || null,
-        firstSeenAt: new Date().toISOString(),
-        lastVerifiedAt: new Date().toISOString(),
+        firstSeenAt: now,
+        lastVerifiedAt: now,
         verifiedCount: 1
-      };
-      list.push(record);
-      all[idx].deviceFingerprints = list;
-      return { data: all, result: { registered: true, record } };
-    });
-    if (!writeResult) return { verified: false, isFirstTime: false, reason: 'CONTACT_NOT_FOUND' };
-    return { verified: true, isFirstTime: writeResult.registered === true };
-  }
+      }];
+      return { data: all, result: 'registered' };
+    }
 
-  // Returning device: exact hash match, OR a recompute of the stored signals
-  // with the current algorithm (legacy registrations). NO silent re-register.
-  const matched = hashMatchesStored(entriesForPhone, hash);
-  if (matched) {
-    await updateDb('contacts.json', (all) => {
-      const idx = all.findIndex((c) => c.contactId === contactId);
-      if (idx === -1) return { data: all, result: null };
-      const fp = all[idx].deviceFingerprints || [];
-      const fi = fp.findIndex((f) => f.fingerprintId === matched.fingerprintId);
-      if (fi !== -1) {
-        fp[fi].lastVerifiedAt = new Date().toISOString();
-        fp[fi].verifiedCount = (fp[fi].verifiedCount || 0) + 1;
-        if (deviceInfo) fp[fi].deviceInfo = deviceInfo;
-        if (signals) fp[fi].signals = signals;
-      }
-      return { data: all, result: all[idx] };
-    });
-    return { verified: true, isFirstTime: false };
-  }
+    const hit = hashMatchesStored(list, hash);
+    if (!hit) return { data: all, result: 'mismatch' };
 
-  return { verified: false, isFirstTime: false, reason: 'DEVICE_MISMATCH' };
+    // Verified: keep exactly this one device, refreshing its details.
+    all[idx].deviceFingerprints = [{
+      ...hit,
+      phone: normalizedPhone,
+      hash,
+      signals: signals || hit.signals || {},
+      deviceInfo: deviceInfo || hit.deviceInfo || null,
+      lastVerifiedAt: now,
+      verifiedCount: (hit.verifiedCount || 0) + 1
+    }];
+    return { data: all, result: 'matched' };
+  });
+
+  if (outcome === 'registered') return { verified: true, isFirstTime: true };
+  if (outcome === 'matched') return { verified: true, isFirstTime: false };
+  if (outcome === 'mismatch') return { verified: false, isFirstTime: false, reason: 'DEVICE_MISMATCH' };
+  return { verified: false, isFirstTime: false, reason: 'CONTACT_NOT_FOUND' };
 }
 
 /** Returns whether a device fingerprint is already registered for the call's contact. */

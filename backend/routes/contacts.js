@@ -4,6 +4,7 @@ const { readDb, updateDb } = require('../lib/db');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { sendSuccess, sendError, asyncRoute } = require('../lib/response');
 const { jailScopeOf, inJailScope, adminScopeFilter, inScopeOf, scopeList, inAdminScope, kioskScopeOf } = require('../lib/scoping');
+const { normalizePhone } = require('../lib/familySecurity');
 const { paginate } = require('../lib/paginate');
 
 function normalizeContact(c) {
@@ -194,8 +195,19 @@ function createContactsRouter(broadcastEvent) {
       if (updates.mobileNumber) { merged.phoneNumber = updates.mobileNumber; merged.phone = updates.mobileNumber; }
       // Device fingerprints are server-owned: a stale client copy must never
       // resurrect a device the warden already removed (or wipe new ones).
-      if (Array.isArray(all[idx].deviceFingerprints)) merged.deviceFingerprints = all[idx].deviceFingerprints;
-      else delete merged.deviceFingerprints;
+      const prevPhone = all[idx].mobileNumber || all[idx].phoneNumber || all[idx].phone;
+      const nextPhone = updates.mobileNumber || updates.phoneNumber || updates.phone || prevPhone;
+      const phoneChanged = !!(prevPhone && nextPhone && normalizePhone(prevPhone) !== normalizePhone(nextPhone));
+      if (phoneChanged) {
+        // The single registered device is bound to the number the call link is
+        // SMS'd to — once that number changes the old phone can never answer
+        // again, so it must not block the new one.
+        merged.deviceFingerprints = [];
+      } else if (Array.isArray(all[idx].deviceFingerprints)) {
+        merged.deviceFingerprints = all[idx].deviceFingerprints;
+      } else {
+        delete merged.deviceFingerprints;
+      }
       all[idx] = merged;
       return { data: all, result: all[idx] };
     });

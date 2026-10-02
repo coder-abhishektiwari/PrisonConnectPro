@@ -8,6 +8,72 @@ import { apiClient } from '@/services/api/client';
 import { usePageHeader } from '@/context/PageHeaderContext';
 import type { Inmate, Contact, DeviceFingerprint } from '@/services/api/wardenApi';
 
+/**
+ * Android/iOS user agents never say "Samsung"/"Vivo" outright, but they do
+ * carry the model code, and each vendor owns a distinctive prefix. Ordered
+ * most-specific-first so a vendor's own token wins over a shared pattern.
+ */
+const BRAND_RULES: Array<[RegExp, string]> = [
+  [/\bSamsung\b|\bSM-[A-Z]?\d{3,4}[A-Z]?\b|\bGT-[A-Z]?\d{3,4}[A-Z]?\b|\bSCG\d{2,3}\b|\bSC-\d{3}[A-Z]?\b|\bSGH-[A-Z]?\d{3,4}\b|\bSCH-[A-Z]?\d{3,4}\b/i, 'Samsung'],
+  [/\bvivo\b|\bV\d{4}[A-Z]?\b/i, 'Vivo'],
+  [/\boppo\b|\bCPH\d{4}\b|\bPCHP\d{3}\b/i, 'Oppo'],
+  [/\brealme\b|\bRMX\d{3,4}\b/i, 'Realme'],
+  [/\bXiaomi\b|\bRedmi\b|\bPOCO\b|\bM2\d{3}[A-Z0-9]*\b/i, 'Xiaomi'],
+  [/\boneplus\b|\bKB200\d\b|\bLE21\d{2}\b|\bNE22\d{2}\b|\bBE20\d{2}\b|\bIN202\d\b|\bGM19\d{2}\b|\bHD19\d{2}\b/i, 'OnePlus'],
+  [/\bmotorola\b|\bmoto\b|\bXT\d{4}\b/i, 'Motorola'],
+  [/\bpixel\b/i, 'Google'],
+  [/\biPhone\b|\biPad\b|\biPod\b/i, 'Apple'],
+  [/\bNokia\b|\bHMD\b/i, 'Nokia'],
+  [/\bInfinix\b/i, 'Infinix'],
+  [/\bTECNO\b/i, 'Tecno'],
+  [/\biTel\b/i, 'iTel'],
+  [/\bLava\b/i, 'Lava'],
+  [/\bHonor\b/i, 'Honor'],
+  [/\bHuawei\b/i, 'Huawei'],
+  [/\bSony\b/i, 'Sony'],
+  [/\bAsus\b/i, 'Asus'],
+  [/\bLenovo\b/i, 'Lenovo'],
+];
+
+function brandFromUserAgent(ua?: string): string | null {
+  if (!ua) return null;
+  for (const [re, brand] of BRAND_RULES) if (re.test(ua)) return brand;
+  return null;
+}
+
+/** Model code from the Android UA segment, e.g. "SM-S918B", "CPH2365", "Pixel 7". */
+function modelFromUserAgent(ua?: string): string | null {
+  if (!ua) return null;
+  // Prefer the `... ; <model> Build/...` form — model names may contain ")"
+  // (e.g. "moto g power (2022)"), which would cut a bracket-based match short.
+  const built = /Android\s+[\d.]+;\s*(.+?)\s+Build\//i.exec(ua);
+  if (built?.[1]) {
+    const model = built[1].trim();
+    if (model && !/^(wv|aarch64|armv81)$/i.test(model)) return model;
+  }
+  const bare = /Android\s+[\d.]+;\s*([^;)]+)/i.exec(ua);
+  if (bare?.[1]) {
+    const model = bare[1].trim();
+    if (model && !/^(wv|aarch64|armv81)$/i.test(model)) return model;
+  }
+  const apple = /\b(iPhone\d+,\d+|iPad\d+,\d+)\b/.exec(ua);
+  return apple ? apple[1] : null;
+}
+
+const digits = (v?: string) => String(v || '').replace(/\D/g, '');
+
+/** A contact has exactly one verified device — pick the one on file. */
+function primaryDevice(c: Contact): DeviceFingerprint | null {
+  const list = c.deviceFingerprints || [];
+  if (list.length === 0) return null;
+  const want = digits(c.phoneNumber || c.phone || c.mobileNumber).slice(-10);
+  if (want) {
+    const onFile = list.find(d => digits(d.phone).slice(-10) === want);
+    if (onFile) return onFile;
+  }
+  return list[0];
+}
+
 export function InmateDetailPage() {
   const { inmateId } = useParams<{ inmateId: string }>();
   const navigate = useNavigate();
@@ -382,67 +448,71 @@ export function InmateDetailPage() {
 
   const renderDevices = (contact: Contact) => {
     const devices = contact.deviceFingerprints || [];
+    const device = primaryDevice(contact);
+    const s = device?.signals || {};
+    const info = device?.deviceInfo || {};
+    const brand = brandFromUserAgent(s.userAgent);
+    const model = modelFromUserAgent(s.userAgent);
+
     return (
       <div className="pt-4 border-t border-neutral-100 mt-1">
         <div className="flex items-center justify-between mb-3">
           <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider flex items-center gap-1.5">
-            <span className="material-icons text-sm">devices</span> Verified Devices ({devices.length})
+            <span className="material-icons text-sm">devices</span> Verified Device
           </p>
-          {devices.length > 0 && (
+          {devices.length > 1 && (
             <button
               onClick={() => clearDevices(contact.contactId)}
               disabled={removingDevice !== null}
               className="text-[11px] text-neutral-500 hover:text-red-600 transition disabled:opacity-50"
-              title="Remove every registered device for this contact"
+              title="Remove every registered record for this contact"
             >
-              Clear all
+              Clear all ({devices.length})
             </button>
           )}
         </div>
         {deviceError && <p className="text-xs text-red-500 mb-2">{deviceError}</p>}
-        {devices.length === 0 ? (
-          <p className="text-xs text-neutral-400">No devices registered yet. A device is registered the first time this contact opens a call link on their phone.</p>
+        {!device ? (
+          <p className="text-xs text-neutral-400">No device registered yet. A device is registered the first time this contact opens a call link on their phone.</p>
         ) : (
-          <div className="space-y-2">
-            {devices.map(d => {
-              const s = d.signals || {};
-              const info = d.deviceInfo || {};
-              const label = info.browser || info.os
-                || (s.userAgent ? String(s.userAgent).replace(/\s*\(.*?\)\s*/g, ' ').trim().split(/\s+/).slice(0, 3).join(' ') : '')
-                || 'Device';
-              const deviceId = s.deviceId || '';
-              return (
-                <div key={d.fingerprintId} className="flex items-start gap-3 p-3 bg-neutral-50 border border-neutral-200 rounded-lg">
-                  <span className="material-icons text-neutral-400 mt-0.5">smartphone</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-neutral-900 truncate">{label}</p>
-                    <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-0.5 text-[11px] text-neutral-500">
-                      {d.phone && <span>Phone: {d.phone}</span>}
-                      {(s.screen || info.screen) && <span>Screen: {s.screen || info.screen}</span>}
-                      {s.timezone && <span>TZ: {s.timezone}</span>}
-                      {s.platform && <span>Platform: {s.platform}</span>}
-                      {s.deviceMemory != null && <span>Memory: {s.deviceMemory} GB</span>}
-                      {typeof s.hardwareConcurrency === 'number' && <span>Cores: {s.hardwareConcurrency}</span>}
-                      <span>Uses: {d.verifiedCount || 0}×</span>
-                      {d.lastVerifiedAt && <span>Last: {fmtDate(d.lastVerifiedAt)}</span>}
-                      {d.firstSeenAt && <span>First: {fmtDate(d.firstSeenAt)}</span>}
-                    </div>
-                    {deviceId && (
-                      <p className="mt-1 text-[10px] font-mono text-neutral-400 truncate">ID: {deviceId}</p>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => removeDevice(contact.contactId, d.fingerprintId)}
-                    disabled={removingDevice !== null}
-                    className="w-8 h-8 shrink-0 flex items-center justify-center bg-white border border-neutral-200 text-neutral-600 rounded-lg hover:bg-red-50 hover:text-red-600 transition disabled:opacity-50"
-                    title="Remove this device"
-                  >
-                    <span className="material-icons text-base">{removingDevice === d.fingerprintId ? 'hourglass_top' : 'delete'}</span>
-                  </button>
+          <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-lg">
+            <div className="flex items-start gap-3">
+              <span className="material-icons text-neutral-400 mt-0.5">smartphone</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-neutral-900 truncate">
+                  {brand || info.os || 'Registered device'}
+                  {model && model !== brand ? <span className="font-normal text-neutral-500">{' · '}{model}</span> : null}
+                </p>
+                {(info.os || info.browser) && (
+                  <p className="text-[11px] text-neutral-500 truncate">{[info.os, info.browser].filter(Boolean).join(' · ')}</p>
+                )}
+                <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-0.5 text-[11px] text-neutral-500">
+                  {device.phone && <span>Phone: {device.phone}</span>}
+                  {(s.screen || info.screen) && <span>Screen: {s.screen || info.screen}</span>}
+                  {s.timezone && <span>TZ: {s.timezone}</span>}
+                  {s.platform && <span>Platform: {s.platform}</span>}
+                  {s.deviceMemory != null && <span>Memory: {s.deviceMemory} GB</span>}
+                  {typeof s.hardwareConcurrency === 'number' && <span>Cores: {s.hardwareConcurrency}</span>}
+                  <span>Uses: {device.verifiedCount || 0}×</span>
+                  {device.lastVerifiedAt && <span>Last: {fmtDate(device.lastVerifiedAt)}</span>}
+                  {device.firstSeenAt && <span>First: {fmtDate(device.firstSeenAt)}</span>}
                 </div>
-              );
-            })}
-            <p className="text-[11px] text-neutral-400">Removing a device forces that phone to register again on its next call.</p>
+                {s.deviceId && <p className="mt-1 text-[10px] font-mono text-neutral-400 truncate">ID: {s.deviceId}</p>}
+              </div>
+              <button
+                onClick={() => removeDevice(contact.contactId, device.fingerprintId)}
+                disabled={removingDevice !== null}
+                className="w-8 h-8 shrink-0 flex items-center justify-center bg-white border border-neutral-200 text-neutral-600 rounded-lg hover:bg-red-50 hover:text-red-600 transition disabled:opacity-50"
+                title="Remove this device"
+              >
+                <span className="material-icons text-base">{removingDevice === device.fingerprintId ? 'hourglass_top' : 'delete'}</span>
+              </button>
+            </div>
+            <p className="mt-2 text-[11px] text-neutral-400">
+              {devices.length > 1
+                ? `${devices.length} records on file — only one device can be active. Removing forces this phone to register again on its next call.`
+                : 'Only one device can be registered per contact. Removing it lets this phone register again on its next call.'}
+            </p>
           </div>
         )}
       </div>
