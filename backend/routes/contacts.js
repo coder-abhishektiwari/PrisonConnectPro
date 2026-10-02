@@ -53,7 +53,10 @@ function createContactsRouter(broadcastEvent) {
     const { contactId } = req.params;
     const contacts = await readDb('contacts.json');
     const contact = contacts.find((c) => c.contactId === contactId);
-    if (!contact || !(await inAdminScope(req, contact))) {
+    // Contacts carry only inmateId — scope must be resolved through the owner
+    // inmate (inScopeOf). inAdminScope() checks record.prisonId, which contacts
+    // never have, and would reject every warden.
+    if (!contact || !(await inScopeOf(req, contact))) {
       return sendError(res, 'NOT_FOUND', 'Contact not found', 404);
     }
     // NOTE: updateDb resolves to the MUTATOR's inner `result` directly
@@ -76,7 +79,8 @@ function createContactsRouter(broadcastEvent) {
     const { contactId, fingerprintId } = req.params;
     const contacts = await readDb('contacts.json');
     const contact = contacts.find((c) => c.contactId === contactId);
-    if (!contact || !(await inAdminScope(req, contact))) {
+    // Same as above: scope contacts through their owner inmate, not record.prisonId.
+    if (!contact || !(await inScopeOf(req, contact))) {
       return sendError(res, 'NOT_FOUND', 'Contact not found', 404);
     }
     const removed = await updateDb('contacts.json', (all) => {
