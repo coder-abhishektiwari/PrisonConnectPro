@@ -102,7 +102,7 @@ apiClient.interceptors.response.use(
     }
 
     const apiError: ApiError = {
-      message: error.response?.data?.message ?? error.message ?? 'Unexpected error',
+      message: error.response?.data?.error?.message ?? error.response?.data?.message ?? error.message ?? 'Unexpected error',
       status: error.response?.status,
     };
     return Promise.reject(apiError);

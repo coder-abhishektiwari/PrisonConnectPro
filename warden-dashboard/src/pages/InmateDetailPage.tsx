@@ -6,6 +6,7 @@ import { SearchableSelect } from '@/components/SearchableSelect';
 import { wardenApi } from '@/services/api/wardenApi';
 import { apiClient } from '@/services/api/client';
 import { usePageHeader } from '@/context/PageHeaderContext';
+import { errorMessage } from '@/utils/error';
 import type { Inmate, Contact, DeviceFingerprint } from '@/services/api/wardenApi';
 
 /**
@@ -142,8 +143,8 @@ export function InmateDetailPage() {
       wardenApi.getInmateBiometrics(inmateId).then(bm => {
         setBiometrics(Array.isArray(bm) ? bm : []);
       }).catch(() => setBiometrics([])).finally(() => setBiometricsLoading(false));
-    } catch (e: any) {
-      setLoadError(e?.response?.data?.error?.message || 'Failed to load inmate details');
+    } catch (e: unknown) {
+      setLoadError(errorMessage(e, 'Failed to load inmate details'));
     } finally { setLoading(false); }
   }, [inmateId, isNew]);
 
@@ -196,18 +197,54 @@ export function InmateDetailPage() {
     setEditingContact(true);
   };
 
+  // Re-read the contact list from the server so the UI always matches what
+  // actually persisted. Returns null when the refresh itself failed.
+  const refreshContacts = useCallback(async (): Promise<Contact[] | null> => {
+    if (!inmateId || isNew) return null;
+    try {
+      const co = await apiClient.get(`/contacts/admin/prisoners/${inmateId}/contacts`).then(r => r.data?.data ?? []);
+      const list = (Array.isArray(co) ? co : []) as Contact[];
+      setContacts(list);
+      setSelectedContact(prev => {
+        if (!prev) return prev;
+        return list.find(c => c.contactId === prev.contactId) ?? prev;
+      });
+      return list;
+    } catch {
+      return null;
+    }
+  }, [inmateId, isNew]);
+
   const saveContact = async () => {
     if (!contactEditData.contactId) return;
     setSaveContactError('');
     try {
       await wardenApi.updateContact(contactEditData.contactId, contactEditData as any);
+    } catch (e: unknown) {
+      setSaveContactError(errorMessage(e, 'Failed to update contact. Please try again.'));
+      return;
+    }
+    const fresh = await refreshContacts();
+    if (fresh) {
+      const saved = fresh.find(c => c.contactId === contactEditData.contactId);
+      const mismatch = saved && (Object.keys(contactEditData) as (keyof Contact)[])
+        .filter(k => k !== 'deviceFingerprints')
+        .find(k => {
+          const want = contactEditData[k];
+          if (want == null || want === '') return false;
+          return String(want) !== String((saved[k] as unknown ?? ''));
+        });
+      if (!saved || mismatch) {
+        setSaveContactError(mismatch
+          ? `Contact was not updated — "${String(mismatch)}" did not save. Please try again.`
+          : 'Contact was not updated. Please try again.');
+        return;
+      }
+    } else {
       setContacts(prev => prev.map(c => c.contactId === contactEditData.contactId ? { ...c, ...contactEditData } as Contact : c));
       if (selectedContact?.contactId === contactEditData.contactId) {
         setSelectedContact({ ...selectedContact, ...contactEditData } as Contact);
       }
-    } catch (e: any) {
-      setSaveContactError(e?.response?.data?.error?.message || 'Failed to update contact. Please try again.');
-      return;
     }
     setEditingContact(false);
   };
@@ -216,11 +253,16 @@ export function InmateDetailPage() {
     setSaveContactError('');
     try {
       await wardenApi.deleteContactApi(contactId);
-    } catch (e: any) {
-      setSaveContactError(e?.response?.data?.error?.message || 'Failed to delete contact. Please try again.');
+    } catch (e: unknown) {
+      setSaveContactError(errorMessage(e, 'Failed to delete contact. Please try again.'));
       return;
     }
-    setContacts(prev => prev.filter(c => c.contactId !== contactId));
+    const fresh = await refreshContacts();
+    if (fresh && fresh.some(c => c.contactId === contactId)) {
+      setSaveContactError('Contact was not deleted. Please try again.');
+      return;
+    }
+    if (!fresh) setContacts(prev => prev.filter(c => c.contactId !== contactId));
     if (selectedContact?.contactId === contactId) { setSelectedContact(null); setEditingContact(false); }
   };
 
@@ -300,16 +342,29 @@ export function InmateDetailPage() {
     if (!inmateId) return;
     setAddFamilyError('');
     const payload = { name: newFamily.name.trim(), relationship: newFamily.relationship.trim() || 'Family', phoneNumber: newFamily.phoneNumber.trim(), address: newFamily.address.trim(), city: newFamily.city.trim(), state: newFamily.state.trim() } as any;
+    let saved: Contact | undefined;
     try {
-      const saved = await wardenApi.createContact(inmateId, payload);
-      if (saved) {
-        setContacts(prev => [...prev, saved as Contact]);
-      } else {
-        setAddFamilyError('Failed to save contact — server returned empty response');
+      saved = await wardenApi.createContact(inmateId, payload) as Contact | undefined;
+    } catch (e: unknown) {
+      setAddFamilyError(errorMessage(e, 'Failed to save contact. Please try again.'));
+      return;
+    }
+    // The create endpoint has historically returned an empty body while still
+    // writing the row, so confirm against the list instead of trusting it.
+    const fresh = await refreshContacts();
+    if (fresh) {
+      const exists = !!saved?.contactId
+        ? fresh.some(c => c.contactId === saved!.contactId)
+        : fresh.some(c => c.name === payload.name && String(c.phoneNumber ?? '') === payload.phoneNumber);
+      if (!exists && !saved) {
+        setAddFamilyError('Failed to save contact. Please try again.');
         return;
       }
-    } catch (e: any) {
-      setAddFamilyError(e?.response?.data?.error?.message || 'Failed to save contact. Please try again.');
+      if (!exists && saved) setContacts(prev => prev.some(c => c.contactId === saved!.contactId) ? prev : [...prev, saved!]);
+    } else if (saved) {
+      setContacts(prev => [...prev, saved]);
+    } else {
+      setAddFamilyError('Failed to verify the save. Please check your connection and try again.');
       return;
     }
     setNewFamily({ name: '', relationship: '', phoneNumber: '', address: '', city: '', state: '' });

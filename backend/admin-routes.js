@@ -203,7 +203,11 @@ router.put('/contacts/:contactId', requireRole(...ALL_ROLES), async (req, res) =
     if (idx === -1) return { data: ct, result: null };
     const merged = { ...ct[idx], ...updates };
     if (updates.name) { merged.firstName = updates.name.split(' ')[0]; merged.lastName = updates.name.split(' ').slice(1).join(' '); }
-    if (updates.mobileNumber) { merged.phoneNumber = updates.mobileNumber; merged.phone = updates.mobileNumber; }
+    // Keep the three phone aliases in sync — the edit form posts phoneNumber
+    // while older kiosk records only carry mobileNumber, so a one-way sync
+    // would leave readers disagreeing about which number is current.
+    const newPhone = updates.phoneNumber || updates.phone || updates.mobileNumber;
+    if (newPhone) { merged.phoneNumber = newPhone; merged.phone = newPhone; merged.mobileNumber = newPhone; }
     ct[idx] = merged;
     return { data: ct, result: ct[idx] };
   });

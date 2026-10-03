@@ -12,6 +12,14 @@ function normalizeContact(c) {
   const out = { ...c };
   if (!out.name && out.fullName) out.name = out.fullName;
   delete out.fullName;
+  // Contacts are created with either mobileNumber (kiosk) or phoneNumber
+  // (warden dashboard); expose one consistent value on all three aliases.
+  const phone = out.mobileNumber || out.phoneNumber || out.phone;
+  if (phone) {
+    if (!out.mobileNumber) out.mobileNumber = phone;
+    if (!out.phoneNumber) out.phoneNumber = phone;
+    if (!out.phone) out.phone = phone;
+  }
   return out;
 }
 
