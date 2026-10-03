@@ -7,6 +7,7 @@
     "start": "node server.js",
     "seed": "node lib/seed.js",
     "seed:force": "node lib/seed.js --force",
+    "backfill:wallets": "node scripts/backfill-wallets.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

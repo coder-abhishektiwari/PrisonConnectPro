@@ -6,6 +6,7 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 const { sendSuccess, sendError, asyncRoute } = require('../lib/response');
 const { jailScopeOf, inJailScope, kioskScopeOf, inAdminScope, adminScopeFilter, inScopeOf, scopeList } = require('../lib/scoping');
 const { paginate } = require('../lib/paginate');
+const { ensureWallet } = require('../lib/wallets');
 
 const router = express.Router();
 
@@ -127,6 +128,10 @@ async function inmateCreateHandler(req, res) {
       const record = {
         ...inmateData,
         inmateId: inmateId,
+        // Wallet is provisioned below with this exact id. Shipping an inmate
+        // without one means the call-charge path finds no wallet to debit and
+        // silently bills ₹0 — free calls for the whole sentence.
+        walletId: inmateData.walletId || `WAL-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         prisonId: jailId || inmateData.prisonId || inmateData.facility,
         facility: jailId || inmateData.facility || inmateData.prisonId,
         assignedKioskId: kioskId || inmateData.assignedKioskId,
@@ -140,6 +145,13 @@ async function inmateCreateHandler(req, res) {
       };
       return { data: [...inmates, record], result: record };
     });
+    if (!newInmate) return sendError(res, 'NOT_FOUND', 'Inmate not found', 404);
+    // Persist the wallet row. The inmate already carries its walletId, and the
+    // charge path lazily ensures the row too, so a failure here must not fail
+    // the whole creation.
+    await ensureWallet(newInmate.inmateId, newInmate.walletId).catch((err) =>
+      console.error(`[wallet] provision failed for ${newInmate.inmateId}:`, err.message)
+    );
     return sendSuccess(res, newInmate, 201);
   } catch (err) {
     if (err.code === 'DUPLICATE') return sendError(res, 'DUPLICATE', err.message, 409);
@@ -178,6 +190,23 @@ async function inmateUpdateHandler(req, res) {
     return { data: inmates, result: inmates[idx] };
   });
   if (!updated) return sendError(res, 'NOT_FOUND', 'Inmate not found', 404);
+  // Self-healing for inmates created before wallets were auto-provisioned:
+  // any edit is enough to give them the wallet they never got.
+  if (!updated.walletId) {
+    const wallet = await ensureWallet(updated.inmateId).catch((err) => {
+      console.error(`[wallet] provision failed for ${updated.inmateId}:`, err.message);
+      return null;
+    });
+    if (wallet) {
+      updated.walletId = wallet.walletId;
+      await updateDb('inmates.json', (all) => {
+        const i = all.findIndex((r) => r.inmateId === updated.inmateId);
+        if (i === -1) return { data: all, result: null };
+        all[i].walletId = wallet.walletId;
+        return { data: all, result: all[i] };
+      });
+    }
+  }
   return sendSuccess(res, updated);
 }
 
@@ -248,6 +277,23 @@ router.patch('/admin/prisoners/:prisonerId/toggle', requireAuth, requireRole('ad
     return { data: inmates, result: inmates[idx] };
   });
   if (!updated) return sendError(res, 'NOT_FOUND', 'Inmate not found', 404);
+  // Self-healing for inmates created before wallets were auto-provisioned:
+  // any edit is enough to give them the wallet they never got.
+  if (!updated.walletId) {
+    const wallet = await ensureWallet(updated.inmateId).catch((err) => {
+      console.error(`[wallet] provision failed for ${updated.inmateId}:`, err.message);
+      return null;
+    });
+    if (wallet) {
+      updated.walletId = wallet.walletId;
+      await updateDb('inmates.json', (all) => {
+        const i = all.findIndex((r) => r.inmateId === updated.inmateId);
+        if (i === -1) return { data: all, result: null };
+        all[i].walletId = wallet.walletId;
+        return { data: all, result: all[i] };
+      });
+    }
+  }
   return sendSuccess(res, updated);
 }));
 

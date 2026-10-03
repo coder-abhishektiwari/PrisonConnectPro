@@ -10,6 +10,7 @@ const { sendSms, otpTemplateVars, linkTemplateVars } = require('../lib/sms');
 const { maskedPhone, contactPhone, buildLinkSms, buildCallLink } = require('../lib/familySecurity');
 const { paginate } = require('../lib/paginate');
 const { personName, callInmateName, callContactName } = require('../lib/names');
+const { pickWallet, ensureWallet } = require('../lib/wallets');
 
 // ==================== CALL STATE MACHINE ====================
 const CALL_STATES = ['scheduled', 'ringing', 'connecting', 'active', 'reconnecting', 'completed', 'failed', 'cancelled', 'rejected', 'missed'];
@@ -236,11 +237,17 @@ async function finalizeCall(call, requestedEndTimeMs, broadcastEvent, endReason,
           inmates.find((i) => i.assignedKioskId === claimed.inmateId) ||
           null;
         const wallets = await readDb('wallets.json');
-        const wallet =
-          wallets.find((w) => inmate?.walletId && w.walletId === inmate.walletId) ||
-          wallets.find((w) => w.inmateId === claimed.inmateId) ||
-          wallets.find((w) => w.inmateId === `INM-${claimed.inmateId}`) ||
-          null;
+        let wallet = pickWallet(wallets, claimed.inmateId, inmate?.walletId);
+
+        // No row yet — the inmate predates wallet auto-provisioning, or its
+        // wallet write was lost. Create it now rather than skipping the debit,
+        // otherwise this call rides for free.
+        if (!wallet) {
+          wallet = await ensureWallet(claimed.inmateId, inmate?.walletId).catch((err) => {
+            console.error(`[wallet] provision failed for ${claimed.inmateId}:`, err.message);
+            return null;
+          });
+        }
 
         if (wallet) {
           await updateDb('transactions.json', (all) => {
@@ -268,7 +275,7 @@ async function finalizeCall(call, requestedEndTimeMs, broadcastEvent, endReason,
           });
           console.log(`[wallet] charged ₹${chargeAmount} to ${wallet.walletId} for ${claimed.callId}`);
         } else {
-          console.warn(`[wallet] no wallet found for inmate ${claimed.inmateId} — charge skipped`);
+          console.warn(`[wallet] could not provision a wallet for inmate ${claimed.inmateId} — charge skipped`);
         }
       }
     } catch (err) {
