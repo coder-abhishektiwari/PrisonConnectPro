@@ -67,6 +67,8 @@ fun AudioCallScreen(
     val inmateProfile by viewModel.inmateProfile.collectAsState()
     val liveCost by viewModel.liveCost.collectAsState()
     val maxCallSeconds by viewModel.maxCallSeconds.collectAsState()
+    val endLabel by viewModel.endLabel.collectAsState()
+    val connectionQuality by viewModel.connectionQuality.collectAsState()
 
     var hasPermissions by remember {
         mutableStateOf(
@@ -130,6 +132,8 @@ fun AudioCallScreen(
             inmateProfile = inmateProfile,
             liveCost = liveCost,
             maxCallSeconds = maxCallSeconds,
+            endLabel = endLabel,
+            connectionQuality = connectionQuality,
             onMuteToggle = { viewModel.toggleMute() },
             onSpeakerToggle = { viewModel.toggleSpeaker() },
             onEndCall = {
@@ -181,6 +185,8 @@ fun AudioCallContent(
     inmateProfile: InmateProfile?,
     liveCost: Double,
     maxCallSeconds: Int,
+    endLabel: String? = null,
+    connectionQuality: String = "unknown",
     onMuteToggle: () -> Unit,
     onSpeakerToggle: () -> Unit,
     onEndCall: () -> Unit
@@ -222,7 +228,7 @@ fun AudioCallContent(
                 } else {
                     Spacer(modifier = Modifier.width(1.dp))
                 }
-                ConnectionQualityBadge(isTablet)
+                ConnectionQualityBadge(connectionQuality, isTablet)
             }
 
             Column(
@@ -233,6 +239,24 @@ fun AudioCallContent(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
+                // The badge alone is easy to miss mid-conversation — spell out
+                // a bad line the way consumer calling apps do.
+                if (connectionQuality == "poor") {
+                    Surface(
+                        color = AlertRed.copy(alpha = 0.12f),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "Poor network quality — audio may break up",
+                            color = AlertRed,
+                            fontSize = if (isTablet) 13.sp else 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                        )
+                    }
+                }
 
                 // -------------------------------------------------------------
                 // 1. CENTER PROFILE & CONTACT DETAILS
@@ -302,7 +326,7 @@ fun AudioCallContent(
                                 CallUIState.WAITING -> "Waiting for participant..."
                                 CallUIState.RECONNECTING -> "Reconnecting..."
                                 CallUIState.FAILED -> "Call Failed"
-                                CallUIState.DISCONNECTED -> "Call ended"
+                                CallUIState.DISCONNECTED -> endLabel ?: "Call ended"
                                 else -> "Connecting..."
                             },
                             fontSize = if (isTablet) 20.sp else 16.sp,
@@ -453,7 +477,11 @@ fun AudioCallContent(
                             ) {
                                 Column(modifier = Modifier.padding(12.dp)) {
                                     Text("INMATE DETAILS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextGray)
-                                    Text("${inmateProfile?.firstName} ${inmateProfile?.lastName}", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        inmateProfile?.displayName ?: "Inmate",
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
                                     Text("Facility: ${inmateProfile?.facility}", fontSize = 12.sp, color = TextGray)
                                 }
                             }
@@ -559,22 +587,30 @@ private fun RecordingBadge() {
 }
 
 @Composable
-private fun ConnectionQualityBadge(isTablet: Boolean) {
+private fun ConnectionQualityBadge(quality: String, isTablet: Boolean) {
+    // Sampled from the live peer connection — never a static label.
+    val (label, tint) = when (quality) {
+        "excellent" -> "Excellent Connection" to AccentGreen
+        "good" -> "Stable Connection" to AccentGreen
+        "fair" -> "Fair Connection" to WarningOrange
+        "poor" -> "Poor Network Quality" to AlertRed
+        else -> "Measuring…" to TextGray
+    }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
-            .background(PrimaryNavy.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
+            .background(tint.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
             .padding(horizontal = 8.dp, vertical = 4.dp)
     ) {
         Icon(
             imageVector = Icons.Default.SignalCellularAlt,
             contentDescription = null,
-            tint = AccentGreen,
+            tint = tint,
             modifier = Modifier.size(if (isTablet) 16.dp else 12.dp)
         )
         Spacer(modifier = Modifier.width(4.dp))
         Text(
-            text = "Stable Connection",
+            text = label,
             color = TextDark,
             fontSize = if (isTablet) 12.sp else 10.sp,
             fontWeight = FontWeight.Medium

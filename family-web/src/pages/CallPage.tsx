@@ -4,7 +4,8 @@ import { ErrorState } from '@/components/States';
 import { useSession } from '@/context/SessionContext';
 import { useToast } from '@/components/Toast';
 import { socketService } from '@/services/socket';
-import { webRtcService, type ConnectionState } from '@/services/webrtc';
+import { callApi } from '@/services/api';
+import { webRtcService, type ConnectionState, type QualitySnapshot } from '@/services/webrtc';
 
 type CallStatus =
   | 'initializing'
@@ -55,6 +56,12 @@ export function CallPage() {
   // Auto-hiding controls: visible on any interaction, hidden after 3s idle.
   const [controlsVisible, setControlsVisible] = useState(true);
   const [endingCall, setEndingCall] = useState(false);
+  // Set when the call is cut by the duration cap (either side), so the user
+  // sees WHY instead of being dumped on a blank page / the home route.
+  const [timeLimitNotice, setTimeLimitNotice] = useState<number | null>(null);
+  // Live inbound quality — drives the header pill and the poor-network banner.
+  const [connectionQuality, setConnectionQuality] =
+    useState<QualitySnapshot['quality']>('unknown');
   const controlsTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const bumpInteraction = useCallback(() => {
     setControlsVisible(true);
@@ -78,6 +85,12 @@ export function CallPage() {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const callTimerRef = useRef<ReturnType<typeof setInterval>>();
+  /**
+   * Local-clock ms at which billing started, as corrected by the last
+   * heartbeat. `null` until the first sync — the timer then ticks locally so
+   * it never sits at 00:00 while the kiosk already counts.
+   */
+  const billingAnchorRef = useRef<number | null>(null);
   const peerIdRef = useRef(`family-${Date.now()}`);
   const joinStartedRef = useRef(false);
   const statusRef = useRef<CallStatus>('initializing');
@@ -108,22 +121,75 @@ export function CallPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, linkToken]);
 
-  // Call timer
+  // Call timer — driven by the backend's billing clock. The kiosk bills from
+  // the server's own `mediaConnectedAt`, so counting locally from browser-load
+  // time made the two countdowns visibly diverge. Every heartbeat re-derives
+  // the anchor with `serverTime`, so a fast or slow browser clock no longer
+  // matters: both ends show the same elapsed seconds.
   useEffect(() => {
-    if (status === 'connected') {
-      callTimerRef.current = setInterval(() => {
-        setCallDuration((d) => d + 1);
-      }, 1000);
-    } else {
-      if (callTimerRef.current) {
-        clearInterval(callTimerRef.current);
-      }
+    if (status !== 'connected') {
+      if (callTimerRef.current) clearInterval(callTimerRef.current);
+      return;
     }
-
+    callTimerRef.current = setInterval(() => {
+      const anchor = billingAnchorRef.current;
+      if (anchor === null) setCallDuration((d) => d + 1);
+      else setCallDuration(Math.max(0, Math.floor((Date.now() - anchor) / 1000)));
+    }, 1000);
     return () => {
-      if (callTimerRef.current) {
-        clearInterval(callTimerRef.current);
+      if (callTimerRef.current) clearInterval(callTimerRef.current);
+    };
+  }, [status]);
+
+  // Pull the billing clock while connected (every 5s). Best-effort: any
+  // failure just leaves the previous anchor in place and the timer keeps
+  // ticking locally from there.
+  useEffect(() => {
+    if (status !== 'connected' || !linkToken) return;
+    let cancelled = false;
+
+    const sync = async () => {
+      try {
+        const hb = await callApi.heartbeat(linkToken);
+        if (cancelled || !hb) return;
+        const serverMs = Date.parse(hb.serverTime || '');
+        const anchorMs = hb.mediaConnectedAt ? Date.parse(hb.mediaConnectedAt) : NaN;
+        if (!Number.isFinite(serverMs) || !Number.isFinite(anchorMs)) return;
+        // Shift the server's billing anchor onto this machine's clock.
+        billingAnchorRef.current = anchorMs - (serverMs - Date.now());
+      } catch {
+        /* heartbeat is advisory — never break the call over it */
       }
+    };
+
+    void sync();
+    const id = setInterval(() => void sync(), 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [status, linkToken]);
+
+  // Sample the peer connection for quality while connected.
+  useEffect(() => {
+    if (status !== 'connected') {
+      setConnectionQuality('unknown');
+      return;
+    }
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const snap = await webRtcService.getQualitySnapshot();
+        if (!cancelled) setConnectionQuality(snap.quality);
+      } catch {
+        /* leave the last known quality */
+      }
+    };
+    void poll();
+    const id = setInterval(() => void poll(), 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
     };
   }, [status]);
 
@@ -214,17 +280,22 @@ export function CallPage() {
     const handleCallEnded = (_event: string, data: any) => {
       // Ignore the echo of OUR OWN hang-up.
       if (data?.sender && data.sender === peerIdRef.current) return;
-      console.log('[Call] Call ended remotely');
+      console.log('[Call] Call ended remotely', data?.reason ?? '');
+      // The kiosk reports `timeout` when the warden's duration cap fired —
+      // say so instead of silently blanking the page.
+      const dueToTimeLimit = data?.reason === 'timeout';
+      if (dueToTimeLimit) setTimeLimitNotice(session?.maxDurationMinutes ?? null);
       wasConnectedRef.current = false;
       reconnectingRef.current = true; // stop any in-flight reconnect loop
       setEndingCall(true);
-      // Show "Ending call..." briefly on the call screen itself, then blank.
+      // Show "Ending call..." briefly on the call screen itself, then leave.
       setTimeout(() => {
         webRtcService.close();
         socketService.leaveRoom(session!.roomId, peerIdRef.current);
         socketService.disconnect();
         joinStartedRef.current = false;
-        goToBlank();
+        if (dueToTimeLimit) clear();
+        else goToBlank();
       }, 1500);
     };
 
@@ -551,6 +622,40 @@ export function CallPage() {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Enforce the warden-set maximum on THIS client. The kiosk cuts the call
+  // too, but the browser must never be able to talk past the cap if that
+  // signal is missed or arrives late — endCall() also tells the kiosk, so
+  // both sides come down together.
+  const maxCallSeconds = session ? Math.max(0, session.maxDurationMinutes) * 60 : 0;
+  useEffect(() => {
+    if (status !== 'connected' || !maxCallSeconds) return;
+    if (timeLimitNotice) return;
+    if (callDuration < maxCallSeconds) return;
+    console.log(`[Call] Max duration reached (${maxCallSeconds}s) - ending call`);
+    setTimeLimitNotice(session?.maxDurationMinutes ?? null);
+    void endCall();
+  }, [status, callDuration, maxCallSeconds, timeLimitNotice, session, endCall]);
+
+  if (timeLimitNotice) {
+    return (
+      <div className="min-h-screen bg-neutral-900 flex items-center justify-center p-4">
+        <div className="max-w-md w-full text-center">
+          <p className="text-lg font-semibold text-white">Time limit reached</p>
+          <p className="text-sm text-neutral-400 mt-2">
+            This call has ended because it reached the maximum duration of{' '}
+            {timeLimitNotice} minutes.
+          </p>
+          <button
+            onClick={() => window.location.replace('/')}
+            className="mt-6 px-5 py-2.5 bg-white text-neutral-900 rounded-lg text-sm font-medium hover:bg-neutral-100 transition"
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!session) {
     return <Navigate to="/" replace />;
   }
@@ -567,6 +672,26 @@ export function CallPage() {
 
   const isVideoCall = session.callType === 'video';
   const isConnected = status === 'connected';
+
+  // Live quality chip — same vocabulary and thresholds as the kiosk's badge.
+  const qualityLabel =
+    connectionQuality === 'excellent'
+      ? 'Excellent'
+      : connectionQuality === 'good'
+        ? 'Stable'
+        : connectionQuality === 'fair'
+          ? 'Fair'
+          : connectionQuality === 'poor'
+            ? 'Poor network'
+            : 'Measuring…';
+  const qualityTone =
+    connectionQuality === 'poor'
+      ? 'bg-red-600 text-white'
+      : connectionQuality === 'fair'
+        ? 'bg-amber-500 text-black'
+        : connectionQuality === 'unknown'
+          ? 'bg-neutral-700 text-neutral-300'
+          : 'bg-emerald-600 text-white';
 
   if (status === 'ended') {
     return (
@@ -668,6 +793,9 @@ export function CallPage() {
           <p className="text-xs text-neutral-300">Secure monitored call</p>
         </div>
         <div className="flex items-center gap-2">
+          <span className={`px-2 py-1 rounded-full text-[10px] font-semibold ${qualityTone}`}>
+            {qualityLabel}
+          </span>
           <span className="bg-red-600 text-white px-2.5 py-1 rounded-full text-[10px] font-semibold flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
             REC
@@ -677,6 +805,16 @@ export function CallPage() {
           </span>
         </div>
       </div>
+
+      {/* Poor network banner — stays visible even once the controls auto-hide,
+          because a chopping-up call is exactly when the user looks away. */}
+      {connectionQuality === 'poor' && (
+        <div className="absolute top-20 inset-x-0 z-10 flex justify-center px-4 pointer-events-none">
+          <span className="bg-red-600 text-white text-xs font-semibold px-4 py-2 rounded-full shadow-lg">
+            Poor network quality — audio may break up
+          </span>
+        </div>
+      )}
 
       {/* Bottom controls — mic | END (center) | speaker */}
       <div

@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { env } from '@/config/env';
 import type { ApiResponse, ApiError } from '@/types/api';
-import type { CallSession, DeviceInfo, DeviceVerificationResult, SendOtpResult, OtpVerificationResult, JoinRoomResult, LeaveRoomResult, CallSummary } from '@/types/call';
+import type { CallSession, CallTimerStatus, DeviceInfo, DeviceVerificationResult, SendOtpResult, OtpVerificationResult, JoinRoomResult, LeaveRoomResult, CallSummary } from '@/types/call';
 
 export const api = axios.create({
   baseURL: env.apiGatewayUrl,
@@ -24,7 +24,7 @@ export const callApi = {
     api.post<ApiResponse<CallSession>>(`/family/secure-call/link/${linkToken}`).then((r) => r.data.data),
 
   heartbeat: (linkToken: string) =>
-    api.get<ApiResponse<{ ok: boolean; done?: boolean }>>(`/family/secure-call/heartbeat/${linkToken}`).then((r) => r.data.data),
+    api.get<ApiResponse<CallTimerStatus>>(`/family/secure-call/heartbeat/${linkToken}`).then((r) => r.data.data),
 
   verifyDevice: (linkToken: string, payload: { fingerprint: string; signals: Record<string, unknown>; deviceInfo?: DeviceInfo }) =>
     api.post<ApiResponse<DeviceVerificationResult>>(`/family/secure-call/device/${linkToken}`, payload).then((r) => r.data.data),

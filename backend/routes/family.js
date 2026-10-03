@@ -6,6 +6,7 @@ const { requireAuth } = require('../middleware/auth');
 const { sendSuccess, sendError, asyncRoute } = require('../lib/response');
 const { sendSms, otpTemplateVars, linkTemplateVars } = require('../lib/sms');
 const { maskedPhone, contactPhone, buildLinkSms, buildCallLink, deviceRegisteredForCall, registerOrVerifyFingerprint } = require('../lib/familySecurity');
+const { callInmateName, callContactName } = require('../lib/names');
 const { signAccessToken } = require('../lib/auth');
 
 const router = express.Router();
@@ -42,8 +43,8 @@ router.post('/secure-call/link/:linkToken', asyncRoute(async (req, res) => {
   return sendSuccess(res, {
     callId: call.callId,
     roomId: call.roomId,
-    inmateName: inmate ? `${inmate.firstName} ${inmate.lastName || ''}`.trim() : call.inmateName || '',
-    contactName: contact?.fullName || contact?.name || call.familyMemberName || 'Family member',
+    inmateName: callInmateName(call, inmate),
+    contactName: callContactName(call, contact) || 'Family member',
     callType: call.type,
     scheduledAt: call.scheduledAt || call.startTime,
     maxDurationMinutes: call.maxDurationMinutes,
@@ -227,19 +228,44 @@ router.post('/secure-call/device/:linkToken', asyncRoute(async (req, res) => {
 }));
 
 // 5. GET /secure-call/heartbeat/:linkToken
+//
+// Doubles as the family portal's clock source: it returns the server's time
+// and the billing anchor (`mediaConnectedAt`) so the browser timer counts the
+// exact same seconds the kiosk is billing — no client drift, no second clock.
 router.get('/secure-call/heartbeat/:linkToken', asyncRoute(async (req, res) => {
   const { linkToken } = req.params;
-  const calls = await readDb('calls.json');
+  const [calls, inmates, contacts] = await Promise.all([
+    readDb('calls.json'), readDb('inmates.json'), readDb('contacts.json')
+  ]);
   const call = calls.find((c) => c.linkToken === linkToken);
   if (!call) return sendError(res, 'NOT_FOUND', 'Invalid or expired call link', 404);
-  if (call.family?.otpVerified) return sendSuccess(res, { ok: true, done: true });
-  await updateDb('calls.json', (all) => {
-    const idx = all.findIndex((c) => c.linkToken === linkToken);
-    if (idx === -1) return { data: all, result: null };
-    all[idx].family = { ...(all[idx].family || {}), lastSeenAt: new Date().toISOString() };
-    return { data: all, result: all[idx] };
-  });
-  return sendSuccess(res, { ok: true });
+
+  const inmate = inmates.find((i) => i.inmateId === call.inmateId);
+  const contact = contacts.find((c) => c.contactId === call.contactId);
+  const payload = {
+    ok: true,
+    done: !!call.family?.otpVerified,
+    serverTime: new Date().toISOString(),
+    status: call.status,
+    startTime: call.startTime || null,
+    mediaConnectedAt: call.mediaConnectedAt || null,
+    maxDurationMinutes: call.maxDurationMinutes,
+    ratePerMinute: call.ratePerMinute,
+    inmateName: callInmateName(call, inmate),
+    contactName: callContactName(call, contact) || 'Family member'
+  };
+
+  // Only chase `lastSeenAt` while we are still proving the visitor is alive —
+  // during an active call that would be a needless write every few seconds.
+  if (!call.family?.otpVerified) {
+    await updateDb('calls.json', (all) => {
+      const idx = all.findIndex((c) => c.linkToken === linkToken);
+      if (idx === -1) return { data: all, result: null };
+      all[idx].family = { ...(all[idx].family || {}), lastSeenAt: new Date().toISOString() };
+      return { data: all, result: all[idx] };
+    });
+  }
+  return sendSuccess(res, payload);
 }));
 
 // 6. GET /secure-call/info/:linkToken

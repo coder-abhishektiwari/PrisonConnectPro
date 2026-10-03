@@ -9,6 +9,7 @@ const { inAdminScope, adminScopeFilter, inScopeOf, scopeList, kioskScopeOf } = r
 const { sendSms, otpTemplateVars, linkTemplateVars } = require('../lib/sms');
 const { maskedPhone, contactPhone, buildLinkSms, buildCallLink } = require('../lib/familySecurity');
 const { paginate } = require('../lib/paginate');
+const { personName, callInmateName, callContactName } = require('../lib/names');
 
 // ==================== CALL STATE MACHINE ====================
 const CALL_STATES = ['scheduled', 'ringing', 'connecting', 'active', 'reconnecting', 'completed', 'failed', 'cancelled', 'rejected', 'missed'];
@@ -281,6 +282,27 @@ async function finalizeCall(call, requestedEndTimeMs, broadcastEvent, endReason,
 function createCallsRouter(broadcastEvent, signaling) {
   const router = express.Router();
 
+  /**
+   * Stamp every call row with the SAME name strings the rest of the product
+   * shows. Call rows only snapshot `inmateName`/`familyMemberName` at creation
+   * time (and the family side was often written as ''), so resolving against
+   * the live inmate/contact records keeps warden lists, exports and the
+   * family portal from disagreeing or falling back to raw CONT-xxx ids.
+   */
+  async function attachPersonNames(rows) {
+    const [inmates, contacts] = await Promise.all([
+      readDb('inmates.json').catch(() => []),
+      readDb('contacts.json').catch(() => []),
+    ]);
+    const byInmate = new Map(inmates.map((i) => [i.inmateId, i]));
+    const byContact = new Map(contacts.map((c) => [c.contactId, c]));
+    return rows.map((c) => ({
+      ...c,
+      inmateName: callInmateName(c, byInmate.get(c.inmateId)) || c.inmateId || null,
+      contactName: callContactName(c, byContact.get(c.contactId)) || null,
+    }));
+  }
+
   // ==================== CALL ROUTES ====================
 
   router.get('/', requireAuth, asyncRoute(async (req, res) => {
@@ -302,7 +324,7 @@ function createCallsRouter(broadcastEvent, signaling) {
     } else {
       calls = calls.filter((c) => inAdminScope(req, c));
     }
-    return sendSuccess(res, calls);
+    return sendSuccess(res, await attachPersonNames(calls));
   }));
 
   router.get('/active', requireAuth, asyncRoute(async (req, res) => {
@@ -328,8 +350,9 @@ function createCallsRouter(broadcastEvent, signaling) {
     const filtered = (typeFilter && typeFilter !== 'all')
       ? active.filter((c) => c.type === typeFilter)
       : active;
+    const withNames = await attachPersonNames(filtered);
     const result = await paginate({
-      req, data: filtered,
+      req, data: withNames,
       search: (c, q) =>
         (c.callId || '').toLowerCase().includes(q) ||
         (c.inmateName || '').toLowerCase().includes(q) ||
@@ -348,7 +371,7 @@ function createCallsRouter(broadcastEvent, signaling) {
       // Only return a name if the contactId actually belongs to this inmate
       const inmateContacts = contacts.filter((c) => c.inmateId === inmateId);
       const exact = inmateContacts.find((c) => c.contactId === contactId);
-      if (exact) return exact.fullName || null;
+      if (exact) return personName(exact) || null;
       // Not found — return null, caller will use familyMemberName or "Unknown"
       return null;
     };
@@ -459,7 +482,7 @@ function createCallsRouter(broadcastEvent, signaling) {
     const contactName = (contactId, inmateId) => {
       const inmateContacts = contacts.filter((c) => c.inmateId === inmateId);
       const exact = inmateContacts.find((c) => c.contactId === contactId);
-      if (exact) return exact.fullName || null;
+      if (exact) return personName(exact) || null;
       return null;
     };
     // booking for TODAY stays visible until midnight (its slot may still be
@@ -487,7 +510,7 @@ function createCallsRouter(broadcastEvent, signaling) {
     const contactName = (contactId, inmateId) => {
       const inmateContacts = contacts.filter((c) => c.inmateId === inmateId);
       const exact = inmateContacts.find((c) => c.contactId === contactId);
-      if (exact) return exact.fullName || null;
+      if (exact) return personName(exact) || null;
       return null;
     };
     const history = scoped
@@ -592,8 +615,8 @@ function createCallsRouter(broadcastEvent, signaling) {
       recordingEnabled: callData.recordingEnabled !== undefined ? callData.recordingEnabled : true,
       recordingStatus: 'not_recording',
       connectionQuality: 'good', bitrate: 0, packetLoss: 0, jitter: 0, iceState: 'new',
-      inmateName: callData.inmateName || inmate.name || inmate.fullName || `${inmate.firstName || ''} ${inmate.lastName || ''}`.trim() || 'An inmate',
-      familyMemberName: callData.familyMemberName || '',
+      inmateName: callData.inmateName || callInmateName(null, inmate) || 'An inmate',
+      familyMemberName: callData.familyMemberName || callContactName(null, contact),
       roomIdLabel: callData.roomIdLabel || '',
       maxDurationMinutes: settings.callSettings?.maxCallDurationMinutes ?? 15,
       ratePerMinute,
@@ -665,7 +688,7 @@ function createCallsRouter(broadcastEvent, signaling) {
           const prisons = await readDb('prisons.json');
           const prison = prisons.find((p) => p.prisonId === (kiosk.prisonId || inmate.prisonId));
           const jailName = prison?.name || 'the correctional facility';
-          const familyMemberName = contact.fullName || contact.name || 'Dear Member';
+          const familyMemberName = personName(contact) || 'Dear Member';
           const callLink = buildCallLink(newCall.linkToken);
           const smsResult = await sendSms({
             phone: familyPhone,

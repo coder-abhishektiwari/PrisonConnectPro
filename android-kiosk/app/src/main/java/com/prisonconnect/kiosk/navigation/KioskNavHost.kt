@@ -277,12 +277,16 @@ fun KioskNavHost(
                 roomId = roomId,
                 isVideoCall = isVideo,
                 onConnected = {
-                    // Media is live ��� only now enter the actual call screen.
+                    // Media is live — only now enter the actual call screen.
+                    // Names routinely contain spaces/brackets and sometimes a
+                    // '/', which would silently truncate a bare route — encode
+                    // both the enter and the pop so they stay in sync.
+                    val encodedName = Uri.encode(contactName)
                     navController.navigate(
-                        if (isVideo) "video_call/$contactName/$roomId"
-                        else "audio_call/$contactName/$roomId"
+                        if (isVideo) "video_call/$encodedName/$roomId"
+                        else "audio_call/$encodedName/$roomId"
                     ) {
-                        popUpTo("call_progress/$contactName/$roomId/$isVideo") { inclusive = true }
+                        popUpTo("call_progress/$encodedName/$roomId/$isVideo") { inclusive = true }
                     }
                 },
                 onFailed = { navController.popBackStack() },
@@ -301,8 +305,10 @@ fun KioskNavHost(
                 roomId = roomId,
                 windowSizeClass = windowSizeClass,
                 onEndCall = {
-                    val duration = (timerSeconds / 60).toString()
-                    navController.navigate("call_summary/$contactName/${String.format("%.2f", liveCost)}/$duration/video") {
+                    // Seconds, not `timerSeconds / 60` — integer division made
+                    // every sub-minute call print "0 Min" on the receipt.
+                    val duration = timerSeconds.toString()
+                    navController.navigate("call_summary/${Uri.encode(contactName)}/${String.format("%.2f", liveCost)}/$duration/video") {
                         popUpTo(KioskRoutes.VIDEO_CALL) { inclusive = true }
                     }
                 },
@@ -320,8 +326,8 @@ fun KioskNavHost(
                 roomId = roomId,
                 windowSizeClass = windowSizeClass,
                 onEndCall = {
-                    val duration = (timerSeconds / 60).toString()
-                    navController.navigate("call_summary/$contactName/${String.format("%.2f", liveCost)}/$duration/audio") {
+                    val duration = timerSeconds.toString()
+                    navController.navigate("call_summary/${Uri.encode(contactName)}/${String.format("%.2f", liveCost)}/$duration/audio") {
                         popUpTo(KioskRoutes.AUDIO_CALL) { inclusive = true }
                     }
                 },

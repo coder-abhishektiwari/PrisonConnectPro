@@ -25,6 +25,17 @@ export type CallState = {
 
 type WebRtcEventCallback = (event: string, data: unknown) => void;
 
+/** Mirrors the kiosk's `QualitySnapshot` shape (see WebRtcManager.kt). */
+export type QualitySnapshot = {
+  quality: 'excellent' | 'good' | 'fair' | 'poor' | 'unknown';
+  /** Cumulative inbound packet loss, 0-100. */
+  packetLoss: number;
+  /** Inbound jitter in ms. */
+  jitter: number;
+  /** Received bitrate in kbps. */
+  bitrate: number;
+};
+
 class WebRtcService {
   private pc: RTCPeerConnection | null = null;
   private localStream: MediaStream | null = null;
@@ -35,6 +46,9 @@ class WebRtcService {
     { urls: 'stun:stun1.l.google.com:19302' }
   ];
   private pendingCandidates: RTCIceCandidateInit[] = [];
+  /** Previous inbound sample for delta bitrate in getQualitySnapshot(). */
+  private lastBytes = -1;
+  private lastStatsTs = 0;
 
   /**
    * An SDP offer relayed before handleJoined() built the peer connection.
@@ -462,6 +476,88 @@ class WebRtcService {
     return (this.pc?.connectionState as ConnectionState) || 'new';
   }
 
+  /**
+   * Live connection health for the on-screen quality indicator.
+   *
+   * Thresholds deliberately mirror the kiosk's
+   * `WebRtcManager.computeQuality()` so both ends of the same call judge the
+   * line the same way — otherwise the kiosk could say "Stable" while the
+   * family side shows a poor-network warning for identical packets.
+   */
+  async getQualitySnapshot(): Promise<QualitySnapshot> {
+    const pc = this.pc;
+    if (!pc) return { quality: 'unknown', packetLoss: 0, jitter: 0, bitrate: 0 };
+    if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+      return { quality: 'poor', packetLoss: 0, jitter: 0, bitrate: 0 };
+    }
+
+    try {
+      const report = await pc.getStats();
+      // Mutable box + boolean flag: TypeScript cannot see assignments made
+      // inside forEach(), so narrowing `inbound` itself to `never` after a
+      // null-check would be wrong.
+      let inbound: Record<string, unknown> = {};
+      let inboundKind = '';
+      let inboundTs = 0;
+      let hasInbound = false;
+      let nominatedRttMs = 0;
+      let anyRttMs = 0;
+
+      report.forEach((raw) => {
+        const s = raw as Record<string, unknown> & { type: string };
+        if (s.type === 'inbound-rtp') {
+          const kind = String(s.kind ?? s.mediaType ?? '');
+          if (!hasInbound || (kind === 'video' && inboundKind !== 'video')) {
+            inbound = s;
+            inboundKind = kind;
+            inboundTs = Number(s.timestamp ?? 0);
+            hasInbound = true;
+          }
+        } else if (s.type === 'candidate-pair' && s.state === 'succeeded') {
+          const rttMs = Number(s.currentRoundTripTime ?? 0) * 1000;
+          if (rttMs <= 0) return;
+          if (!anyRttMs) anyRttMs = rttMs;
+          if (s.nominated) nominatedRttMs = rttMs;
+        }
+      });
+
+      if (!hasInbound) return { quality: 'good', packetLoss: 0, jitter: 0, bitrate: 0 };
+
+      const received = Number(inbound.packetsReceived ?? 0);
+      const lost = Number(inbound.packetsLost ?? 0);
+      const total = received + lost;
+      const lossPct = total > 0 ? (lost * 100) / total : 0;
+      const jitterMs = Number(inbound.jitter ?? 0) * 1000;
+      const bytes = Number(inbound.bytesReceived ?? 0);
+      const rttMs = nominatedRttMs > 0 ? nominatedRttMs : anyRttMs;
+
+      let bitrateKbps = 0;
+      if (
+        this.lastBytes >= 0 &&
+        this.lastStatsTs > 0 &&
+        inboundTs > this.lastStatsTs &&
+        bytes >= this.lastBytes
+      ) {
+        bitrateKbps = ((bytes - this.lastBytes) * 8 * 1000) / (inboundTs - this.lastStatsTs);
+      }
+      this.lastBytes = bytes;
+      this.lastStatsTs = inboundTs;
+
+      const quality: QualitySnapshot['quality'] =
+        lossPct > 15 || rttMs > 500 || jitterMs > 100
+          ? 'poor'
+          : lossPct > 5 || rttMs > 250 || jitterMs > 50
+            ? 'fair'
+            : lossPct > 1 || rttMs > 150
+              ? 'good'
+              : 'excellent';
+
+      return { quality, packetLoss: lossPct, jitter: jitterMs, bitrate: bitrateKbps };
+    } catch {
+      return { quality: 'unknown', packetLoss: 0, jitter: 0, bitrate: 0 };
+    }
+  }
+
   close(): void {
     // Invalidate any in-flight getUserMedia first: its result must be
     // discarded rather than assigned after the tracks were just released.
@@ -481,6 +577,8 @@ class WebRtcService {
     this.remoteStream = null;
     this.pendingCandidates = [];
     this.pendingRemoteOffer = null;
+    this.lastBytes = -1;
+    this.lastStatsTs = 0;
   }
 
   on(event: string, callback: WebRtcEventCallback): void {

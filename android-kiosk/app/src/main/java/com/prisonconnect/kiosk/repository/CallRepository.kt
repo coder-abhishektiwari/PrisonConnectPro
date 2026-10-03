@@ -32,7 +32,7 @@ interface CallRepository {
     fun sendAnswer(sdp: JSONObject)
 
     /** Notify the room that this peer hung up, so the other side ends too. */
-    fun sendCallEnded()
+    fun sendCallEnded(reason: String = "hangup")
     fun sendIceCandidate(candidate: JSONObject)
     fun getCallStatus(callId: String): Flow<NetworkResult<CallStatusSnapshot>>
     fun uploadRecording(request: RecordingUploadRequest): Flow<NetworkResult<RecordingUploadResponse>>

@@ -7,6 +7,7 @@ import { wardenApi } from '@/services/api/wardenApi';
 import { useWardenSocket } from '@/hooks/useWardenSocket';
 import { useToast } from '@/hooks/useToast';
 import { usePageHeader } from '@/context/PageHeaderContext';
+import { inmateLabel, contactLabel } from '@/utils/names';
 import type { ActiveCall, Inmate, Contact, Wallet, Recording, Device, CallStatistics } from '@/services/api/wardenApi';
 
 export function MonitorScreenPage() {
@@ -70,7 +71,7 @@ export function MonitorScreenPage() {
 
   usePageHeader({
     title: 'Monitor Screen',
-    subtitle: call ? `Call ${call.callId} — ${call.inmateName || call.inmateId}` : 'Loading...',
+    subtitle: call ? `Call ${call.callId} — ${inmateLabel(call)}` : 'Loading...',
     icon: headerIcon,
     actions: useMemo(() => (
       <div className="flex items-center gap-3">
@@ -172,7 +173,7 @@ export function MonitorScreenPage() {
                   <svg className="w-7 h-7 text-[#8696A0]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" /></svg>
                 </div>
                 <div>
-                  <p className="font-semibold text-neutral-900">{inmate ? inmate.name : call.inmateName || call.inmateId}</p>
+                  <p className="font-semibold text-neutral-900">{inmateLabel(call, inmate)}</p>
                   <p className="text-sm text-neutral-600">{inmate?.inmateId || call.inmateId}</p>
                 </div>
               </div>
@@ -196,7 +197,7 @@ export function MonitorScreenPage() {
                   <svg className="w-7 h-7 text-[#8696A0]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" /></svg>
                 </div>
                 <div>
-                  <p className="font-semibold text-neutral-900">{contact?.name || call.familyMemberName || call.contactId}</p>
+                  <p className="font-semibold text-neutral-900">{contactLabel(call, contact)}</p>
                   <p className="text-sm text-neutral-600">{contact?.relationship || 'Family Member'}</p>
                 </div>
               </div>

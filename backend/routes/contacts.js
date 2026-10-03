@@ -41,7 +41,7 @@ function createContactsRouter(broadcastEvent) {
       filtered = filtered.filter((c) => c.relationship === relationshipFilter);
     }
     const result = await paginate({
-      req, data: filtered,
+      req, data: filtered.map(normalizeContact),
       search: (c, q) =>
         (c.name || '').toLowerCase().includes(q) ||
         (c.contactId || '').toLowerCase().includes(q) ||

@@ -61,3 +61,26 @@ export interface RoomStatus {
   status: 'idle' | 'waiting' | 'ready' | 'joining' | 'joined' | 'error';
   message?: string;
 }
+
+/**
+ * Response of `/family/secure-call/heartbeat/:linkToken`.
+ *
+ * The family browser has no trustworthy clock of its own: the kiosk bills from
+ * the backend's wall clock, so the countdown shown here is anchored to
+ * `serverTime` and derived from the server's own `mediaConnectedAt`. Without
+ * this the two sides visibly drift apart mid-call.
+ */
+export interface CallTimerStatus {
+  ok: boolean;
+  done?: boolean;
+  /** Backend wall clock as an ISO string (the billing clock). */
+  serverTime: string;
+  status: string;
+  startTime: string | null;
+  /** Backend ms when media first connected — the billing anchor. */
+  mediaConnectedAt: string | null;
+  maxDurationMinutes: number;
+  ratePerMinute: number;
+  inmateName: string | null;
+  contactName: string | null;
+}

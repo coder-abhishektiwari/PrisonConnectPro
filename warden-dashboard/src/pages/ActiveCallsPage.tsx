@@ -6,6 +6,7 @@ import { Loading } from '@/components/States';
 import { wardenApi } from '@/services/api/wardenApi';
 import { useWardenSocket } from '@/hooks/useWardenSocket';
 import { usePageHeader } from '@/context/PageHeaderContext';
+import { inmateLabel, contactLabel } from '@/utils/names';
 import type { ActiveCall, ListParams } from '@/services/api/wardenApi';
 
 const PAGE_SIZE = 20;
@@ -151,7 +152,7 @@ export function ActiveCallsPage() {
                         </div>
                         <div className="min-w-0">
                           <p className="text-[11px] font-bold text-primary-600 uppercase tracking-wide">Inmate</p>
-                          <p className="text-sm font-semibold text-neutral-900 truncate">{call.inmateName || call.inmateId}</p>
+                          <p className="text-sm font-semibold text-neutral-900 truncate">{inmateLabel(call)}</p>
                           <p className="text-xs text-neutral-500 truncate">{call.inmateId} • {call.kioskId}</p>
                         </div>
                       </div>
@@ -161,7 +162,7 @@ export function ActiveCallsPage() {
                         </div>
                         <div className="min-w-0">
                           <p className="text-[11px] font-bold text-info uppercase tracking-wide">Family</p>
-                          <p className="text-sm font-semibold text-neutral-900 truncate">{call.familyMemberName || call.contactId}</p>
+                          <p className="text-sm font-semibold text-neutral-900 truncate">{contactLabel(call)}</p>
                           <p className="text-xs text-neutral-500 truncate">{call.contactId}</p>
                         </div>
                       </div>
@@ -204,8 +205,8 @@ export function ActiveCallsPage() {
               <h3 className="text-lg font-bold text-neutral-900">Force Disconnect?</h3>
               <p className="text-sm text-neutral-600 mt-2 leading-relaxed">
                 End live call <span className="font-mono font-bold text-neutral-900">{confirmForceEnd.callId}</span> (started {formatStartedAt(confirmForceEnd.startTime)} • {formatDuration(confirmForceEnd.durationMinutes)}) between{' '}
-                <span className="font-semibold text-neutral-900">{confirmForceEnd.inmateName || confirmForceEnd.inmateId}</span> and{' '}
-                <span className="font-semibold text-neutral-900">{confirmForceEnd.familyMemberName || confirmForceEnd.contactId}</span>.
+                <span className="font-semibold text-neutral-900">{inmateLabel(confirmForceEnd)}</span> and{' '}
+                <span className="font-semibold text-neutral-900">{contactLabel(confirmForceEnd)}</span>.
               </p>
               <div className="flex gap-3 justify-end mt-6">
                 <button onClick={() => setConfirmForceEnd(null)} className="px-5 py-2.5 bg-white border border-neutral-200 text-neutral-900 rounded-xl text-sm font-semibold hover:bg-neutral-50">Cancel</button>

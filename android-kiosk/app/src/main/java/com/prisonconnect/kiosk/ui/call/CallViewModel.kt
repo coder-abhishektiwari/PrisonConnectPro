@@ -45,6 +45,8 @@ class CallViewModel @Inject constructor(
     val familyLeft: StateFlow<Boolean> = engine.familyLeft
     val liveCost: StateFlow<Double> = engine.liveCost
     val maxCallSeconds: StateFlow<Int> = engine.maxCallSeconds
+    val endLabel: StateFlow<String?> = engine.endLabel
+    val connectionQuality: StateFlow<String> = engine.connectionQuality
 
     val eglContext: EglBase.Context
         get() = engine.eglContext

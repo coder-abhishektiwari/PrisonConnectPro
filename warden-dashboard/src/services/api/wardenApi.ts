@@ -22,6 +22,7 @@ export interface ActiveCall {
   iceState: string;
   inmateName?: string;
   familyMemberName?: string;
+  contactName?: string;
   roomIdLabel?: string;
 }
 

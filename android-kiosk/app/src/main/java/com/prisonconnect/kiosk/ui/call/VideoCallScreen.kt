@@ -139,6 +139,8 @@ fun VideoCallScreen(
     val remoteTrack by viewModel.remoteVideoTrack.collectAsState()
     val liveCost by viewModel.liveCost.collectAsState()
     val maxCallSeconds by viewModel.maxCallSeconds.collectAsState()
+    val endLabel by viewModel.endLabel.collectAsState()
+    val connectionQuality by viewModel.connectionQuality.collectAsState()
 
     var hasPermissions by remember {
         mutableStateOf(
@@ -210,6 +212,8 @@ fun VideoCallScreen(
             eglContext = viewModel.eglContext,
             liveCost = liveCost,
             maxCallSeconds = maxCallSeconds,
+            endLabel = endLabel,
+            connectionQuality = connectionQuality,
             onMuteToggle = { viewModel.toggleMute() },
             onVideoToggle = { viewModel.toggleCamera() },
             onSpeakerToggle = { viewModel.toggleSpeaker() },
@@ -289,6 +293,8 @@ fun VideoCallContent(
     eglContext: org.webrtc.EglBase.Context?,
     liveCost: Double,
     maxCallSeconds: Int,
+    endLabel: String? = null,
+    connectionQuality: String = "unknown",
     onMuteToggle: () -> Unit,
     onVideoToggle: () -> Unit,
     onSpeakerToggle: () -> Unit,
@@ -366,7 +372,7 @@ fun VideoCallContent(
                             CallUIState.WAITING -> "Waiting for $contactName..."
                             CallUIState.RECONNECTING -> "Reconnecting..."
                             CallUIState.FAILED -> "Call Failed"
-                            CallUIState.DISCONNECTED -> "Call ended"
+                            CallUIState.DISCONNECTED -> endLabel ?: "Call ended"
                             else -> "Connecting..."
                         },
                         color = Color.White,
@@ -497,7 +503,7 @@ fun VideoCallContent(
                             )
                         }
                         Text(
-                            text = "Inmate: ${inmateProfile?.let { "${it.firstName} ${it.lastName}" } ?: "User"} | $contactName",
+                            text = "Inmate: ${inmateProfile?.displayName ?: "Unknown"} | $contactName",
                             color = Color.White.copy(alpha = 0.8f),
                             fontSize = 11.sp,
                             maxLines = 1,
@@ -506,6 +512,10 @@ fun VideoCallContent(
                     }
 
                     Spacer(modifier = Modifier.width(8.dp))
+
+                    // Live connection quality — sampled from the peer
+                    // connection, so a bad line is visible instead of silent.
+                    QualityChip(connectionQuality)
 
                     // Timer Chip
                     Surface(
@@ -544,6 +554,34 @@ fun VideoCallContent(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "Connection lost. Reconnecting...",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                }
+            }
+        }
+
+        // 4b. POOR NETWORK QUALITY (video is still up, audio will break up)
+        if (connectionQuality == "poor") {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+                    .padding(horizontal = 24.dp, vertical = 120.dp)
+                    .zIndex(4f),
+                color = AlertRed,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(Icons.Default.SignalCellularAlt, contentDescription = null, tint = Color.White)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Poor network quality — audio may break up",
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp
@@ -711,7 +749,7 @@ fun VideoCallContent(
                         ) {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text("Inmate:", fontSize = 12.sp, color = TextGray)
-                                Text(inmateProfile?.let { "${it.firstName} ${it.lastName}" } ?: "Inmate", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextDark)
+                                Text(inmateProfile?.displayName ?: "Inmate", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextDark)
                             }
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text("Contact:", fontSize = 12.sp, color = TextGray)
@@ -766,6 +804,45 @@ fun VideoActionButton(
             fontSize = 9.sp,
             fontWeight = FontWeight.Medium
         )
+    }
+}
+
+/**
+ * Compact live-quality pill for the call header. Values come from
+ * [com.prisonconnect.kiosk.ui.call.CallEngine.connectionQuality], which samples
+ * the peer connection once a second — this chip never reports a fixed state.
+ */
+@Composable
+private fun QualityChip(quality: String) {
+    val (label, tint) = when (quality) {
+        "excellent" -> "Excellent" to AccentGreen
+        "good" -> "Stable" to AccentGreen
+        "fair" -> "Fair" to WarningOrange
+        "poor" -> "Poor network" to AlertRed
+        else -> "Measuring…" to TextGray
+    }
+    Surface(
+        color = tint.copy(alpha = 0.22f),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.SignalCellularAlt,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(12.dp)
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text = label,
+                color = Color.White,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
     }
 }
 

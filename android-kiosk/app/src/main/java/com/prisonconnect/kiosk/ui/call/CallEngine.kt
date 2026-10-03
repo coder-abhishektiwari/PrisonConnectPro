@@ -5,6 +5,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import com.prisonconnect.kiosk.R
 import com.prisonconnect.kiosk.core.Constants
 import com.prisonconnect.kiosk.core.Logger
 import com.prisonconnect.kiosk.models.call.CallStatusSnapshot
@@ -151,9 +152,26 @@ class CallEngine @Inject constructor(
     private val _maxCallSeconds = MutableStateFlow(MAX_CALL_SECONDS)
     val maxCallSeconds = _maxCallSeconds.asStateFlow()
 
+    /**
+     * User-facing reason the call just ended, or null for a plain hangup.
+     * Set once in [endSession] and consumed by the call screen and the
+     * receipt, so a time-limit cut never looks like a normal hangup.
+     */
+    private val _endLabel = MutableStateFlow<String?>(null)
+    val endLabel: StateFlow<String?> = _endLabel.asStateFlow()
+
     /** UI badge: the kiosk always records calls (KioskCallRecorder). */
     private val _isRecording = MutableStateFlow(true)
     val isRecording = _isRecording.asStateFlow()
+
+    /**
+     * Live WebRTC quality ("excellent" | "good" | "fair" | "poor" | "unknown"),
+     * sampled every second off the peer connection. Drives the on-screen
+     * connection badge — the old badge was a hardcoded green "Stable
+     * Connection" that lied even when the line had collapsed.
+     */
+    private val _connectionQuality = MutableStateFlow("unknown")
+    val connectionQuality = _connectionQuality.asStateFlow()
 
     var activeCallId: String? = null
         private set
@@ -362,6 +380,8 @@ class CallEngine @Inject constructor(
         _ratePerMinute.value = 0.0
         _liveCost.value = 0.0
         _maxCallSeconds.value = MAX_CALL_SECONDS
+        _endLabel.value = null
+        _connectionQuality.value = "unknown"
         _callState.value = CallUIState.WAITING
         timerJob?.cancel(); timerJob = null
         reconnectJob?.cancel(); reconnectJob = null
@@ -450,55 +470,61 @@ class CallEngine @Inject constructor(
 
     private fun startTimer() {
         if (timerJob != null) return
-        // Timer runs ONLY while the media session is CONNECTED — wall-clock
-        // waiting for the family to answer never counts against the quota.
+        // Drive the timer off the CLOCK, not off rtcConnectionState emissions.
+        // connectionState is a StateFlow, which only re-emits when its value
+        // actually changes — so the previous `collect { delay(1000) ... }`
+        // form ticked exactly once after connect and then parked forever
+        // waiting for a change that never comes while the call is healthy.
+        // That meant `_timerSeconds >= _maxCallSeconds` could never become
+        // true and the auto-end never fired: the call ran past its limit.
+        //
+        // Waiting for the family to answer (or a mid-call network dip) still
+        // never counts against the quota — the tick is skipped unless media
+        // is CONNECTED right now.
         timerJob = scope.launch {
-            var connected = false
-            rtcConnectionState.collect { state ->
-                if (state == PeerConnection.PeerConnectionState.CONNECTED) {
-                    connected = true
-                } else if (state == PeerConnection.PeerConnectionState.DISCONNECTED ||
-                    state == PeerConnection.PeerConnectionState.FAILED ||
-                    state == PeerConnection.PeerConnectionState.CLOSED
-                ) {
-                    connected = false
-                }
-                if (connected) {
-                    delay(1000)
-                    _timerSeconds.value++
-                    // Live billing: charge the new minute the moment it starts
-                    // (ceiling), even if it is not consumed in full.
-                    val billedMinutes = kotlin.math.ceil(_timerSeconds.value / 60.0).toInt()
-                    _liveCost.value = billedMinutes * _ratePerMinute.value
-                    // Max call duration: warden-controlled via the dashboard;
-                    // the call auto-ends when the limit of connected talk time
-                    // is reached.
-                    if (_timerSeconds.value >= _maxCallSeconds.value) {
-                        Logger.d("Max call duration (${MAX_CALL_SECONDS}s) reached - ending call")
-                        // Fully tear down the session (state -> DISCONNECTED,
-                        // finalize the backend record) so the UI navigates off
-                        // instead of leaving a dead call screen.
-                        endSession(
-                            reason = "timeout",
-                            description = "Call ended — maximum duration reached"
-                        )
-                    }
+            while (callSessionActive) {
+                delay(1000)
+                if (!callSessionActive) break
+                if (rtcConnectionState.value != PeerConnection.PeerConnectionState.CONNECTED) continue
+                _timerSeconds.value++
+                // Live billing: charge the new minute the moment it starts
+                // (ceiling), even if it is not consumed in full.
+                val billedMinutes = kotlin.math.ceil(_timerSeconds.value / 60.0).toInt()
+                _liveCost.value = billedMinutes * _ratePerMinute.value
+                // Max call duration: warden-controlled via the dashboard;
+                // the call auto-ends when the limit of connected talk time
+                // is reached.
+                if (_timerSeconds.value >= _maxCallSeconds.value) {
+                    Logger.d("Max call duration (${_maxCallSeconds.value}s) reached - ending call")
+                    // Fully tear down the session (state -> DISCONNECTED,
+                    // finalize the backend record) so the UI navigates off
+                    // instead of leaving a dead call screen.
+                    endSession(
+                        reason = "timeout",
+                        description = "Call ended — maximum duration reached"
+                    )
+                    break
                 }
             }
         }
     }
 
     /**
-     * Periodic stats reporting: sends connection quality + recording status
-     * to the backend every 5s so the warden dashboard shows live updates.
+     * Periodic stats reporting: samples connection quality every second for the
+     * on-screen badge, and ships it to the backend every 5s so the warden
+     * dashboard shows live updates too.
      */
     private fun startStatsReporting() {
         statsReportJob?.cancel()
         statsReportJob = scope.launch {
+            var lastReportAt = 0L
             while (callSessionActive) {
-                delay(5000)
-                val callId = activeCallId ?: continue
+                delay(1000)
                 val snapshot = webRtcManager.getQualitySnapshot()
+                _connectionQuality.value = snapshot.quality
+                if (System.currentTimeMillis() - lastReportAt < 5000) continue
+                val callId = activeCallId ?: continue
+                lastReportAt = System.currentTimeMillis()
                 val recordingStatus = if (_isRecording.value) "recording" else "inactive"
                 callRepository.reportStats(
                     callId,
@@ -552,19 +578,10 @@ class CallEngine @Inject constructor(
                 endedInState == CallUIState.RECONNECTING
 
         val wasActive = callSessionActive
-        callSessionActive = false
-        pollJob?.cancel(); pollJob = null
-        timerJob?.cancel(); timerJob = null
-        statsReportJob?.cancel(); statsReportJob = null
-        reconnectJob?.cancel(); reconnectJob = null
-        peerLeftGraceJob?.cancel(); peerLeftGraceJob = null
-        webRtcManager.endCall()
-        _timerSeconds.value = 0
-        _callState.value = terminalState
-        activeRoomId = null
 
         // Backend end reason: real state drives it, so a failed call no longer
-        // reports itself as "completed".
+        // reports itself as "completed". Computed before anything is mutated so
+        // it can also drive the hangup reason sent to the peer.
         val endReason = reason ?: when {
             terminalState == CallUIState.FAILED && wasConnected -> "network_lost"
             terminalState == CallUIState.FAILED -> "webrtc_failed"
@@ -581,6 +598,26 @@ class CallEngine @Inject constructor(
             endedInState == CallUIState.RECONNECTING -> "Call ended — connection unstable"
             else -> null
         }
+
+        // What the receipt and the call screen tell the inmate. Only a time
+        // limit earns a specific label — everything else stays "Call ended".
+        _endLabel.value = if (wasActive && endReason == "timeout") {
+            context.getString(R.string.max_duration_reached, (maxCallSeconds.value + 59) / 60)
+        } else null
+
+        callSessionActive = false
+        pollJob?.cancel(); pollJob = null
+        timerJob?.cancel(); timerJob = null
+        statsReportJob?.cancel(); statsReportJob = null
+        reconnectJob?.cancel(); reconnectJob = null
+        peerLeftGraceJob?.cancel(); peerLeftGraceJob = null
+        // Forward the timeout so the family browser shows the same reason
+        // instead of treating it as an ordinary hangup.
+        webRtcManager.endCall(hangupReason = if (endReason == "timeout") "timeout" else null)
+        _timerSeconds.value = 0
+        _callState.value = terminalState
+        activeRoomId = null
+
         if (!wasActive) return
         val request = EndCallRequest(
             endReason = endReason,

@@ -8,6 +8,7 @@ import { useWardenSocket } from '@/hooks/useWardenSocket';
 import { usePageHeader } from '@/context/PageHeaderContext';
 import { FilterDropdown } from '@/components/FilterDropdown';
 import type { ColumnFilter } from '@/components/FilterDropdown';
+import { inmateLabel, contactLabel } from '@/utils/names';
 import ExcelJS from 'exceljs';
 
 import type { CallHistoryItem, Recording, Inmate, CallHistoryParams } from '@/services/api/wardenApi';
@@ -125,8 +126,8 @@ export function CallHistoryPage() {
     rows.forEach((c) => {
       const rec = recordings[c.callId];
       const row = ws.addRow([
-        c.callId, fmtDate(c.startTime), inmates[c.inmateId]?.name || c.inmateId,
-        c.familyMemberName || '', c.kioskId, c.type, fmtDur(c.durationMinutes),
+        c.callId, fmtDate(c.startTime), inmateLabel(c, inmates[c.inmateId]),
+        contactLabel(c), c.kioskId, c.type, fmtDur(c.durationMinutes),
         c.status, c.connectionQuality || '', rec?.url ? 'Yes' : 'No'
       ]);
       row.eachCell((cell) => { cell.numFmt = '@'; });
@@ -261,8 +262,8 @@ export function CallHistoryPage() {
                 {calls.map((call) => {
                   const rec = recordings[call.callId];
                   const inmate = inmates[call.inmateId];
-                  const isInmateName = inmate?.name || call.inmateName || call.inmateId;
-                  const familyName = call.contactName || call.familyMemberName || '—';
+                  const isInmateName = inmateLabel(call, inmate);
+                  const familyName = contactLabel(call);
                   const isLive = call.status === 'active';
 
                   return (
@@ -386,9 +387,9 @@ export function CallHistoryPage() {
                   <div className="bg-neutral-50 rounded-xl p-4 border border-neutral-200">
                     <p className="text-[11px] font-bold text-primary-600 uppercase tracking-wide mb-2">Participants</p>
                     <div className="space-y-2">
-                      <div className="flex justify-between"><span className="text-sm text-neutral-600">Inmate</span><span className="text-sm font-semibold text-neutral-900">{inmates[selected.inmateId]?.name || selected.inmateName || selected.inmateId}</span></div>
+                      <div className="flex justify-between"><span className="text-sm text-neutral-600">Inmate</span><span className="text-sm font-semibold text-neutral-900">{inmateLabel(selected, inmates[selected.inmateId])}</span></div>
                       <div className="flex justify-between"><span className="text-sm text-neutral-600">Inmate ID</span><span className="text-sm font-mono text-neutral-900">{selected.inmateId}</span></div>
-                      <div className="flex justify-between"><span className="text-sm text-neutral-600">Family Member</span><span className="text-sm font-semibold text-neutral-900">{selected.contactName || selected.familyMemberName || '—'}</span></div>
+                      <div className="flex justify-between"><span className="text-sm text-neutral-600">Family Member</span><span className="text-sm font-semibold text-neutral-900">{contactLabel(selected)}</span></div>
                       <div className="flex justify-between"><span className="text-sm text-neutral-600">Contact ID</span><span className="text-sm font-mono text-neutral-900">{selected.contactId}</span></div>
                     </div>
                   </div>

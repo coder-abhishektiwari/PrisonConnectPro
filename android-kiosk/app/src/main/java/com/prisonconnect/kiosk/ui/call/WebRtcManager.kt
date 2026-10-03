@@ -598,7 +598,7 @@ class WebRtcManager @Inject constructor(
         audioManager.isSpeakerphoneOn = on
     }
 
-    fun endCall(context: Context? = null) {
+    fun endCall(context: Context? = null, hangupReason: String? = null) {
         // Invalidate every in-flight async callback for this session.
         sessionGen++
 
@@ -614,7 +614,7 @@ class WebRtcManager @Inject constructor(
 
         if (hadRealSession) {
             // Tell the other peer FIRST so it ends instantly too, then leave.
-            callRepository.sendCallEnded()
+            callRepository.sendCallEnded(hangupReason ?: "hangup")
             callRepository.leaveRoom(roomId, peerId)
         }
         signalingJob?.cancel()

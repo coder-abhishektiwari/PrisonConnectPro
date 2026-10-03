@@ -227,7 +227,7 @@ class SessionManager @Inject constructor(
     suspend fun saveInmateProfile(inmate: InmateProfile) {
         context.dataStore.edit { prefs ->
             prefs[KEY_INMATE_ID] = inmate.inmateId
-            prefs[KEY_INMATE_NAME] = "${inmate.firstName} ${inmate.lastName}"
+            prefs[KEY_INMATE_NAME] = inmate.displayName
         }
     }
 
