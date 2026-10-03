@@ -5,10 +5,14 @@
   "description": "Prison Video Calling & Monitoring System Workspace",
   "workspaces": [
     "family-web",
-    "warden-dashboard"
+    "warden-dashboard",
+    "backend",
+    "signaling-server"
   ],
   "scripts": {
     "lint": "npm run lint --workspace=family-web && npm run lint --workspace=warden-dashboard",
+    "backend": "npm run start --workspace=backend",
+    "signaling": "npm run start --workspace=signaling-server",
     "format:check": "prettier --check \"**/*.{ts,tsx,json,md}\"",
     "format:write": "prettier --write \"**/*.{ts,tsx,json,md}\""
   },
