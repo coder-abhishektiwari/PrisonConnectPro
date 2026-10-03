@@ -804,6 +804,7 @@ export interface KioskItem {
   firmwareVersion?: string;
   appVersion?: string;
   lastSeen?: string;
+  lastHeartbeatAt?: string | null;
   createdAt?: string;
   updatedAt?: string;
   hardware?: Record<string, unknown>;
@@ -847,6 +848,7 @@ export interface KioskStats {
   status: string;
   authorizationStatus: string;
   lastSeen: string | null;
+  lastHeartbeatAt: string | null;
   installationDate: string | null;
   ward: string | null;
   wards: string[];

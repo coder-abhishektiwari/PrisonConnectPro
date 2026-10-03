@@ -114,6 +114,11 @@ function deriveCols(reg, data) {
   const out = {};
   for (const [key, col] of Object.entries(reg.cols)) {
     const v = data[key];
+    // `undefined` means the document does not carry this value at all (e.g.
+    // `uid`, a SERIAL the database owns). Writing NULL would either wipe a
+    // generated value or violate a NOT NULL constraint, so the column is left
+    // alone for the database to keep or default.
+    if (v === undefined) continue;
     out[col] = v == null || v === '' ? null : v;
   }
   return out;
@@ -135,8 +140,22 @@ const CACHE_TTL_MS = 10_000; // 10 seconds
 
 async function readAll(reg) {
   const table = reg.table;
-  const { rows } = await pool.query(`SELECT data FROM ${table}`);
-  const docs = rows.map((r) => r.data);
+  const colEntries = Object.entries(reg.cols);
+  const columns = ['id', 'data', ...colEntries.map(([, col]) => `"${col}"`)];
+  const { rows } = await pool.query(`SELECT ${columns.join(', ')} FROM ${table}`);
+  // Documents live in `data`, but the relational columns (prison_id, serial,
+  // uid, ...) are authoritative for the fields they index. Fold them back in
+  // wherever the document does not carry its own value, so a round-trip never
+  // loses a generated column and `deriveCols` sees what the row actually has.
+  const docs = rows.map((r) => {
+    const doc = r.data || {};
+    const fromCols = {};
+    if (reg.idKey && doc[reg.idKey] == null && r.id != null) fromCols[reg.idKey] = r.id;
+    for (const [key, col] of colEntries) {
+      if (doc[key] == null && r[col] != null) fromCols[key] = r[col];
+    }
+    return { ...fromCols, ...doc };
+  });
   const bad = docs.filter((d) => d == null);
   if (bad.length) {
     console.error(`[db] readAll(${table}): ${bad.length}/${docs.length} rows have NULL data`);

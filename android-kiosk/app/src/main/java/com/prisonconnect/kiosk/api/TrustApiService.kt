@@ -80,6 +80,10 @@ interface TrustApiService {
     @GET("kiosks/registration-status/{serialNumber}")
     suspend fun getRegistrationStatus(@Path("serialNumber") serialNumber: String): ApiResponse<RegistrationStatusResponse>
 
+    /** Liveness ping — keeps the warden dashboard's Online/Offline and Last Seen honest. */
+    @POST("kiosks/heartbeat")
+    suspend fun heartbeat(@Body request: KioskHeartbeatRequest): ApiResponse<KioskHeartbeatResponse>
+
 
     @GET("inmate/profile/{id}")
     suspend fun getInmateProfile(@Path("id") id: String): ApiResponse<InmateProfile>

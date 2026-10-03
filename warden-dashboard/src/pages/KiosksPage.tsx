@@ -7,6 +7,19 @@ import { useToast } from '@/hooks/useToast';
 import { usePageHeader } from '@/context/PageHeaderContext';
 import { wardenApi, KioskItem } from '@/services/api/wardenApi';
 
+// 'online'/'offline' come from the device heartbeat; the rest are the states
+// a warden sets (or that registration leaves behind).
+const STATUS_STYLES: Record<string, string> = {
+  online: 'bg-success/10 text-success border border-success/20',
+  active: 'bg-success/10 text-success border border-success/20',
+  offline: 'bg-neutral-100 text-neutral-500 border border-neutral-300',
+  disabled: 'bg-error/10 text-error border border-error/20',
+  maintenance: 'bg-warning/10 text-warning border border-warning/20',
+  pending: 'bg-warning/10 text-warning border border-warning/20',
+};
+
+const statusStyle = (status?: string) => STATUS_STYLES[status || ''] || STATUS_STYLES.pending;
+
 export function KiosksPage() {
   const [kiosks, setKiosks] = useState<KioskItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -135,11 +148,7 @@ export function KiosksPage() {
                     </td>
                     <td className="py-3 px-4 text-sm text-neutral-600">{k.androidVersion || '—'}</td>
                     <td className="py-3 px-4">
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-bold capitalize ${
-                        k.status === 'active' ? 'bg-success/10 text-success border border-success/20' :
-                        k.status === 'disabled' ? 'bg-error/10 text-error border border-error/20' :
-                        'bg-warning/10 text-warning border border-warning/20'
-                      }`}>{k.status || 'pending'}</span>
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-bold capitalize ${statusStyle(k.status)}`}>{k.status || 'pending'}</span>
                     </td>
                     <td className="py-3 px-4 text-sm text-neutral-600">
                       {k.lastSeen ? new Date(k.lastSeen).toLocaleString('en-IN') : '—'}

@@ -110,3 +110,18 @@ data class RegistrationStatusResponse(
     @SerializedName("authorized") val authorized: Boolean = false,
     @SerializedName("rejectionReason") val rejectionReason: String? = null
 )
+
+/** Liveness ping posted while the kiosk runs — drives Online/Offline + Last Seen. */
+data class KioskHeartbeatRequest(
+    @SerializedName("deviceSerialNumber") val deviceSerialNumber: String,
+    @SerializedName("deviceFingerprint") val deviceFingerprint: String? = null,
+    @SerializedName("androidVersion") val androidVersion: String,
+    @SerializedName("appVersion") val appVersion: String
+)
+
+data class KioskHeartbeatResponse(
+    @SerializedName("ok") val ok: Boolean = false,
+    @SerializedName("kioskId") val kioskId: String? = null,
+    @SerializedName("status") val status: String? = null,
+    @SerializedName("lastSeen") val lastSeen: String? = null
+)

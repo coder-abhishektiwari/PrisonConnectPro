@@ -24,7 +24,8 @@ function Meta({ label, value }: { label: string; value?: string | null }) {
 }
 
 function statusClasses(status?: string) {
-  if (status === 'active') return 'bg-success/10 text-success border border-success/20';
+  if (status === 'online' || status === 'active') return 'bg-success/10 text-success border border-success/20';
+  if (status === 'offline') return 'bg-neutral-100 text-neutral-500 border border-neutral-300';
   if (status === 'disabled') return 'bg-error/10 text-error border border-error/20';
   return 'bg-warning/10 text-warning border border-warning/20';
 }

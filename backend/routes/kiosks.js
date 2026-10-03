@@ -73,6 +73,32 @@ function wardLabel(inmate, blockMap) {
   return (inmate.blockId && blockMap.get(inmate.blockId)) || inmate.blockName || inmate.cellBlock || '';
 }
 
+// ==================== DEVICE LIVENESS ====================
+// The kiosk app posts a heartbeat every 30s while it runs. `lastHeartbeatAt`
+// is the only field liveness is derived from — stored `status` flags go stale
+// the moment they are written, so they are never trusted for online/offline.
+const HEARTBEAT_INTERVAL_MS = 30_000;
+const HEARTBEAT_GRACE_MS = 4 * HEARTBEAT_INTERVAL_MS;
+
+function kioskLive(k) {
+  const beat = parseWhen(k?.lastHeartbeatAt);
+  if (!beat) return { online: false, lastSeen: parseWhen(k?.lastSeen) ? k.lastSeen : null };
+  return {
+    online: Date.now() - beat.getTime() <= HEARTBEAT_GRACE_MS,
+    lastSeen: beat.toISOString(),
+  };
+}
+
+// Read-model status: authorization state wins (pending/disabled/maintenance
+// are things a warden set), otherwise the device's real connectivity.
+function kioskDisplayStatus(k) {
+  if (!k) return 'unknown';
+  if (k.authorizationStatus === 'unauthorized' || k.status === 'disabled') return 'disabled';
+  if (k.authorizationStatus !== 'authorized') return 'pending';
+  if (k.status === 'maintenance') return 'maintenance';
+  return kioskLive(k).online ? 'online' : 'offline';
+}
+
 
 // ==================== INPUT SANITIZATION ====================
 function sanitize(str) {
@@ -137,6 +163,57 @@ router.post('/verify', asyncRoute(async (req, res) => {
       location: kiosk.location,
       ipAddress: kiosk.ipAddress
     }
+  });
+}));
+
+// ==================== KIOSK LIVENESS HEARTBEAT (public — device side) ====================
+// The kiosk posts this while it runs so the dashboard can show a truthful
+// Online/Offline state and Last Seen. It only ever refreshes liveness and
+// device facts — it can never authorize, approve or move a kiosk.
+router.post('/heartbeat', asyncRoute(async (req, res) => {
+  if (!checkRateLimit(`heartbeat:${req.ip}`, 30, 60000)) {
+    return sendError(res, 'RATE_LIMITED', 'Too many heartbeats, slow down', 429);
+  }
+
+  const body = req.body || {};
+  const deviceSerialNumber = typeof body.deviceSerialNumber === 'string' ? body.deviceSerialNumber.trim() : '';
+  const deviceFingerprint =
+    (typeof body.deviceFingerprint === 'string' && body.deviceFingerprint.trim()) ||
+    (req.get('X-Device-Fingerprint') || '').trim();
+
+  if (!deviceSerialNumber && !deviceFingerprint) {
+    return sendError(res, 'INVALID_REQUEST', 'deviceSerialNumber or X-Device-Fingerprint is required', 400);
+  }
+
+  const kiosks = await readDb('kiosks.json');
+  const match = kiosks.find((k) =>
+    (deviceSerialNumber && k.deviceSerialNumber === deviceSerialNumber) ||
+    (deviceFingerprint && k.deviceFingerprint === deviceFingerprint)
+  );
+  if (!match) return sendError(res, 'NOT_FOUND', 'Unknown kiosk device', 404);
+
+  const now = new Date().toISOString();
+  const ipAddress = (req.get('X-Device-IP') || '').trim() || body.ipAddress || match.ipAddress;
+  const updated = await updateDb('kiosks.json', (rows) => {
+    const idx = rows.findIndex((k) => k.kioskId === match.kioskId);
+    if (idx === -1) return { data: rows, result: null };
+    rows[idx] = {
+      ...rows[idx],
+      lastHeartbeatAt: now,
+      lastSeen: now,
+      ipAddress,
+      androidVersion: body.androidVersion || rows[idx].androidVersion,
+      firmwareVersion: body.appVersion || rows[idx].firmwareVersion,
+    };
+    return { data: rows, result: rows[idx] };
+  });
+  if (!updated) return sendError(res, 'NOT_FOUND', 'Unknown kiosk device', 404);
+
+  return sendSuccess(res, {
+    ok: true,
+    kioskId: updated.kioskId,
+    status: kioskDisplayStatus(updated),
+    lastSeen: updated.lastSeen,
   });
 }));
 
@@ -458,6 +535,10 @@ router.get('/', requireAuth, requireRole('admin', 'warden', 'super-admin', 'supe
       const wards = [...(wardSet.get(k.kioskId) || [])];
       return {
         ...k,
+        // Liveness is derived from the device's heartbeat, not the stored flag.
+        status: kioskDisplayStatus(k),
+        lastSeen: kioskLive(k).lastSeen,
+        lastHeartbeatAt: k.lastHeartbeatAt || null,
         // Where the assigned prisoners actually live is the only truthful
         // source — a kiosk has no cell range of its own, and every device that
         // went through registration leaves assignedBlock null.
@@ -537,9 +618,10 @@ router.get('/:kioskId/stats', requireAuth, requireRole('admin', 'warden', 'super
     location: kiosk.location || null,
     ipAddress: kiosk.ipAddress || null,
     androidVersion: kiosk.androidVersion || null,
-    status: kiosk.status || 'pending',
+    status: kioskDisplayStatus(kiosk),
     authorizationStatus: kiosk.authorizationStatus || 'pending',
-    lastSeen: kiosk.lastSeen || null,
+    lastSeen: kioskLive(kiosk).lastSeen,
+    lastHeartbeatAt: kiosk.lastHeartbeatAt || null,
     installationDate: kiosk.installationDate || null,
     ward: wards.length ? wards.join(', ') : null,
     wards,
