@@ -815,9 +815,7 @@ export interface KioskItem {
   assignedBlock?: string;
   assignedCellArea?: string;
   ward?: string | null;
-  cellArea?: string | null;
   wards?: string[];
-  areas?: string[];
   registeredInmates?: number;
 }
 
@@ -851,9 +849,7 @@ export interface KioskStats {
   lastSeen: string | null;
   installationDate: string | null;
   ward: string | null;
-  cellArea: string | null;
   wards: string[];
-  areas: string[];
   registeredInmates: number;
   today: KioskPeriodStats;
   month: KioskPeriodStats;

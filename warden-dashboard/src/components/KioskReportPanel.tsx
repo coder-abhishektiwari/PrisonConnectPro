@@ -125,8 +125,7 @@ export function KioskReportPanel({ kiosk, onClose }: KioskReportPanelProps) {
           ) : (
             <>
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-                <Meta label="Ward / Block" value={stats?.ward ?? kiosk.assignedBlock ?? kiosk.ward} />
-                <Meta label="Cell area" value={stats?.cellArea ?? kiosk.assignedCellArea ?? kiosk.cellArea} />
+                <Meta label="Ward / Block" value={stats?.ward ?? kiosk.ward} />
                 <Meta label="Serial" value={stats?.deviceSerialNumber ?? kiosk.deviceSerialNumber} />
                 <Meta label="IP address" value={stats?.ipAddress ?? kiosk.ipAddress} />
                 <Meta label="Android" value={stats?.androidVersion ?? kiosk.androidVersion} />

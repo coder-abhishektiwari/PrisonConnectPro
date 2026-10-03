@@ -66,14 +66,11 @@ function parseWhen(value) {
   return isNaN(d.getTime()) ? null : d;
 }
 
-// Ward / cell labels an inmate carries. blocks.json and cells.json are the
-// normalized sources; cellBlock is the free-text fallback.
+// Ward label an inmate carries: the normalized block first, then the
+// free-text cellBlock. There is no per-cell range on a kiosk — the ward is
+// derived from the prisoners actually registered on the device.
 function wardLabel(inmate, blockMap) {
   return (inmate.blockId && blockMap.get(inmate.blockId)) || inmate.blockName || inmate.cellBlock || '';
-}
-
-function areaLabel(inmate, cellMap) {
-  return (inmate.cellId && cellMap.get(inmate.cellId)) || inmate.cellName || '';
 }
 
 
@@ -432,21 +429,18 @@ router.patch('/registration/:requestId/reject', requireAuth, requireRole('admin'
 // ==================== KIOSK ROUTES (CRUD added — was read-only) ====================
 
 router.get('/', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
-  const [kiosks, inmates, blocks, cells] = await Promise.all([
+  const [kiosks, inmates, blocks] = await Promise.all([
     readDb('kiosks.json'),
     readDb('inmates.json'),
     readDb('blocks.json').catch(() => []),
-    readDb('cells.json').catch(() => []),
   ]);
   const inScope = adminScopeFilter(req);
   const blockMap = new Map(blocks.map((b) => [b.blockId, b.name]));
-  const cellMap = new Map(cells.map((c) => [c.cellId, c.name]));
 
   // Registered prisoners + ward labels per kiosk, counted in one pass so the
   // list stays O(inmates + kiosks) instead of issuing a query per row.
   const inmateCount = new Map();
   const wardSet = new Map();
-  const areaSet = new Map();
   for (const i of inmates) {
     if (!i.assignedKioskId || !inScope(i)) continue;
     const id = i.assignedKioskId;
@@ -456,26 +450,19 @@ router.get('/', requireAuth, requireRole('admin', 'warden', 'super-admin', 'supe
       if (!wardSet.has(id)) wardSet.set(id, new Set());
       wardSet.get(id).add(w);
     }
-    const a = areaLabel(i, cellMap);
-    if (a) {
-      if (!areaSet.has(id)) areaSet.set(id, new Set());
-      areaSet.get(id).add(a);
-    }
   }
 
   const data = kiosks
     .filter((k) => inScope(k) && !isDemoKiosk(k))
     .map((k) => {
       const wards = [...(wardSet.get(k.kioskId) || [])];
-      const areas = [...(areaSet.get(k.kioskId) || [])];
       return {
         ...k,
-        // The kiosk's own assignment wins; otherwise fall back to where its
-        // registered prisoners actually live.
-        ward: k.assignedBlock || wards[0] || null,
-        cellArea: k.assignedCellArea || areas[0] || null,
+        // Where the assigned prisoners actually live is the only truthful
+        // source — a kiosk has no cell range of its own, and every device that
+        // went through registration leaves assignedBlock null.
+        ward: wards.length ? wards.join(', ') : null,
         wards,
-        areas,
         registeredInmates: inmateCount.get(k.kioskId) || 0,
       };
     });
@@ -485,12 +472,11 @@ router.get('/', requireAuth, requireRole('admin', 'warden', 'super-admin', 'supe
 // Per-kiosk report: today / this month / all-time call counts, audio vs
 // video split, registered prisoners and the latest calls from the device.
 router.get('/:kioskId/stats', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
-  const [kiosks, inmates, calls, blocks, cells, prisons] = await Promise.all([
+  const [kiosks, inmates, calls, blocks, prisons] = await Promise.all([
     readDb('kiosks.json'),
     readDb('inmates.json'),
     readDb('calls.json'),
     readDb('blocks.json').catch(() => []),
-    readDb('cells.json').catch(() => []),
     readDb('prisons.json'),
   ]);
   const kiosk = kiosks.find((k) => k.kioskId === req.params.kioskId);
@@ -500,19 +486,14 @@ router.get('/:kioskId/stats', requireAuth, requireRole('admin', 'warden', 'super
 
   const inScope = adminScopeFilter(req);
   const blockMap = new Map(blocks.map((b) => [b.blockId, b.name]));
-  const cellMap = new Map(cells.map((c) => [c.cellId, c.name]));
 
   const registered = inmates.filter((i) => i.assignedKioskId === kiosk.kioskId && inScope(i));
   const wardSet = new Set();
-  const areaSet = new Set();
   for (const i of registered) {
     const w = wardLabel(i, blockMap);
     if (w) wardSet.add(w);
-    const a = areaLabel(i, cellMap);
-    if (a) areaSet.add(a);
   }
   const wards = [...wardSet];
-  const areas = [...areaSet];
 
   const placed = calls.filter((c) => c.kioskId === kiosk.kioskId && inScope(c) && PLACED_CALL_STATES.includes(c.status));
   const now = new Date();
@@ -560,10 +541,8 @@ router.get('/:kioskId/stats', requireAuth, requireRole('admin', 'warden', 'super
     authorizationStatus: kiosk.authorizationStatus || 'pending',
     lastSeen: kiosk.lastSeen || null,
     installationDate: kiosk.installationDate || null,
-    ward: kiosk.assignedBlock || wards[0] || null,
-    cellArea: kiosk.assignedCellArea || areas[0] || null,
+    ward: wards.length ? wards.join(', ') : null,
     wards,
-    areas,
     registeredInmates: registered.length,
     today: finish(today),
     month: finish(month),

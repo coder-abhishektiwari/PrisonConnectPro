@@ -20,15 +20,34 @@
       "ram": "4GB",
       "storage": "32GB eMMC"
     },
-    "camera": { "status": "operational", "resolution": "1080p", "lastTested": "2026-08-08T08:00:00Z" },
-    "microphone": { "status": "operational", "sensitivity": "high", "lastTested": "2026-08-08T08:00:00Z" },
-    "speaker": { "status": "operational", "volume": 70, "lastTested": "2026-08-08T08:00:00Z" },
-    "printer": { "status": "operational", "paperLevel": 75, "lastTested": "2026-08-07T18:00:00Z" },
-    "network": { "status": "connected", "type": "ethernet", "signalStrength": 90, "bandwidth": "100Mbps" },
+    "camera": {
+      "status": "operational",
+      "resolution": "1080p",
+      "lastTested": "2026-08-08T08:00:00Z"
+    },
+    "microphone": {
+      "status": "operational",
+      "sensitivity": "high",
+      "lastTested": "2026-08-08T08:00:00Z"
+    },
+    "speaker": {
+      "status": "operational",
+      "volume": 70,
+      "lastTested": "2026-08-08T08:00:00Z"
+    },
+    "printer": {
+      "status": "operational",
+      "paperLevel": 75,
+      "lastTested": "2026-08-07T18:00:00Z"
+    },
+    "network": {
+      "status": "connected",
+      "type": "ethernet",
+      "signalStrength": 90,
+      "bandwidth": "100Mbps"
+    },
     "installationDate": "2024-01-10T00:00:00Z",
-    "lastMaintenance": "2026-07-15T09:00:00Z",
-    "assignedBlock": "Block A",
-    "assignedCellArea": "Wing 1 - Cells 101-120"
+    "lastMaintenance": "2026-07-15T09:00:00Z"
   },
   {
     "kioskId": "KIOSK-002",
@@ -51,15 +70,34 @@
       "ram": "4GB",
       "storage": "32GB eMMC"
     },
-    "camera": { "status": "operational", "resolution": "1080p", "lastTested": "2026-08-08T08:05:00Z" },
-    "microphone": { "status": "operational", "sensitivity": "high", "lastTested": "2026-08-08T08:05:00Z" },
-    "speaker": { "status": "operational", "volume": 65, "lastTested": "2026-08-08T08:05:00Z" },
-    "printer": { "status": "operational", "paperLevel": 60, "lastTested": "2026-08-07T18:00:00Z" },
-    "network": { "status": "connected", "type": "ethernet", "signalStrength": 92, "bandwidth": "100Mbps" },
+    "camera": {
+      "status": "operational",
+      "resolution": "1080p",
+      "lastTested": "2026-08-08T08:05:00Z"
+    },
+    "microphone": {
+      "status": "operational",
+      "sensitivity": "high",
+      "lastTested": "2026-08-08T08:05:00Z"
+    },
+    "speaker": {
+      "status": "operational",
+      "volume": 65,
+      "lastTested": "2026-08-08T08:05:00Z"
+    },
+    "printer": {
+      "status": "operational",
+      "paperLevel": 60,
+      "lastTested": "2026-08-07T18:00:00Z"
+    },
+    "network": {
+      "status": "connected",
+      "type": "ethernet",
+      "signalStrength": 92,
+      "bandwidth": "100Mbps"
+    },
     "installationDate": "2024-01-10T00:00:00Z",
-    "lastMaintenance": "2026-06-20T10:00:00Z",
-    "assignedBlock": "Block B",
-    "assignedCellArea": "Wing 2 - Cells 201-220"
+    "lastMaintenance": "2026-06-20T10:00:00Z"
   },
   {
     "kioskId": "KIOSK-003",
@@ -82,15 +120,34 @@
       "ram": "2GB",
       "storage": "16GB eMMC"
     },
-    "camera": { "status": "operational", "resolution": "720p", "lastTested": "2026-08-08T07:55:00Z" },
-    "microphone": { "status": "operational", "sensitivity": "medium", "lastTested": "2026-08-08T07:55:00Z" },
-    "speaker": { "status": "operational", "volume": 60, "lastTested": "2026-08-08T07:55:00Z" },
-    "printer": { "status": "operational", "paperLevel": 40, "lastTested": "2026-08-07T18:00:00Z" },
-    "network": { "status": "connected", "type": "ethernet", "signalStrength": 88, "bandwidth": "100Mbps" },
+    "camera": {
+      "status": "operational",
+      "resolution": "720p",
+      "lastTested": "2026-08-08T07:55:00Z"
+    },
+    "microphone": {
+      "status": "operational",
+      "sensitivity": "medium",
+      "lastTested": "2026-08-08T07:55:00Z"
+    },
+    "speaker": {
+      "status": "operational",
+      "volume": 60,
+      "lastTested": "2026-08-08T07:55:00Z"
+    },
+    "printer": {
+      "status": "operational",
+      "paperLevel": 40,
+      "lastTested": "2026-08-07T18:00:00Z"
+    },
+    "network": {
+      "status": "connected",
+      "type": "ethernet",
+      "signalStrength": 88,
+      "bandwidth": "100Mbps"
+    },
     "installationDate": "2024-02-15T00:00:00Z",
-    "lastMaintenance": "2026-05-10T11:00:00Z",
-    "assignedBlock": "Block C",
-    "assignedCellArea": "Wing 1 - Cells 301-320"
+    "lastMaintenance": "2026-05-10T11:00:00Z"
   },
   {
     "kioskId": "KIOSK-004",
@@ -113,15 +170,35 @@
       "ram": "4GB",
       "storage": "32GB eMMC"
     },
-    "camera": { "status": "faulty", "resolution": "1080p", "lastTested": "2026-08-07T22:00:00Z", "error": "Camera module not responding" },
-    "microphone": { "status": "operational", "sensitivity": "high", "lastTested": "2026-08-07T22:00:00Z" },
-    "speaker": { "status": "operational", "volume": 70, "lastTested": "2026-08-07T22:00:00Z" },
-    "printer": { "status": "operational", "paperLevel": 75, "lastTested": "2026-08-07T18:00:00Z" },
-    "network": { "status": "connected", "type": "ethernet", "signalStrength": 90, "bandwidth": "100Mbps" },
+    "camera": {
+      "status": "faulty",
+      "resolution": "1080p",
+      "lastTested": "2026-08-07T22:00:00Z",
+      "error": "Camera module not responding"
+    },
+    "microphone": {
+      "status": "operational",
+      "sensitivity": "high",
+      "lastTested": "2026-08-07T22:00:00Z"
+    },
+    "speaker": {
+      "status": "operational",
+      "volume": 70,
+      "lastTested": "2026-08-07T22:00:00Z"
+    },
+    "printer": {
+      "status": "operational",
+      "paperLevel": 75,
+      "lastTested": "2026-08-07T18:00:00Z"
+    },
+    "network": {
+      "status": "connected",
+      "type": "ethernet",
+      "signalStrength": 90,
+      "bandwidth": "100Mbps"
+    },
     "installationDate": "2024-02-15T00:00:00Z",
-    "lastMaintenance": "2026-08-08T09:00:00Z",
-    "assignedBlock": "Block A",
-    "assignedCellArea": "Wing 2 - Cells 121-140"
+    "lastMaintenance": "2026-08-08T09:00:00Z"
   },
   {
     "kioskId": "KIOSK-005",
@@ -144,15 +221,34 @@
       "ram": "4GB",
       "storage": "32GB eMMC"
     },
-    "camera": { "status": "operational", "resolution": "1080p", "lastTested": "2026-08-08T08:10:00Z" },
-    "microphone": { "status": "operational", "sensitivity": "high", "lastTested": "2026-08-08T08:10:00Z" },
-    "speaker": { "status": "operational", "volume": 75, "lastTested": "2026-08-08T08:10:00Z" },
-    "printer": { "status": "operational", "paperLevel": 90, "lastTested": "2026-08-07T18:00:00Z" },
-    "network": { "status": "connected", "type": "ethernet", "signalStrength": 94, "bandwidth": "100Mbps" },
+    "camera": {
+      "status": "operational",
+      "resolution": "1080p",
+      "lastTested": "2026-08-08T08:10:00Z"
+    },
+    "microphone": {
+      "status": "operational",
+      "sensitivity": "high",
+      "lastTested": "2026-08-08T08:10:00Z"
+    },
+    "speaker": {
+      "status": "operational",
+      "volume": 75,
+      "lastTested": "2026-08-08T08:10:00Z"
+    },
+    "printer": {
+      "status": "operational",
+      "paperLevel": 90,
+      "lastTested": "2026-08-07T18:00:00Z"
+    },
+    "network": {
+      "status": "connected",
+      "type": "ethernet",
+      "signalStrength": 94,
+      "bandwidth": "100Mbps"
+    },
     "installationDate": "2024-03-01T00:00:00Z",
-    "lastMaintenance": "2026-07-01T14:00:00Z",
-    "assignedBlock": "Block D",
-    "assignedCellArea": "Wing 1 - Cells 401-420"
+    "lastMaintenance": "2026-07-01T14:00:00Z"
   },
   {
     "kioskId": "KIOSK-006",
@@ -175,15 +271,34 @@
       "ram": "4GB",
       "storage": "32GB eMMC"
     },
-    "camera": { "status": "operational", "resolution": "1080p", "lastTested": "2026-08-08T08:00:00Z" },
-    "microphone": { "status": "operational", "sensitivity": "high", "lastTested": "2026-08-08T08:00:00Z" },
-    "speaker": { "status": "operational", "volume": 68, "lastTested": "2026-08-08T08:00:00Z" },
-    "printer": { "status": "operational", "paperLevel": 55, "lastTested": "2026-08-07T18:00:00Z" },
-    "network": { "status": "connected", "type": "ethernet", "signalStrength": 91, "bandwidth": "100Mbps" },
+    "camera": {
+      "status": "operational",
+      "resolution": "1080p",
+      "lastTested": "2026-08-08T08:00:00Z"
+    },
+    "microphone": {
+      "status": "operational",
+      "sensitivity": "high",
+      "lastTested": "2026-08-08T08:00:00Z"
+    },
+    "speaker": {
+      "status": "operational",
+      "volume": 68,
+      "lastTested": "2026-08-08T08:00:00Z"
+    },
+    "printer": {
+      "status": "operational",
+      "paperLevel": 55,
+      "lastTested": "2026-08-07T18:00:00Z"
+    },
+    "network": {
+      "status": "connected",
+      "type": "ethernet",
+      "signalStrength": 91,
+      "bandwidth": "100Mbps"
+    },
     "installationDate": "2024-02-01T00:00:00Z",
-    "lastMaintenance": "2026-06-15T09:30:00Z",
-    "assignedBlock": "Main Block",
-    "assignedCellArea": "Wing 1 - Cells 1-20"
+    "lastMaintenance": "2026-06-15T09:30:00Z"
   },
   {
     "kioskId": "KIOSK-007",
@@ -206,15 +321,34 @@
       "ram": "2GB",
       "storage": "16GB eMMC"
     },
-    "camera": { "status": "operational", "resolution": "720p", "lastTested": "2026-08-08T07:50:00Z" },
-    "microphone": { "status": "operational", "sensitivity": "medium", "lastTested": "2026-08-08T07:50:00Z" },
-    "speaker": { "status": "operational", "volume": 62, "lastTested": "2026-08-08T07:50:00Z" },
-    "printer": { "status": "operational", "paperLevel": 70, "lastTested": "2026-08-07T18:00:00Z" },
-    "network": { "status": "connected", "type": "ethernet", "signalStrength": 89, "bandwidth": "100Mbps" },
+    "camera": {
+      "status": "operational",
+      "resolution": "720p",
+      "lastTested": "2026-08-08T07:50:00Z"
+    },
+    "microphone": {
+      "status": "operational",
+      "sensitivity": "medium",
+      "lastTested": "2026-08-08T07:50:00Z"
+    },
+    "speaker": {
+      "status": "operational",
+      "volume": 62,
+      "lastTested": "2026-08-08T07:50:00Z"
+    },
+    "printer": {
+      "status": "operational",
+      "paperLevel": 70,
+      "lastTested": "2026-08-07T18:00:00Z"
+    },
+    "network": {
+      "status": "connected",
+      "type": "ethernet",
+      "signalStrength": 89,
+      "bandwidth": "100Mbps"
+    },
     "installationDate": "2024-02-01T00:00:00Z",
-    "lastMaintenance": "2026-05-25T10:00:00Z",
-    "assignedBlock": "Main Block",
-    "assignedCellArea": "Wing 2 - Cells 21-40"
+    "lastMaintenance": "2026-05-25T10:00:00Z"
   },
   {
     "kioskId": "KIOSK-008",
@@ -237,15 +371,34 @@
       "ram": "2GB",
       "storage": "16GB eMMC"
     },
-    "camera": { "status": "unknown", "resolution": "720p", "lastTested": "2026-08-08T06:40:00Z" },
-    "microphone": { "status": "unknown", "sensitivity": "medium", "lastTested": "2026-08-08T06:40:00Z" },
-    "speaker": { "status": "unknown", "volume": 0, "lastTested": "2026-08-08T06:40:00Z" },
-    "printer": { "status": "unknown", "paperLevel": 0, "lastTested": "2026-08-08T06:40:00Z" },
-    "network": { "status": "disconnected", "type": "unknown", "signalStrength": 0, "bandwidth": "0Mbps" },
+    "camera": {
+      "status": "unknown",
+      "resolution": "720p",
+      "lastTested": "2026-08-08T06:40:00Z"
+    },
+    "microphone": {
+      "status": "unknown",
+      "sensitivity": "medium",
+      "lastTested": "2026-08-08T06:40:00Z"
+    },
+    "speaker": {
+      "status": "unknown",
+      "volume": 0,
+      "lastTested": "2026-08-08T06:40:00Z"
+    },
+    "printer": {
+      "status": "unknown",
+      "paperLevel": 0,
+      "lastTested": "2026-08-08T06:40:00Z"
+    },
+    "network": {
+      "status": "disconnected",
+      "type": "unknown",
+      "signalStrength": 0,
+      "bandwidth": "0Mbps"
+    },
     "installationDate": "2024-03-10T00:00:00Z",
-    "lastMaintenance": "2026-04-18T13:00:00Z",
-    "assignedBlock": "Block B",
-    "assignedCellArea": "Wing 1 - Cells 41-60"
+    "lastMaintenance": "2026-04-18T13:00:00Z"
   },
   {
     "kioskId": "KIOSK-009",
@@ -268,15 +421,34 @@
       "ram": "4GB",
       "storage": "32GB eMMC"
     },
-    "camera": { "status": "operational", "resolution": "1080p", "lastTested": "2026-08-08T08:15:00Z" },
-    "microphone": { "status": "operational", "sensitivity": "high", "lastTested": "2026-08-08T08:15:00Z" },
-    "speaker": { "status": "operational", "volume": 72, "lastTested": "2026-08-08T08:15:00Z" },
-    "printer": { "status": "operational", "paperLevel": 80, "lastTested": "2026-08-07T18:00:00Z" },
-    "network": { "status": "connected", "type": "ethernet", "signalStrength": 93, "bandwidth": "100Mbps" },
+    "camera": {
+      "status": "operational",
+      "resolution": "1080p",
+      "lastTested": "2026-08-08T08:15:00Z"
+    },
+    "microphone": {
+      "status": "operational",
+      "sensitivity": "high",
+      "lastTested": "2026-08-08T08:15:00Z"
+    },
+    "speaker": {
+      "status": "operational",
+      "volume": 72,
+      "lastTested": "2026-08-08T08:15:00Z"
+    },
+    "printer": {
+      "status": "operational",
+      "paperLevel": 80,
+      "lastTested": "2026-08-07T18:00:00Z"
+    },
+    "network": {
+      "status": "connected",
+      "type": "ethernet",
+      "signalStrength": 93,
+      "bandwidth": "100Mbps"
+    },
     "installationDate": "2024-03-10T00:00:00Z",
-    "lastMaintenance": "2026-07-20T09:00:00Z",
-    "assignedBlock": "Block C",
-    "assignedCellArea": "Wing 1 - Cells 61-80"
+    "lastMaintenance": "2026-07-20T09:00:00Z"
   },
   {
     "kioskId": "KIOSK-010",
@@ -299,15 +471,34 @@
       "ram": "8GB",
       "storage": "64GB eMMC"
     },
-    "camera": { "status": "operational", "resolution": "4K", "lastTested": "2026-08-08T08:00:00Z" },
-    "microphone": { "status": "operational", "sensitivity": "high", "lastTested": "2026-08-08T08:00:00Z" },
-    "speaker": { "status": "operational", "volume": 70, "lastTested": "2026-08-08T08:00:00Z" },
-    "printer": { "status": "operational", "paperLevel": 65, "lastTested": "2026-08-07T18:00:00Z" },
-    "network": { "status": "connected", "type": "ethernet", "signalStrength": 95, "bandwidth": "1Gbps" },
+    "camera": {
+      "status": "operational",
+      "resolution": "4K",
+      "lastTested": "2026-08-08T08:00:00Z"
+    },
+    "microphone": {
+      "status": "operational",
+      "sensitivity": "high",
+      "lastTested": "2026-08-08T08:00:00Z"
+    },
+    "speaker": {
+      "status": "operational",
+      "volume": 70,
+      "lastTested": "2026-08-08T08:00:00Z"
+    },
+    "printer": {
+      "status": "operational",
+      "paperLevel": 65,
+      "lastTested": "2026-08-07T18:00:00Z"
+    },
+    "network": {
+      "status": "connected",
+      "type": "ethernet",
+      "signalStrength": 95,
+      "bandwidth": "1Gbps"
+    },
     "installationDate": "2024-02-20T00:00:00Z",
-    "lastMaintenance": "2026-07-10T10:00:00Z",
-    "assignedBlock": "High Security Block",
-    "assignedCellArea": "Wing 1 - Cells HS-01 to HS-20"
+    "lastMaintenance": "2026-07-10T10:00:00Z"
   },
   {
     "kioskId": "KIOSK-011",
@@ -330,15 +521,34 @@
       "ram": "8GB",
       "storage": "64GB eMMC"
     },
-    "camera": { "status": "operational", "resolution": "4K", "lastTested": "2026-08-08T08:05:00Z" },
-    "microphone": { "status": "operational", "sensitivity": "high", "lastTested": "2026-08-08T08:05:00Z" },
-    "speaker": { "status": "operational", "volume": 68, "lastTested": "2026-08-08T08:05:00Z" },
-    "printer": { "status": "operational", "paperLevel": 50, "lastTested": "2026-08-07T18:00:00Z" },
-    "network": { "status": "connected", "type": "ethernet", "signalStrength": 94, "bandwidth": "1Gbps" },
+    "camera": {
+      "status": "operational",
+      "resolution": "4K",
+      "lastTested": "2026-08-08T08:05:00Z"
+    },
+    "microphone": {
+      "status": "operational",
+      "sensitivity": "high",
+      "lastTested": "2026-08-08T08:05:00Z"
+    },
+    "speaker": {
+      "status": "operational",
+      "volume": 68,
+      "lastTested": "2026-08-08T08:05:00Z"
+    },
+    "printer": {
+      "status": "operational",
+      "paperLevel": 50,
+      "lastTested": "2026-08-07T18:00:00Z"
+    },
+    "network": {
+      "status": "connected",
+      "type": "ethernet",
+      "signalStrength": 94,
+      "bandwidth": "1Gbps"
+    },
     "installationDate": "2024-02-20T00:00:00Z",
-    "lastMaintenance": "2026-06-28T11:00:00Z",
-    "assignedBlock": "High Security Block",
-    "assignedCellArea": "Wing 2 - Cells HS-21 to HS-40"
+    "lastMaintenance": "2026-06-28T11:00:00Z"
   },
   {
     "kioskId": "KIOSK-012",
@@ -361,15 +571,34 @@
       "ram": "4GB",
       "storage": "32GB eMMC"
     },
-    "camera": { "status": "operational", "resolution": "1080p", "lastTested": "2026-08-08T07:45:00Z" },
-    "microphone": { "status": "operational", "sensitivity": "high", "lastTested": "2026-08-08T07:45:00Z" },
-    "speaker": { "status": "operational", "volume": 60, "lastTested": "2026-08-08T07:45:00Z" },
-    "printer": { "status": "operational", "paperLevel": 30, "lastTested": "2026-08-07T18:00:00Z" },
-    "network": { "status": "connected", "type": "ethernet", "signalStrength": 87, "bandwidth": "100Mbps" },
+    "camera": {
+      "status": "operational",
+      "resolution": "1080p",
+      "lastTested": "2026-08-08T07:45:00Z"
+    },
+    "microphone": {
+      "status": "operational",
+      "sensitivity": "high",
+      "lastTested": "2026-08-08T07:45:00Z"
+    },
+    "speaker": {
+      "status": "operational",
+      "volume": 60,
+      "lastTested": "2026-08-08T07:45:00Z"
+    },
+    "printer": {
+      "status": "operational",
+      "paperLevel": 30,
+      "lastTested": "2026-08-07T18:00:00Z"
+    },
+    "network": {
+      "status": "connected",
+      "type": "ethernet",
+      "signalStrength": 87,
+      "bandwidth": "100Mbps"
+    },
     "installationDate": "2024-03-15T00:00:00Z",
-    "lastMaintenance": "2026-05-30T09:00:00Z",
-    "assignedBlock": "Isolation Block",
-    "assignedCellArea": "Cells ISO-01 to ISO-10"
+    "lastMaintenance": "2026-05-30T09:00:00Z"
   },
   {
     "kioskId": "KIOSK-013",
@@ -392,15 +621,34 @@
       "ram": "Unknown",
       "storage": "Unknown"
     },
-    "camera": { "status": "unknown", "resolution": "Unknown", "lastTested": null },
-    "microphone": { "status": "unknown", "sensitivity": "unknown", "lastTested": null },
-    "speaker": { "status": "unknown", "volume": 0, "lastTested": null },
-    "printer": { "status": "unknown", "paperLevel": 0, "lastTested": null },
-    "network": { "status": "blocked", "type": "unknown", "signalStrength": 0, "bandwidth": "0Mbps" },
+    "camera": {
+      "status": "unknown",
+      "resolution": "Unknown",
+      "lastTested": null
+    },
+    "microphone": {
+      "status": "unknown",
+      "sensitivity": "unknown",
+      "lastTested": null
+    },
+    "speaker": {
+      "status": "unknown",
+      "volume": 0,
+      "lastTested": null
+    },
+    "printer": {
+      "status": "unknown",
+      "paperLevel": 0,
+      "lastTested": null
+    },
+    "network": {
+      "status": "blocked",
+      "type": "unknown",
+      "signalStrength": 0,
+      "bandwidth": "0Mbps"
+    },
     "installationDate": null,
-    "lastMaintenance": null,
-    "assignedBlock": null,
-    "assignedCellArea": null
+    "lastMaintenance": null
   },
   {
     "kioskId": "KIOSK-014",
@@ -423,15 +671,34 @@
       "ram": "4GB",
       "storage": "32GB eMMC"
     },
-    "camera": { "status": "operational", "resolution": "1080p", "lastTested": "2026-08-08T08:00:00Z" },
-    "microphone": { "status": "operational", "sensitivity": "high", "lastTested": "2026-08-08T08:00:00Z" },
-    "speaker": { "status": "operational", "volume": 70, "lastTested": "2026-08-08T08:00:00Z" },
-    "printer": { "status": "operational", "paperLevel": 75, "lastTested": "2026-08-07T18:00:00Z" },
-    "network": { "status": "connected", "type": "ethernet", "signalStrength": 90, "bandwidth": "100Mbps" },
+    "camera": {
+      "status": "operational",
+      "resolution": "1080p",
+      "lastTested": "2026-08-08T08:00:00Z"
+    },
+    "microphone": {
+      "status": "operational",
+      "sensitivity": "high",
+      "lastTested": "2026-08-08T08:00:00Z"
+    },
+    "speaker": {
+      "status": "operational",
+      "volume": 70,
+      "lastTested": "2026-08-08T08:00:00Z"
+    },
+    "printer": {
+      "status": "operational",
+      "paperLevel": 75,
+      "lastTested": "2026-08-07T18:00:00Z"
+    },
+    "network": {
+      "status": "connected",
+      "type": "ethernet",
+      "signalStrength": 90,
+      "bandwidth": "100Mbps"
+    },
     "installationDate": "2024-03-20T00:00:00Z",
-    "lastMaintenance": "2026-07-05T10:00:00Z",
-    "assignedBlock": "Block A",
-    "assignedCellArea": "Wing 1 - Cells 1-20"
+    "lastMaintenance": "2026-07-05T10:00:00Z"
   },
   {
     "kioskId": "KIOSK-015",
@@ -454,15 +721,34 @@
       "ram": "2GB",
       "storage": "16GB eMMC"
     },
-    "camera": { "status": "disabled", "resolution": "720p", "lastTested": "2026-07-28T14:00:00Z" },
-    "microphone": { "status": "disabled", "sensitivity": "medium", "lastTested": "2026-07-28T14:00:00Z" },
-    "speaker": { "status": "disabled", "volume": 0, "lastTested": "2026-07-28T14:00:00Z" },
-    "printer": { "status": "disabled", "paperLevel": 0, "lastTested": "2026-07-28T14:00:00Z" },
-    "network": { "status": "disconnected", "type": "unknown", "signalStrength": 0, "bandwidth": "0Mbps" },
+    "camera": {
+      "status": "disabled",
+      "resolution": "720p",
+      "lastTested": "2026-07-28T14:00:00Z"
+    },
+    "microphone": {
+      "status": "disabled",
+      "sensitivity": "medium",
+      "lastTested": "2026-07-28T14:00:00Z"
+    },
+    "speaker": {
+      "status": "disabled",
+      "volume": 0,
+      "lastTested": "2026-07-28T14:00:00Z"
+    },
+    "printer": {
+      "status": "disabled",
+      "paperLevel": 0,
+      "lastTested": "2026-07-28T14:00:00Z"
+    },
+    "network": {
+      "status": "disconnected",
+      "type": "unknown",
+      "signalStrength": 0,
+      "bandwidth": "0Mbps"
+    },
     "installationDate": "2024-03-20T00:00:00Z",
-    "lastMaintenance": "2026-07-28T14:00:00Z",
-    "assignedBlock": "Block B",
-    "assignedCellArea": "Wing 1 - Cells 21-40"
+    "lastMaintenance": "2026-07-28T14:00:00Z"
   },
   {
     "kioskId": "KIOSK-016",
@@ -485,15 +771,34 @@
       "ram": "4GB",
       "storage": "32GB eMMC"
     },
-    "camera": { "status": "operational", "resolution": "1080p", "lastTested": "2026-08-08T08:00:00Z" },
-    "microphone": { "status": "operational", "sensitivity": "high", "lastTested": "2026-08-08T08:00:00Z" },
-    "speaker": { "status": "operational", "volume": 70, "lastTested": "2026-08-08T08:00:00Z" },
-    "printer": { "status": "operational", "paperLevel": 60, "lastTested": "2026-08-07T18:00:00Z" },
-    "network": { "status": "connected", "type": "ethernet", "signalStrength": 88, "bandwidth": "100Mbps" },
+    "camera": {
+      "status": "operational",
+      "resolution": "1080p",
+      "lastTested": "2026-08-08T08:00:00Z"
+    },
+    "microphone": {
+      "status": "operational",
+      "sensitivity": "high",
+      "lastTested": "2026-08-08T08:00:00Z"
+    },
+    "speaker": {
+      "status": "operational",
+      "volume": 70,
+      "lastTested": "2026-08-08T08:00:00Z"
+    },
+    "printer": {
+      "status": "operational",
+      "paperLevel": 60,
+      "lastTested": "2026-08-07T18:00:00Z"
+    },
+    "network": {
+      "status": "connected",
+      "type": "ethernet",
+      "signalStrength": 88,
+      "bandwidth": "100Mbps"
+    },
     "installationDate": "2024-04-10T00:00:00Z",
     "lastMaintenance": "2026-06-12T09:00:00Z",
-    "assignedBlock": "Block C",
-    "assignedCellArea": "Wing 1 - Cells 41-60",
     "createdAt": "2026-08-12T10:00:00Z"
   },
   {
@@ -517,15 +822,34 @@
       "ram": "4GB",
       "storage": "32GB eMMC"
     },
-    "camera": { "status": "operational", "resolution": "1080p", "lastTested": "2026-08-12T09:00:00Z" },
-    "microphone": { "status": "operational", "sensitivity": "high", "lastTested": "2026-08-12T09:00:00Z" },
-    "speaker": { "status": "operational", "volume": 70, "lastTested": "2026-08-12T09:00:00Z" },
-    "printer": { "status": "operational", "paperLevel": 85, "lastTested": "2026-08-12T09:00:00Z" },
-    "network": { "status": "connected", "type": "ethernet", "signalStrength": 92, "bandwidth": "100Mbps" },
+    "camera": {
+      "status": "operational",
+      "resolution": "1080p",
+      "lastTested": "2026-08-12T09:00:00Z"
+    },
+    "microphone": {
+      "status": "operational",
+      "sensitivity": "high",
+      "lastTested": "2026-08-12T09:00:00Z"
+    },
+    "speaker": {
+      "status": "operational",
+      "volume": 70,
+      "lastTested": "2026-08-12T09:00:00Z"
+    },
+    "printer": {
+      "status": "operational",
+      "paperLevel": 85,
+      "lastTested": "2026-08-12T09:00:00Z"
+    },
+    "network": {
+      "status": "connected",
+      "type": "ethernet",
+      "signalStrength": 92,
+      "bandwidth": "100Mbps"
+    },
     "installationDate": null,
     "lastMaintenance": null,
-    "assignedBlock": "Block A",
-    "assignedCellArea": "Wing 1 - Cells 1-20",
     "createdAt": "2026-08-12T08:00:00Z"
   },
   {
@@ -549,15 +873,34 @@
       "ram": "2GB",
       "storage": "16GB eMMC"
     },
-    "camera": { "status": "operational", "resolution": "720p", "lastTested": "2026-08-12T09:00:00Z" },
-    "microphone": { "status": "operational", "sensitivity": "medium", "lastTested": "2026-08-12T09:00:00Z" },
-    "speaker": { "status": "operational", "volume": 65, "lastTested": "2026-08-12T09:00:00Z" },
-    "printer": { "status": "operational", "paperLevel": 70, "lastTested": "2026-08-12T09:00:00Z" },
-    "network": { "status": "connected", "type": "ethernet", "signalStrength": 90, "bandwidth": "100Mbps" },
+    "camera": {
+      "status": "operational",
+      "resolution": "720p",
+      "lastTested": "2026-08-12T09:00:00Z"
+    },
+    "microphone": {
+      "status": "operational",
+      "sensitivity": "medium",
+      "lastTested": "2026-08-12T09:00:00Z"
+    },
+    "speaker": {
+      "status": "operational",
+      "volume": 65,
+      "lastTested": "2026-08-12T09:00:00Z"
+    },
+    "printer": {
+      "status": "operational",
+      "paperLevel": 70,
+      "lastTested": "2026-08-12T09:00:00Z"
+    },
+    "network": {
+      "status": "connected",
+      "type": "ethernet",
+      "signalStrength": 90,
+      "bandwidth": "100Mbps"
+    },
     "installationDate": null,
     "lastMaintenance": null,
-    "assignedBlock": "Block E",
-    "assignedCellArea": "Wing 1 - Cells 501-520",
     "createdAt": "2026-08-12T07:30:00Z"
   }
 ]

@@ -44,7 +44,7 @@ export function KiosksPage() {
       (k.location || '').toLowerCase().includes(q) ||
       (k.ipAddress || '').toLowerCase().includes(q) ||
       (k.deviceSerialNumber || '').toLowerCase().includes(q) ||
-      (k.ward || k.assignedBlock || '').toLowerCase().includes(q) ||
+      (k.ward || '').toLowerCase().includes(q) ||
       (k.prisonName || k.prisonId || '').toLowerCase().includes(q)
     );
   }, [kiosks, searchQuery]);
@@ -106,7 +106,7 @@ export function KiosksPage() {
                   <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Serial</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Location</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">IP Address</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Block / Cell</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Ward / Block</th>
                   <th className="text-right py-3 px-4 text-sm font-semibold text-neutral-900">Prisoners</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Android</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Status</th>
@@ -127,11 +127,7 @@ export function KiosksPage() {
                     <td className="py-3 px-4 font-mono text-sm text-neutral-700">{k.deviceSerialNumber || '—'}</td>
                     <td className="py-3 px-4 text-sm text-neutral-700">{k.location || '—'}</td>
                     <td className="py-3 px-4 font-mono text-sm text-neutral-700">{k.ipAddress || '—'}</td>
-                    <td className="py-3 px-4 text-sm text-neutral-700">
-                      {k.ward || k.assignedBlock || k.cellArea || k.assignedCellArea ? (
-                        <span>{k.ward || k.assignedBlock || '—'} / {k.cellArea || k.assignedCellArea || '—'}</span>
-                      ) : '—'}
-                    </td>
+                    <td className="py-3 px-4 text-sm text-neutral-700">{k.ward || '—'}</td>
                     <td className="py-3 px-4 text-right">
                       <span className="inline-block min-w-8 px-2 py-0.5 rounded-full text-xs font-bold bg-info/10 text-info text-center">
                         {k.registeredInmates ?? 0}
