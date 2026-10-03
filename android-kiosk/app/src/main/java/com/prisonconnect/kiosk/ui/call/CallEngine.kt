@@ -614,7 +614,10 @@ class CallEngine @Inject constructor(
         // Forward the timeout so the family browser shows the same reason
         // instead of treating it as an ordinary hangup.
         webRtcManager.endCall(hangupReason = if (endReason == "timeout") "timeout" else null)
-        _timerSeconds.value = 0
+        // NOTE: `_timerSeconds` is deliberately NOT reset here. The receipt is
+        // navigated to with `timerSeconds` read at call time — zeroing it in
+        // this same synchronous call made every receipt print "0 Sec".
+        // initCall() resets it for the next call instead.
         _callState.value = terminalState
         activeRoomId = null
 

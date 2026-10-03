@@ -347,17 +347,16 @@ fun ReceiptRow(
 //    }
 //}
 
-/** `duration` arrives through the nav route as whole SECONDS (the old code
- *  sent `timerSeconds / 60`, so a 59-second call printed "0 Min"). */
+/**
+ * `duration` arrives through the nav route as whole SECONDS and is the engine's
+ * final elapsed count (endSession() no longer zeroes it — initCall() does that
+ * for the next call instead).
+ *
+ * Always prints both units so the row never collapses to a bare "Sec" figure.
+ */
 private fun formatCallDuration(raw: String): String {
     val totalSeconds = raw.filter { it.isDigit() }.toIntOrNull() ?: return "—"
-    val mins = totalSeconds / 60
-    val secs = totalSeconds % 60
-    return when {
-        mins <= 0 -> "$secs Sec"
-        secs == 0 -> "$mins Min"
-        else -> "$mins Min $secs Sec"
-    }
+    return "${totalSeconds / 60} Min ${totalSeconds % 60} Sec"
 }
 
 @Preview(name = "Mobile View", device = "spec:width=360dp,height=800dp", showBackground = true)
@@ -368,7 +367,7 @@ fun PreviewCallSummaryMobile() {
             inmateName = "RAHUL KUMAR",
             inmateId = "INM123456",
             contactName = "Suresh Kumar",
-            duration = "300",
+            duration = "307",
             totalCharged = "10.00",
             callType = "video",
             remainingBalance = 40.0,
