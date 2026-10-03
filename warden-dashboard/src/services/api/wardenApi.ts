@@ -700,14 +700,20 @@ export const wardenApi = {
   approveKioskRegistration: (requestId: string) =>
     apiClient.patch<ApiResponse<{ success: boolean }>>(`/kiosks/registration/${requestId}/approve`).then((r) => {
       invalidateCache('kiosks:registration');
+      // The approved device shows up on the Kiosks tab immediately.
+      invalidateCache('kiosks:list');
       return r.data?.data ?? { success: false };
     }),
 
   rejectKioskRegistration: (requestId: string, reason?: string) =>
     apiClient.patch<ApiResponse<{ success: boolean }>>(`/kiosks/registration/${requestId}/reject`, { reason }).then((r) => {
       invalidateCache('kiosks:registration');
+      invalidateCache('kiosks:list');
       return r.data?.data ?? { success: false };
     }),
+
+  getKioskStats: (kioskId: string) =>
+    apiClient.get<ApiResponse<KioskStats>>(`/kiosks/${encodeURIComponent(kioskId)}/stats`).then((r) => r.data?.data),
 
   getSetupPin: (prisonId: string) =>
     cachedGet(`kiosks:pin:${prisonId}`, () => apiClient.get<ApiResponse<SetupPinData>>(`/kiosks/setup-pin/${prisonId}`).then((r) => r.data?.data)),
@@ -808,6 +814,52 @@ export interface KioskItem {
   network?: Record<string, unknown>;
   assignedBlock?: string;
   assignedCellArea?: string;
+  ward?: string | null;
+  cellArea?: string | null;
+  wards?: string[];
+  areas?: string[];
+  registeredInmates?: number;
+}
+
+export interface KioskPeriodStats {
+  total: number;
+  audio: number;
+  video: number;
+  minutes: number;
+}
+
+export interface KioskRecentCall {
+  callId: string;
+  startTime: string | null;
+  type: string;
+  status: string;
+  minutes: number;
+  inmateName: string | null;
+  familyMemberName: string | null;
+}
+
+export interface KioskStats {
+  kioskId: string;
+  prisonId: string | null;
+  prisonName: string | null;
+  deviceSerialNumber: string | null;
+  location: string | null;
+  ipAddress: string | null;
+  androidVersion: string | null;
+  status: string;
+  authorizationStatus: string;
+  lastSeen: string | null;
+  installationDate: string | null;
+  ward: string | null;
+  cellArea: string | null;
+  wards: string[];
+  areas: string[];
+  registeredInmates: number;
+  today: KioskPeriodStats;
+  month: KioskPeriodStats;
+  allTime: KioskPeriodStats;
+  lastCallAt: string | null;
+  recentCalls: KioskRecentCall[];
 }
 
 export interface KioskRegistrationRequestItem {

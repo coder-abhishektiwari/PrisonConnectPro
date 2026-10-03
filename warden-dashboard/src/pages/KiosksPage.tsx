@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card } from '@/components/Card';
 import { Loading } from '@/components/States';
 import { ToastContainer } from '@/components/ToastContainer';
+import { KioskReportPanel } from '@/components/KioskReportPanel';
 import { useToast } from '@/hooks/useToast';
 import { usePageHeader } from '@/context/PageHeaderContext';
 import { wardenApi, KioskItem } from '@/services/api/wardenApi';
@@ -11,6 +12,7 @@ export function KiosksPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<KioskItem | null>(null);
   const { toasts, removeToast } = useToast();
 
   const fetchKiosks = useCallback(async (signal?: AbortSignal) => {
@@ -42,6 +44,7 @@ export function KiosksPage() {
       (k.location || '').toLowerCase().includes(q) ||
       (k.ipAddress || '').toLowerCase().includes(q) ||
       (k.deviceSerialNumber || '').toLowerCase().includes(q) ||
+      (k.ward || k.assignedBlock || '').toLowerCase().includes(q) ||
       (k.prisonName || k.prisonId || '').toLowerCase().includes(q)
     );
   }, [kiosks, searchQuery]);
@@ -77,12 +80,16 @@ export function KiosksPage() {
   return (
     <div className="space-y-6">
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
+      {selected && <KioskReportPanel kiosk={selected} onClose={() => setSelected(null)} />}
 
       {/* Search */}
       <Card>
         <div className="flex items-center justify-between gap-4 p-4 border-b border-neutral-200">
-          <p className="text-sm text-neutral-500">{filtered.length} kiosk{filtered.length !== 1 ? 's' : ''}</p>
-          <input type="text" placeholder="Search ID, serial, location..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full sm:w-72 px-3 py-1.5 text-sm border-2 border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" />
+          <div>
+            <p className="text-sm text-neutral-500">{filtered.length} kiosk{filtered.length !== 1 ? 's' : ''}</p>
+            <p className="text-xs text-neutral-400">Click a kiosk to open its full report</p>
+          </div>
+          <input type="text" placeholder="Search ID, serial, ward..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full sm:w-72 px-3 py-1.5 text-sm border-2 border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" />
         </div>
 
         {filtered.length === 0 ? (
@@ -100,6 +107,7 @@ export function KiosksPage() {
                   <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Location</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">IP Address</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Block / Cell</th>
+                  <th className="text-right py-3 px-4 text-sm font-semibold text-neutral-900">Prisoners</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Android</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Status</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Last Seen</th>
@@ -107,7 +115,12 @@ export function KiosksPage() {
               </thead>
               <tbody>
                 {filtered.map((k) => (
-                  <tr key={k.kioskId} className="border-b border-neutral-100 hover:bg-neutral-50 transition-colors">
+                  <tr
+                    key={k.kioskId}
+                    onClick={() => setSelected(k)}
+                    title="View kiosk report"
+                    className="border-b border-neutral-100 hover:bg-primary-50/50 transition-colors cursor-pointer"
+                  >
                     <td className="py-3 px-4">
                       <span className="font-mono text-xs font-bold text-primary-700 bg-primary-50 px-2 py-0.5 rounded">{k.kioskId}</span>
                     </td>
@@ -115,9 +128,14 @@ export function KiosksPage() {
                     <td className="py-3 px-4 text-sm text-neutral-700">{k.location || '—'}</td>
                     <td className="py-3 px-4 font-mono text-sm text-neutral-700">{k.ipAddress || '—'}</td>
                     <td className="py-3 px-4 text-sm text-neutral-700">
-                      {k.assignedBlock || k.assignedCellArea ? (
-                        <span>{k.assignedBlock || '—'} / {k.assignedCellArea || '—'}</span>
+                      {k.ward || k.assignedBlock || k.cellArea || k.assignedCellArea ? (
+                        <span>{k.ward || k.assignedBlock || '—'} / {k.cellArea || k.assignedCellArea || '—'}</span>
                       ) : '—'}
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <span className="inline-block min-w-8 px-2 py-0.5 rounded-full text-xs font-bold bg-info/10 text-info text-center">
+                        {k.registeredInmates ?? 0}
+                      </span>
                     </td>
                     <td className="py-3 px-4 text-sm text-neutral-600">{k.androidVersion || '—'}</td>
                     <td className="py-3 px-4">
