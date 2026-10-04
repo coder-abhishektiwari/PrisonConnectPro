@@ -20,6 +20,10 @@ const STATUS_STYLES: Record<string, string> = {
 
 const statusStyle = (status?: string) => STATUS_STYLES[status || ''] || STATUS_STYLES.pending;
 
+// A live kiosk has just reported in, so the timestamp is noise; anything else
+// needs to say when the device was last heard from.
+const isLive = (status?: string) => status === 'online' || status === 'active';
+
 export function KiosksPage() {
   const [kiosks, setKiosks] = useState<KioskItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -120,10 +124,9 @@ export function KiosksPage() {
                   <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Location</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">IP Address</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Ward / Block</th>
-                  <th className="text-right py-3 px-4 text-sm font-semibold text-neutral-900">Prisoners</th>
+                  <th className="text-right py-3 px-4 text-sm font-semibold text-neutral-900">Inmates</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Android</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Status</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Last Seen</th>
                 </tr>
               </thead>
               <tbody>
@@ -149,9 +152,11 @@ export function KiosksPage() {
                     <td className="py-3 px-4 text-sm text-neutral-600">{k.androidVersion || '—'}</td>
                     <td className="py-3 px-4">
                       <span className={`px-2.5 py-1 rounded-full text-xs font-bold capitalize ${statusStyle(k.status)}`}>{k.status || 'pending'}</span>
-                    </td>
-                    <td className="py-3 px-4 text-sm text-neutral-600">
-                      {k.lastSeen ? new Date(k.lastSeen).toLocaleString('en-IN') : '—'}
+                      {!isLive(k.status) && (
+                        <p className="mt-1 text-xs text-neutral-500">
+                          {k.lastSeen ? `Last seen at ${new Date(k.lastSeen).toLocaleString('en-IN')}` : 'Last seen at —'}
+                        </p>
+                      )}
                     </td>
                   </tr>
                 ))}
