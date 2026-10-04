@@ -35,19 +35,22 @@ class PrisonKioskApp : Application() {
     override fun onCreate() {
         super.onCreate()
 
-        // Single background ping every 30s. This is what the dashboard reads to
-        // decide Online/Offline and Last Seen — without it a kiosk that is
-        // sitting idle would never report in.
+        // Single background ping. This is what the dashboard reads to decide
+        // Online/Offline and Last Seen — without it a kiosk that is sitting idle
+        // would never report in. A kiosk roams between Wi-Fi networks, so a
+        // failed ping retries in a few seconds instead of waiting out the whole
+        // interval and looking offline for an extra half minute.
         appScope.launch {
+            var intervalMs = HEARTBEAT_INTERVAL_MS
             while (isActive) {
-                delay(HEARTBEAT_INTERVAL_MS)
-                sendHeartbeat()
+                delay(intervalMs)
+                intervalMs = if (sendHeartbeat()) HEARTBEAT_INTERVAL_MS else HEARTBEAT_RETRY_MS
             }
         }
     }
 
-    private suspend fun sendHeartbeat() {
-        try {
+    private suspend fun sendHeartbeat(): Boolean {
+        return try {
             trustApiService.heartbeat(
                 KioskHeartbeatRequest(
                     deviceSerialNumber = deviceId,
@@ -56,12 +59,15 @@ class PrisonKioskApp : Application() {
                     appVersion = com.prisonconnect.kiosk.BuildConfig.VERSION_NAME
                 )
             )
+            true
         } catch (t: Throwable) {
             Logger.w("Heartbeat failed: ${t.message}")
+            false
         }
     }
 
     private companion object {
         const val HEARTBEAT_INTERVAL_MS = 30_000L
+        const val HEARTBEAT_RETRY_MS = 5_000L
     }
 }
