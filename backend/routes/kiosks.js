@@ -1,7 +1,7 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { readDb, updateDb } = require('../lib/db');
-const { hashSecret, verifySecret } = require('../lib/auth');
+const { hashSecret, verifySecret, verifyToken } = require('../lib/auth');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { sendSuccess, sendError, asyncRoute } = require('../lib/response');
 const { jailScopeOf, inAdminScope, adminScopeFilter, inScopeOf, scopeList } = require('../lib/scoping');
@@ -181,16 +181,37 @@ router.post('/heartbeat', asyncRoute(async (req, res) => {
     (typeof body.deviceFingerprint === 'string' && body.deviceFingerprint.trim()) ||
     (req.get('X-Device-Fingerprint') || '').trim();
 
-  if (!deviceSerialNumber && !deviceFingerprint) {
+  // Identity, strongest first. The hardware serial is the best signal but
+  // Build.getSerial() is only readable when the app is Device Owner, so most
+  // installations fall back to the kiosk's own login token — the app attaches
+  // it to every request. Fingerprint last: it is only unique when the serial
+  // was available when it was computed.
+  const authHeader = req.get('authorization') || '';
+  let claims = null;
+  if (/^bearer\s+/i.test(authHeader)) {
+    try { claims = verifyToken(authHeader.replace(/^bearer\s+/i, '').trim()); } catch (e) { claims = null; }
+  }
+  const tokenKioskId = claims && claims.role === 'kiosk' && claims.kioskId ? String(claims.kioskId) : '';
+
+  if (!deviceSerialNumber && !deviceFingerprint && !tokenKioskId) {
     return sendError(res, 'INVALID_REQUEST', 'deviceSerialNumber or X-Device-Fingerprint is required', 400);
   }
 
   const kiosks = await readDb('kiosks.json');
   const match = kiosks.find((k) =>
+    (tokenKioskId && k.kioskId === tokenKioskId) ||
     (deviceSerialNumber && k.deviceSerialNumber === deviceSerialNumber) ||
     (deviceFingerprint && k.deviceFingerprint === deviceFingerprint)
   );
-  if (!match) return sendError(res, 'NOT_FOUND', 'Unknown kiosk device', 404);
+  if (!match) {
+    console.warn('[kiosks] unmatched heartbeat', {
+      kioskId: tokenKioskId || null,
+      serial: deviceSerialNumber || null,
+      fingerprint: deviceFingerprint ? deviceFingerprint.slice(0, 12) + '…' : null,
+      ip: req.ip,
+    });
+    return sendError(res, 'NOT_FOUND', 'Unknown kiosk device', 404);
+  }
 
   const now = new Date().toISOString();
   const ipAddress = (req.get('X-Device-IP') || '').trim() || body.ipAddress || match.ipAddress;
