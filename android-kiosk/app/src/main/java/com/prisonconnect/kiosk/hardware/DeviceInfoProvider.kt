@@ -3,6 +3,7 @@ package com.prisonconnect.kiosk.hardware
 import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Build
+import android.provider.Settings
 import com.prisonconnect.kiosk.core.Logger
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -90,10 +91,22 @@ class DeviceInfoProvider @Inject constructor(
 
     /**
      * Generates a stable device fingerprint using hardware parameters.
+     *
+     * ANDROID_ID carries the per-device identity: the hardware serial cannot
+     * be read unless the app is Device Owner, so without it every unit of the
+     * same model would produce the same fingerprint. The serial is deliberately
+     * left out of the input — it becomes readable once the app is made Device
+     * Owner and would otherwise change the fingerprint of an already-registered
+     * kiosk.
      */
     fun getDeviceFingerprint(): String {
-        val serial = getDeviceSerialNumber() ?: "NO_SERIAL"
-        val rawFingerprint = "${Build.MANUFACTURER}_${Build.MODEL}_${Build.BOARD}_${Build.HARDWARE}_$serial"
+        val androidId = try {
+            Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) ?: "NO_ID"
+        } catch (e: Exception) {
+            "NO_ID"
+        }
+        val rawFingerprint =
+            "${Build.MANUFACTURER}_${Build.MODEL}_${Build.BOARD}_${Build.HARDWARE}_$androidId"
         return try {
             val md = java.security.MessageDigest.getInstance("SHA-256")
             val digest = md.digest(rawFingerprint.toByteArray(Charsets.UTF_8))

@@ -197,7 +197,8 @@ router.post('/heartbeat', asyncRoute(async (req, res) => {
     return sendError(res, 'INVALID_REQUEST', 'deviceSerialNumber or X-Device-Fingerprint is required', 400);
   }
 
-  const kiosks = await readDb('kiosks.json');
+  // Demo rows are not real devices, so no heartbeat can ever light one up.
+  const kiosks = (await readDb('kiosks.json')).filter((k) => !isDemoKiosk(k));
   const match = kiosks.find((k) =>
     (tokenKioskId && k.kioskId === tokenKioskId) ||
     (deviceSerialNumber && k.deviceSerialNumber === deviceSerialNumber) ||
@@ -215,6 +216,15 @@ router.post('/heartbeat', asyncRoute(async (req, res) => {
 
   const now = new Date().toISOString();
   const ipAddress = (req.get('X-Device-IP') || '').trim() || body.ipAddress || match.ipAddress;
+  // A heartbeat that identified the kiosk by its login token or by the hardware
+  // serial is trustworthy enough to teach us the device's fingerprint, so
+  // heartbeats keep matching after the kiosk's session expires or is logged out.
+  const matchedByStrongId =
+    !!tokenKioskId || (!!deviceSerialNumber && match.deviceSerialNumber === deviceSerialNumber);
+  const learnedFingerprint =
+    matchedByStrongId && deviceFingerprint && deviceFingerprint !== match.deviceFingerprint
+      ? deviceFingerprint
+      : null;
   const updated = await updateDb('kiosks.json', (rows) => {
     const idx = rows.findIndex((k) => k.kioskId === match.kioskId);
     if (idx === -1) return { data: rows, result: null };
@@ -225,6 +235,7 @@ router.post('/heartbeat', asyncRoute(async (req, res) => {
       ipAddress,
       androidVersion: body.androidVersion || rows[idx].androidVersion,
       firmwareVersion: body.appVersion || rows[idx].firmwareVersion,
+      ...(learnedFingerprint ? { deviceFingerprint: learnedFingerprint } : {}),
     };
     return { data: rows, result: rows[idx] };
   });
@@ -263,8 +274,15 @@ router.post('/register', asyncRoute(async (req, res) => {
   
   const kiosks = await readDb('kiosks.json');
   
-  // Check if kiosk already exists
-  const existingKiosk = kiosks.find((k) => k.deviceSerialNumber === deviceSerialNumber);
+  // Check if kiosk already exists. The hardware serial is only readable when
+  // the app is Device Owner, so a kiosk that has since lost that permission
+  // comes back with a fallback id — fall back to the fingerprint it registered
+  // with instead of creating a duplicate row for the same tablet.
+  const existingKiosk =
+    kiosks.find((k) => k.deviceSerialNumber === deviceSerialNumber) ||
+    (deviceFingerprint
+      ? kiosks.find((k) => k.deviceFingerprint && k.deviceFingerprint === deviceFingerprint)
+      : undefined);
   if (existingKiosk) {
     // If already pending, return existing request (no duplicate)
     if (existingKiosk.authorizationStatus === 'pending' && existingKiosk.status === 'pending') {
@@ -284,7 +302,7 @@ router.post('/register', asyncRoute(async (req, res) => {
       existingKiosk.status === 'unauthorized';
     // Update existing kiosk
     const updated = await updateDb('kiosks.json', (kiosks) => {
-      const idx = kiosks.findIndex((k) => k.deviceSerialNumber === deviceSerialNumber);
+      const idx = kiosks.findIndex((k) => k.kioskId === existingKiosk.kioskId);
       if (idx === -1) return { data: kiosks, result: null };
       
       kiosks[idx] = {
@@ -345,7 +363,7 @@ router.post('/register', asyncRoute(async (req, res) => {
     lastMaintenance: null,
     assignedBlock: null,
     assignedCellArea: null,
-    deviceFingerprint: deviceFingerprint || 'Unknown',
+    deviceFingerprint: deviceFingerprint || null,
     rejectionReason: null,
     createdAt: new Date().toISOString()
   };
