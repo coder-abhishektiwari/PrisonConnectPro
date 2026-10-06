@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '@/components/Card';
+import { LocationLink } from '@/components/LocationLink';
 import { Loading } from '@/components/States';
 import { wardenApi } from '@/services/api/wardenApi';
 import { useWardenSocket } from '@/hooks/useWardenSocket';
@@ -166,6 +167,11 @@ export function ActiveCallsPage() {
                           <p className="text-xs text-neutral-500 truncate">{call.contactId}</p>
                         </div>
                       </div>
+                    </div>
+                    {/* Captured when this call's device was verified - the
+                        family side's current location for THIS call. */}
+                    <div className="text-xs text-neutral-600 -mt-1">
+                      <LocationLink location={call.family?.location} />
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${call.type==='video'?'bg-primary-600 text-white border-primary-600':'bg-info text-white border-info'}`}>{call.type==='video'?'▶ Video':'● Audio'}</span>

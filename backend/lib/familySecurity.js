@@ -205,6 +205,34 @@ async function registerOrVerifyFingerprint(contactId, phone, fingerprintPayload)
 }
 
 /** Returns whether a device fingerprint is already registered for the call's contact. */
+/**
+ * Attach a location to the registered device - ONCE.
+ *
+ * The warden's Verified Device card shows the location captured when the
+ * device was first registered, forever, so this only ever fills a record that
+ * has no location yet and never overwrites one. It deliberately lives outside
+ * registerOrVerifyFingerprint: the fingerprint hash must never depend on
+ * location, otherwise every call from a new spot would fail device checks.
+ *
+ * @param {string} contactId
+ * @param {object} location { lat, lng, accuracy, area, city, state, country, at }
+ * @returns {Promise<object|null>} the updated record, or null if nothing to do
+ */
+async function saveDeviceFirstLocation(contactId, location) {
+  if (!contactId || !location || typeof location !== 'object') return null;
+  if (!Number.isFinite(Number(location.lat)) || !Number.isFinite(Number(location.lng))) return null;
+
+  return updateDb('contacts.json', (all) => {
+    const idx = all.findIndex((c) => c.contactId === contactId);
+    if (idx === -1) return { data: all, result: null };
+    const list = Array.isArray(all[idx].deviceFingerprints) ? all[idx].deviceFingerprints : [];
+    if (list.length === 0 || list[0].location) return { data: all, result: null };
+    list[0] = { ...list[0], location };
+    all[idx].deviceFingerprints = [list[0]];
+    return { data: all, result: list[0] };
+  });
+}
+
 async function deviceRegisteredForCall(call) {
   const contacts = await readDb('contacts.json');
   const contact = findContactById(contacts, call.contactId);
@@ -226,6 +254,7 @@ module.exports = {
   contactPhone,
   fingerprintFor,
   registerOrVerifyFingerprint,
+  saveDeviceFirstLocation,
   deviceRegisteredForCall,
   buildLinkSms,
   FAMILY_WEB_URL

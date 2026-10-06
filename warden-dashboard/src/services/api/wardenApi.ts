@@ -62,6 +62,22 @@ export interface KioskAdminUpdate {
   password?: string;
 }
 
+/**
+ * Where the family member was when their device was verified for a call.
+ * Written by POST /family/secure-call/location: on the call for that call
+ * only, and on the device fingerprint once, forever.
+ */
+export interface LocationPoint {
+  lat: number;
+  lng: number;
+  accuracy?: number | null;
+  area?: string | null;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+  at?: string;
+}
+
 export interface ActiveCall {
   callId: string;
   roomId: string;
@@ -84,6 +100,8 @@ export interface ActiveCall {
   familyMemberName?: string;
   contactName?: string;
   roomIdLabel?: string;
+  /** Family-side state for this call; location is captured at device verify. */
+  family?: { location?: LocationPoint };
 }
 
 export interface CallHistoryItem {
@@ -110,6 +128,8 @@ export interface CallHistoryItem {
   mediaConnectedAt?: string;
   chargeAmount?: number;
   ratePerMinute?: number;
+  /** Family-side state for this call; location is captured at device verify. */
+  family?: { location?: LocationPoint };
 }
 
 export interface PaginatedCallsResponse {
@@ -260,6 +280,8 @@ export interface DeviceFingerprint {
   firstSeenAt?: string;
   lastVerifiedAt?: string;
   verifiedCount?: number;
+  /** Captured when the device first registered - shown forever, never updated. */
+  location?: LocationPoint;
 }
 
 export interface Contact {

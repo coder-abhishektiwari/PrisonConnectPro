@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { env } from '@/config/env';
 import type { ApiResponse, ApiError } from '@/types/api';
-import type { CallSession, CallTimerStatus, DeviceInfo, DeviceVerificationResult, SendOtpResult, OtpVerificationResult, JoinRoomResult, LeaveRoomResult, CallSummary } from '@/types/call';
+import type { CallSession, CallTimerStatus, DeviceInfo, DeviceVerificationResult, FamilyLocation, SendOtpResult, OtpVerificationResult, JoinRoomResult, LeaveRoomResult, CallSummary } from '@/types/call';
 
 export const api = axios.create({
   baseURL: env.apiGatewayUrl,
@@ -28,6 +28,11 @@ export const callApi = {
 
   verifyDevice: (linkToken: string, payload: { fingerprint: string; signals: Record<string, unknown>; deviceInfo?: DeviceInfo }) =>
     api.post<ApiResponse<DeviceVerificationResult>>(`/family/secure-call/device/${linkToken}`, payload).then((r) => r.data.data),
+
+  // Fire-and-forget: sent only after verifyDevice succeeded, and never awaited
+  // by the caller, so a slow or refused location cannot hold up the call.
+  sendLocation: (linkToken: string, location: { lat: number; lng: number; accuracy?: number | null }) =>
+    api.post<ApiResponse<FamilyLocation>>(`/family/secure-call/location/${linkToken}`, location).then((r) => r.data.data),
 
   sendOtp: (linkToken: string) =>
     api.post<ApiResponse<SendOtpResult>>(`/family/secure-call/send-otp/${linkToken}`).then((r) => r.data.data),

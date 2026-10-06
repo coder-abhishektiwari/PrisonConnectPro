@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Card } from '@/components/Card';
 import { Loading } from '@/components/States';
 import { SearchableSelect } from '@/components/SearchableSelect';
+import { LocationLink } from '@/components/LocationLink';
 import { wardenApi } from '@/services/api/wardenApi';
 import { apiClient } from '@/services/api/client';
 import { usePageHeader } from '@/context/PageHeaderContext';
@@ -556,6 +557,10 @@ export function InmateDetailPage() {
                   <span>Uses: {device.verifiedCount || 0}×</span>
                   {device.lastVerifiedAt && <span>Last: {fmtDate(device.lastVerifiedAt)}</span>}
                   {device.firstSeenAt && <span>First: {fmtDate(device.firstSeenAt)}</span>}
+                </div>
+                <div className="mt-1.5 flex items-center gap-1.5 text-[11px]">
+                  <span className="text-neutral-500 font-semibold uppercase tracking-wide">Location</span>
+                  <LocationLink location={device.location} className="font-medium text-primary-700" />
                 </div>
                 {s.deviceId && <p className="mt-1 text-[10px] font-mono text-neutral-400 truncate">ID: {s.deviceId}</p>}
               </div>

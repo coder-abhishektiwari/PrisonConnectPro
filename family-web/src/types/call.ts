@@ -31,6 +31,18 @@ export interface DeviceVerificationResult {
   otpAllowed: boolean;
 }
 
+/** Position captured at device verification time (sent as its own request). */
+export interface FamilyLocation {
+  lat: number;
+  lng: number;
+  accuracy?: number | null;
+  area?: string | null;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+  at?: string;
+}
+
 export interface SendOtpResult {
   sent: boolean;
   transport: string;

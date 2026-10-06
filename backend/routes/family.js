@@ -5,7 +5,8 @@ const { readDb, updateDb } = require('../lib/db');
 const { requireAuth } = require('../middleware/auth');
 const { sendSuccess, sendError, asyncRoute } = require('../lib/response');
 const { sendSms, otpTemplateVars, linkTemplateVars } = require('../lib/sms');
-const { maskedPhone, contactPhone, buildLinkSms, buildCallLink, deviceRegisteredForCall, registerOrVerifyFingerprint } = require('../lib/familySecurity');
+const { maskedPhone, contactPhone, buildLinkSms, buildCallLink, deviceRegisteredForCall, registerOrVerifyFingerprint, saveDeviceFirstLocation } = require('../lib/familySecurity');
+const { reverseGeocode } = require('../lib/geocode');
 const { callInmateName, callContactName } = require('../lib/names');
 const { signAccessToken } = require('../lib/auth');
 
@@ -225,6 +226,65 @@ router.post('/secure-call/device/:linkToken', asyncRoute(async (req, res) => {
     // OTP may only be dispatched after a successful device check.
     otpAllowed: true
   });
+}));
+
+// 4b. POST /secure-call/location
+// Sent right after a SUCCESSFUL device verification (never before), so the
+// fingerprint flow stays untouched: a denied, timed-out or missing location
+// simply means no request at all, and the call proceeds as if it never
+// existed. Two distinct stores come out of this one write:
+//   - call.family.location          -> this call only (live call card + history)
+//   - deviceFingerprints[0].location -> once per device, never overwritten
+//       (the Verified Device card in the warden dashboard)
+// Auth is the link token, same as every other family route.
+function parseLocation(body) {
+  if (!body || typeof body !== 'object') return null;
+  const lat = Number(body.lat);
+  const lng = Number(body.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  const accuracy = Number.isFinite(Number(body.accuracy)) ? Number(body.accuracy) : null;
+  return { lat, lng, accuracy };
+}
+
+router.post('/secure-call/location/:linkToken', asyncRoute(async (req, res) => {
+  const { linkToken } = req.params;
+  const calls = await readDb('calls.json');
+  const call = calls.find((c) => c.linkToken === linkToken);
+  if (!call) return sendError(res, 'NOT_FOUND', 'Invalid or expired call link', 404);
+
+  const point = parseLocation(req.body);
+  if (!point) return sendError(res, 'INVALID_REQUEST', 'lat and lng are required', 400);
+
+  // Reverse geocoding is free (BigDataCloud, no key) and runs here inside the
+  // request because the browser fires this call without waiting on it - a 3s
+  // timeout only leaves area/city/state empty.
+  let place = null;
+  try {
+    place = await reverseGeocode(point.lat, point.lng);
+  } catch (err) {
+    console.warn('[family] geocode failed:', err.message);
+  }
+
+  const location = {
+    ...point,
+    area: place?.area || null,
+    city: place?.city || null,
+    state: place?.state || null,
+    country: place?.country || null,
+    at: new Date().toISOString()
+  };
+
+  await updateDb('calls.json', (all) => {
+    const idx = all.findIndex((c) => c.linkToken === linkToken);
+    if (idx === -1) return { data: all, result: null };
+    all[idx].family = { ...(all[idx].family || {}), location };
+    return { data: all, result: all[idx] };
+  });
+
+  await saveDeviceFirstLocation(call.contactId, location);
+
+  return sendSuccess(res, { location });
 }));
 
 // 5. GET /secure-call/heartbeat/:linkToken

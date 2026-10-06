@@ -7,6 +7,7 @@ import { apiClient } from '@/services/api/client';
 import { useWardenSocket } from '@/hooks/useWardenSocket';
 import { usePageHeader } from '@/context/PageHeaderContext';
 import { FilterDropdown } from '@/components/FilterDropdown';
+import { LocationLink, locationLabel } from '@/components/LocationLink';
 import type { ColumnFilter } from '@/components/FilterDropdown';
 import { inmateLabel, contactLabel } from '@/utils/names';
 import ExcelJS from 'exceljs';
@@ -95,7 +96,7 @@ export function CallHistoryPage() {
   const exportExcel = async (rows: CallHistoryItem[], filename: string) => {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Call Logs');
-    const headers = ['Call ID', 'Date', 'Inmate', 'Family', 'Kiosk', 'Type', 'Duration', 'Status', 'Quality', 'Recording'];
+    const headers = ['Call ID', 'Date', 'Inmate', 'Family', 'Location', 'Kiosk', 'Type', 'Duration', 'Status', 'Quality', 'Recording'];
     const colsCount = headers.length;
 
     ws.mergeCells(1, 1, 1, colsCount);
@@ -127,7 +128,7 @@ export function CallHistoryPage() {
       const rec = recordings[c.callId];
       const row = ws.addRow([
         c.callId, fmtDate(c.startTime), inmateLabel(c, inmates[c.inmateId]),
-        contactLabel(c), c.kioskId, c.type, fmtDur(c.durationMinutes),
+        contactLabel(c), locationLabel(c.family?.location) || '', c.kioskId, c.type, fmtDur(c.durationMinutes),
         c.status, c.connectionQuality || '', rec?.url ? 'Yes' : 'No'
       ]);
       row.eachCell((cell) => { cell.numFmt = '@'; });
@@ -144,13 +145,13 @@ export function CallHistoryPage() {
         row.eachCell((cell, colNumber) => {
           cell.border = thinBorder;
           if (rowNumber > 4) {
-            cell.alignment = { horizontal: [1, 2, 5, 6, 7, 8, 9, 10].includes(colNumber) ? 'center' : 'left', vertical: 'middle' };
+            cell.alignment = { horizontal: [1, 2, 6, 7, 8, 9, 10, 11].includes(colNumber) ? 'center' : 'left', vertical: 'middle' };
             cell.font = { name: 'Calibri', size: 10, color: { argb: 'FF000000' } };
           }
         });
       }
     });
-    ws.columns = [{ width: 18 }, { width: 15 }, { width: 22 }, { width: 22 }, { width: 15 }, { width: 12 }, { width: 14 }, { width: 15 }, { width: 14 }, { width: 14 }];
+    ws.columns = [{ width: 18 }, { width: 15 }, { width: 22 }, { width: 22 }, { width: 26 }, { width: 15 }, { width: 12 }, { width: 14 }, { width: 15 }, { width: 14 }, { width: 14 }];
 
     const buffer = await wb.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -252,6 +253,7 @@ export function CallHistoryPage() {
                   <th className="text-left py-3 px-4"><button onClick={() => setSortDir((d) => d === 'asc' ? 'desc' : 'asc')} className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-neutral-500 hover:text-primary-600 transition-colors">Date {sortDir === 'asc' ? '↑' : '↓'}</button></th>
                   <th className="text-left py-3 px-4"><span className="text-xs font-bold uppercase tracking-wider text-neutral-500">Inmate ⇄ Family</span></th>
                   <th className="text-left py-3 px-4"><FilterDropdown label="Kiosk" options={allKiosks} filter={kioskFilter} setFilter={setKioskFilter} /></th>
+                  <th className="text-left py-3 px-4"><span className="text-xs font-bold uppercase tracking-wider text-neutral-500">Location</span></th>
                   <th className="text-left py-3 px-4"><span className="text-xs font-bold uppercase tracking-wider text-neutral-500">Duration</span></th>
                   <th className="text-left py-3 px-4"><FilterDropdown label="Status" options={[{ value: 'completed', label: 'Completed' }, { value: 'missed', label: 'Missed' }, { value: 'failed', label: 'Failed' }, { value: 'cancelled', label: 'Cancelled' }, { value: 'rejected', label: 'Rejected' }, { value: 'active', label: 'Active' }]} filter={statusFilter} setFilter={setStatusFilter} /></th>
                   <th className="text-left py-3 px-4"><FilterDropdown label="Quality" options={[{ value: 'excellent', label: 'Excellent' }, { value: 'good', label: 'Good' }, { value: 'fair', label: 'Fair' }, { value: 'poor', label: 'Poor' }]} filter={qualityFilter} setFilter={setQualityFilter} /></th>
@@ -282,6 +284,10 @@ export function CallHistoryPage() {
                         <p className="text-xs text-neutral-500 mt-0.5">{call.inmateId}</p>
                       </td>
                       <td className="py-3 px-4 text-sm text-neutral-900">{call.kioskId}</td>
+                      {/* stopPropagation: opening the map must not open the row drawer */}
+                      <td className="py-3 px-4 text-xs text-neutral-600" onClick={(e) => e.stopPropagation()}>
+                        <LocationLink location={call.family?.location} />
+                      </td>
                       <td className="py-3 px-4">
                         {isLive ? (
                           <span className="inline-flex items-center gap-1.5 text-sm font-bold text-success">
@@ -400,6 +406,7 @@ export function CallHistoryPage() {
                       <div className="flex justify-between"><span className="text-sm text-neutral-600">Call ID</span><span className="text-sm font-mono text-neutral-900">{selected.callId}</span></div>
                       <div className="flex justify-between"><span className="text-sm text-neutral-600">Room ID</span><span className="text-sm font-mono text-neutral-900">{selected.roomId}</span></div>
                       <div className="flex justify-between"><span className="text-sm text-neutral-600">Kiosk</span><span className="text-sm font-semibold text-neutral-900">{selected.kioskId}</span></div>
+                      <div className="flex justify-between gap-3"><span className="text-sm text-neutral-600 shrink-0">Location</span><span className="text-sm text-neutral-900 text-right"><LocationLink location={selected.family?.location} /></span></div>
                       <div className="flex justify-between"><span className="text-sm text-neutral-600">Started</span><span className="text-sm text-neutral-900">{fmtDateTime(selected.startTime)}</span></div>
                       <div className="flex justify-between"><span className="text-sm text-neutral-600">Ended</span><span className="text-sm text-neutral-900">{selected.endTime ? fmtDateTime(selected.endTime) : '—'}</span></div>
                       <div className="flex justify-between"><span className="text-sm text-neutral-600">Duration</span><span className="text-sm font-semibold text-neutral-900">{fmtDur(selected.durationMinutes)}</span></div>

@@ -4,6 +4,7 @@ import { Button } from '@/components/Button';
 import { callApi } from '@/services/api';
 import { useSession } from '@/context/SessionContext';
 import { collectSignals, fingerprintHash } from '@/services/fingerprint';
+import { captureLocation, type CapturedLocation } from '@/services/geolocation';
 import { useHeartbeat } from '@/hooks/useHeartbeat';
 
 const STEPS = ['Checking your device…', 'Matching your secure profile…', 'Almost done…'];
@@ -17,6 +18,13 @@ export function DeviceVerificationPage() {
   const [submitting, setSubmitting] = useState(false);
   const [step, setStep] = useState(0);
   const attemptedRef = useRef(false);
+  // Kick off the permission prompt the moment the page mounts so the user is
+  // answering it while the fingerprint is being computed. Location is NOT part
+  // of the fingerprint - it is only shipped once verification has succeeded.
+  const locationRef = useRef<Promise<CapturedLocation | null> | null>(null);
+  useEffect(() => {
+    if (!locationRef.current) locationRef.current = captureLocation();
+  }, []);
 
   // Rotate a single short line while verifying — keeps the wait calm.
   useEffect(() => {
@@ -59,6 +67,13 @@ export function DeviceVerificationPage() {
 
       if (result.verified) {
         setDeviceVerified(true);
+        // Verification has already passed: hand the captured location over in
+        // the background (own request, errors swallowed) so it can never hold
+        // up or fail the call. Sent only now because the device record it
+        // belongs to is written by the request above.
+        void locationRef.current?.then((loc) => {
+          if (loc) callApi.sendLocation(linkToken, loc).catch(() => undefined);
+        });
         // Returning device -> OTP. First call to this number -> straight to
         // the call screen (the lobby was only ever a redirect hop).
         navigate(session.deviceRegistered ? `/c/${linkToken}/otp` : `/c/${linkToken}/call`, { replace: true });
