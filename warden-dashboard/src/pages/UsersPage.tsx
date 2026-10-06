@@ -346,7 +346,6 @@ export function UsersPage() {
                   <tr className="border-b border-neutral-200 bg-neutral-50">
                     <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Warden</th>
                     <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Role</th>
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Status</th>
                     <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Actions</th>
                   </tr>
                 </thead>
@@ -378,10 +377,7 @@ export function UsersPage() {
                         <td className="py-3 px-4">
                           {roleBadge(user)}
                         </td>
-                        {/* The chief warden has no status to show - they are always on. */}
-                        <td className="py-3 px-4">
-                          {isChief ? <span className="text-neutral-400">—</span> : statusBadge(user.status)}
-                        </td>
+                        
                         <td className="py-3 px-4">
                           {canManage ? (
                             <div className="flex items-center gap-1">
@@ -510,7 +506,6 @@ export function UsersPage() {
               <p className="text-xs text-neutral-500">{adminsLoading && kioskAdmins.length === 0 ? <SkeletonText /> : kioskAdmins.length} in this prison · can sign in on any kiosk</p>
             </div>
             <div className="flex items-center gap-2">
-              <span className="material-icons text-primary-600">badge</span>
               <button
                 onClick={openAddAdmin}
                 disabled={isSaving}
