@@ -654,10 +654,11 @@ function createCallsRouter(broadcastEvent, signaling) {
       newCall.signalingUrl = process.env.SIGNALING_PUBLIC_URL;
     }
 
-    await updateDb('calls.json', (calls) => ({ data: [...calls, newCall], result: newCall }));
-    // Every call owns exactly one room row. Minting the room id without the
-    // row left calls.room_id pointing at nothing, which the new foreign key
-    // would reject.
+    // Every call owns exactly one room row. The room has to land FIRST: calls
+    // carries FK fk_calls_room -> rooms.id, so minting the room id inside the
+    // call row before the room exists is rejected with 23503 and the whole
+    // call silently fails to start. (A room without a call is harmless - it
+    // just expires.)
     await updateDb('rooms.json', (rooms) => {
       if (rooms.some((r) => r.roomId === newCall.roomId)) return { data: rooms, result: null };
       const minutes = Number(newCall.maxDurationMinutes) || 15;
@@ -676,6 +677,7 @@ function createCallsRouter(broadcastEvent, signaling) {
         result: null,
       };
     });
+    await updateDb('calls.json', (calls) => ({ data: [...calls, newCall], result: newCall }));
     broadcastEvent('call-created', newCall);
 
     // Scheduled call launched from the dashboard: mark that booking completed so
