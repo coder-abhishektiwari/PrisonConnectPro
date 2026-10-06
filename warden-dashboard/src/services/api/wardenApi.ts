@@ -28,6 +28,16 @@ export interface NewWardenInput {
   designation?: string;
 }
 
+/** Fields a chief warden may change on an existing warden (password resets too). */
+export interface WardenUpdate {
+  name?: string;
+  phone?: string;
+  department?: string;
+  designation?: string;
+  status?: string;
+  password?: string;
+}
+
 /** Staff account attached to a kiosk device. */
 export interface KioskAdmin {
   adminId: string;
@@ -790,6 +800,16 @@ export const wardenApi = {
 
   createWarden: (payload: NewWardenInput) =>
     apiClient.post<ApiResponse<WardenRecord>>('/wardens', payload).then((r) => r.data?.data),
+
+  updateWarden: (wardenId: string, patch: WardenUpdate) =>
+    apiClient
+      .patch<ApiResponse<WardenRecord>>(`/wardens/${encodeURIComponent(wardenId)}`, patch)
+      .then((r) => r.data?.data),
+
+  deleteWarden: (wardenId: string) =>
+    apiClient
+      .delete<ApiResponse<{ message: string; wardenId: string }>>(`/wardens/${encodeURIComponent(wardenId)}`)
+      .then((r) => r.data?.data),
 
   getKioskAdmins: () =>
     apiClient.get<ApiResponse<KioskAdmin[]>>('/kiosk-admins').then((r) => r.data?.data ?? []),

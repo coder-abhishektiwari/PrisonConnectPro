@@ -48,9 +48,12 @@ export function UsersPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [editingAdmin, setEditingAdmin] = useState<KioskAdmin | null>(null);
   const [adminForm, setAdminForm] = useState({ name: '' });
-  const [resettingAdmin, setResettingAdmin] = useState<KioskAdmin | null>(null);
+  const [editingWarden, setEditingWarden] = useState<WardenRecord | null>(null);
+  const [wardenForm, setWardenForm] = useState({ name: '', phone: '', department: '', designation: '' });
+  const [resetTarget, setResetTarget] = useState<{ kind: 'warden' | 'kiosk'; id: string; name: string; tag: string } | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [pendingDeleteWardenId, setPendingDeleteWardenId] = useState<string | null>(null);
   const { toasts, success: toastSuccess, error: toastError, removeToast } = useToast();
   const limit = 20;
 
@@ -101,10 +104,20 @@ export function UsersPage() {
   useEffect(() => { loadStats(); }, [loadStats]);
   useEffect(() => { loadKioskAdmins(); }, [loadKioskAdmins]);
 
-  function toggleStatus(userId: string, currentStatus: string) {
-    const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
-    setUsers(prev => prev.map(u => u.wardenId === userId ? { ...u, status: newStatus } : u));
-    toastSuccess(`Warden status updated to ${newStatus.replace('_', ' ')}`);
+  // Persisted status switch (the old one only flipped local state). The server
+  // refuses to deactivate the chief warden or your own account.
+  async function toggleWardenStatus(w: WardenRecord) {
+    const next = w.status === 'active' ? 'inactive' : 'active';
+    try {
+      setIsSaving(true);
+      await wardenApi.updateWarden(w.wardenId, { status: next });
+      toastSuccess(`${w.name} ${next === 'active' ? 'activated' : 'deactivated'}`);
+      await Promise.all([loadUsers(), loadStats()]);
+    } catch (err: any) {
+      toastError(err?.response?.data?.error?.message || err?.message || 'Could not change status');
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   function setField(key: keyof NewWardenInput, value: string) {
@@ -176,22 +189,73 @@ export function UsersPage() {
     }
   }
 
-  function openResetPassword(a: KioskAdmin) {
+  function openResetPassword(target: { kind: 'warden' | 'kiosk'; id: string; name: string; tag: string }) {
     setPendingDeleteId(null);
+    setPendingDeleteWardenId(null);
     setNewPassword('');
-    setResettingAdmin(a);
+    setResetTarget(target);
   }
 
   async function submitResetPassword() {
-    if (!resettingAdmin) return;
+    if (!resetTarget) return;
     if (newPassword.length < 6) { toastError('Password must be at least 6 characters'); return; }
     try {
       setIsSaving(true);
-      await wardenApi.updateKioskAdmin(resettingAdmin.adminId, { password: newPassword });
-      setResettingAdmin(null);
-      toastSuccess(`Password reset for ${resettingAdmin.name}`);
+      if (resetTarget.kind === 'warden') await wardenApi.updateWarden(resetTarget.id, { password: newPassword });
+      else await wardenApi.updateKioskAdmin(resetTarget.id, { password: newPassword });
+      setResetTarget(null);
+      toastSuccess(`Password reset for ${resetTarget.name}`);
     } catch (err: any) {
       toastError(err?.response?.data?.error?.message || err?.message || 'Could not reset password');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  function openEditWarden(w: WardenRecord) {
+    setPendingDeleteWardenId(null);
+    setWardenForm({
+      name: w.name,
+      phone: w.phone || '',
+      department: w.department || '',
+      designation: w.designation || '',
+    });
+    setEditingWarden(w);
+  }
+
+  async function saveWarden() {
+    if (!editingWarden) return;
+    const name = wardenForm.name.trim();
+    if (!name) { toastError('Name cannot be empty'); return; }
+    try {
+      setIsSaving(true);
+      await wardenApi.updateWarden(editingWarden.wardenId, {
+        name,
+        phone: wardenForm.phone.trim(),
+        department: wardenForm.department.trim(),
+        designation: wardenForm.designation.trim(),
+      });
+      setEditingWarden(null);
+      toastSuccess('Warden updated');
+      await Promise.all([loadUsers(), loadStats()]);
+    } catch (err: any) {
+      toastError(err?.response?.data?.error?.message || err?.message || 'Could not update warden');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  // Two-step delete for a warden: first click arms the row, second one removes.
+  async function deleteWarden(w: WardenRecord) {
+    if (pendingDeleteWardenId !== w.wardenId) { setPendingDeleteWardenId(w.wardenId); return; }
+    setPendingDeleteWardenId(null);
+    try {
+      setIsSaving(true);
+      await wardenApi.deleteWarden(w.wardenId);
+      toastSuccess(`${w.name} deleted`);
+      await Promise.all([loadUsers(), loadStats()]);
+    } catch (err: any) {
+      toastError(err?.response?.data?.error?.message || err?.message || 'Could not delete warden');
     } finally {
       setIsSaving(false);
     }
@@ -244,22 +308,6 @@ export function UsersPage() {
     <div className="space-y-6">
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
 
-      {/* Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="p-4 bg-white border border-neutral-200 rounded-xl">
-          <p className="text-xs font-semibold uppercase text-success">Active Wardens</p>
-          <p className="text-3xl font-extrabold text-neutral-900 mt-2">{statsCounts.activeCount}</p>
-        </div>
-        <div className="p-4 bg-white border border-neutral-200 rounded-xl">
-          <p className="text-xs font-semibold uppercase text-error">Inactive</p>
-          <p className="text-3xl font-extrabold text-neutral-900 mt-2">{statsCounts.inactiveCount}</p>
-        </div>
-        <div className="p-4 bg-white border border-neutral-200 rounded-xl">
-          <p className="text-xs font-semibold uppercase text-warning">On Leave</p>
-          <p className="text-3xl font-extrabold text-neutral-900 mt-2">{statsCounts.onLeaveCount}</p>
-        </div>
-      </div>
-
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
         {/* Wardens */}
         <div className="xl:col-span-2 space-y-4">
@@ -306,42 +354,122 @@ export function UsersPage() {
                 <tbody>
                   {users.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-12 text-center text-neutral-600">No wardens in this prison yet</td>
+                      <td colSpan={5} className="py-12 text-center text-neutral-600">No wardens in this prison yet</td>
                     </tr>
-                  ) : users.map((user) => (
-                    <tr key={user.wardenId} className="border-b border-neutral-100 hover:bg-neutral-50 transition-colors">
-                      <td className="py-3 px-4">
-                        <p className="font-medium text-neutral-900">{user.name}</p>
-                        <p className="text-xs text-neutral-500">{user.email}</p>
-                      </td>
-                      <td className="py-3 px-4">
-                        {roleBadge(user)}
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex flex-wrap gap-1">
-                          {(user.permissions || []).slice(0, 3).map(p => (
-                            <span key={p} className="px-2 py-0.5 rounded text-xs font-medium bg-neutral-100 text-neutral-600">{p}</span>
-                          ))}
-                          {(user.permissions || []).length > 3 && (
-                            <span className="text-xs text-neutral-400">+{(user.permissions || []).length - 3}</span>
+                  ) : users.map((user) => {
+                    const isChief = !!user.isChiefWarden;
+                    const isActive = user.status === 'active';
+                    return (
+                      <tr key={user.wardenId} className="border-b border-neutral-100 hover:bg-neutral-50 transition-colors">
+                        <td className="py-3 px-4">
+                          <p className="font-medium text-neutral-900">{user.name}</p>
+                          <p className="text-xs text-neutral-500">{user.email}</p>
+                        </td>
+                        <td className="py-3 px-4">
+                          {roleBadge(user)}
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="flex flex-wrap gap-1">
+                            {(user.permissions || []).slice(0, 3).map(p => (
+                              <span key={p} className="px-2 py-0.5 rounded text-xs font-medium bg-neutral-100 text-neutral-600">{p}</span>
+                            ))}
+                            {(user.permissions || []).length > 3 && (
+                              <span className="text-xs text-neutral-400">+{(user.permissions || []).length - 3}</span>
+                            )}
+                          </div>
+                        </td>
+                        {/* The chief warden has no status to show - they are always on. */}
+                        <td className="py-3 px-4">
+                          {isChief ? <span className="text-neutral-400">—</span> : statusBadge(user.status)}
+                        </td>
+                        <td className="py-3 px-4">
+                          {canManage ? (
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => openResetPassword({ kind: 'warden', id: user.wardenId, name: user.name, tag: user.employeeId || user.wardenId })}
+                                disabled={isSaving}
+                                title="Reset password"
+                                aria-label={`Reset password for ${user.name}`}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 transition disabled:opacity-50"
+                              >
+                                <span className="material-icons text-[18px]">lock_reset</span>
+                              </button>
+                              <button
+                                onClick={() => openEditWarden(user)}
+                                disabled={isSaving}
+                                title="Edit"
+                                aria-label={`Edit ${user.name}`}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 transition disabled:opacity-50"
+                              >
+                                <span className="material-icons text-[18px]">edit</span>
+                              </button>
+
+                              {/* No delete and no switch for the chief warden. */}
+                              {!isChief && (
+                                <>
+                                  <button
+                                    onClick={() => deleteWarden(user)}
+                                    disabled={isSaving}
+                                    title="Delete"
+                                    aria-label={`Delete ${user.name}`}
+                                    className={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition disabled:opacity-50 ${
+                                      pendingDeleteWardenId === user.wardenId
+                                        ? 'bg-error text-white hover:bg-error/90'
+                                        : 'text-neutral-500 hover:bg-error/5 hover:text-error'
+                                    }`}
+                                  >
+                                    <span className="material-icons text-[18px]">delete_outline</span>
+                                  </button>
+                                  <span className={`ml-1 text-[11px] font-bold ${isActive ? 'text-success' : 'text-neutral-400'}`}>
+                                    {isActive ? 'Active' : 'Inactive'}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    role="switch"
+                                    aria-checked={isActive}
+                                    aria-label={isActive ? `Deactivate ${user.name}` : `Activate ${user.name}`}
+                                    title={isActive ? 'Active - click to deactivate' : 'Inactive - click to activate'}
+                                    onClick={() => toggleWardenStatus(user)}
+                                    disabled={isSaving}
+                                    className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition disabled:opacity-50 ${
+                                      isActive ? 'bg-success' : 'bg-neutral-300'
+                                    }`}
+                                  >
+                                    <span
+                                      className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+                                        isActive ? 'translate-x-[18px]' : 'translate-x-[2px]'
+                                      }`}
+                                    />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-neutral-400">—</span>
                           )}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">{statusBadge(user.status)}</td>
-                      <td className="py-3 px-4">
-                        <button
-                          onClick={() => toggleStatus(user.wardenId, user.status)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                            user.status === 'active'
-                              ? 'bg-white border border-neutral-200 text-error hover:bg-error/5'
-                              : 'bg-neutral-900 text-white hover:bg-black'
-                          }`}
-                        >
-                          {user.status === 'active' ? 'Deactivate' : 'Activate'}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+
+                          {canManage && !isChief && pendingDeleteWardenId === user.wardenId && (
+                            <div className="mt-1.5 flex items-center gap-2 rounded-lg border border-error/25 bg-error/5 px-2 py-1 text-xs">
+                              <span className="font-semibold text-error">Delete {user.name}?</span>
+                              <button
+                                onClick={() => deleteWarden(user)}
+                                disabled={isSaving}
+                                className="rounded bg-error px-2 py-0.5 font-bold text-white hover:bg-error/90 disabled:opacity-60"
+                              >
+                                {isSaving ? 'Deleting...' : 'Yes, delete'}
+                              </button>
+                              <button
+                                onClick={() => setPendingDeleteWardenId(null)}
+                                className="px-1 font-medium text-neutral-500 hover:text-neutral-700"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -404,7 +532,7 @@ export function UsersPage() {
                       {/* actions: reset password, edit, delete, status toggle */}
                       <div className="flex items-center gap-1 shrink-0">
                         <button
-                          onClick={() => openResetPassword(a)}
+                          onClick={() => openResetPassword({ kind: 'kiosk', id: a.adminId, name: a.name, tag: a.employeeId || a.adminId })}
                           disabled={isSaving}
                           title="Reset password"
                           aria-label={`Reset password for ${a.name}`}
@@ -535,6 +663,75 @@ export function UsersPage() {
           </div>
         </div>
       )}
+      {/* Edit warden modal */}
+      {editingWarden && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-neutral-900/50 p-4 sm:p-8" onClick={() => setEditingWarden(null)}>
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-200">
+              <div>
+                <h2 className="text-base font-bold text-neutral-900">Edit Warden</h2>
+                <p className="text-xs text-neutral-500 mt-0.5">
+                  {editingWarden.isChiefWarden ? 'Chief Warden' : 'Warden'} ·{' '}
+                  <span className="font-mono font-bold text-primary-700">{editingWarden.employeeId || editingWarden.wardenId}</span>
+                </p>
+              </div>
+              <button onClick={() => setEditingWarden(null)} className="text-neutral-400 hover:text-neutral-700" title="Close">
+                <span className="material-icons">close</span>
+              </button>
+            </div>
+
+            <div className="px-5 py-4 space-y-3">
+              <div>
+                <label className="block text-xs font-semibold uppercase text-neutral-500 mb-1">Full name</label>
+                <input
+                  value={wardenForm.name}
+                  onChange={(e) => setWardenForm((p) => ({ ...p, name: e.target.value }))}
+                  className="w-full px-3 py-2 border-2 border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  placeholder="e.g. Amit Verma"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold uppercase text-neutral-500 mb-1">Phone</label>
+                <input
+                  value={wardenForm.phone}
+                  onChange={(e) => setWardenForm((p) => ({ ...p, phone: e.target.value }))}
+                  className="w-full px-3 py-2 border-2 border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  placeholder="+91-9000000000"
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold uppercase text-neutral-500 mb-1">Department</label>
+                  <input
+                    value={wardenForm.department}
+                    onChange={(e) => setWardenForm((p) => ({ ...p, department: e.target.value }))}
+                    className="w-full px-3 py-2 border-2 border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="Security"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase text-neutral-500 mb-1">Designation</label>
+                  <input
+                    value={wardenForm.designation}
+                    onChange={(e) => setWardenForm((p) => ({ ...p, designation: e.target.value }))}
+                    className="w-full px-3 py-2 border-2 border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="Warden"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-neutral-500">Status is switched with the toggle on the row; the password with the reset icon.</p>
+            </div>
+
+            <div className="flex justify-end gap-2 px-5 py-4 border-t border-neutral-200">
+              <button onClick={() => setEditingWarden(null)} className="px-4 py-2 rounded-lg text-sm font-medium border border-neutral-200 text-neutral-700 hover:bg-neutral-50">Cancel</button>
+              <button onClick={saveWarden} disabled={isSaving} className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-60">
+                {isSaving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Edit kiosk admin modal */}
       {editingAdmin && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-neutral-900/50 p-4 sm:p-8" onClick={() => setEditingAdmin(null)}>
@@ -575,17 +772,17 @@ export function UsersPage() {
         </div>
       )}
       {/* Reset kiosk admin password modal */}
-      {resettingAdmin && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-neutral-900/50 p-4 sm:p-8" onClick={() => setResettingAdmin(null)}>
+      {resetTarget && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-neutral-900/50 p-4 sm:p-8" onClick={() => setResetTarget(null)}>
           <div className="w-full max-w-md bg-white rounded-2xl shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-200">
               <div>
                 <h2 className="text-base font-bold text-neutral-900">Reset Password</h2>
                 <p className="text-xs text-neutral-500 mt-0.5">
-                  {resettingAdmin.name} · User ID <span className="font-mono font-bold text-primary-700">{resettingAdmin.employeeId || '—'}</span>
+                  {resetTarget.name} · User ID <span className="font-mono font-bold text-primary-700">{resetTarget.tag || '—'}</span>
                 </p>
               </div>
-              <button onClick={() => setResettingAdmin(null)} className="text-neutral-400 hover:text-neutral-700" title="Close">
+              <button onClick={() => setResetTarget(null)} className="text-neutral-400 hover:text-neutral-700" title="Close">
                 <span className="material-icons">close</span>
               </button>
             </div>
@@ -607,7 +804,7 @@ export function UsersPage() {
                 <p className="text-xs text-neutral-500">Used to sign in on any kiosk of this prison. The old password stops working immediately.</p>
               </div>
               <div className="flex justify-end gap-2 px-5 py-4 border-t border-neutral-200">
-                <button type="button" onClick={() => setResettingAdmin(null)} className="px-4 py-2 rounded-lg text-sm font-medium border border-neutral-200 text-neutral-700 hover:bg-neutral-50">Cancel</button>
+                <button type="button" onClick={() => setResetTarget(null)} className="px-4 py-2 rounded-lg text-sm font-medium border border-neutral-200 text-neutral-700 hover:bg-neutral-50">Cancel</button>
                 <button type="submit" disabled={isSaving} className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-60">
                   {isSaving ? 'Resetting...' : 'Reset Password'}
                 </button>

@@ -566,6 +566,116 @@ app.get('/wardens/:wardenId', requireAuth, requireRole('admin', 'warden', 'super
   return sendSuccess(res, warden);
 }));
 
+// Same rule as POST /wardens: the chief warden of the jail manages its wardens,
+// an admin needs a jail to manage, a super admin manages everywhere.
+async function wardenWriteGuard(req) {
+  const role = req.auth?.role;
+  const jailId = await effectiveJailId(req);
+  if (role === 'super-admin' || role === 'super_admin') return { ok: true, jailId };
+  if (!jailId) return { ok: false, code: 'FORBIDDEN', message: 'Your account is not linked to a prison yet', status: 403 };
+  if (role === 'warden') {
+    const chief = chiefWardenOf(jailId, await readDb('wardens.json'));
+    if (!(chief && req.auth.sub === chief.wardenId)) {
+      return { ok: false, code: 'FORBIDDEN', message: 'Only the chief warden can manage wardens', status: 403 };
+    }
+  }
+  return { ok: true, jailId };
+}
+
+function wardenGuardError(res, guard) {
+  return sendError(res, guard.code, guard.message, guard.status);
+}
+
+app.patch('/wardens/:wardenId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+  const guard = await wardenWriteGuard(req);
+  if (!guard.ok) return wardenGuardError(res, guard);
+
+  const patch = {};
+  for (const key of ['name', 'phone', 'department', 'designation']) {
+    if (req.body[key] !== undefined) patch[key] = String(req.body[key]).trim();
+  }
+  if ('name' in patch && !patch.name) return sendError(res, 'INVALID_REQUEST', 'name cannot be empty', 400);
+  if (req.body.status !== undefined) {
+    const status = String(req.body.status);
+    if (!['active', 'inactive', 'on_leave'].includes(status)) {
+      return sendError(res, 'INVALID_REQUEST', 'status must be active, inactive or on_leave', 400);
+    }
+    patch.status = status;
+  }
+  if (req.body.password !== undefined) {
+    const password = String(req.body.password);
+    if (password.length < 6) {
+      return sendError(res, 'INVALID_REQUEST', 'password must be at least 6 characters', 400);
+    }
+    patch.password = await hashSecret(password);
+  }
+  if (Object.keys(patch).length === 0) return sendError(res, 'INVALID_REQUEST', 'nothing to update', 400);
+
+  // All row checks run inside the write transaction: scope, the chief warden
+  // protections and the no-deactivating-yourself rule cannot be raced around.
+  let refusal = null;
+  const updated = await updateDb('wardens.json', (rows) => {
+    const idx = rows.findIndex((w) => w.wardenId === req.params.wardenId);
+    const deny = (code, message, status) => {
+      refusal = { code, message, status };
+      return { data: rows, result: null };
+    };
+    if (idx === -1) return deny('NOT_FOUND', 'Warden not found', 404);
+    const target = rows[idx];
+    if (guard.jailId && target.prisonId !== guard.jailId) return deny('NOT_FOUND', 'Warden not found', 404);
+    const chief = chiefWardenOf(target.prisonId, rows);
+    const isChief = !!chief && chief.wardenId === target.wardenId;
+    if (isChief && patch.status && patch.status !== 'active') {
+      return deny('FORBIDDEN', 'The chief warden cannot be deactivated', 403);
+    }
+    if (target.wardenId === req.auth?.sub && patch.status && patch.status !== 'active') {
+      return deny('FORBIDDEN', 'You cannot deactivate your own account', 403);
+    }
+    rows[idx] = { ...target, ...patch, updatedAt: new Date().toISOString() };
+    return { data: rows, result: rows[idx] };
+  });
+  if (!updated) return sendError(res, refusal.code, refusal.message, refusal.status);
+
+  return sendSuccess(res, withoutSecrets(updated));
+}));
+
+app.delete('/wardens/:wardenId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+  const guard = await wardenWriteGuard(req);
+  if (!guard.ok) return wardenGuardError(res, guard);
+
+  let refusal = null;
+  const removed = await updateDb('wardens.json', (rows) => {
+    const idx = rows.findIndex((w) => w.wardenId === req.params.wardenId);
+    const deny = (code, message, status) => {
+      refusal = { code, message, status };
+      return { data: rows, result: null };
+    };
+    if (idx === -1) return deny('NOT_FOUND', 'Warden not found', 404);
+    const target = rows[idx];
+    if (guard.jailId && target.prisonId !== guard.jailId) return deny('NOT_FOUND', 'Warden not found', 404);
+    const chief = chiefWardenOf(target.prisonId, rows);
+    const isChief = !!chief && chief.wardenId === target.wardenId;
+    if (isChief) return deny('FORBIDDEN', 'The chief warden cannot be deleted', 403);
+    if (target.wardenId === req.auth?.sub) return deny('FORBIDDEN', 'You cannot delete your own account', 403);
+    const [gone] = rows.splice(idx, 1);
+    return { data: rows, result: gone };
+  });
+  if (!removed) return sendError(res, refusal.code, refusal.message, refusal.status);
+
+  // The jail roster has to drop the id too - 005 rebuilds wardenIds from the
+  // rows that exist, and a stale entry would resurrect on the next rebuild.
+  await updateDb('prisons.json', (prisons) => {
+    const jail = prisons.find((p) => p.prisonId === removed.prisonId);
+    if (!jail || !Array.isArray(jail.wardenIds) || !jail.wardenIds.includes(removed.wardenId)) {
+      return { data: prisons, result: null };
+    }
+    jail.wardenIds = jail.wardenIds.filter((id) => id !== removed.wardenId);
+    return { data: prisons, result: jail };
+  });
+
+  return sendSuccess(res, { message: 'Warden deleted', wardenId: removed.wardenId });
+}));
+
 // ==================== ADMIN PROFILE ====================
 app.get('/admin/profile', requireAuth, asyncRoute(async (req, res) => {
   const admins = await readDb('admins.json');
