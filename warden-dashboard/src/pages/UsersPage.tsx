@@ -7,7 +7,10 @@ import { wardenApi, WardenRecord, KioskAdmin, NewWardenInput } from '@/services/
 import { usePageHeader } from '@/context/PageHeaderContext';
 import type { ListParams } from '@/services/api/wardenApi';
 
-const EMPTY_FORM: NewWardenInput = { name: '', email: '', password: '', phone: '', department: '' };
+const EMPTY_FORM: NewWardenInput = { name: '', email: '', password: '', phone: '' };
+
+/** One card adds and edits a warden; `mode` is all that tells them apart. */
+type WardenModal = { mode: 'add' } | { mode: 'edit'; warden: WardenRecord } | null;
 
 function roleBadge(user: WardenRecord) {
   return user.isChiefWarden ? (
@@ -42,14 +45,12 @@ export function UsersPage() {
   const [total, setTotal] = useState(0);
   const [statsCounts, setStatsCounts] = useState({ activeCount: 0, inactiveCount: 0, onLeaveCount: 0 });
   const [canManage, setCanManage] = useState(false);
-  const [showForm, setShowForm] = useState(false);
+  const [wardenModal, setWardenModal] = useState<WardenModal>(null);
   const [form, setForm] = useState<NewWardenInput>(EMPTY_FORM);
   const [formErrors, setFormErrors] = useState<FormErrors>({});
   const [isSaving, setIsSaving] = useState(false);
   const [editingAdmin, setEditingAdmin] = useState<KioskAdmin | null>(null);
   const [adminForm, setAdminForm] = useState({ name: '' });
-  const [editingWarden, setEditingWarden] = useState<WardenRecord | null>(null);
-  const [wardenForm, setWardenForm] = useState({ name: '', phone: '', department: '', designation: '' });
   const [resetTarget, setResetTarget] = useState<{ kind: 'warden' | 'kiosk'; id: string; name: string; tag: string } | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -125,27 +126,48 @@ export function UsersPage() {
     setFormErrors(prev => ({ ...prev, [key]: '' }));
   }
 
-  async function submitForm() {
+  function openAddWarden() {
+    setPendingDeleteWardenId(null);
+    setForm(EMPTY_FORM);
+    setFormErrors({});
+    setWardenModal({ mode: 'add' });
+  }
+
+  // Edit reuses the same card: email and password are add-only, so the edit
+  // card carries just name and phone.
+  async function submitWarden() {
+    if (!wardenModal) return;
+    const isEdit = wardenModal.mode === 'edit';
     const errors: FormErrors = {};
     if (!form.name.trim()) errors.name = 'Name is required';
-    if (!form.email.trim()) errors.email = 'Email is required';
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) errors.email = 'Enter a valid email';
-    if (!form.password) errors.password = 'Password is required';
-    else if (form.password.length < 6) errors.password = 'At least 6 characters';
+    if (!isEdit) {
+      const email = form.email.trim();
+      if (!email) errors.email = 'Email is required';
+      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.email = 'Enter a valid email';
+      if (!form.password) errors.password = 'Password is required';
+      else if (form.password.length < 6) errors.password = 'At least 6 characters';
+    }
     setFormErrors(errors);
     if (Object.keys(errors).length > 0) return;
 
     try {
       setIsSaving(true);
-      await wardenApi.createWarden(form);
-      setShowForm(false);
+      if (isEdit) {
+        await wardenApi.updateWarden(wardenModal.warden.wardenId, {
+          name: form.name.trim(),
+          phone: (form.phone || '').trim(),
+        });
+      } else {
+        await wardenApi.createWarden(form);
+      }
+      setWardenModal(null);
       setForm(EMPTY_FORM);
-      toastSuccess('Warden added');
-      setPage(1);
+      toastSuccess(isEdit ? 'Warden updated' : 'Warden added');
+      if (!isEdit) setPage(1);
       await Promise.all([loadUsers(), loadStats()]);
     } catch (err: any) {
-      const message = err?.response?.data?.error?.message || err?.message || 'Could not add warden';
-      toastError(message);
+      const fallback = isEdit ? 'Could not update warden' : 'Could not add warden';
+      toastError(err?.response?.data?.error?.message || err?.message || fallback);
     } finally {
       setIsSaving(false);
     }
@@ -214,35 +236,9 @@ export function UsersPage() {
 
   function openEditWarden(w: WardenRecord) {
     setPendingDeleteWardenId(null);
-    setWardenForm({
-      name: w.name,
-      phone: w.phone || '',
-      department: w.department || '',
-      designation: w.designation || '',
-    });
-    setEditingWarden(w);
-  }
-
-  async function saveWarden() {
-    if (!editingWarden) return;
-    const name = wardenForm.name.trim();
-    if (!name) { toastError('Name cannot be empty'); return; }
-    try {
-      setIsSaving(true);
-      await wardenApi.updateWarden(editingWarden.wardenId, {
-        name,
-        phone: wardenForm.phone.trim(),
-        department: wardenForm.department.trim(),
-        designation: wardenForm.designation.trim(),
-      });
-      setEditingWarden(null);
-      toastSuccess('Warden updated');
-      await Promise.all([loadUsers(), loadStats()]);
-    } catch (err: any) {
-      toastError(err?.response?.data?.error?.message || err?.message || 'Could not update warden');
-    } finally {
-      setIsSaving(false);
-    }
+    setFormErrors({});
+    setForm({ name: w.name, email: w.email || '', password: '', phone: w.phone || '' });
+    setWardenModal({ mode: 'edit', warden: w });
   }
 
   // Two-step delete for a warden: first click arms the row, second one removes.
@@ -331,7 +327,7 @@ export function UsersPage() {
             </select>
             {canManage && (
               <button
-                onClick={() => { setForm(EMPTY_FORM); setFormErrors({}); setShowForm(true); }}
+                onClick={openAddWarden}
                 className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-semibold transition inline-flex items-center gap-1.5"
               >
                 <span className="material-icons text-base">person_add</span> Add New Warden
@@ -346,7 +342,6 @@ export function UsersPage() {
                   <tr className="border-b border-neutral-200 bg-neutral-50">
                     <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Warden</th>
                     <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Role</th>
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Permissions</th>
                     <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Status</th>
                     <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Actions</th>
                   </tr>
@@ -354,7 +349,7 @@ export function UsersPage() {
                 <tbody>
                   {users.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="py-12 text-center text-neutral-600">No wardens in this prison yet</td>
+                      <td colSpan={4} className="py-12 text-center text-neutral-600">No wardens in this prison yet</td>
                     </tr>
                   ) : users.map((user) => {
                     const isChief = !!user.isChiefWarden;
@@ -367,16 +362,6 @@ export function UsersPage() {
                         </td>
                         <td className="py-3 px-4">
                           {roleBadge(user)}
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="flex flex-wrap gap-1">
-                            {(user.permissions || []).slice(0, 3).map(p => (
-                              <span key={p} className="px-2 py-0.5 rounded text-xs font-medium bg-neutral-100 text-neutral-600">{p}</span>
-                            ))}
-                            {(user.permissions || []).length > 3 && (
-                              <span className="text-xs text-neutral-400">+{(user.permissions || []).length - 3}</span>
-                            )}
-                          </div>
                         </td>
                         {/* The chief warden has no status to show - they are always on. */}
                         <td className="py-3 px-4">
@@ -614,13 +599,24 @@ export function UsersPage() {
         </Card>
       </div>
 
-      {/* Add warden modal */}
-      {showForm && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-neutral-900/50 p-4 sm:p-8" onClick={() => setShowForm(false)}>
+      {/* One card for both adding and editing a warden: designation is set
+          server-side on create, department and permissions are never shown. */}
+      {wardenModal && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-neutral-900/50 p-4 sm:p-8" onClick={() => setWardenModal(null)}>
           <div className="w-full max-w-lg bg-white rounded-2xl shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-200">
-              <h2 className="text-base font-bold text-neutral-900">Add New Warden</h2>
-              <button onClick={() => setShowForm(false)} className="text-neutral-400 hover:text-neutral-700" title="Close">
+              <div>
+                <h2 className="text-base font-bold text-neutral-900">
+                  {wardenModal.mode === 'edit' ? 'Edit Warden' : 'Add New Warden'}
+                </h2>
+                {wardenModal.mode === 'edit' && (
+                  <p className="text-xs text-neutral-500 mt-0.5">
+                    {wardenModal.warden.isChiefWarden ? 'Chief Warden' : 'Warden'} ·{' '}
+                    <span className="font-mono font-bold text-primary-700">{wardenModal.warden.employeeId || wardenModal.warden.wardenId}</span>
+                  </p>
+                )}
+              </div>
+              <button onClick={() => setWardenModal(null)} className="text-neutral-400 hover:text-neutral-700" title="Close">
                 <span className="material-icons">close</span>
               </button>
             </div>
@@ -628,105 +624,47 @@ export function UsersPage() {
             <div className="px-5 py-4 space-y-3">
               <div>
                 <label className="block text-xs font-semibold uppercase text-neutral-500 mb-1">Full name</label>
-                <input value={form.name} onChange={(e) => setField('name', e.target.value)} className="w-full px-3 py-2 border-2 border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="e.g. Amit Verma" />
+                <input value={form.name} onChange={(e) => setField('name', e.target.value)} className="w-full px-3 py-2 border-2 border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="e.g. Amit Verma" autoFocus />
                 {formErrors.name && <p className="mt-1 text-xs text-error">{formErrors.name}</p>}
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold uppercase text-neutral-500 mb-1">Email</label>
-                  <input type="email" value={form.email} onChange={(e) => setField('email', e.target.value)} className="w-full px-3 py-2 border-2 border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="name@prison.gov.in" />
+                  <input
+                    type="email"
+                    value={form.email}
+                    onChange={(e) => setField('email', e.target.value)}
+                    disabled={wardenModal.mode === 'edit'}
+                    className="w-full px-3 py-2 border-2 border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-neutral-100 disabled:text-neutral-500 disabled:cursor-not-allowed"
+                    placeholder="name@prison.gov.in"
+                  />
                   {formErrors.email && <p className="mt-1 text-xs text-error">{formErrors.email}</p>}
                 </div>
                 <div>
                   <label className="block text-xs font-semibold uppercase text-neutral-500 mb-1">Phone</label>
-                  <input value={form.phone} onChange={(e) => setField('phone', e.target.value)} className="w-full px-3 py-2 border-2 border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="+91-9000000000" />
+                  <input value={form.phone || ''} onChange={(e) => setField('phone', e.target.value)} className="w-full px-3 py-2 border-2 border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="+91-9000000000" />
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-semibold uppercase text-neutral-500 mb-1">Department</label>
-                <input value={form.department} onChange={(e) => setField('department', e.target.value)} className="w-full px-3 py-2 border-2 border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="Security" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold uppercase text-neutral-500 mb-1">Password</label>
-                <input type="password" value={form.password} onChange={(e) => setField('password', e.target.value)} className="w-full px-3 py-2 border-2 border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="At least 6 characters" />
-                {formErrors.password && <p className="mt-1 text-xs text-error">{formErrors.password}</p>}
-              </div>
-              <p className="text-xs text-neutral-500">The new warden joins this prison and gets the standard warden role.</p>
+              {wardenModal.mode === 'add' && (
+                <div>
+                  <label className="block text-xs font-semibold uppercase text-neutral-500 mb-1">Password</label>
+                  <input type="password" value={form.password} onChange={(e) => setField('password', e.target.value)} className="w-full px-3 py-2 border-2 border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="At least 6 characters" autoComplete="new-password" />
+                  {formErrors.password && <p className="mt-1 text-xs text-error">{formErrors.password}</p>}
+                </div>
+              )}
+              <p className="text-xs text-neutral-500">
+                {wardenModal.mode === 'edit'
+                  ? 'Status is switched with the toggle on the row; the password with the reset icon.'
+                  : 'The new warden joins this prison and gets the standard warden role.'}
+              </p>
             </div>
 
             <div className="flex justify-end gap-2 px-5 py-4 border-t border-neutral-200">
-              <button onClick={() => setShowForm(false)} className="px-4 py-2 rounded-lg text-sm font-medium border border-neutral-200 text-neutral-700 hover:bg-neutral-50">Cancel</button>
-              <button onClick={submitForm} disabled={isSaving} className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-60">
-                {isSaving ? 'Adding...' : 'Add Warden'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* Edit warden modal */}
-      {editingWarden && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-neutral-900/50 p-4 sm:p-8" onClick={() => setEditingWarden(null)}>
-          <div className="w-full max-w-md bg-white rounded-2xl shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-200">
-              <div>
-                <h2 className="text-base font-bold text-neutral-900">Edit Warden</h2>
-                <p className="text-xs text-neutral-500 mt-0.5">
-                  {editingWarden.isChiefWarden ? 'Chief Warden' : 'Warden'} ·{' '}
-                  <span className="font-mono font-bold text-primary-700">{editingWarden.employeeId || editingWarden.wardenId}</span>
-                </p>
-              </div>
-              <button onClick={() => setEditingWarden(null)} className="text-neutral-400 hover:text-neutral-700" title="Close">
-                <span className="material-icons">close</span>
-              </button>
-            </div>
-
-            <div className="px-5 py-4 space-y-3">
-              <div>
-                <label className="block text-xs font-semibold uppercase text-neutral-500 mb-1">Full name</label>
-                <input
-                  value={wardenForm.name}
-                  onChange={(e) => setWardenForm((p) => ({ ...p, name: e.target.value }))}
-                  className="w-full px-3 py-2 border-2 border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  placeholder="e.g. Amit Verma"
-                  autoFocus
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold uppercase text-neutral-500 mb-1">Phone</label>
-                <input
-                  value={wardenForm.phone}
-                  onChange={(e) => setWardenForm((p) => ({ ...p, phone: e.target.value }))}
-                  className="w-full px-3 py-2 border-2 border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  placeholder="+91-9000000000"
-                />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold uppercase text-neutral-500 mb-1">Department</label>
-                  <input
-                    value={wardenForm.department}
-                    onChange={(e) => setWardenForm((p) => ({ ...p, department: e.target.value }))}
-                    className="w-full px-3 py-2 border-2 border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    placeholder="Security"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold uppercase text-neutral-500 mb-1">Designation</label>
-                  <input
-                    value={wardenForm.designation}
-                    onChange={(e) => setWardenForm((p) => ({ ...p, designation: e.target.value }))}
-                    className="w-full px-3 py-2 border-2 border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    placeholder="Warden"
-                  />
-                </div>
-              </div>
-              <p className="text-xs text-neutral-500">Status is switched with the toggle on the row; the password with the reset icon.</p>
-            </div>
-
-            <div className="flex justify-end gap-2 px-5 py-4 border-t border-neutral-200">
-              <button onClick={() => setEditingWarden(null)} className="px-4 py-2 rounded-lg text-sm font-medium border border-neutral-200 text-neutral-700 hover:bg-neutral-50">Cancel</button>
-              <button onClick={saveWarden} disabled={isSaving} className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-60">
-                {isSaving ? 'Saving...' : 'Save Changes'}
+              <button onClick={() => setWardenModal(null)} className="px-4 py-2 rounded-lg text-sm font-medium border border-neutral-200 text-neutral-700 hover:bg-neutral-50">Cancel</button>
+              <button onClick={submitWarden} disabled={isSaving} className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-60">
+                {isSaving
+                  ? (wardenModal.mode === 'edit' ? 'Saving...' : 'Adding...')
+                  : (wardenModal.mode === 'edit' ? 'Save Changes' : 'Add Warden')}
               </button>
             </div>
           </div>

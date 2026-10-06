@@ -10,7 +10,6 @@ export interface WardenRecord {
   email: string;
   phone?: string;
   prisonId: string;
-  department?: string;
   designation?: string;
   permissions?: string[];
   status: string;
@@ -24,16 +23,12 @@ export interface NewWardenInput {
   email: string;
   password: string;
   phone?: string;
-  department?: string;
-  designation?: string;
 }
 
 /** Fields a chief warden may change on an existing warden (password resets too). */
 export interface WardenUpdate {
   name?: string;
   phone?: string;
-  department?: string;
-  designation?: string;
   status?: string;
   password?: string;
 }

@@ -416,7 +416,6 @@ app.post('/wardens', requireAuth, requireRole('admin', 'warden', 'super-admin', 
   const email = String(req.body.email || '').trim().toLowerCase();
   const password = String(req.body.password || '');
   const phone = String(req.body.phone || '').trim();
-  const department = String(req.body.department || '').trim();
   const designation = String(req.body.designation || '').trim() || 'Warden';
 
   if (!name || !email || !password) {
@@ -436,7 +435,6 @@ app.post('/wardens', requireAuth, requireRole('admin', 'warden', 'super-admin', 
     name,
     email,
     phone,
-    department,
     designation,
     prisonId: jailId,
     permissions: ['view_calls', 'view_reports'],
@@ -591,8 +589,14 @@ app.patch('/wardens/:wardenId', requireAuth, requireRole('admin', 'warden', 'sup
   if (!guard.ok) return wardenGuardError(res, guard);
 
   const patch = {};
-  for (const key of ['name', 'phone', 'department', 'designation']) {
+  // department is not a warden field any more - it is dropped if a client
+  // still sends it.
+  for (const key of ['name', 'phone']) {
     if (req.body[key] !== undefined) patch[key] = String(req.body[key]).trim();
+  }
+  // Designation is set on creation ("Warden") and never blanked by a patch.
+  if (req.body.designation !== undefined && String(req.body.designation).trim()) {
+    patch.designation = String(req.body.designation).trim();
   }
   if ('name' in patch && !patch.name) return sendError(res, 'INVALID_REQUEST', 'name cannot be empty', 400);
   if (req.body.status !== undefined) {
