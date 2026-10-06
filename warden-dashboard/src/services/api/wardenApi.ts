@@ -2,6 +2,47 @@ import { apiClient } from './client';
 import type { ApiResponse } from '@/types/api';
 import { cachedGet, invalidateCache } from './cache';
 
+/** Warden staff record as returned by GET /wardens (secrets stripped). */
+export interface WardenRecord {
+  wardenId: string;
+  employeeId?: string;
+  name: string;
+  email: string;
+  phone?: string;
+  prisonId: string;
+  department?: string;
+  designation?: string;
+  permissions?: string[];
+  status: string;
+  isChiefWarden?: boolean;
+  createdBy?: string | null;
+  createdAt?: string;
+}
+
+export interface NewWardenInput {
+  name: string;
+  email: string;
+  password: string;
+  phone?: string;
+  department?: string;
+  designation?: string;
+}
+
+/** Staff account attached to a kiosk device. */
+export interface KioskAdmin {
+  adminId: string;
+  employeeId?: string;
+  name: string;
+  email?: string;
+  status?: string;
+  kioskId: string | null;
+  prisonId?: string;
+  location?: string | null;
+  ward?: string | null;
+  wards?: string[];
+  registeredInmates?: number;
+}
+
 export interface ActiveCall {
   callId: string;
   roomId: string;
@@ -736,7 +777,13 @@ export const wardenApi = {
     cachedGet(`wardens:${wardenId}`, () => apiClient.get<ApiResponse<any>>(`/wardens/${wardenId}`).then((r) => r.data?.data)),
 
   getWardenStats: () =>
-    apiClient.get<ApiResponse<{ total: number; activeCount: number; inactiveCount: number; onLeaveCount: number }>>('/wardens/stats').then((r) => r.data?.data ?? { total: 0, activeCount: 0, inactiveCount: 0, onLeaveCount: 0 }),
+    apiClient.get<ApiResponse<{ total: number; activeCount: number; inactiveCount: number; onLeaveCount: number; canManageWardens?: boolean }>>('/wardens/stats').then((r) => r.data?.data ?? { total: 0, activeCount: 0, inactiveCount: 0, onLeaveCount: 0, canManageWardens: false }),
+
+  createWarden: (payload: NewWardenInput) =>
+    apiClient.post<ApiResponse<WardenRecord>>('/wardens', payload).then((r) => r.data?.data),
+
+  getKioskAdmins: () =>
+    apiClient.get<ApiResponse<KioskAdmin[]>>('/kiosk-admins').then((r) => r.data?.data ?? []),
 
   // Prisons
   getPrisons: () =>

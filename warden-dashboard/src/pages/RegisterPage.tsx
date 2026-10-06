@@ -15,6 +15,7 @@ export function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [prisonName, setPrisonName] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const { register, isLoading } = useAuth();
@@ -26,14 +27,16 @@ export function RegisterPage() {
 
     // Client-side validation
     const { valid, errors } = validateRegister(name, email, password, confirmPassword);
+    if (!prisonName.trim()) errors.prisonName = 'Prison name is required';
     setFieldErrors(errors);
-    if (!valid) return;
+    if (!valid || !prisonName.trim()) return;
 
     try {
       await register({
         name: name.trim(),
         email: email.trim(),
         password,
+        prisonName: prisonName.trim(),
       });
       navigate('/dashboard', { replace: true });
     } catch {
@@ -112,6 +115,23 @@ export function RegisterPage() {
           icon={
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+          }
+        />
+
+        <AuthInput
+          label="Prison / Jail Name"
+          type="text"
+          value={prisonName}
+          onChange={(v) => {
+            setPrisonName(v);
+            clearFieldError('prisonName');
+          }}
+          error={fieldErrors.prisonName}
+          placeholder="e.g. Central Prison Mumbai"
+          icon={
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21h18M5 21V5a2 2 0 012-2h10a2 2 0 012 2v16M9 7h1m4 0h1M9 11h1m4 0h1M9 15h1m4 0h1" />
             </svg>
           }
         />

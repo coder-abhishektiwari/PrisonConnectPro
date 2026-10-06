@@ -6,19 +6,10 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 const { sendSuccess, sendError, asyncRoute } = require('../lib/response');
 const { jailScopeOf, inAdminScope, adminScopeFilter, inScopeOf, scopeList } = require('../lib/scoping');
 const { paginate } = require('../lib/paginate');
+const { isDemoKiosk, wardLabel, buildWardIndex } = require('../lib/kioskView');
 
 const router = express.Router();
 
-// ==================== DEMO DEVICE SEPARATOR ====================
-// The seeded demo fleet ships with a fake serial (PC-KSK-2024-00NN). Real
-// kiosks register with the hardware serial read from the device, so the
-// prefix reliably separates demo rows from kiosks actually installed in a
-// jail. Demo rows stay in the database (legacy calls/inmates point at them)
-// but are never listed or reported on.
-const DEMO_SERIAL_PREFIX = 'PC-KSK-';
-function isDemoKiosk(k) {
-  return !!k && String(k.deviceSerialNumber || '').startsWith(DEMO_SERIAL_PREFIX);
-}
 
 // ==================== KIOSK REPORT HELPERS ====================
 // States where the call actually reached the kiosk. 'scheduled'/'waiting'
@@ -64,13 +55,6 @@ function parseWhen(value) {
   if (!value) return null;
   const d = new Date(value);
   return isNaN(d.getTime()) ? null : d;
-}
-
-// Ward label an inmate carries: the normalized block first, then the
-// free-text cellBlock. There is no per-cell range on a kiosk — the ward is
-// derived from the prisoners actually registered on the device.
-function wardLabel(inmate, blockMap) {
-  return (inmate.blockId && blockMap.get(inmate.blockId)) || inmate.blockName || inmate.cellBlock || '';
 }
 
 // ==================== DEVICE LIVENESS ====================
@@ -551,27 +535,12 @@ router.get('/', requireAuth, requireRole('admin', 'warden', 'super-admin', 'supe
     readDb('blocks.json').catch(() => []),
   ]);
   const inScope = adminScopeFilter(req);
-  const blockMap = new Map(blocks.map((b) => [b.blockId, b.name]));
-
-  // Registered prisoners + ward labels per kiosk, counted in one pass so the
-  // list stays O(inmates + kiosks) instead of issuing a query per row.
-  const inmateCount = new Map();
-  const wardSet = new Map();
-  for (const i of inmates) {
-    if (!i.assignedKioskId || !inScope(i)) continue;
-    const id = i.assignedKioskId;
-    inmateCount.set(id, (inmateCount.get(id) || 0) + 1);
-    const w = wardLabel(i, blockMap);
-    if (w) {
-      if (!wardSet.has(id)) wardSet.set(id, new Set());
-      wardSet.get(id).add(w);
-    }
-  }
+  const index = buildWardIndex({ inmates, blocks, inScope });
 
   const data = kiosks
     .filter((k) => inScope(k) && !isDemoKiosk(k))
     .map((k) => {
-      const wards = [...(wardSet.get(k.kioskId) || [])];
+      const wards = index.wardsFor(k.kioskId);
       return {
         ...k,
         // Liveness is derived from the device's heartbeat, not the stored flag.
@@ -583,7 +552,7 @@ router.get('/', requireAuth, requireRole('admin', 'warden', 'super-admin', 'supe
         // went through registration leaves assignedBlock null.
         ward: wards.length ? wards.join(', ') : null,
         wards,
-        registeredInmates: inmateCount.get(k.kioskId) || 0,
+        registeredInmates: index.countFor(k.kioskId),
       };
     });
   return sendSuccess(res, data);

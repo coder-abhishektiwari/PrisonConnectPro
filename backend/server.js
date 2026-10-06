@@ -7,12 +7,13 @@ const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
 
 const { readDb, updateDb } = require('./lib/db');
-const { verifyToken } = require('./lib/auth');
+const { verifyToken, hashSecret } = require('./lib/auth');
 const { requireAuth, requireRole } = require('./middleware/auth');
 const { sendSms, otpTemplateVars } = require('./lib/sms');
 const { sendSuccess, sendError, asyncRoute, deepMerge } = require('./lib/response');
 const { jailScopeOf, inAdminScope, inScopeOf, scopeList, kioskScopeOf } = require('./lib/scoping');
 const { paginate } = require('./lib/paginate');
+const { buildWardIndex } = require('./lib/kioskView');
 
 const { router: authRouter } = require('./auth-routes');
 const { router: adminRouter } = require('./admin-routes');
@@ -315,8 +316,55 @@ app.patch('/wallet-requests/:requestId/reject', requireAuth, requireRole('admin'
 }));
 
 // ==================== WARDENS ====================
+// A warden's prison can be missing from the token (accounts created before a
+// prison was assigned), and a scope with no jail returns every prison's staff.
+// Fall back to the warden record so the list is always this jail's own wardens.
+async function effectiveJailId(req) {
+  const claimed = jailScopeOf(req);
+  if (claimed) return claimed;
+  if (req.auth?.role !== 'warden') return null;
+  const [wardens, prisons] = await Promise.all([readDb('wardens.json'), readDb('prisons.json')]);
+  const me = wardens.find((w) => w.wardenId === req.auth.sub);
+  if (me?.prisonId) return me.prisonId;
+  const linked = prisons.find((p) => (p.wardenIds || []).includes(req.auth.sub));
+  return linked?.prisonId || null;
+}
+
+// The account created through "Create Account" is the jail's chief warden, and
+// only the chief may add wardens; everyone added afterwards is a plain warden.
+// Older records predate that flag, so the earliest-created warden of the jail
+// stands in until one is explicitly marked.
+function chiefWardenOf(jailId, wardens) {
+  if (!jailId) return null;
+  const own = wardens.filter((w) => w.prisonId === jailId);
+  const marked = own.find((w) => w.isChiefWarden);
+  if (marked) return marked;
+  const sorted = own.slice().sort((a, b) =>
+    String(a.createdAt || '').localeCompare(String(b.createdAt || '')) ||
+    String(a.wardenId || '').localeCompare(String(b.wardenId || '')));
+  return sorted[0] || null;
+}
+
+function withoutSecrets(warden) {
+  const { password, pin, ...safe } = warden;
+  void password;
+  void pin;
+  return safe;
+}
+
+// Everything on this page is one jail's own staff; only a super admin is
+// allowed to look across prisons, and a warden with no linked jail sees nothing
+// rather than another prison's records.
+function staffInScope(jailId, role, rows) {
+  if (jailId) return rows.filter((w) => w.prisonId === jailId);
+  return role === 'super-admin' || role === 'super_admin' ? rows : [];
+}
+
 app.get('/wardens', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
-  const wardens = await scopeList(req, await readDb('wardens.json'));
+  const jailId = await effectiveJailId(req);
+  const all = await readDb('wardens.json');
+  const wardens = staffInScope(jailId, req.auth?.role, all);
+  const chief = chiefWardenOf(jailId, all);
   const statusFilter = req.query.status;
   const filtered = (statusFilter && statusFilter !== 'all')
     ? wardens.filter((w) => w.status === statusFilter)
@@ -331,16 +379,107 @@ app.get('/wardens', requireAuth, requireRole('admin', 'warden', 'super-admin', '
     searchFields: [],
     defaultSort: 'name',
   });
+  result.items = (result.items || []).map((w) => ({
+    ...withoutSecrets(w),
+    isChiefWarden: !!chief && w.wardenId === chief.wardenId,
+  }));
   return sendSuccess(res, result);
 }));
 app.get('/wardens/stats', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
-  const wardens = await scopeList(req, await readDb('wardens.json'));
+  const jailId = await effectiveJailId(req);
+  const all = await readDb('wardens.json');
+  const wardens = staffInScope(jailId, req.auth?.role, all);
+  const chief = chiefWardenOf(jailId, all);
   return sendSuccess(res, {
     total: wardens.length,
     activeCount: wardens.filter((w) => w.status === 'active').length,
     inactiveCount: wardens.filter((w) => w.status === 'inactive').length,
     onLeaveCount: wardens.filter((w) => w.status === 'on_leave').length,
+    // Only the chief of this jail gets the "Add New Warden" action.
+    canManageWardens: !!(chief && req.auth?.sub === chief.wardenId),
   });
+}));
+
+// Only the chief warden may create wardens, and they always land in the
+// chief's own jail — a warden can never seed staff into another prison.
+app.post('/wardens', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+  const jailId = await effectiveJailId(req);
+  if (!jailId) return sendError(res, 'FORBIDDEN', 'Your account is not linked to a prison yet', 403);
+
+  const all = await readDb('wardens.json');
+  const chief = chiefWardenOf(jailId, all);
+  if (req.auth?.role === 'warden' && !(chief && req.auth.sub === chief.wardenId)) {
+    return sendError(res, 'FORBIDDEN', 'Only the chief warden can add wardens', 403);
+  }
+
+  const name = String(req.body.name || '').trim();
+  const email = String(req.body.email || '').trim().toLowerCase();
+  const password = String(req.body.password || '');
+  const phone = String(req.body.phone || '').trim();
+  const department = String(req.body.department || '').trim();
+  const designation = String(req.body.designation || '').trim() || 'Warden';
+
+  if (!name || !email || !password) {
+    return sendError(res, 'INVALID_REQUEST', 'name, email and password are required', 400);
+  }
+  if (password.length < 6) {
+    return sendError(res, 'INVALID_REQUEST', 'password must be at least 6 characters', 400);
+  }
+  if (all.some((w) => String(w.email || '').toLowerCase() === email)) {
+    return sendError(res, 'DUPLICATE', 'A warden with this email already exists', 409);
+  }
+
+  const now = new Date().toISOString();
+  const newWarden = {
+    wardenId: `WARDEN-${uuidv4().substring(0, 8).toUpperCase()}`,
+    employeeId: `EMP-${uuidv4().substring(0, 6).toUpperCase()}`,
+    name,
+    email,
+    phone,
+    department,
+    designation,
+    prisonId: jailId,
+    permissions: ['view_calls', 'view_reports'],
+    status: 'active',
+    password: await hashSecret(password),
+    isChiefWarden: false,
+    createdBy: req.auth.sub,
+    createdAt: now,
+  };
+  await updateDb('wardens.json', (rows) => ({ data: [...rows, newWarden], result: newWarden }));
+  return sendSuccess(res, withoutSecrets(newWarden), 201);
+}));
+
+// ==================== KIOSK ADMINS ====================
+// Staff who operate a kiosk device, shown with the device's ward and prisoner
+// load so a warden can see who is on which terminal in this jail.
+app.get('/kiosk-admins', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+  const jailId = await effectiveJailId(req);
+  const [admins, kiosks, inmates, blocks] = await Promise.all([
+    readDb('admins.json'),
+    readDb('kiosks.json'),
+    readDb('inmates.json'),
+    readDb('blocks.json').catch(() => []),
+  ]);
+  const index = buildWardIndex({ inmates, blocks });
+
+  const data = staffInScope(jailId, req.auth?.role, admins.filter((a) => a.role === 'kiosk_admin'))
+    .map((a) => {
+      const kiosk = kiosks.find((k) => k.kioskId === a.kioskId);
+      const { password, pin, biometricData, ...safe } = a;
+      void password;
+      void pin;
+      void biometricData;
+      return {
+        ...safe,
+        kioskId: a.kioskId || null,
+        location: kiosk?.location || null,
+        ward: index.wardFor(a.kioskId),
+        wards: index.wardsFor(a.kioskId),
+        registeredInmates: a.kioskId ? index.countFor(a.kioskId) : 0,
+      };
+    });
+  return sendSuccess(res, data);
 }));
 app.get('/wardens/:wardenId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const wardens = await readDb('wardens.json');

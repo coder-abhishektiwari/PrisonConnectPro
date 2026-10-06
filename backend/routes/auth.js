@@ -111,24 +111,51 @@ router.post('/warden/login', authLimiter, asyncRoute(async (req, res) => {
 // Warden registration endpoint
 router.post('/register', authLimiter, asyncRoute(async (req, res) => {
   const { name, email, password } = req.body;
+  const prisonName = String(req.body.prisonName || '').trim() || 'New Prison';
   if (!name || !email || !password) return sendError(res, 'INVALID_REQUEST', 'name, email and password are required', 400);
 
   const wardens = await readDb('wardens.json');
   const existing = wardens.find((w) => w.email === email);
   if (existing) return sendError(res, 'DUPLICATE', 'A warden with this email already exists', 409);
 
+  const now = new Date().toISOString();
+  const wardenId = 'WARDEN-' + Date.now().toString(36).toUpperCase();
+  const prisonId = 'PRISON-' + Date.now().toString(36).toUpperCase();
+
   const newWarden = {
-    wardenId: 'WARDEN-' + Date.now().toString(36).toUpperCase(),
+    wardenId,
     name: name.trim(),
     email: email.trim(),
     password: await hashSecret(String(password)),
     role: 'warden',
     permissions: ['view_calls'],
     status: 'active',
-    prisonId: null,
-    createdAt: new Date().toISOString()
+    designation: 'Chief Warden',
+    // The account opened through "Create Account" runs the jail it creates.
+    isChiefWarden: true,
+    prisonId,
+    createdAt: now
   };
 
+  // A registered account owns its own jail, so it has a scope to manage wardens
+  // and kiosk admins against.
+  const newPrison = {
+    prisonId,
+    name: prisonName,
+    code: 'JAIL-' + prisonId.slice(-6),
+    state: null,
+    district: null,
+    address: null,
+    status: 'active',
+    capacity: 500,
+    currentInmateCount: 0,
+    wardenIds: [wardenId],
+    kioskIds: [],
+    createdAt: now
+  };
+
+  // The jail row must exist first: wardens.prison_id is a foreign key.
+  await updateDb('prisons.json', (all) => ({ data: [...all, newPrison], result: newPrison }));
   await updateDb('wardens.json', (all) => ({ data: [...all, newWarden], result: newWarden }));
 
   const claims = { sub: newWarden.wardenId, role: 'warden', prisonId: newWarden.prisonId };
