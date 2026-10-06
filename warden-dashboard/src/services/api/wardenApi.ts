@@ -28,6 +28,7 @@ export interface NewWardenInput {
 /** Fields a chief warden may change on an existing warden (password resets too). */
 export interface WardenUpdate {
   name?: string;
+  email?: string;
   phone?: string;
   status?: string;
   password?: string;
@@ -54,6 +55,7 @@ export interface KioskAdminUpdate {
   name?: string;
   /** The username the operator types on the kiosk terminal. */
   employeeId?: string;
+  email?: string;
   status?: string;
   permissions?: string[];
   password?: string;

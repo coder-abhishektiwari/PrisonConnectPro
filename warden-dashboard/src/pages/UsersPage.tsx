@@ -143,11 +143,11 @@ export function UsersPage() {
     if (!wardenModal) return;
     const isEdit = wardenModal.mode === 'edit';
     const errors: FormErrors = {};
+    const email = form.email.trim();
     if (!form.name.trim()) errors.name = 'Name is required';
+    if (!email) errors.email = 'Email is required';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.email = 'Enter a valid email';
     if (!isEdit) {
-      const email = form.email.trim();
-      if (!email) errors.email = 'Email is required';
-      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.email = 'Enter a valid email';
       if (!form.password) errors.password = 'Password is required';
       else if (form.password.length < 6) errors.password = 'At least 6 characters';
     }
@@ -159,6 +159,7 @@ export function UsersPage() {
       if (isEdit) {
         await wardenApi.updateWarden(wardenModal.warden.wardenId, {
           name: form.name.trim(),
+          email,
           phone: (form.phone || '').trim(),
         });
       } else {
@@ -208,8 +209,8 @@ export function UsersPage() {
     if (!name) errors.name = 'Name is required';
     if (!employeeId) errors.employeeId = 'Username is required';
     else if (!/^[A-Za-z0-9._-]{3,40}$/.test(employeeId)) errors.employeeId = '3-40 characters: letters, digits, dot, dash or underscore';
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.email = 'Enter a valid email';
     if (!isEdit) {
-      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.email = 'Enter a valid email';
       if (!adminForm.password) errors.password = 'Password is required';
       else if (adminForm.password.length < 6) errors.password = 'At least 6 characters';
     }
@@ -219,7 +220,7 @@ export function UsersPage() {
     try {
       setIsSaving(true);
       if (isEdit) {
-        await wardenApi.updateKioskAdmin(adminModal.admin.adminId, { name, employeeId });
+        await wardenApi.updateKioskAdmin(adminModal.admin.adminId, { name, employeeId, email });
       } else {
         await wardenApi.createKioskAdmin({ name, employeeId, email: email || undefined, password: adminForm.password });
       }
@@ -362,12 +363,6 @@ export function UsersPage() {
                 <span className="material-icons text-base">person_add</span> Add New Warden
               </button>
             )}
-            <button
-              onClick={openAddAdmin}
-              className="px-4 py-2 border-2 border-primary-600 text-primary-700 hover:bg-primary-50 rounded-lg text-sm font-semibold transition inline-flex items-center gap-1.5"
-            >
-              <span className="material-icons text-base">badge</span> Add Kiosk Admin
-            </button>
           </div>
 
           <Card>
@@ -529,7 +524,16 @@ export function UsersPage() {
               <h2 className="text-sm font-bold text-neutral-900">Kiosk Admins</h2>
               <p className="text-xs text-neutral-500">{kioskAdmins.length} in this prison · can sign in on any kiosk</p>
             </div>
-            <span className="material-icons text-primary-600">badge</span>
+            <div className="flex items-center gap-2">
+              <span className="material-icons text-primary-600">badge</span>
+              <button
+                onClick={openAddAdmin}
+                disabled={isSaving}
+                className="inline-flex items-center gap-0.5 rounded-lg border-2 border-primary-600 px-3 py-1.5 text-sm font-semibold text-primary-700 hover:bg-primary-50 transition disabled:opacity-60"
+              >
+                <span className="material-icons text-base">add</span> New
+              </button>
+            </div>
           </div>
 
           {kioskAdmins.length === 0 ? (
@@ -757,7 +761,6 @@ export function UsersPage() {
                     type="email"
                     value={adminForm.email}
                     onChange={(e) => setAdminField('email', e.target.value)}
-                    disabled={adminModal.mode === 'edit'}
                     className="w-full px-3 py-2 border-2 border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-neutral-100 disabled:text-neutral-500 disabled:cursor-not-allowed"
                     placeholder="name@prisonconnect.io"
                   />

@@ -57,7 +57,8 @@ router.post('/login', authLimiter, asyncRoute(async (req, res) => {
         user: { id: emailUser.userId || emailUser.id, name: emailUser.username || emailUser.name, email: emailUser.email, role: claims.role, permissions: emailUser.permissions || [], kioskId: emailUser.kioskId, prisonId: emailUser.prisonId }
       });
     }
-    const admin = admins.find((a) => a.email === email);
+    const wanted = email.toLowerCase();
+    const admin = admins.find((a) => String(a.email || '').toLowerCase() === wanted);
     if (admin) {
       const valid = await verifySecret(password, admin.password || admin.pin);
       if (!valid) return sendError(res, 'INVALID_CREDENTIALS', 'Invalid email or password', 401);
@@ -82,7 +83,8 @@ router.post('/warden/login', authLimiter, asyncRoute(async (req, res) => {
   if (!email || !password) return sendError(res, 'INVALID_REQUEST', 'email and password are required', 400);
 
   const wardens = await readDb('wardens.json');
-  const warden = wardens.find((w) => w.email === email);
+  const wanted = email.toLowerCase();
+  const warden = wardens.find((w) => String(w.email || '').toLowerCase() === wanted);
   if (!warden) return sendError(res, 'INVALID_CREDENTIALS', 'Invalid email or password', 401);
 
   if (warden.status !== 'active') return sendError(res, 'ACCOUNT_DISABLED', 'Account is not active', 403);

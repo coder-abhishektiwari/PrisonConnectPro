@@ -568,6 +568,19 @@ app.patch('/kiosk-admins/:adminId', requireAuth, requireRole('admin', 'warden', 
     }
     patch.employeeId = employeeId;
   }
+  // Email is the other way to sign in on a kiosk - kept unique and lowercased
+  // exactly like on create.
+  if (req.body.email !== undefined) {
+    const email = String(req.body.email).trim().toLowerCase();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return sendError(res, 'INVALID_REQUEST', 'enter a valid email', 400);
+    }
+    const admins = await readDb('admins.json');
+    if (email && admins.some((a) => a.adminId !== req.params.adminId && String(a.email || '').toLowerCase() === email)) {
+      return sendError(res, 'DUPLICATE', 'A kiosk admin with this email already exists', 409);
+    }
+    patch.email = email || null;
+  }
   if (req.body.status !== undefined) {
     const status = String(req.body.status);
     if (!['active', 'inactive', 'on_leave'].includes(status)) {
@@ -661,6 +674,17 @@ app.patch('/wardens/:wardenId', requireAuth, requireRole('admin', 'warden', 'sup
   // Designation is set on creation ("Warden") and never blanked by a patch.
   if (req.body.designation !== undefined && String(req.body.designation).trim()) {
     patch.designation = String(req.body.designation).trim();
+  }
+  // Email doubles as the warden's sign-in name, so it stays unique.
+  if (req.body.email !== undefined) {
+    const email = String(req.body.email).trim().toLowerCase();
+    if (!email) return sendError(res, 'INVALID_REQUEST', 'email cannot be empty', 400);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return sendError(res, 'INVALID_REQUEST', 'enter a valid email', 400);
+    const wardens = await readDb('wardens.json');
+    if (wardens.some((w) => w.wardenId !== req.params.wardenId && String(w.email || '').toLowerCase() === email)) {
+      return sendError(res, 'DUPLICATE', 'A warden with this email already exists', 409);
+    }
+    patch.email = email;
   }
   if ('name' in patch && !patch.name) return sendError(res, 'INVALID_REQUEST', 'name cannot be empty', 400);
   if (req.body.status !== undefined) {
