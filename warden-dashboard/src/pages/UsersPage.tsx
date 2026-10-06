@@ -47,7 +47,9 @@ export function UsersPage() {
   const [formErrors, setFormErrors] = useState<FormErrors>({});
   const [isSaving, setIsSaving] = useState(false);
   const [editingAdmin, setEditingAdmin] = useState<KioskAdmin | null>(null);
-  const [adminForm, setAdminForm] = useState({ name: '', status: 'active' });
+  const [adminForm, setAdminForm] = useState({ name: '' });
+  const [resettingAdmin, setResettingAdmin] = useState<KioskAdmin | null>(null);
+  const [newPassword, setNewPassword] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const { toasts, success: toastSuccess, error: toastError, removeToast } = useToast();
   const limit = 20;
@@ -138,7 +140,7 @@ export function UsersPage() {
 
   function openEditAdmin(a: KioskAdmin) {
     setPendingDeleteId(null);
-    setAdminForm({ name: a.name, status: a.status || 'active' });
+    setAdminForm({ name: a.name });
     setEditingAdmin(a);
   }
 
@@ -148,12 +150,48 @@ export function UsersPage() {
     if (!name) { toastError('Name cannot be empty'); return; }
     try {
       setIsSaving(true);
-      await wardenApi.updateKioskAdmin(editingAdmin.adminId, { name, status: adminForm.status });
+      await wardenApi.updateKioskAdmin(editingAdmin.adminId, { name });
       setEditingAdmin(null);
       toastSuccess('Kiosk admin updated');
       await loadKioskAdmins();
     } catch (err: any) {
       toastError(err?.response?.data?.error?.message || err?.message || 'Could not update kiosk admin');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  // Active / inactive switch straight from the row - no modal for a toggle.
+  async function toggleAdminStatus(a: KioskAdmin) {
+    const next = (a.status || 'active') === 'active' ? 'inactive' : 'active';
+    try {
+      setIsSaving(true);
+      await wardenApi.updateKioskAdmin(a.adminId, { status: next });
+      toastSuccess(`${a.name} ${next === 'active' ? 'activated' : 'deactivated'}`);
+      await loadKioskAdmins();
+    } catch (err: any) {
+      toastError(err?.response?.data?.error?.message || err?.message || 'Could not change status');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  function openResetPassword(a: KioskAdmin) {
+    setPendingDeleteId(null);
+    setNewPassword('');
+    setResettingAdmin(a);
+  }
+
+  async function submitResetPassword() {
+    if (!resettingAdmin) return;
+    if (newPassword.length < 6) { toastError('Password must be at least 6 characters'); return; }
+    try {
+      setIsSaving(true);
+      await wardenApi.updateKioskAdmin(resettingAdmin.adminId, { password: newPassword });
+      setResettingAdmin(null);
+      toastSuccess(`Password reset for ${resettingAdmin.name}`);
+    } catch (err: any) {
+      toastError(err?.response?.data?.error?.message || err?.message || 'Could not reset password');
     } finally {
       setIsSaving(false);
     }
@@ -260,7 +298,6 @@ export function UsersPage() {
                   <tr className="border-b border-neutral-200 bg-neutral-50">
                     <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Warden</th>
                     <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Role</th>
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Employee ID</th>
                     <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Permissions</th>
                     <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Status</th>
                     <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Actions</th>
@@ -280,7 +317,6 @@ export function UsersPage() {
                       <td className="py-3 px-4">
                         {roleBadge(user)}
                       </td>
-                      <td className="py-3 px-4 font-mono text-sm text-neutral-700">{user.employeeId || '—'}</td>
                       <td className="py-3 px-4">
                         <div className="flex flex-wrap gap-1">
                           {(user.permissions || []).slice(0, 3).map(p => (
@@ -352,55 +388,99 @@ export function UsersPage() {
             <p className="px-4 py-8 text-sm text-neutral-500 text-center">No kiosk admins in this prison yet.</p>
           ) : (
             <ul className="divide-y divide-neutral-100 max-h-[calc(100vh-380px)] overflow-auto">
-              {kioskAdmins.map((a) => (
-                <li key={a.adminId} className="px-4 py-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-neutral-900 truncate">{a.name}</p>
-                      <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-                        <span className="font-bold uppercase tracking-wide text-neutral-400">User ID</span>
-                        <span className="rounded bg-primary-50 px-1.5 py-0.5 font-mono font-bold text-primary-700">
+              {kioskAdmins.map((a) => {
+                const isActive = (a.status || 'active') === 'active';
+                return (
+                  <li key={a.adminId} className="px-4 py-2.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {/* name + ids, all on one line */}
+                      <div className="min-w-0 flex-1 flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-semibold text-neutral-900 truncate">{a.name}</p>
+                        <span className="rounded bg-primary-50 px-1.5 py-0.5 font-mono text-xs font-bold text-primary-700">
                           {a.employeeId || '—'}
                         </span>
-                        <span className="font-bold uppercase tracking-wide text-neutral-400">Admin ID</span>
-                        <span className="font-mono text-neutral-500">{a.adminId}</span>
-                      </p>
-                    </div>
-                    <span className="shrink-0">{statusBadge(a.status || 'active')}</span>
-                  </div>
+                      </div>
 
-                  <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                    <button
-                      onClick={() => openEditAdmin(a)}
-                      disabled={isSaving}
-                      className="inline-flex items-center gap-1 rounded-lg border border-neutral-200 px-2.5 py-1 text-xs font-bold text-neutral-700 hover:bg-neutral-50 transition disabled:opacity-50"
-                    >
-                      <span className="material-icons text-sm">edit</span>
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => deleteAdmin(a)}
-                      disabled={isSaving}
-                      className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-bold transition disabled:opacity-50 ${
-                        pendingDeleteId === a.adminId
-                          ? 'border-error bg-error text-white hover:bg-error/90'
-                          : 'border-neutral-200 text-error hover:bg-error/5'
-                      }`}
-                    >
-                      <span className="material-icons text-sm">delete_outline</span>
-                      {pendingDeleteId === a.adminId ? 'Confirm delete?' : 'Delete'}
-                    </button>
+                      {/* actions: reset password, edit, delete, status toggle */}
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={() => openResetPassword(a)}
+                          disabled={isSaving}
+                          title="Reset password"
+                          aria-label={`Reset password for ${a.name}`}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 transition disabled:opacity-50"
+                        >
+                          <span className="material-icons text-[18px]">lock_reset</span>
+                        </button>
+                        <button
+                          onClick={() => openEditAdmin(a)}
+                          disabled={isSaving}
+                          title="Edit"
+                          aria-label={`Edit ${a.name}`}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 transition disabled:opacity-50"
+                        >
+                          <span className="material-icons text-[18px]">edit</span>
+                        </button>
+                        <button
+                          onClick={() => deleteAdmin(a)}
+                          disabled={isSaving}
+                          title="Delete"
+                          aria-label={`Delete ${a.name}`}
+                          className={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition disabled:opacity-50 ${
+                            pendingDeleteId === a.adminId
+                              ? 'bg-error text-white hover:bg-error/90'
+                              : 'text-neutral-500 hover:bg-error/5 hover:text-error'
+                          }`}
+                        >
+                          <span className="material-icons text-[18px]">delete_outline</span>
+                        </button>
+
+                        <span className={`ml-1 text-[11px] font-bold ${isActive ? 'text-success' : 'text-neutral-400'}`}>
+                          {isActive ? 'Active' : 'Inactive'}
+                        </span>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={isActive}
+                          aria-label={isActive ? `Deactivate ${a.name}` : `Activate ${a.name}`}
+                          title={isActive ? 'Active - click to deactivate' : 'Inactive - click to activate'}
+                          onClick={() => toggleAdminStatus(a)}
+                          disabled={isSaving}
+                          className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition disabled:opacity-50 ${
+                            isActive ? 'bg-success' : 'bg-neutral-300'
+                          }`}
+                        >
+                          <span
+                            className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+                              isActive ? 'translate-x-[18px]' : 'translate-x-[2px]'
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* second step of the two-step delete */}
                     {pendingDeleteId === a.adminId && (
-                      <button
-                        onClick={() => setPendingDeleteId(null)}
-                        className="px-2 py-1 text-xs font-medium text-neutral-500 hover:text-neutral-700"
-                      >
-                        Cancel
-                      </button>
+                      <div className="mt-2 flex items-center gap-2 rounded-lg border border-error/25 bg-error/5 px-2.5 py-1.5 text-xs">
+                        <span className="font-semibold text-error">Delete {a.name}?</span>
+                        <button
+                          onClick={() => deleteAdmin(a)}
+                          disabled={isSaving}
+                          className="rounded bg-error px-2 py-1 font-bold text-white hover:bg-error/90 disabled:opacity-60"
+                        >
+                          {isSaving ? 'Deleting...' : 'Yes, delete'}
+                        </button>
+                        <button
+                          onClick={() => setPendingDeleteId(null)}
+                          className="px-1 py-1 font-medium text-neutral-500 hover:text-neutral-700"
+                        >
+                          Cancel
+                        </button>
+                      </div>
                     )}
-                  </div>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </Card>
@@ -482,19 +562,7 @@ export function UsersPage() {
                   autoFocus
                 />
               </div>
-              <div>
-                <label className="block text-xs font-semibold uppercase text-neutral-500 mb-1">Status</label>
-                <select
-                  value={adminForm.status}
-                  onChange={(e) => setAdminForm((p) => ({ ...p, status: e.target.value }))}
-                  className="w-full px-3 py-2 border-2 border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                >
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                  <option value="on_leave">On leave</option>
-                </select>
-              </div>
-              <p className="text-xs text-neutral-500">Inactive admins cannot sign in on any kiosk until reactivated.</p>
+              <p className="text-xs text-neutral-500">Status is switched with the toggle on the row; the password with the reset icon.</p>
             </div>
 
             <div className="flex justify-end gap-2 px-5 py-4 border-t border-neutral-200">
@@ -503,6 +571,48 @@ export function UsersPage() {
                 {isSaving ? 'Saving...' : 'Save Changes'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* Reset kiosk admin password modal */}
+      {resettingAdmin && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-neutral-900/50 p-4 sm:p-8" onClick={() => setResettingAdmin(null)}>
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-200">
+              <div>
+                <h2 className="text-base font-bold text-neutral-900">Reset Password</h2>
+                <p className="text-xs text-neutral-500 mt-0.5">
+                  {resettingAdmin.name} · User ID <span className="font-mono font-bold text-primary-700">{resettingAdmin.employeeId || '—'}</span>
+                </p>
+              </div>
+              <button onClick={() => setResettingAdmin(null)} className="text-neutral-400 hover:text-neutral-700" title="Close">
+                <span className="material-icons">close</span>
+              </button>
+            </div>
+
+            <form onSubmit={(e) => { e.preventDefault(); submitResetPassword(); }}>
+              <div className="px-5 py-4 space-y-3">
+                <div>
+                  <label className="block text-xs font-semibold uppercase text-neutral-500 mb-1">New password</label>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full px-3 py-2 border-2 border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="At least 6 characters"
+                    autoComplete="new-password"
+                    autoFocus
+                  />
+                </div>
+                <p className="text-xs text-neutral-500">Used to sign in on any kiosk of this prison. The old password stops working immediately.</p>
+              </div>
+              <div className="flex justify-end gap-2 px-5 py-4 border-t border-neutral-200">
+                <button type="button" onClick={() => setResettingAdmin(null)} className="px-4 py-2 rounded-lg text-sm font-medium border border-neutral-200 text-neutral-700 hover:bg-neutral-50">Cancel</button>
+                <button type="submit" disabled={isSaving} className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-60">
+                  {isSaving ? 'Resetting...' : 'Reset Password'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

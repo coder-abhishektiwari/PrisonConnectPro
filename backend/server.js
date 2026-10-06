@@ -519,6 +519,14 @@ app.patch('/kiosk-admins/:adminId', requireAuth, requireRole('admin', 'warden', 
     }
     patch.permissions = req.body.permissions.map(String);
   }
+  // Password reset from the same form: hashed here, never returned.
+  if (req.body.password !== undefined) {
+    const password = String(req.body.password);
+    if (password.length < 6) {
+      return sendError(res, 'INVALID_REQUEST', 'password must be at least 6 characters', 400);
+    }
+    patch.password = await hashSecret(password);
+  }
   if (Object.keys(patch).length === 0) return sendError(res, 'INVALID_REQUEST', 'nothing to update', 400);
 
   const updated = await updateDb('admins.json', (all) => {

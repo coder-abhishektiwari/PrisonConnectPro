@@ -49,6 +49,7 @@ export interface KioskAdminUpdate {
   name?: string;
   status?: string;
   permissions?: string[];
+  password?: string;
 }
 
 export interface ActiveCall {
