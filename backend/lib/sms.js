@@ -22,6 +22,12 @@ const LOG_FILE = path.join(LOG_DIR, 'sms.jsonl');
 const GLOBAL_PROVIDER = process.env.SMS_PROVIDER || 'log';
 const FAST2SMS_API_KEY = process.env.FAST2SMS_API_KEY;
 const FAST2SMS_SENDER_ID = process.env.FAST2SMS_SENDER_ID || '';
+// DLT headers are registered per template, so OTP and call-link SMS may need
+// two different sender ids. Each falls back to the shared one when unset, so
+// existing deployments keep working without new env vars.
+const FAST2SMS_OTP_SENDER_ID = process.env.FAST2SMS_OTP_SENDER_ID || '';
+const FAST2SMS_LINK_SENDER_ID = process.env.FAST2SMS_LINK_SENDER_ID || '';
+const FAST2SMS_SCHEDULED_SENDER_ID = process.env.FAST2SMS_SCHEDULED_SENDER_ID || '';
 const FAST2SMS_ENTITY_ID = process.env.FAST2SMS_ENTITY_ID || '';
 const FAST2SMS_OTP_TEMPLATE_ID = process.env.FAST2SMS_OTP_TEMPLATE_ID || '';
 const FAST2SMS_LINK_TEMPLATE_ID = process.env.FAST2SMS_LINK_TEMPLATE_ID || '';
@@ -45,9 +51,30 @@ function effectiveProvider(kind) {
   return GLOBAL_PROVIDER;
 }
 
+/**
+ * Which DLT header (sender id) this kind goes out under.
+ *
+ *   otp       -> FAST2SMS_OTP_SENDER_ID,      else shared FAST2SMS_SENDER_ID
+ *   link      -> FAST2SMS_LINK_SENDER_ID,     else shared
+ *   scheduled -> FAST2SMS_SCHEDULED_SENDER_ID, else the link header (it is a
+ *                call link too), else shared
+ *   anything  -> shared
+ */
+function senderIdFor(kind) {
+  const shared = FAST2SMS_SENDER_ID;
+  const map = {
+    otp: FAST2SMS_OTP_SENDER_ID || shared,
+    link: FAST2SMS_LINK_SENDER_ID || shared,
+    scheduled: FAST2SMS_SCHEDULED_SENDER_ID || FAST2SMS_LINK_SENDER_ID || shared,
+  };
+  return map[kind] || shared;
+}
+
 console.log(
   `[sms] provider=${GLOBAL_PROVIDER} hasKey=${!!FAST2SMS_API_KEY} ` +
   `sender=${FAST2SMS_SENDER_ID || '(none)'} ` +
+  `otpSender=${senderIdFor('otp') || '(none)'} linkSender=${senderIdFor('link') || '(none)'} ` +
+  `schedSender=${senderIdFor('scheduled') || '(none)'} ` +
   `entity=${FAST2SMS_ENTITY_ID || '(none)'} ` +
   `otpTpl=${FAST2SMS_OTP_TEMPLATE_ID || '(none)'} linkTpl=${FAST2SMS_LINK_TEMPLATE_ID || '(none)'} ` +
   `schedTpl=${FAST2SMS_SCHEDULED_TEMPLATE_ID || '(none)'}`
@@ -69,8 +96,8 @@ function appendLog(entry) {
 }
 
 function consoleLog(entry) {
-  const { phone, message, kind } = entry;
-  console.log(`[sms:${entry.transport}:${kind}] -> ${phone}`);
+  const { phone, message, kind, senderId } = entry;
+  console.log(`[sms:${entry.transport}:${kind}] -> ${phone}${senderId ? ` sender=${senderId}` : ''}`);
   console.log(`[sms:${kind}:message] ${message}`);
   if (entry.templateVars) {
     console.log(`[sms:${kind}:vars] ${JSON.stringify(entry.templateVars)}`);
@@ -103,7 +130,7 @@ async function sendViaDlt({ phone, templateId, templateVars, senderId }) {
   }
   const effectiveSenderId = senderId || FAST2SMS_SENDER_ID;
   if (!effectiveSenderId) {
-    throw new Error('FAST2SMS_SENDER_ID is not configured — add it in Render env');
+    throw new Error('No sender id configured — set FAST2SMS_SENDER_ID (or the per-kind FAST2SMS_OTP_SENDER_ID / FAST2SMS_LINK_SENDER_ID) in Render env');
   }
   if (!templateId) {
     throw new Error('DLT Template ID (message) is not configured');
@@ -286,13 +313,14 @@ async function sendSms({ phone, message, kind = 'generic', callId = null, templa
       console.error(`[sms] ${errMsg}`);
     } else {
       try {
-        const senderIdForKind = FAST2SMS_SENDER_ID;
+        const senderIdForKind = senderIdFor(kind);
         const result = await sendViaDlt({
           phone: entry.phone,
           templateId,
           templateVars,
           senderId: senderIdForKind,
         });
+        entry.senderId = senderIdForKind;
         entry.transport = 'fast2sms';
         entry.messageId = result.messageId || null;
         entry.gatewayOk = true;
@@ -320,6 +348,7 @@ module.exports = {
   linkTemplateVars,
   scheduledTemplateVars,
   normalizePhone,
+  senderIdFor,
   PROVIDER: GLOBAL_PROVIDER,
   effectiveProvider,
 };

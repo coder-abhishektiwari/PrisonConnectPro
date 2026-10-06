@@ -755,7 +755,7 @@ app.use('/admin', requireAuth, adminRouter);
 
 // ==================== HEALTH CHECK ====================
 app.get('/health', (req, res) => {
-  const { PROVIDER } = require('./lib/sms');
+  const { PROVIDER, senderIdFor, effectiveProvider } = require('./lib/sms');
   res.json({
     status: 'ok',
     timestamp: Date.now(),
@@ -765,6 +765,19 @@ app.get('/health', (req, res) => {
       hasApiKey: !!process.env.FAST2SMS_API_KEY,
       apiKeyPrefix: (process.env.FAST2SMS_API_KEY || '').substring(0, 4),
       domain: process.env.SMS_OTP_DOMAIN || '(none)',
+      // Which DLT header each kind goes out under, and whether that kind is
+      // actually routed to the gateway (some stay on `log` on purpose).
+      senders: {
+        shared: process.env.FAST2SMS_SENDER_ID || '(none)',
+        otp: senderIdFor('otp') || '(none)',
+        link: senderIdFor('link') || '(none)',
+        scheduled: senderIdFor('scheduled') || '(none)',
+      },
+      routes: {
+        otp: effectiveProvider('otp'),
+        link: effectiveProvider('link'),
+        scheduled: effectiveProvider('scheduled'),
+      },
     }
   });
 });
