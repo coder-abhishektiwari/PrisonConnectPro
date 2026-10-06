@@ -7,7 +7,9 @@ RUN npm install --omit=dev
 
 COPY . .
 
-# Migrations + seed run automatically on startup if the schema is not present.
 EXPOSE 3001
 
-CMD ["sh", "-c", "node lib/migrate.js && node lib/seed.js && node server.js"]
+# Migrations run on every startup and must succeed; the seed is best-effort so
+# a single bad collection can never keep the API from booting (a dead API looks
+# like "invalid credentials" on the login screen).
+CMD ["sh", "-c", "node lib/migrate.js || exit 1; node lib/seed.js || echo '[seed] failed - starting server anyway'; exec node server.js"]

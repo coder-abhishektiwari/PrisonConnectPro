@@ -7,6 +7,21 @@ import { LoadingButton } from '@/components/auth/LoadingButton';
 import { validateLogin } from '@/utils/validation';
 
 /**
+ * Turn a failed login into an honest message: 401 = bad credentials, anything
+ * else (API down, 500, rate limited) must not masquerade as a wrong password.
+ */
+function loginErrorMessage(err: unknown): string {
+  const response = (
+    err as { response?: { status?: number; data?: { error?: { message?: string } } } }
+  )?.response;
+  const serverMessage = response?.data?.error?.message;
+  if (response?.status === 401) return 'Invalid email or password. Please try again.';
+  if (serverMessage) return serverMessage;
+  if (!response) return 'Cannot reach the server. Please try again in a moment.';
+  return 'Something went wrong while signing in. Please try again.';
+}
+
+/**
  * Login Page for the Vendor Super Admin Console.
  * Features floating labels, password visibility toggle, inline validation,
  * loading spinner, and error handling.
@@ -34,8 +49,8 @@ export function LoginPage() {
     try {
       await login(email.trim(), password);
       navigate(from, { replace: true });
-    } catch {
-      setFormError('Invalid email or password. Please try again.');
+    } catch (err) {
+      setFormError(loginErrorMessage(err));
     }
   };
 

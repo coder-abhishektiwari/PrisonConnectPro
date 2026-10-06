@@ -6,6 +6,23 @@ import { LoadingButton } from '@/components/auth/LoadingButton';
 import { validateLogin } from '@/utils/validation';
 
 /**
+ * Turn a failed login into an honest message. The API answers 401 for bad
+ * credentials, but a dead/500-ing backend or a network drop must not be
+ * reported as "invalid credentials" - that sent us chasing phantom password
+ * bugs while the API was simply down.
+ */
+function loginErrorMessage(err: unknown): string {
+  const response = (
+    err as { response?: { status?: number; data?: { error?: { message?: string } } } }
+  )?.response;
+  const serverMessage = response?.data?.error?.message;
+  if (response?.status === 401) return 'Invalid email or password. Please try again.';
+  if (serverMessage) return serverMessage;
+  if (!response) return 'Cannot reach the server. Please try again in a moment.';
+  return 'Something went wrong while signing in. Please try again.';
+}
+
+/**
  * Login Page for Jail Administration staff.
  * Features floating labels, password visibility toggle, inline validation,
  * loading spinner, and error handling.
@@ -33,8 +50,8 @@ export function LoginPage() {
     try {
       await login(email.trim(), password);
       navigate(from, { replace: true });
-    } catch {
-      setFormError('Invalid email or password. Please try again.');
+    } catch (err) {
+      setFormError(loginErrorMessage(err));
     }
   };
 

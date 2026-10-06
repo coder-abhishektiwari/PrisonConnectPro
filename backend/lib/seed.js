@@ -64,6 +64,24 @@ async function main() {
     raw[f] = load(f);
   }
 
+  // Singleton configs are one JSON document; every other collection is a list
+  // of rows. A legacy file occasionally holds a single object (transactions.json
+  // is one lone transaction) or a map keyed by id instead of an array. Coerce
+  // that here - downstream helpers (link / idSet / for..of) assume arrays and a
+  // stray object used to take the whole seed down with
+  // "TypeError: (rows || []).filter is not a function".
+  const SINGLETON_FILES = new Set(['settings.json', 'storage.json', 'pricing.json']);
+  for (const [file, value] of Object.entries(raw)) {
+    if (value == null || Array.isArray(value) || SINGLETON_FILES.has(file)) continue;
+    if (typeof value !== 'object') { raw[file] = []; continue; }
+    const keys = Object.keys(value);
+    const looksLikeRow = keys.some((k) => /Id$/.test(k) && ['string', 'number'].includes(typeof value[k]));
+    raw[file] = looksLikeRow
+      ? [value]
+      : Object.values(value).filter((v) => v && typeof v === 'object');
+    console.log(`[seed] ${file}: coerced non-array source into ${raw[file].length} row(s)`);
+  }
+
   const repairs = [];
 
   // ---- hash credentials ----
@@ -168,7 +186,10 @@ async function main() {
   const walletIds = idSet(raw['wallets.json'], 'walletId');
 
   function link(rows, field, validSet, fallback, what, where, soft) {
-    const out = (rows || []).filter((r) => {
+    const list = Array.isArray(rows) ? rows
+      : (rows && typeof rows === 'object') ? [rows]
+      : [];
+    const out = list.filter((r) => {
       const v = r[field];
       if (v == null || validSet.has(v)) return true;
       const fb = fallback ? [...validSet][0] : null;
@@ -278,20 +299,40 @@ async function main() {
   // and re-seed.
   const forceSeed = process.argv.includes('--force') ||
     ['1', 'true'].includes(String(process.env.FORCE_SEED || '').toLowerCase());
+  const failed = [];
   const write = async (file) => {
-    const rows = raw[file];
-    if (rows == null) { console.log(`[seed] ${file}: skipped (missing)`); return; }
-    if (!forceSeed) {
-      const existing = await readDb(file);
-      const count = Array.isArray(existing) ? existing.length : 0;
-      if (count > 0) {
-        console.log(`[seed] ${file}: skipped (${count} existing rows)`);
-        return;
+    try {
+      const rows = raw[file];
+      if (rows == null) { console.log(`[seed] ${file}: skipped (missing)`); return; }
+      if (!forceSeed) {
+        // Singletons report 0 rows for readDb (it hands back built-in defaults
+        // when nothing is stored yet), so the array count below can never skip
+        // them - without this check every restart silently resets the jail's
+        // live call pricing / settings to the legacy file.
+        if (SINGLETON_FILES.has(file)) {
+          const { rows: present } = await pool.query(
+            'SELECT 1 FROM singleton_config WHERE id = $1',
+            [file.replace('.json', '')]
+          );
+          if (present.length > 0) {
+            console.log(`[seed] ${file}: skipped (already configured)`);
+            return;
+          }
+        }
+        const existing = await readDb(file);
+        const count = Array.isArray(existing) ? existing.length : 0;
+        if (count > 0) {
+          console.log(`[seed] ${file}: skipped (${count} existing rows)`);
+          return;
+        }
       }
+      await updateDb(file, () => ({ data: rows, result: null }));
+      const count = Array.isArray(rows) ? rows.length : 1;
+      console.log(`[seed] ${file}: ${count} row(s)`);
+    } catch (err) {
+      failed.push(file);
+      console.error(`[seed] ${file}: FAILED (${err.message}) - continuing with remaining collections`);
     }
-    await updateDb(file, () => ({ data: rows, result: null }));
-    const count = Array.isArray(rows) ? rows.length : 1;
-    console.log(`[seed] ${file}: ${count} row(s)`);
   };
 
   await write('prisons.json');
@@ -352,6 +393,10 @@ async function main() {
   console.log('[seed] referential-integrity repairs:');
   if (repairs.length === 0) console.log('  (none needed)');
   else repairs.forEach((r) => console.log('  - ' + r));
+
+  if (failed.length > 0) {
+    console.log(`[seed] WARNING: ${failed.length} collection(s) could not be seeded: ${failed.join(', ')}`);
+  }
 
   const rows = await pool.query(`
     SELECT 'prisons' AS t, count(*) FROM prisons UNION ALL
