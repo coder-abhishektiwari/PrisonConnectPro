@@ -37,10 +37,18 @@ export interface KioskAdmin {
   status?: string;
   kioskId: string | null;
   prisonId?: string;
+  permissions?: string[];
+  createdAt?: string;
   location?: string | null;
   ward?: string | null;
   wards?: string[];
   registeredInmates?: number;
+}
+
+export interface KioskAdminUpdate {
+  name?: string;
+  status?: string;
+  permissions?: string[];
 }
 
 export interface ActiveCall {
@@ -784,6 +792,16 @@ export const wardenApi = {
 
   getKioskAdmins: () =>
     apiClient.get<ApiResponse<KioskAdmin[]>>('/kiosk-admins').then((r) => r.data?.data ?? []),
+
+  updateKioskAdmin: (adminId: string, patch: KioskAdminUpdate) =>
+    apiClient
+      .patch<ApiResponse<KioskAdmin>>(`/kiosk-admins/${encodeURIComponent(adminId)}`, patch)
+      .then((r) => r.data?.data),
+
+  deleteKioskAdmin: (adminId: string) =>
+    apiClient
+      .delete<ApiResponse<{ message: string; adminId: string }>>(`/kiosk-admins/${encodeURIComponent(adminId)}`)
+      .then((r) => r.data?.data),
 
   // Prisons
   getPrisons: () =>

@@ -562,12 +562,12 @@ router.post('/admin/identify', asyncRoute(async (req, res) => {
   const kiosk = kiosks.find((k) => k.kioskId === kioskId);
   if (!kiosk || kiosk.authorizationStatus !== 'authorized') return sendError(res, 'UNAUTHORIZED', 'Kiosk not authorized', 403);
 
-  // Lookup is scoped to this kiosk's jail so an admin assigned to another
-  // jail/kiosk is simply "not found" rather than leaking a mismatch.
-  // Super admins are excluded — they manage at company level, not kiosk level.
+  // Lookup is scoped to this kiosk's jail. Kiosk admins are jail staff, not
+  // per-terminal accounts: any active admin of this jail may sign in on any
+  // kiosk of that jail (by employee id, or by email for older accounts).
+  // Super admins are excluded - they manage at company level, not kiosk level.
   const scopeAdmin = (a) =>
     a.status === 'active' &&
-    a.kioskId === kioskId &&
     a.role !== 'super_admin' &&
     (!kiosk.prisonId || !a.prisonId || a.prisonId === kiosk.prisonId);
 
@@ -579,20 +579,27 @@ router.post('/admin/identify', asyncRoute(async (req, res) => {
   return sendSuccess(res, {
     adminId: admin.adminId, employeeId: admin.employeeId, name: admin.name, email: admin.email,
     role: admin.role, permissions: admin.permissions, status: admin.status,
-    kioskId: admin.kioskId, prisonId: admin.prisonId, confidence: 0.95
+    // The device asking, not the admin's "home" kiosk - the session that follows
+    // must belong to the terminal the person is standing at.
+    kioskId, prisonId: admin.prisonId || kiosk.prisonId, confidence: 0.95
   });
 }));
 
 router.post('/admin/verify-pin', authLimiter, asyncRoute(async (req, res) => {
   const { adminId, pin, password, kioskId } = req.body;
   const admins = await readDb('admins.json');
-  const admin = admins.find((a) => a.adminId === adminId && a.kioskId === kioskId && a.role !== 'super_admin');
-  if (!admin) return sendError(res, 'NOT_FOUND', 'Admin not found for this kiosk', 404);
+  // No per-kiosk assignment check: an admin of this jail unlocks on any kiosk
+  // of the jail, which is what the identify step above just validated.
+  const admin = admins.find((a) => a.adminId === adminId && a.role !== 'super_admin' && a.status === 'active');
+  if (!admin) return sendError(res, 'NOT_FOUND', 'Admin not found', 404);
 
   const kiosks = await readDb('kiosks.json');
   const kiosk = kiosks.find((k) => k.kioskId === kioskId);
   if (!kiosk || kiosk.authorizationStatus !== 'authorized' || kiosk.status === 'unauthorized' || kiosk.status === 'disabled') {
     return sendError(res, 'UNAUTHORIZED', 'Kiosk not authorized for admin access', 403);
+  }
+  if (admin.prisonId && kiosk.prisonId && admin.prisonId !== kiosk.prisonId) {
+    return sendError(res, 'NOT_FOUND', 'Admin not found for this kiosk', 404);
   }
 
   // Accept the admin's login secret as "password" (preferred) or "pin".

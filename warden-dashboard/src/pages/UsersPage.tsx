@@ -46,6 +46,9 @@ export function UsersPage() {
   const [form, setForm] = useState<NewWardenInput>(EMPTY_FORM);
   const [formErrors, setFormErrors] = useState<FormErrors>({});
   const [isSaving, setIsSaving] = useState(false);
+  const [editingAdmin, setEditingAdmin] = useState<KioskAdmin | null>(null);
+  const [adminForm, setAdminForm] = useState({ name: '', status: 'active' });
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const { toasts, success: toastSuccess, error: toastError, removeToast } = useToast();
   const limit = 20;
 
@@ -133,8 +136,46 @@ export function UsersPage() {
     }
   }
 
-  const headerIcon = useMemo(() => <span className="material-icons text-primary-600 text-xl">people</span>, []);
+  function openEditAdmin(a: KioskAdmin) {
+    setPendingDeleteId(null);
+    setAdminForm({ name: a.name, status: a.status || 'active' });
+    setEditingAdmin(a);
+  }
 
+  async function saveAdmin() {
+    if (!editingAdmin) return;
+    const name = adminForm.name.trim();
+    if (!name) { toastError('Name cannot be empty'); return; }
+    try {
+      setIsSaving(true);
+      await wardenApi.updateKioskAdmin(editingAdmin.adminId, { name, status: adminForm.status });
+      setEditingAdmin(null);
+      toastSuccess('Kiosk admin updated');
+      await loadKioskAdmins();
+    } catch (err: any) {
+      toastError(err?.response?.data?.error?.message || err?.message || 'Could not update kiosk admin');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  // Two-step delete: first click arms the row, the second one really removes it.
+  async function deleteAdmin(a: KioskAdmin) {
+    if (pendingDeleteId !== a.adminId) { setPendingDeleteId(a.adminId); return; }
+    setPendingDeleteId(null);
+    try {
+      setIsSaving(true);
+      await wardenApi.deleteKioskAdmin(a.adminId);
+      toastSuccess(`${a.name} removed`);
+      await loadKioskAdmins();
+    } catch (err: any) {
+      toastError(err?.response?.data?.error?.message || err?.message || 'Could not delete kiosk admin');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  const headerIcon = useMemo(() => <span className="material-icons text-primary-600 text-xl">people</span>, []);
   usePageHeader({
     title: 'Admin Management',
     subtitle: 'Wardens and kiosk admins of your prison',
@@ -296,12 +337,13 @@ export function UsersPage() {
           )}
         </div>
 
-        {/* Kiosk admins */}
+        {/* Kiosk admins - jail-wide staff: they sign in with their user id on
+            any kiosk of this prison, so nothing here is tied to one device. */}
         <Card>
           <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-200">
             <div>
               <h2 className="text-sm font-bold text-neutral-900">Kiosk Admins</h2>
-              <p className="text-xs text-neutral-500">{kioskAdmins.length} in this prison</p>
+              <p className="text-xs text-neutral-500">{kioskAdmins.length} in this prison · can sign in on any kiosk</p>
             </div>
             <span className="material-icons text-primary-600">badge</span>
           </div>
@@ -315,25 +357,46 @@ export function UsersPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-neutral-900 truncate">{a.name}</p>
-                      <p className="text-xs text-neutral-500 truncate">{a.email}</p>
+                      <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                        <span className="font-bold uppercase tracking-wide text-neutral-400">User ID</span>
+                        <span className="rounded bg-primary-50 px-1.5 py-0.5 font-mono font-bold text-primary-700">
+                          {a.employeeId || '—'}
+                        </span>
+                        <span className="font-bold uppercase tracking-wide text-neutral-400">Admin ID</span>
+                        <span className="font-mono text-neutral-500">{a.adminId}</span>
+                      </p>
                     </div>
-                    <span className="shrink-0 px-2 py-0.5 rounded font-mono text-xs font-bold bg-primary-50 text-primary-700">
-                      {a.kioskId || '—'}
-                    </span>
+                    <span className="shrink-0">{statusBadge(a.status || 'active')}</span>
                   </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-600">
-                    <span className="inline-flex items-center gap-1">
-                      <span className="material-icons text-sm text-neutral-400">king_bed</span>
-                      {a.ward || 'Ward not set'}
-                    </span>
-                    <span className="inline-flex items-center gap-1">
-                      <span className="material-icons text-sm text-neutral-400">groups</span>
-                      {a.registeredInmates ?? 0} prisoners
-                    </span>
-                    {a.status && (
-                      <span className={`px-1.5 py-0.5 rounded-full text-[11px] font-bold capitalize ${
-                        a.status === 'active' ? 'bg-success/10 text-success' : 'bg-neutral-100 text-neutral-500'
-                      }`}>{a.status}</span>
+
+                  <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={() => openEditAdmin(a)}
+                      disabled={isSaving}
+                      className="inline-flex items-center gap-1 rounded-lg border border-neutral-200 px-2.5 py-1 text-xs font-bold text-neutral-700 hover:bg-neutral-50 transition disabled:opacity-50"
+                    >
+                      <span className="material-icons text-sm">edit</span>
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => deleteAdmin(a)}
+                      disabled={isSaving}
+                      className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-bold transition disabled:opacity-50 ${
+                        pendingDeleteId === a.adminId
+                          ? 'border-error bg-error text-white hover:bg-error/90'
+                          : 'border-neutral-200 text-error hover:bg-error/5'
+                      }`}
+                    >
+                      <span className="material-icons text-sm">delete_outline</span>
+                      {pendingDeleteId === a.adminId ? 'Confirm delete?' : 'Delete'}
+                    </button>
+                    {pendingDeleteId === a.adminId && (
+                      <button
+                        onClick={() => setPendingDeleteId(null)}
+                        className="px-2 py-1 text-xs font-medium text-neutral-500 hover:text-neutral-700"
+                      >
+                        Cancel
+                      </button>
                     )}
                   </div>
                 </li>
@@ -387,6 +450,57 @@ export function UsersPage() {
               <button onClick={() => setShowForm(false)} className="px-4 py-2 rounded-lg text-sm font-medium border border-neutral-200 text-neutral-700 hover:bg-neutral-50">Cancel</button>
               <button onClick={submitForm} disabled={isSaving} className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-60">
                 {isSaving ? 'Adding...' : 'Add Warden'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Edit kiosk admin modal */}
+      {editingAdmin && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-neutral-900/50 p-4 sm:p-8" onClick={() => setEditingAdmin(null)}>
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-200">
+              <div>
+                <h2 className="text-base font-bold text-neutral-900">Edit Kiosk Admin</h2>
+                <p className="text-xs text-neutral-500 mt-0.5">
+                  User ID <span className="font-mono font-bold text-primary-700">{editingAdmin.employeeId || '—'}</span>
+                </p>
+              </div>
+              <button onClick={() => setEditingAdmin(null)} className="text-neutral-400 hover:text-neutral-700" title="Close">
+                <span className="material-icons">close</span>
+              </button>
+            </div>
+
+            <div className="px-5 py-4 space-y-3">
+              <div>
+                <label className="block text-xs font-semibold uppercase text-neutral-500 mb-1">Full name</label>
+                <input
+                  value={adminForm.name}
+                  onChange={(e) => setAdminForm((p) => ({ ...p, name: e.target.value }))}
+                  className="w-full px-3 py-2 border-2 border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  placeholder="e.g. Neha Gupta"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold uppercase text-neutral-500 mb-1">Status</label>
+                <select
+                  value={adminForm.status}
+                  onChange={(e) => setAdminForm((p) => ({ ...p, status: e.target.value }))}
+                  className="w-full px-3 py-2 border-2 border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                >
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                  <option value="on_leave">On leave</option>
+                </select>
+              </div>
+              <p className="text-xs text-neutral-500">Inactive admins cannot sign in on any kiosk until reactivated.</p>
+            </div>
+
+            <div className="flex justify-end gap-2 px-5 py-4 border-t border-neutral-200">
+              <button onClick={() => setEditingAdmin(null)} className="px-4 py-2 rounded-lg text-sm font-medium border border-neutral-200 text-neutral-700 hover:bg-neutral-50">Cancel</button>
+              <button onClick={saveAdmin} disabled={isSaving} className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-60">
+                {isSaving ? 'Saving...' : 'Save Changes'}
               </button>
             </div>
           </div>

@@ -491,6 +491,66 @@ app.get('/kiosk-admins', requireAuth, requireRole('admin', 'warden', 'super-admi
     });
   return sendSuccess(res, data);
 }));
+
+// Kiosk admins are this jail's staff, so the jail's wardens may edit or remove
+// them here; the vendor console keeps its own super-admin-only /admin routes.
+// Both routes refuse a row from another prison unless the caller is a super admin.
+app.patch('/kiosk-admins/:adminId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+  const isSuper = ['super-admin', 'super_admin'].includes(req.auth?.role);
+  const jailId = await effectiveJailId(req);
+  if (!isSuper && !jailId) return sendError(res, 'FORBIDDEN', 'Your account is not linked to a prison yet', 403);
+
+  const patch = {};
+  if (req.body.name !== undefined) {
+    const name = String(req.body.name).trim();
+    if (!name) return sendError(res, 'INVALID_REQUEST', 'name cannot be empty', 400);
+    patch.name = name;
+  }
+  if (req.body.status !== undefined) {
+    const status = String(req.body.status);
+    if (!['active', 'inactive', 'on_leave'].includes(status)) {
+      return sendError(res, 'INVALID_REQUEST', 'status must be active, inactive or on_leave', 400);
+    }
+    patch.status = status;
+  }
+  if (req.body.permissions !== undefined) {
+    if (!Array.isArray(req.body.permissions)) {
+      return sendError(res, 'INVALID_REQUEST', 'permissions must be an array', 400);
+    }
+    patch.permissions = req.body.permissions.map(String);
+  }
+  if (Object.keys(patch).length === 0) return sendError(res, 'INVALID_REQUEST', 'nothing to update', 400);
+
+  const updated = await updateDb('admins.json', (all) => {
+    const idx = all.findIndex((a) => a.adminId === req.params.adminId && a.role === 'kiosk_admin');
+    if (idx === -1 || (!isSuper && all[idx].prisonId !== jailId)) return { data: all, result: null };
+    all[idx] = { ...all[idx], ...patch, updatedAt: new Date().toISOString() };
+    return { data: all, result: all[idx] };
+  });
+  if (!updated) return sendError(res, 'NOT_FOUND', 'Kiosk admin not found', 404);
+
+  const { password, pin, biometricData, ...safe } = updated;
+  void password;
+  void pin;
+  void biometricData;
+  return sendSuccess(res, safe);
+}));
+
+app.delete('/kiosk-admins/:adminId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+  const isSuper = ['super-admin', 'super_admin'].includes(req.auth?.role);
+  const jailId = await effectiveJailId(req);
+  if (!isSuper && !jailId) return sendError(res, 'FORBIDDEN', 'Your account is not linked to a prison yet', 403);
+
+  const removed = await updateDb('admins.json', (all) => {
+    const idx = all.findIndex((a) => a.adminId === req.params.adminId && a.role === 'kiosk_admin');
+    if (idx === -1 || (!isSuper && all[idx].prisonId !== jailId)) return { data: all, result: null };
+    const [gone] = all.splice(idx, 1);
+    return { data: all, result: gone };
+  });
+  if (!removed) return sendError(res, 'NOT_FOUND', 'Kiosk admin not found', 404);
+
+  return sendSuccess(res, { message: 'Kiosk admin deleted', adminId: removed.adminId });
+}));
 app.get('/wardens/:wardenId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const wardens = await readDb('wardens.json');
   const warden = wardens.find((w) => w.wardenId === req.params.wardenId);
