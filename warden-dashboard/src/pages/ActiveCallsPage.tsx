@@ -1,49 +1,46 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '@/components/Card';
 import { LocationLink } from '@/components/LocationLink';
-import { Loading } from '@/components/States';
-import { wardenApi } from '@/services/api/wardenApi';
+import { SkeletonCards } from '@/components/Skeleton';
+import { wardenApi, cacheKeys } from '@/services/api/wardenApi';
+import { useCachedResource } from '@/hooks/useCachedResource';
 import { useWardenSocket } from '@/hooks/useWardenSocket';
 import { usePageHeader } from '@/context/PageHeaderContext';
 import { inmateLabel, contactLabel } from '@/utils/names';
-import type { ActiveCall, ListParams } from '@/services/api/wardenApi';
+import type { ActiveCall, ListParams, PaginatedResponse } from '@/services/api/wardenApi';
 
 const PAGE_SIZE = 20;
 
 export function ActiveCallsPage() {
   const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState(true);
-  const [calls, setCalls] = useState<ActiveCall[]>([]);
-  const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | 'video' | 'audio'>('all');
   const [toast, setToast] = useState<string | null>(null);
   const [confirmForceEnd, setConfirmForceEnd] = useState<ActiveCall | null>(null);
 
-  const buildParams = useCallback((): ListParams => ({
+  const params = useMemo<ListParams>(() => ({
     limit: PAGE_SIZE,
     offset: (page - 1) * PAGE_SIZE,
     search: search || undefined,
     type: typeFilter !== 'all' ? typeFilter : undefined,
   }), [page, search, typeFilter]);
 
-  const loadCalls = useCallback(async () => {
-    try {
-      const result = await wardenApi.getActiveCalls(buildParams());
-      setCalls(result.items ?? []);
-      setTotal(result.total ?? 0);
-    } catch (error) {
-      console.error('Failed to load active calls:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [buildParams]);
+  const { data, isLoading, error, refresh } = useCachedResource<PaginatedResponse<ActiveCall>>(
+    cacheKeys.activeCalls(params),
+    () => wardenApi.getActiveCalls(params),
+    { ttl: 15_000, pollMs: 15_000 },
+  );
 
-  useEffect(() => { loadCalls(); }, [loadCalls]);
-  useWardenSocket(() => { loadCalls(); }, undefined, undefined, undefined);
+  const calls = data?.items ?? [];
+  const total = data?.total ?? 0;
+
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
+  const onCallUpdate = useCallback(() => { refreshRef.current(); }, []);
+  useWardenSocket(onCallUpdate, undefined, undefined, undefined);
   useEffect(() => { setPage(1); }, [search, typeFilter]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -52,7 +49,7 @@ export function ActiveCallsPage() {
 
   usePageHeader({
     title: 'Live Calls',
-    subtitle: `${total} active calls`,
+    subtitle: isLoading && total === 0 ? 'Loading active calls…' : `${total} active calls`,
     icon: headerIcon,
     actions: useMemo(() => (
       <div className="flex gap-2">
@@ -64,8 +61,6 @@ export function ActiveCallsPage() {
       </div>
     ), [typeFilter]),
   });
-
-  if (isLoading) return <Loading message="Loading active calls..." />;
 
   const formatDuration = (minutes: number) => {
     if (!Number.isFinite(minutes) || minutes == null) return '00:00';
@@ -107,12 +102,14 @@ export function ActiveCallsPage() {
     try {
       await wardenApi.endCall(call.callId);
       showToast(`Call ${call.callId} force ended`);
-      loadCalls();
+      refresh();
     } catch (error) {
       console.error('Failed to force end call:', error);
       showToast('Failed to end call');
     }
   };
+
+  const hasContent = calls.length > 0;
 
   return (
     <div className="space-y-6">
@@ -124,7 +121,15 @@ export function ActiveCallsPage() {
       </div>
 
       <Card className="overflow-hidden">
-        {calls.length === 0 ? (
+        {isLoading && !hasContent ? (
+          <SkeletonCards count={6} />
+        ) : error && !hasContent ? (
+          <div className="text-center py-16">
+            <p className="text-neutral-900 font-semibold">Couldn&apos;t load active calls</p>
+            <p className="text-sm text-neutral-500 mt-1">{error}</p>
+            <button onClick={() => refresh()} className="mt-4 px-4 py-2 bg-neutral-900 text-white rounded-xl text-sm font-bold">Retry</button>
+          </div>
+        ) : calls.length === 0 ? (
           <div className="text-center py-16">
             <div className="w-16 h-16 bg-neutral-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <svg className="w-8 h-8 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>

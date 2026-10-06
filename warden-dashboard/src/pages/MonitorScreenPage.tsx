@@ -1,71 +1,85 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card } from '@/components/Card';
-import { Loading } from '@/components/States';
+import { Skeleton, SkeletonText } from '@/components/Skeleton';
 import { ToastContainer } from '@/components/ToastContainer';
-import { wardenApi } from '@/services/api/wardenApi';
+import { wardenApi, cacheKeys } from '@/services/api/wardenApi';
+import { useCachedResource } from '@/hooks/useCachedResource';
 import { useWardenSocket } from '@/hooks/useWardenSocket';
 import { useToast } from '@/hooks/useToast';
 import { usePageHeader } from '@/context/PageHeaderContext';
 import { inmateLabel, contactLabel } from '@/utils/names';
-import type { ActiveCall, Inmate, Contact, Wallet, Recording, Device, CallStatistics } from '@/services/api/wardenApi';
+import type { ActiveCall, Inmate, Contact, Wallet, Recording, Device, CallStatistics, PaginatedResponse } from '@/services/api/wardenApi';
 
 export function MonitorScreenPage() {
   const { callId } = useParams<{ callId: string }>();
   const navigate = useNavigate();
 
-  const [isLoading, setIsLoading] = useState(true);
-  const [call, setCall] = useState<ActiveCall | null>(null);
-  const [inmate, setInmate] = useState<Inmate | null>(null);
-  const [contact, setContact] = useState<Contact | null>(null);
-  const [wallet, setWallet] = useState<Wallet | null>(null);
-  const [recording, setRecording] = useState<Recording | null>(null);
-  const [device, setDevice] = useState<Device | null>(null);
-  const [statistics, setStatistics] = useState<CallStatistics | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const { toasts, success, error: toastError, removeToast } = useToast();
 
-  const loadMonitorData = useCallback(async () => {
-    if (!callId) return;
-    setLoadError(null);
-    try {
-      const [calls, inmates, contacts, wallets, recordings, devices, stats] = await Promise.all([
-        wardenApi.getActiveCalls(),
-        wardenApi.getInmates(),
-        wardenApi.getContacts(),
-        wardenApi.getWallets(),
-        wardenApi.getRecordings(),
-        wardenApi.getDevices(),
-        wardenApi.getStatistics(),
-      ]);
-
-      const foundCall = (calls.items ?? []).find((c) => c.callId === callId) || null;
-      setCall(foundCall);
-
-      if (foundCall) {
-        setInmate((inmates.items ?? []).find((i) => i.inmateId === foundCall.inmateId) || null);
-        setContact((contacts.items ?? []).find((c) => c.contactId === foundCall.contactId) || null);
-        setWallet((wallets.items ?? []).find((w) => w.inmateId === foundCall.inmateId) || null);
-        setRecording((recordings ?? []).find((r) => r.callId === foundCall.callId) || null);
-        setDevice((devices.items ?? []).find((d) => d.deviceId === foundCall.kioskId) || null);
-        setStatistics((stats ?? []).find((s) => s.callId === foundCall.callId) || null);
-      }
-    } catch (err) {
-      console.error('Failed to load monitor data:', err);
-      setLoadError('Failed to load monitor data. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [callId]);
-
-  useEffect(() => { loadMonitorData(); }, [loadMonitorData]);
-
-  useWardenSocket(
-    () => { loadMonitorData(); },
-    undefined,
-    () => { loadMonitorData(); },
-    () => { loadMonitorData(); }
+  const { data: call, isLoading: callLoading, error, refresh: refreshCall } = useCachedResource<ActiveCall>(
+    callId ? cacheKeys.call(callId) : null,
+    () => wardenApi.getCall(callId as string),
+    { ttl: 15_000, pollMs: 15_000 },
   );
+
+  const { data: inmatesData, isLoading: inmatesLoading, refresh: refreshInmates } = useCachedResource<PaginatedResponse<Inmate>>(
+    cacheKeys.inmates(),
+    () => wardenApi.getInmates(),
+    { ttl: 15_000, pollMs: 0 },
+  );
+  const inmate = call ? (inmatesData?.items ?? []).find((i) => i.inmateId === call.inmateId) || null : null;
+
+  const { data: contactsData, isLoading: contactsLoading, refresh: refreshContacts } = useCachedResource<PaginatedResponse<Contact>>(
+    cacheKeys.contacts(),
+    () => wardenApi.getContacts(),
+    { ttl: 15_000, pollMs: 0 },
+  );
+  const contact = call ? (contactsData?.items ?? []).find((c) => c.contactId === call.contactId) || null : null;
+
+  const { data: walletsData, refresh: refreshWallets } = useCachedResource<PaginatedResponse<Wallet>>(
+    cacheKeys.wallets(),
+    () => wardenApi.getWallets(),
+    { ttl: 15_000, pollMs: 0 },
+  );
+  const wallet = call ? (walletsData?.items ?? []).find((w) => w.inmateId === call.inmateId) || null : null;
+
+  const { data: recordingsData, refresh: refreshRecordings } = useCachedResource<Recording[]>(
+    cacheKeys.recordings(),
+    () => wardenApi.getRecordings(),
+    { ttl: 15_000, pollMs: 0 },
+  );
+  const recording = call ? (recordingsData ?? []).find((r) => r.callId === call.callId) || null : null;
+
+  const { data: devicesData, refresh: refreshDevices } = useCachedResource<PaginatedResponse<Device>>(
+    cacheKeys.devices(),
+    () => wardenApi.getDevices(),
+    { ttl: 15_000, pollMs: 0 },
+  );
+  const device = call ? (devicesData?.items ?? []).find((d) => d.deviceId === call.kioskId) || null : null;
+
+  const { data: statisticsData, refresh: refreshStatistics } = useCachedResource<CallStatistics[]>(
+    'statistics',
+    () => wardenApi.getStatistics(),
+    { ttl: 15_000, pollMs: 0 },
+  );
+  const statistics = call ? (statisticsData ?? []).find((s) => s.callId === call.callId) || null : null;
+
+  const refreshAll = () => {
+    refreshCall();
+    refreshInmates();
+    refreshContacts();
+    refreshWallets();
+    refreshRecordings();
+    refreshDevices();
+    refreshStatistics();
+  };
+  const refreshRef = useRef(refreshAll);
+  refreshRef.current = refreshAll;
+  const onCallUpdate = useCallback(() => { refreshRef.current(); }, []);
+  const onDeviceStatusChange = useCallback(() => { refreshRef.current(); }, []);
+  const onRecordingUpdate = useCallback(() => { refreshRef.current(); }, []);
+  useWardenSocket(onCallUpdate, undefined, onDeviceStatusChange, onRecordingUpdate);
 
   const headerIcon = useMemo(() => <span className="material-icons text-primary-600 text-xl">videocam</span>, []);
 
@@ -84,9 +98,20 @@ export function MonitorScreenPage() {
     ), [navigate]),
   });
 
-  if (isLoading) return <Loading message="Loading monitor screen..." />;
+  if (!call && error) {
+    return (
+      <div className="space-y-6">
+        <Card>
+          <div className="text-center py-12">
+            <p className="text-error mb-4">{error}</p>
+            <button onClick={() => refreshCall()} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700">Retry</button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
-  if (!call && !loadError) {
+  if (!call && !callLoading) {
     return (
       <div className="space-y-6">
         <Card>
@@ -98,15 +123,27 @@ export function MonitorScreenPage() {
     );
   }
 
-  if (loadError) {
+  if (!call) {
     return (
       <div className="space-y-6">
-        <Card>
-          <div className="text-center py-12">
-            <p className="text-error mb-4">{loadError}</p>
-            <button onClick={() => { setIsLoading(true); loadMonitorData(); }} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700">Retry</button>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-4">
+            <Card title="Video Area" className="border-l-8 border-slate-300 bg-slate-50">
+              <Skeleton className="h-48 w-full" />
+            </Card>
+            <Card title="Call Controls" className="border-l-8 border-slate-300 bg-slate-50">
+              <Skeleton className="h-10 w-full" />
+            </Card>
           </div>
-        </Card>
+          <div className="space-y-4">
+            <Card title="Inmate Information" className="border-l-8 border-slate-300 bg-slate-50">
+              <Skeleton className="h-32" />
+            </Card>
+            <Card title="Family Information" className="border-l-8 border-slate-300 bg-slate-50">
+              <Skeleton className="h-32" />
+            </Card>
+          </div>
+        </div>
       </div>
     );
   }
@@ -180,11 +217,11 @@ export function MonitorScreenPage() {
               <div className="space-y-1 text-sm">
                 <div className="flex justify-between">
                   <span className="text-neutral-500">Facility</span>
-                  <span className="font-medium text-neutral-900">{inmate?.facility || '—'}</span>
+                  <span className="font-medium text-neutral-900">{inmatesLoading && !inmate ? <SkeletonText /> : inmate?.facility || '—'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-neutral-500">Cell Block</span>
-                  <span className="font-medium text-neutral-900">{inmate?.cellBlock || '—'}</span>
+                  <span className="font-medium text-neutral-900">{inmatesLoading && !inmate ? <SkeletonText /> : inmate?.cellBlock || '—'}</span>
                 </div>
               </div>
             </div>
@@ -198,13 +235,13 @@ export function MonitorScreenPage() {
                 </div>
                 <div>
                   <p className="font-semibold text-neutral-900">{contactLabel(call, contact)}</p>
-                  <p className="text-sm text-neutral-600">{contact?.relationship || 'Family Member'}</p>
+                  <p className="text-sm text-neutral-600">{contactsLoading && !contact ? <SkeletonText /> : contact?.relationship || 'Family Member'}</p>
                 </div>
               </div>
               <div className="space-y-1 text-sm">
                 <div className="flex justify-between">
                   <span className="text-neutral-500">Phone</span>
-                  <span className="font-medium text-neutral-900">{contact?.phoneNumber || '—'}</span>
+                  <span className="font-medium text-neutral-900">{contactsLoading && !contact ? <SkeletonText /> : contact?.phoneNumber || '—'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-neutral-500">Contact ID</span>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { backendSocket } from '@/services/socket/socketClient';
-import { invalidateCache } from '@/services/api/cache';
+import { invalidatePrefix } from '@/services/api/cache';
 import type { Alert, Device, Recording } from '@/services/api/wardenApi';
 
 type EventHandler = (data: any) => void;
@@ -20,17 +20,17 @@ export function useWardenSocket(
     const handlers: Record<string, EventHandler> = {
       'call-created': (data) => {
         console.log('[Socket] Call created:', data);
-        invalidateCache('calls:active', 'calls:all', 'calls:history');
+        invalidatePrefix('calls:active', 'calls:all', 'calls:history');
         onActiveCallsUpdate?.();
       },
       'call-updated': (data) => {
         console.log('[Socket] Call updated:', data);
-        invalidateCache('calls:active', 'calls:all', 'calls:history');
+        invalidatePrefix('calls:active', 'calls:all', 'calls:history');
         onActiveCallsUpdate?.();
       },
       'call-ended': (data) => {
         console.log('[Socket] Call ended:', data);
-        invalidateCache('calls:active', 'calls:all', 'calls:history', 'recordings', 'statistics');
+        invalidatePrefix('calls:active', 'calls:all', 'calls:history', 'recordings', 'statistics');
         onActiveCallsUpdate?.();
       },
       'alert-generated': (data) => {
@@ -43,21 +43,21 @@ export function useWardenSocket(
       },
       'recording-started': (data) => {
         console.log('[Socket] Recording started:', data);
-        invalidateCache('recordings');
+        invalidatePrefix('recordings');
         onRecordingUpdate?.(data);
       },
       'recording-finished': (data) => {
         console.log('[Socket] Recording finished:', data);
-        invalidateCache('recordings');
+        invalidatePrefix('recordings');
         onRecordingUpdate?.(data);
       },
       'settings-updated': (data) => {
         console.log('[Socket] Settings updated:', data);
-        invalidateCache('settings', 'wallets', 'wallets:all');
+        invalidatePrefix('settings', 'wallets', 'wallets:all');
       },
       'pricing-updated': (data) => {
         console.log('[Socket] Pricing updated:', data);
-        invalidateCache('pricing', 'wallets', 'wallets:all', 'statistics');
+        invalidatePrefix('pricing', 'wallets', 'wallets:all', 'statistics');
       },
       'incident-created': (data) => {
         console.log('[Socket] Incident created:', data);

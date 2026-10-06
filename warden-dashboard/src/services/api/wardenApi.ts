@@ -1,6 +1,6 @@
 import { apiClient } from './client';
 import type { ApiResponse } from '@/types/api';
-import { cachedGet, invalidateCache } from './cache';
+import { cachedGet, invalidateCache, invalidatePrefix } from './cache';
 
 /** Warden staff record as returned by GET /wardens (secrets stripped). */
 export interface WardenRecord {
@@ -456,13 +456,67 @@ export interface SecurityStatus {
   developerMode: string;
 }
 
+/** Query string used both in the request URL and in that request's cache key. */
+function buildQs(params?: object): URLSearchParams {
+  const qs = new URLSearchParams();
+  if (params) Object.entries(params).forEach(([k, v]) => { if (v != null && v !== '') qs.set(k, String(v)); });
+  return qs;
+}
+
+/** Cache key for a parameterised list: prefix plus the same query string. */
+function listKey(prefix: string, params?: object): string {
+  const qs = buildQs(params).toString();
+  return qs ? `${prefix}?${qs}` : prefix;
+}
+
+/**
+ * Keys for the caches the API layer writes. Views pass the matching builder to
+ * `useCachedResource` so a page renders its cached answer immediately and a
+ * mutation can invalidate exactly the family it changed.
+ */
+export const cacheKeys = {
+  activeCalls: (params?: ListParams) => listKey('calls:active', params),
+  callHistory: (params?: CallHistoryParams) => listKey('calls:history', params),
+  allCalls: () => 'calls:all',
+  call: (callId: string) => `calls:${callId}`,
+  dashboardStats: () => 'dash:stats',
+  devices: (params?: ListParams) => listKey('devices:list', params),
+  device: (deviceId: string) => `devices:${deviceId}`,
+  inmates: (params?: ListParams) => listKey('inmates:list', params),
+  inmate: (inmateId: string) => `inmates:${inmateId}`,
+  contacts: (params?: ListParams) => listKey('contacts:list', params),
+  wallets: (params?: ListParams) => listKey('wallets:list', params),
+  wallet: (inmateId: string) => `wallets:${inmateId}`,
+  walletStatement: (inmateId: string) => `wallet:stmt:${inmateId}`,
+  walletRequests: () => 'wallet-requests',
+  kiosks: () => 'kiosks:list',
+  kioskRegistrations: (params?: ListParams) => listKey('kiosks:registration', params),
+  kioskRegistrationStats: () => 'kiosks:registration:stats',
+  wardens: (params?: ListParams) => listKey('wardens:list', params),
+  warden: (wardenId: string) => `wardens:${wardenId}`,
+  wardenStats: () => 'wardens:stats',
+  kioskAdmins: () => 'kiosk-admins',
+  settings: () => 'settings',
+  pricing: () => 'pricing',
+  schedule: () => 'schedule',
+  alerts: () => 'alerts',
+  recordings: () => 'recordings',
+  recording: (recordingId: string) => `recordings:${recordingId}`,
+  incidents: () => 'incidents',
+  reports: () => 'reports',
+  prisons: () => 'prisons',
+};
+
 export const wardenApi = {
   // Active Calls
   getActiveCalls: (params?: ListParams) => {
-    const qs = new URLSearchParams();
-    if (params) Object.entries(params).forEach(([k, v]) => { if (v != null && v !== '') qs.set(k, String(v)); });
+    const qs = buildQs(params);
     const url = `/calls/active${qs.toString() ? '?' + qs.toString() : ''}`;
-    return apiClient.get<ApiResponse<PaginatedResponse<ActiveCall>>>(url).then((r) => r.data?.data ?? { items: [], total: 0, limit: 20, offset: 0 });
+    return cachedGet(
+      listKey('calls:active', params),
+      () => apiClient.get<ApiResponse<PaginatedResponse<ActiveCall>>>(url).then((r) => r.data?.data ?? { items: [], total: 0, limit: 20, offset: 0 }),
+      15_000,
+    );
   },
 
   // All Calls
@@ -476,18 +530,19 @@ export const wardenApi = {
   // Update Call
   updateCall: (callId: string, updates: Partial<ActiveCall>) =>
     apiClient.patch<ApiResponse<ActiveCall>>(`/calls/${callId}`, updates).then((r) => {
-      invalidateCache('calls:active', 'calls:all', `calls:${callId}`);
+      invalidatePrefix('calls:active', 'calls:all', `calls:${callId}`);
       return r.data?.data;
     }),
 
   // Call History
   getCallHistory: (params?: CallHistoryParams) => {
-    const qs = new URLSearchParams();
-    if (params) {
-      Object.entries(params).forEach(([k, v]) => { if (v != null && v !== '') qs.set(k, String(v)); });
-    }
+    const qs = buildQs(params);
     const url = `/calls/history${qs.toString() ? '?' + qs.toString() : ''}`;
-    return apiClient.get<ApiResponse<PaginatedCallsResponse>>(url).then((r) => r.data?.data ?? { calls: [], total: 0, limit: 20, offset: 0 });
+    return cachedGet(
+      listKey('calls:history', params),
+      () => apiClient.get<ApiResponse<PaginatedCallsResponse>>(url).then((r) => r.data?.data ?? { calls: [], total: 0, limit: 20, offset: 0 }),
+      30_000,
+    );
   },
 
   // Recordings
@@ -499,13 +554,13 @@ export const wardenApi = {
 
   startRecording: (recordingId: string) =>
     apiClient.post<ApiResponse<Recording>>(`/recordings/${recordingId}/start`).then((r) => {
-      invalidateCache('recordings');
+      invalidatePrefix('recordings');
       return r.data?.data;
     }),
 
   stopRecording: (recordingId: string) =>
     apiClient.post<ApiResponse<Recording>>(`/recordings/${recordingId}/stop`).then((r) => {
-      invalidateCache('recordings');
+      invalidatePrefix('recordings');
       return r.data?.data;
     }),
 
@@ -515,16 +570,19 @@ export const wardenApi = {
 
   resolveAlert: (alertId: string, resolvedBy: string) =>
     apiClient.patch<ApiResponse<Alert>>(`/alerts/${alertId}/resolve`, { resolvedBy }).then((r) => {
-      invalidateCache('alerts');
+      invalidatePrefix('alerts');
       return r.data?.data;
     }),
 
   // Devices
   getDevices: (params?: ListParams) => {
-    const qs = new URLSearchParams();
-    if (params) Object.entries(params).forEach(([k, v]) => { if (v != null && v !== '') qs.set(k, String(v)); });
+    const qs = buildQs(params);
     const url = `/admin/devices${qs.toString() ? '?' + qs.toString() : ''}`;
-    return apiClient.get<ApiResponse<PaginatedResponse<Device>>>(url).then((r) => r.data?.data ?? { items: [], total: 0, limit: 20, offset: 0 });
+    return cachedGet(
+      listKey('devices:list', params),
+      () => apiClient.get<ApiResponse<PaginatedResponse<Device>>>(url).then((r) => r.data?.data ?? { items: [], total: 0, limit: 20, offset: 0 }),
+      60_000,
+    );
   },
 
   getDevice: (deviceId: string) =>
@@ -532,7 +590,7 @@ export const wardenApi = {
 
   updateDeviceStatus: (deviceId: string, status: string) =>
     apiClient.patch<ApiResponse<Device>>(`/devices/${deviceId}/status`, { status }).then((r) => {
-      invalidateCache('devices');
+      invalidatePrefix('devices');
       return r.data?.data;
     }),
 
@@ -545,10 +603,13 @@ export const wardenApi = {
 
   // Inmates
   getInmates: (params?: ListParams) => {
-    const qs = new URLSearchParams();
-    if (params) Object.entries(params).forEach(([k, v]) => { if (v != null && v !== '') qs.set(k, String(v)); });
+    const qs = buildQs(params);
     const url = `/inmates${qs.toString() ? '?' + qs.toString() : ''}`;
-    return apiClient.get<ApiResponse<PaginatedResponse<Inmate>>>(url).then((r) => r.data?.data ?? { items: [], total: 0, limit: 20, offset: 0 });
+    return cachedGet(
+      listKey('inmates:list', params),
+      () => apiClient.get<ApiResponse<PaginatedResponse<Inmate>>>(url).then((r) => r.data?.data ?? { items: [], total: 0, limit: 20, offset: 0 }),
+      60_000,
+    );
   },
 
   getInmate: (inmateId: string) =>
@@ -558,57 +619,67 @@ export const wardenApi = {
     apiClient.get<ApiResponse<{ nextId: string }>>('/inmates/next-id').then((r) => r.data?.data?.nextId),
 
   createInmate: (data: Partial<Inmate> & {kioskId?:string}) =>
-    apiClient.post<ApiResponse<Inmate>>('/inmates', data).then((r) => { invalidateCache('inmates'); return r.data?.data; }),
+    apiClient.post<ApiResponse<Inmate>>('/inmates', data).then((r) => { invalidatePrefix('inmates'); return r.data?.data; }),
 
   updateInmate: (inmateId: string, data: Partial<Inmate>) =>
-    apiClient.put<ApiResponse<Inmate>>(`/inmates/admin/prisoners/${inmateId}`, data).then((r) => { invalidateCache('inmates'); return r.data?.data; }),
+    apiClient.put<ApiResponse<Inmate>>(`/inmates/admin/prisoners/${inmateId}`, data).then((r) => { invalidatePrefix('inmates'); return r.data?.data; }),
 
   deleteInmateApi: (inmateId: string) =>
-    apiClient.delete<ApiResponse<void>>(`/inmates/${inmateId}`).then((r) => { invalidateCache('inmates'); return r.data; }),
+    apiClient.delete<ApiResponse<void>>(`/inmates/${inmateId}`).then((r) => { invalidatePrefix('inmates'); return r.data; }),
 
   // Contacts
   getContacts: (params?: ListParams) => {
-    const qs = new URLSearchParams();
-    if (params) Object.entries(params).forEach(([k, v]) => { if (v != null && v !== '') qs.set(k, String(v)); });
+    const qs = buildQs(params);
     const url = `/contacts${qs.toString() ? '?' + qs.toString() : ''}`;
-    return apiClient.get<ApiResponse<PaginatedResponse<Contact>>>(url).then((r) => r.data?.data ?? { items: [], total: 0, limit: 20, offset: 0 });
+    return cachedGet(
+      listKey('contacts:list', params),
+      () => apiClient.get<ApiResponse<PaginatedResponse<Contact>>>(url).then((r) => r.data?.data ?? { items: [], total: 0, limit: 20, offset: 0 }),
+      60_000,
+    );
   },
 
   createContact: (inmateId: string, data: Partial<Contact>) =>
-    apiClient.post<ApiResponse<Contact>>(`/admin/prisoners/${inmateId}/contacts`, data).then((r) => { invalidateCache('contacts'); return r.data?.data; }),
+    apiClient.post<ApiResponse<Contact>>(`/admin/prisoners/${inmateId}/contacts`, data).then((r) => { invalidatePrefix('contacts'); return r.data?.data; }),
 
   updateContact: (contactId: string, data: Partial<Contact>) =>
-    apiClient.put<ApiResponse<Contact>>(`/admin/contacts/${contactId}`, data).then((r) => { invalidateCache('contacts'); return r.data?.data; }),
+    apiClient.put<ApiResponse<Contact>>(`/admin/contacts/${contactId}`, data).then((r) => { invalidatePrefix('contacts'); return r.data?.data; }),
 
   deleteContactApi: (contactId: string) =>
-    apiClient.delete<ApiResponse<void>>(`/admin/contacts/${contactId}`).then((r) => { invalidateCache('contacts'); return r.data; }),
+    apiClient.delete<ApiResponse<void>>(`/admin/contacts/${contactId}`).then((r) => { invalidatePrefix('contacts'); return r.data; }),
 
   // Registered family devices (fingerprint registry)
   removeContactDevice: (contactId: string, fingerprintId: string) =>
     apiClient.delete<ApiResponse<{ contactId: string; fingerprintId: string }>>(`/contacts/${contactId}/devices/${fingerprintId}`)
-      .then((r) => { invalidateCache('contacts'); return r.data?.data; }),
+      .then((r) => { invalidatePrefix('contacts'); return r.data?.data; }),
 
   clearContactDevices: (contactId: string) =>
     apiClient.delete<ApiResponse<{ removedDevices: number }>>(`/contacts/${contactId}/devices`)
-      .then((r) => { invalidateCache('contacts'); return r.data?.data; }),
+      .then((r) => { invalidatePrefix('contacts'); return r.data?.data; }),
 
   // Wallets
   getWallets: (params?: ListParams) => {
-    const qs = new URLSearchParams();
-    if (params) Object.entries(params).forEach(([k, v]) => { if (v != null && v !== '') qs.set(k, String(v)); });
+    const qs = buildQs(params);
     const url = `/wallets${qs.toString() ? '?' + qs.toString() : ''}`;
-    return apiClient.get<ApiResponse<PaginatedResponse<Wallet>>>(url).then((r) => r.data?.data ?? { items: [], total: 0, limit: 20, offset: 0 });
+    return cachedGet(
+      listKey('wallets:list', params),
+      () => apiClient.get<ApiResponse<PaginatedResponse<Wallet>>>(url).then((r) => r.data?.data ?? { items: [], total: 0, limit: 20, offset: 0 }),
+      60_000,
+    );
   },
 
   getWallet: (inmateId: string) =>
     cachedGet(`wallets:${inmateId}`, () => apiClient.get<ApiResponse<Wallet>>(`/wallets/${inmateId}`).then((r) => r.data?.data)),
 
   getWalletStatement: (inmateId: string) =>
-    apiClient.get<ApiResponse<{ wallet: Wallet; transactions: Transaction[] }>>(`/inmate/wallet/${inmateId}`).then((r) => r.data?.data ?? { wallet: null as any, transactions: [] }),
+    cachedGet(
+      `wallet:stmt:${inmateId}`,
+      () => apiClient.get<ApiResponse<{ wallet: Wallet; transactions: Transaction[] }>>(`/inmate/wallet/${inmateId}`).then((r) => r.data?.data ?? { wallet: null as any, transactions: [] }),
+      30_000,
+    ),
 
   rechargeWallet: (inmateId: string, amount: number, description?: string) =>
     apiClient.post<ApiResponse<{ wallet: Wallet; transaction: Transaction }>>(`/wallets/${inmateId}/recharge`, { amount, description }).then((r) => {
-      invalidateCache('wallets', `wallets:${inmateId}`);
+      invalidatePrefix('wallets', `wallets:${inmateId}`);
       return r.data?.data;
     }),
 
@@ -618,19 +689,19 @@ export const wardenApi = {
 
   createWalletRequest: (inmateId: string, amount: number, reason?: string) =>
     apiClient.post<ApiResponse<WalletRequest>>('/wallet-requests', { inmateId, amount, reason }).then((r) => {
-      invalidateCache('wallet-requests');
+      invalidatePrefix('wallet-requests');
       return r.data?.data;
     }),
 
   approveWalletRequest: (requestId: string) =>
     apiClient.patch<ApiResponse<{ request: WalletRequest; wallet: Wallet; transaction: Transaction }>>(`/wallet-requests/${requestId}/approve`).then((r) => {
-      invalidateCache('wallet-requests', 'wallets');
+      invalidatePrefix('wallet-requests', 'wallets');
       return r.data?.data;
     }),
 
   rejectWalletRequest: (requestId: string, reason?: string) =>
     apiClient.patch<ApiResponse<WalletRequest>>(`/wallet-requests/${requestId}/reject`, { reason }).then((r) => {
-      invalidateCache('wallet-requests');
+      invalidatePrefix('wallet-requests');
       return r.data?.data;
     }),
 
@@ -644,17 +715,13 @@ export const wardenApi = {
 
   updateSettings: (settings: Partial<Settings>) =>
     apiClient.patch<ApiResponse<Settings>>('/settings', settings).then((r) => {
-      invalidateCache('settings');
+      invalidatePrefix('settings');
       return r.data?.data;
     }),
 
   // Ensure wallet statements also refresh when settings that could affect UI are changed
   invalidateWallets: () => {
-    invalidateCache('wallets', 'wallets:all');
-    try {
-      const keys = Object.keys(localStorage).filter((k) => k.startsWith('pc_cache_wallets'));
-      keys.forEach((k) => localStorage.removeItem(k));
-    } catch {}
+    invalidatePrefix('wallet');
   },
 
   // Pricing (per-minute call rates set by the warden)
@@ -663,18 +730,8 @@ export const wardenApi = {
 
   updatePricing: (pricing: Partial<Pricing>) =>
     apiClient.patch<ApiResponse<Pricing>>('/pricing', pricing).then((r) => {
-      // Pricing directly affects wallet remaining minutes, so bust all wallet + pricing caches
-      invalidateCache('pricing', 'wallets', 'wallets:all');
-      try {
-        // Clear any cached wallet list or individual wallet entries (pc_cache_wallets / pc_cache_wallets:*)
-        const keys = Object.keys(localStorage).filter((k) => k.startsWith('pc_cache_wallets') || k.startsWith('pc_cache_pricing'));
-        keys.forEach((k) => localStorage.removeItem(k));
-        // Also clear in-memory for wallets: prefix
-        // (invalidateCache only deletes exact keys, so clear all pc_cache_wallets:* from memory via internal map)
-        // Force bust by clearing known wallet keys from memoryCache via invalidate
-        // We do a broad clear by touching cache.ts internal map not exposed, so we piggyback on invalidate of known keys:
-        // The above localStorage clear covers persistence; memory will be cleared on next fetchFresh due to isStale
-      } catch {}
+      // Pricing directly affects wallet remaining minutes, so bust every wallet + pricing entry
+      invalidatePrefix('wallet', 'pricing');
       return r.data?.data;
     }),
 
@@ -684,7 +741,7 @@ export const wardenApi = {
 
   createIncident: (incident: Partial<Incident>) =>
     apiClient.post<ApiResponse<Incident>>('/incidents', incident).then((r) => {
-      invalidateCache('incidents');
+      invalidatePrefix('incidents');
       return r.data?.data;
     }),
 
@@ -700,7 +757,7 @@ export const wardenApi = {
 
   updateCallStatistics: (callId: string, updates: Partial<CallStatistics>) =>
     apiClient.patch<ApiResponse<CallStatistics>>(`/statistics/${callId}`, updates).then((r) => {
-      invalidateCache('statistics', `statistics:${callId}`);
+      invalidatePrefix('statistics', `statistics:${callId}`);
       return r.data?.data;
     }),
 
@@ -712,12 +769,13 @@ export const wardenApi = {
   endCall: (callId: string) =>
     apiClient.post<ApiResponse<ActiveCall>>(`/calls/${callId}/end`).then((r) => {
       // Bust live + history + recordings + stats caches so next fetches are fresh, not 30s stale
-      invalidateCache('calls:active', 'calls:all', 'calls:history', `calls:${callId}`, 'recordings', `recordings:${callId}`, 'statistics');
+      invalidatePrefix('calls:active', 'calls:all', 'calls:history', `calls:${callId}`, 'recordings', `recordings:${callId}`, 'statistics');
       return r.data?.data;
     }),
 
   // Dashboard Stats
-  getDashboardStats: async (): Promise<DashboardStats> => {
+  getDashboardStats: (): Promise<DashboardStats> =>
+    cachedGet('dash:stats', async () => {
     try {
       const [callsRes, devicesRes, alertsRes, recordingsRes, reportsRes] = await Promise.allSettled([
         apiClient.get<ApiResponse<ActiveCall[]>>('/calls'),
@@ -762,7 +820,7 @@ export const wardenApi = {
         totalKiosks: 0, todayCalls: 0, failedCalls: 0, alerts: 0, revenueToday: 0
       };
     }
-  },
+    }, 30_000),
 
   getStorage: async () => {
     try {
@@ -773,30 +831,37 @@ export const wardenApi = {
 
   // Kiosk Registration & Authorization
   getKiosks: () =>
-    cachedGet('kiosks:list', () => apiClient.get<ApiResponse<KioskItem[]>>('/kiosks/').then((r) => r.data?.data ?? [])),
+    cachedGet('kiosks:list', () => apiClient.get<ApiResponse<KioskItem[]>>('/kiosks/').then((r) => r.data?.data ?? []), 30_000),
 
   getKioskRegistrationRequests: (params?: ListParams) => {
-    const qs = new URLSearchParams();
-    if (params) Object.entries(params).forEach(([k, v]) => { if (v != null && v !== '') qs.set(k, String(v)); });
+    const qs = buildQs(params);
     const url = `/kiosks/registration-requests${qs.toString() ? '?' + qs.toString() : ''}`;
-    return apiClient.get<ApiResponse<PaginatedResponse<KioskRegistrationRequestItem>>>(url).then((r) => r.data?.data ?? { items: [], total: 0, limit: 20, offset: 0 });
+    return cachedGet(
+      listKey('kiosks:registration', params),
+      () => apiClient.get<ApiResponse<PaginatedResponse<KioskRegistrationRequestItem>>>(url).then((r) => r.data?.data ?? { items: [], total: 0, limit: 20, offset: 0 }),
+      30_000,
+    );
   },
 
   getKioskRegistrationStats: () =>
-    apiClient.get<ApiResponse<{ total: number; pendingCount: number; approvedCount: number; rejectedCount: number }>>('/kiosks/registration-requests/stats').then((r) => r.data?.data ?? { total: 0, pendingCount: 0, approvedCount: 0, rejectedCount: 0 }),
+    cachedGet(
+      'kiosks:registration:stats',
+      () => apiClient.get<ApiResponse<{ total: number; pendingCount: number; approvedCount: number; rejectedCount: number }>>('/kiosks/registration-requests/stats').then((r) => r.data?.data ?? { total: 0, pendingCount: 0, approvedCount: 0, rejectedCount: 0 }),
+      30_000,
+    ),
 
   approveKioskRegistration: (requestId: string) =>
     apiClient.patch<ApiResponse<{ success: boolean }>>(`/kiosks/registration/${requestId}/approve`).then((r) => {
-      invalidateCache('kiosks:registration');
+      invalidatePrefix('kiosks:registration');
       // The approved device shows up on the Kiosks tab immediately.
-      invalidateCache('kiosks:list');
+      invalidatePrefix('kiosks:list');
       return r.data?.data ?? { success: false };
     }),
 
   rejectKioskRegistration: (requestId: string, reason?: string) =>
     apiClient.patch<ApiResponse<{ success: boolean }>>(`/kiosks/registration/${requestId}/reject`, { reason }).then((r) => {
-      invalidateCache('kiosks:registration');
-      invalidateCache('kiosks:list');
+      invalidatePrefix('kiosks:registration');
+      invalidatePrefix('kiosks:list');
       return r.data?.data ?? { success: false };
     }),
 
@@ -808,52 +873,77 @@ export const wardenApi = {
 
   updateSetupPin: (prisonId: string, pin: string) =>
     apiClient.put<ApiResponse<{ success: boolean }>>('/kiosks/setup-pin', { prisonId, pin }).then((r) => {
-      invalidateCache(`kiosks:pin:${prisonId}`);
+      invalidatePrefix(`kiosks:pin:${prisonId}`);
       return r.data?.data ?? { success: false };
     }),
 
   // User Management
   getWardens: (params?: ListParams) => {
-    const qs = new URLSearchParams();
-    if (params) Object.entries(params).forEach(([k, v]) => { if (v != null && v !== '') qs.set(k, String(v)); });
+    const qs = buildQs(params);
     const url = `/wardens${qs.toString() ? '?' + qs.toString() : ''}`;
-    return apiClient.get<ApiResponse<PaginatedResponse<any>>>(url).then((r) => r.data?.data ?? { items: [], total: 0, limit: 20, offset: 0 });
+    return cachedGet(
+      listKey('wardens:list', params),
+      () => apiClient.get<ApiResponse<PaginatedResponse<any>>>(url).then((r) => r.data?.data ?? { items: [], total: 0, limit: 20, offset: 0 }),
+      60_000,
+    );
   },
 
   getWarden: (wardenId: string) =>
     cachedGet(`wardens:${wardenId}`, () => apiClient.get<ApiResponse<any>>(`/wardens/${wardenId}`).then((r) => r.data?.data)),
 
   getWardenStats: () =>
-    apiClient.get<ApiResponse<{ total: number; activeCount: number; inactiveCount: number; onLeaveCount: number; canManageWardens?: boolean }>>('/wardens/stats').then((r) => r.data?.data ?? { total: 0, activeCount: 0, inactiveCount: 0, onLeaveCount: 0, canManageWardens: false }),
+    cachedGet(
+      'wardens:stats',
+      () => apiClient.get<ApiResponse<{ total: number; activeCount: number; inactiveCount: number; onLeaveCount: number; canManageWardens?: boolean }>>('/wardens/stats').then((r) => r.data?.data ?? { total: 0, activeCount: 0, inactiveCount: 0, onLeaveCount: 0, canManageWardens: false }),
+      60_000,
+    ),
 
   createWarden: (payload: NewWardenInput) =>
-    apiClient.post<ApiResponse<WardenRecord>>('/wardens', payload).then((r) => r.data?.data),
+    apiClient.post<ApiResponse<WardenRecord>>('/wardens', payload).then((r) => {
+      invalidatePrefix('wardens');
+      return r.data?.data;
+    }),
 
   updateWarden: (wardenId: string, patch: WardenUpdate) =>
     apiClient
       .patch<ApiResponse<WardenRecord>>(`/wardens/${encodeURIComponent(wardenId)}`, patch)
-      .then((r) => r.data?.data),
+      .then((r) => {
+        invalidatePrefix('wardens');
+        return r.data?.data;
+      }),
 
   deleteWarden: (wardenId: string) =>
     apiClient
       .delete<ApiResponse<{ message: string; wardenId: string }>>(`/wardens/${encodeURIComponent(wardenId)}`)
-      .then((r) => r.data?.data),
+      .then((r) => {
+        invalidatePrefix('wardens');
+        return r.data?.data;
+      }),
 
   getKioskAdmins: () =>
-    apiClient.get<ApiResponse<KioskAdmin[]>>('/kiosk-admins').then((r) => r.data?.data ?? []),
+    cachedGet('kiosk-admins', () => apiClient.get<ApiResponse<KioskAdmin[]>>('/kiosk-admins').then((r) => r.data?.data ?? []), 60_000),
 
   createKioskAdmin: (payload: NewKioskAdminInput) =>
-    apiClient.post<ApiResponse<KioskAdmin>>('/kiosk-admins', payload).then((r) => r.data?.data),
+    apiClient.post<ApiResponse<KioskAdmin>>('/kiosk-admins', payload).then((r) => {
+      invalidatePrefix('kiosk-admins');
+      return r.data?.data;
+    }),
 
   updateKioskAdmin: (adminId: string, patch: KioskAdminUpdate) =>
     apiClient
       .patch<ApiResponse<KioskAdmin>>(`/kiosk-admins/${encodeURIComponent(adminId)}`, patch)
-      .then((r) => r.data?.data),
+      .then((r) => {
+        invalidatePrefix('kiosk-admins');
+        return r.data?.data;
+      }),
 
   deleteKioskAdmin: (adminId: string) =>
     apiClient
       .delete<ApiResponse<{ message: string; adminId: string }>>(`/kiosk-admins/${encodeURIComponent(adminId)}`)
-      .then((r) => r.data?.data),
+      .then((r) => {
+        invalidatePrefix('kiosk-admins');
+        return r.data?.data;
+      }),
 
   // Prisons
   getPrisons: () =>

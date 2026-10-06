@@ -1,14 +1,15 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card } from '@/components/Card';
-import { Loading } from '@/components/States';
+import { Skeleton, SkeletonList, SkeletonText } from '@/components/Skeleton';
 import { SearchableSelect } from '@/components/SearchableSelect';
 import { LocationLink } from '@/components/LocationLink';
-import { wardenApi } from '@/services/api/wardenApi';
+import { wardenApi, cacheKeys } from '@/services/api/wardenApi';
 import { apiClient } from '@/services/api/client';
+import { useCachedResource } from '@/hooks/useCachedResource';
 import { usePageHeader } from '@/context/PageHeaderContext';
 import { errorMessage } from '@/utils/error';
-import type { Inmate, Contact, DeviceFingerprint } from '@/services/api/wardenApi';
+import type { Inmate, Contact, DeviceFingerprint, ListParams } from '@/services/api/wardenApi';
 
 /**
  * Android/iOS user agents never say "Samsung"/"Vivo" outright, but they do
@@ -80,10 +81,6 @@ export function InmateDetailPage() {
   const { inmateId } = useParams<{ inmateId: string }>();
   const navigate = useNavigate();
   const isNew = !inmateId || inmateId === 'new';
-  const [inmate, setInmate] = useState<Inmate | null>(null);
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [loading, setLoading] = useState(!isNew);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [editingInmate, setEditingInmate] = useState(isNew);
   const [editData, setEditData] = useState<Partial<Inmate>>(isNew ? { status: 'active', securityLevel: 'medium', gender: 'male' } : {});
   const [saving, setSaving] = useState(false);
@@ -110,46 +107,52 @@ export function InmateDetailPage() {
   const [removingDevice, setRemovingDevice] = useState<string | null>(null);
   const [deviceError, setDeviceError] = useState('');
 
-  const load = useCallback(async () => {
-    try {
-      setLoadError(null);
-      if (isNew) {
-        const [cells, blocks, kiosks, generatedId] = await Promise.all([
-          wardenApi.getCells().catch(() => []),
-          wardenApi.getBlocks().catch(() => []),
-          apiClient.get('/kiosks').then(r => r.data?.data?.items ?? r.data?.data ?? []).catch(() => []),
-          wardenApi.getNextInmateId().catch(() => ''),
-        ]);
-        setCellNames(cells.map((c: any) => ({ id: c.cellId, name: c.name })).filter(c => c.id && c.name));
-        setBlockNames(blocks.map((b: any) => ({ id: b.blockId, name: b.name })).filter(b => b.id && b.name));
-        setKioskNames(kiosks.map((k: any) => ({ id: k.kioskId, name: k.kioskId })).filter(k => k.id));
-        setNextId(generatedId || '');
-        setLoading(false);
-        return;
-      }
-      const [im, co, cells, blocks, kiosks] = await Promise.all([
-        wardenApi.getInmate(inmateId),
-        apiClient.get(`/contacts/admin/prisoners/${inmateId}/contacts`).then(r => r.data?.data ?? []),
-        wardenApi.getCells().catch(() => []),
-        wardenApi.getBlocks().catch(() => []),
-        apiClient.get('/kiosks').then(r => r.data?.data?.items ?? r.data?.data ?? []).catch(() => []),
-      ]);
-      setInmate(im ?? null);
-      setContacts(Array.isArray(co) ? co : []);
-      setCellNames(cells.map((c: any) => ({ id: c.cellId, name: c.name })).filter(c => c.id && c.name));
-      setBlockNames(blocks.map((b: any) => ({ id: b.blockId, name: b.name })).filter(b => b.id && b.name));
-      setKioskNames(kiosks.map((k: any) => ({ id: k.kioskId, name: k.kioskId })).filter(k => k.id));
-      // Load biometrics
-      setBiometricsLoading(true);
-      wardenApi.getInmateBiometrics(inmateId).then(bm => {
-        setBiometrics(Array.isArray(bm) ? bm : []);
-      }).catch(() => setBiometrics([])).finally(() => setBiometricsLoading(false));
-    } catch (e: unknown) {
-      setLoadError(errorMessage(e, 'Failed to load inmate details'));
-    } finally { setLoading(false); }
-  }, [inmateId, isNew]);
+  const contactParams = useMemo<ListParams>(() => ({ inmateId: inmateId ?? '' }), [inmateId]);
 
-  useEffect(() => { load(); }, [load]);
+  const { data: inmateData, isLoading: inmateLoading, error: inmateError, refresh: refreshInmate } = useCachedResource<Inmate>(
+    isNew ? null : cacheKeys.inmate(inmateId ?? ''),
+    () => wardenApi.getInmate(inmateId ?? ''),
+    { ttl: 60_000 },
+  );
+  const inmate = inmateData ?? null;
+
+  const freshContacts = useRef<Contact[] | null>(null);
+  const loadContacts = useCallback(async () => {
+    const co = await apiClient.get(`/contacts/admin/prisoners/${inmateId}/contacts`).then(r => r.data?.data ?? []);
+    const list = (Array.isArray(co) ? co : []) as Contact[];
+    freshContacts.current = list;
+    return list;
+  }, [inmateId]);
+
+  const { data: contactsData, isLoading: contactsLoading, error: contactsError, refresh: refreshContactsCache } = useCachedResource<Contact[]>(
+    isNew ? null : cacheKeys.contacts(contactParams),
+    loadContacts,
+    { ttl: 60_000 },
+  );
+  const contacts = contactsData ?? [];
+
+  const loadAux = useCallback(async () => {
+    const [cells, blocks, kiosks, generatedId] = await Promise.all([
+      wardenApi.getCells().catch(() => []),
+      wardenApi.getBlocks().catch(() => []),
+      apiClient.get('/kiosks').then(r => r.data?.data?.items ?? r.data?.data ?? []).catch(() => []),
+      isNew ? wardenApi.getNextInmateId().catch(() => '') : Promise.resolve(''),
+    ]);
+    setCellNames(cells.map((c: any) => ({ id: c.cellId, name: c.name })).filter(c => c.id && c.name));
+    setBlockNames(blocks.map((b: any) => ({ id: b.blockId, name: b.name })).filter(b => b.id && b.name));
+    setKioskNames(kiosks.map((k: any) => ({ id: k.kioskId, name: k.kioskId })).filter(k => k.id));
+    setNextId(generatedId || '');
+  }, [isNew]);
+
+  useEffect(() => { loadAux(); }, [loadAux]);
+
+  useEffect(() => {
+    if (isNew || !inmateId) return;
+    setBiometricsLoading(true);
+    wardenApi.getInmateBiometrics(inmateId).then(bm => {
+      setBiometrics(Array.isArray(bm) ? bm : []);
+    }).catch(() => setBiometrics([])).finally(() => setBiometricsLoading(false));
+  }, [inmateId, isNew]);
 
   const startEditInmate = () => {
     if (!inmate) return;
@@ -166,9 +169,8 @@ export function InmateDetailPage() {
         const saved = await wardenApi.createInmate(payload);
         if (saved) navigate(`/inmates-family/${saved.inmateId}`, { replace: true });
       } else {
-        const updated = await wardenApi.updateInmate(editData.inmateId, editData);
-        if (updated) setInmate(updated);
-        else setInmate({ ...inmate!, ...editData } as Inmate);
+        await wardenApi.updateInmate(editData.inmateId, editData);
+        await refreshInmate();
         setEditingInmate(false);
       }
     } catch { }
@@ -185,9 +187,8 @@ export function InmateDetailPage() {
     if (!inmate || toggling) return;
     setToggling(true);
     try {
-      const updated = await wardenApi.toggleInmate(inmate.inmateId);
-      if (updated) setInmate(updated);
-      else setInmate({ ...inmate, status: inmate.status === 'active' ? 'inactive' : 'active' });
+      await wardenApi.toggleInmate(inmate.inmateId);
+      await refreshInmate();
     } catch { }
     setToggling(false);
   };
@@ -202,19 +203,16 @@ export function InmateDetailPage() {
   // actually persisted. Returns null when the refresh itself failed.
   const refreshContacts = useCallback(async (): Promise<Contact[] | null> => {
     if (!inmateId || isNew) return null;
-    try {
-      const co = await apiClient.get(`/contacts/admin/prisoners/${inmateId}/contacts`).then(r => r.data?.data ?? []);
-      const list = (Array.isArray(co) ? co : []) as Contact[];
-      setContacts(list);
-      setSelectedContact(prev => {
-        if (!prev) return prev;
-        return list.find(c => c.contactId === prev.contactId) ?? prev;
-      });
-      return list;
-    } catch {
-      return null;
-    }
-  }, [inmateId, isNew]);
+    freshContacts.current = null;
+    await refreshContactsCache();
+    const list = freshContacts.current;
+    if (!list) return null;
+    setSelectedContact(prev => {
+      if (!prev) return prev;
+      return list.find(c => c.contactId === prev.contactId) ?? prev;
+    });
+    return list;
+  }, [inmateId, isNew, refreshContactsCache]);
 
   const saveContact = async () => {
     if (!contactEditData.contactId) return;
@@ -242,7 +240,6 @@ export function InmateDetailPage() {
         return;
       }
     } else {
-      setContacts(prev => prev.map(c => c.contactId === contactEditData.contactId ? { ...c, ...contactEditData } as Contact : c));
       if (selectedContact?.contactId === contactEditData.contactId) {
         setSelectedContact({ ...selectedContact, ...contactEditData } as Contact);
       }
@@ -263,7 +260,6 @@ export function InmateDetailPage() {
       setSaveContactError('Contact was not deleted. Please try again.');
       return;
     }
-    if (!fresh) setContacts(prev => prev.filter(c => c.contactId !== contactId));
     if (selectedContact?.contactId === contactId) { setSelectedContact(null); setEditingContact(false); }
   };
 
@@ -271,8 +267,8 @@ export function InmateDetailPage() {
     try {
       const updated = await wardenApi.toggleContact(contactId);
       if (updated) {
-        setContacts(prev => prev.map(c => c.contactId === contactId ? { ...c, ...updated } : c));
         if (selectedContact?.contactId === contactId) setSelectedContact({ ...selectedContact, ...updated } as Contact);
+        await refreshContactsCache();
       }
     } catch { }
   };
@@ -284,8 +280,8 @@ export function InmateDetailPage() {
     try {
       await wardenApi.removeContactDevice(contactId, fingerprintId);
       const strip = (c: Contact): Contact => ({ ...c, deviceFingerprints: (c.deviceFingerprints || []).filter(d => d.fingerprintId !== fingerprintId) });
-      setContacts(prev => prev.map(c => c.contactId === contactId ? strip(c) : c));
       if (selectedContact?.contactId === contactId) setSelectedContact(strip(selectedContact));
+      await refreshContactsCache();
     } catch (e: any) {
       setDeviceError(e?.response?.data?.error?.message || 'Failed to remove device. Please try again.');
     } finally {
@@ -300,8 +296,8 @@ export function InmateDetailPage() {
     try {
       await wardenApi.clearContactDevices(contactId);
       const strip = (c: Contact): Contact => ({ ...c, deviceFingerprints: [] });
-      setContacts(prev => prev.map(c => c.contactId === contactId ? strip(c) : c));
       if (selectedContact?.contactId === contactId) setSelectedContact(strip(selectedContact));
+      await refreshContactsCache();
     } catch (e: any) {
       setDeviceError(e?.response?.data?.error?.message || 'Failed to clear devices. Please try again.');
     } finally {
@@ -361,10 +357,7 @@ export function InmateDetailPage() {
         setAddFamilyError('Failed to save contact. Please try again.');
         return;
       }
-      if (!exists && saved) setContacts(prev => prev.some(c => c.contactId === saved!.contactId) ? prev : [...prev, saved!]);
-    } else if (saved) {
-      setContacts(prev => [...prev, saved]);
-    } else {
+    } else if (!saved) {
       setAddFamilyError('Failed to verify the save. Please check your connection and try again.');
       return;
     }
@@ -384,9 +377,10 @@ export function InmateDetailPage() {
     ), []),
   });
 
-  if (loading) return <Loading message="Loading inmate details..." />;
-  if (loadError) return <Card><div className="text-center py-12"><p className="text-error mb-4">{loadError}</p><button onClick={() => { setLoading(true); load(); }} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm">Retry</button></div></Card>;
-  if (!isNew && !inmate) return <Card><div className="text-center py-12"><p className="text-neutral-600">Inmate not found</p></div></Card>;
+  if (inmateError && !inmate) return <Card><div className="text-center py-12"><p className="text-error mb-4">{inmateError}</p><button onClick={() => refreshInmate()} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm">Retry</button></div></Card>;
+  if (!isNew && !inmateLoading && !inmate) return <Card><div className="text-center py-12"><p className="text-neutral-600">Inmate not found</p></div></Card>;
+
+  const fieldsPending = !isNew && !inmate;
 
   const fieldRow = (label: string, key: keyof Inmate, icon: string, opts?: { type?: string; radio?: string[]; placeholder?: string; readOnly?: boolean }) => {
     const val = editingInmate ? (editData[key] ?? '') : (inmate?.[key] ?? '');
@@ -424,7 +418,7 @@ export function InmateDetailPage() {
         <span className="material-icons text-neutral-400 text-lg">{icon}</span>
         <div>
           <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">{label}</p>
-          <p className="text-sm text-neutral-900">{val || '—'}</p>
+          <p className="text-sm text-neutral-900">{fieldsPending ? <SkeletonText /> : val || '—'}</p>
         </div>
       </div>
     );
@@ -466,7 +460,7 @@ export function InmateDetailPage() {
         <span className="material-icons text-neutral-400 text-lg">{icon}</span>
         <div>
           <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">{label}</p>
-          <p className="text-sm text-neutral-900">{val || '—'}</p>
+          <p className="text-sm text-neutral-900">{fieldsPending ? <SkeletonText /> : val || '—'}</p>
         </div>
       </div>
     );
@@ -636,6 +630,15 @@ export function InmateDetailPage() {
               </div>
             </div>
           )}
+          {fieldsPending && (
+            <div className="flex items-center gap-4 mb-6 pb-6 border-b border-neutral-200">
+              <Skeleton className="h-16 w-16 rounded-full" />
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+            </div>
+          )}
           {isNew && <div className="mb-4" />}
           {fieldRow('Full Name', 'name', 'person')}
           {isNew ? (
@@ -672,9 +675,7 @@ export function InmateDetailPage() {
                 <p className="text-xs text-error bg-error/10 border border-error/20 rounded-lg px-3 py-2 mb-3">{biometricError}</p>
               )}
               {biometricsLoading ? (
-                <div className="space-y-2">
-                  {[1, 2, 3].map(i => <div key={i} className="h-12 bg-neutral-100 rounded-lg animate-pulse" />)}
-                </div>
+                <SkeletonList rows={3} />
               ) : (
                 <div className="space-y-2">
                   {([
@@ -723,18 +724,25 @@ export function InmateDetailPage() {
 
       {/* RIGHT — Family Members (hidden in add mode) */}
       {!isNew && (
-      <div className={`w-[420px] shrink-0 flex flex-col bg-white rounded-xl shadow-md border border-neutral-200 overflow-hidden ${inmate.status !== 'active' ? 'opacity-50' : ''}`}>
+      <div className={`w-[420px] shrink-0 flex flex-col bg-white rounded-xl shadow-md border border-neutral-200 overflow-hidden ${inmate?.status !== 'active' ? 'opacity-50' : ''}`}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-200 bg-neutral-50/50 shrink-0">
           <h2 className="text-sm font-bold uppercase tracking-wide text-neutral-700 flex items-center gap-2">
             <span className="w-2 h-2 bg-success rounded-full" />Family Members
-            <span className="px-2 py-0.5 bg-white border border-neutral-200 rounded-full text-xs font-bold text-neutral-900">{contacts.length}</span>
+            <span className="px-2 py-0.5 bg-white border border-neutral-200 rounded-full text-xs font-bold text-neutral-900">{contactsLoading && contacts.length === 0 ? <SkeletonText /> : contacts.length}</span>
           </h2>
           <button onClick={() => setShowAddFamily(true)} className="w-8 h-8 flex items-center justify-center bg-success text-white rounded-lg hover:bg-success-700 transition" title="Add Family"><span className="material-icons text-base">person_add</span></button>
         </div>
         <div className="flex-1 overflow-y-auto min-h-0">
           {!selectedContact ? (
             <div className="divide-y divide-neutral-100">
-              {contacts.length === 0 ? (
+              {contactsLoading && contacts.length === 0 ? (
+                <SkeletonList rows={6} />
+              ) : contactsError && contacts.length === 0 ? (
+                <div className="py-12 text-center">
+                  <p className="text-sm text-error mb-3">{contactsError}</p>
+                  <button onClick={() => refreshContactsCache()} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-xs font-medium">Retry</button>
+                </div>
+              ) : contacts.length === 0 ? (
                 <div className="py-12 text-center">
                   <span className="material-icons text-neutral-300 text-4xl">people_outline</span>
                   <p className="text-sm text-neutral-500 mt-2">No family members</p>

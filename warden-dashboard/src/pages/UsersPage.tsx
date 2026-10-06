@@ -1,11 +1,14 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Card } from '@/components/Card';
-import { Loading } from '@/components/States';
+import { SkeletonList, SkeletonRows, SkeletonText } from '@/components/Skeleton';
 import { ToastContainer } from '@/components/ToastContainer';
 import { useToast } from '@/hooks/useToast';
-import { wardenApi, WardenRecord, KioskAdmin, NewWardenInput } from '@/services/api/wardenApi';
+import { wardenApi, cacheKeys, WardenRecord, KioskAdmin, NewWardenInput } from '@/services/api/wardenApi';
+import { useCachedResource } from '@/hooks/useCachedResource';
 import { usePageHeader } from '@/context/PageHeaderContext';
-import type { ListParams } from '@/services/api/wardenApi';
+import type { ListParams, PaginatedResponse } from '@/services/api/wardenApi';
+
+type WardenStats = Awaited<ReturnType<typeof wardenApi.getWardenStats>>;
 
 const EMPTY_FORM: NewWardenInput = { name: '', email: '', password: '', phone: '' };
 
@@ -40,15 +43,9 @@ function statusBadge(status: string) {
 interface FormErrors { [key: string]: string }
 
 export function UsersPage() {
-  const [users, setUsers] = useState<WardenRecord[]>([]);
-  const [kioskAdmins, setKioskAdmins] = useState<KioskAdmin[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
-  const [statsCounts, setStatsCounts] = useState({ activeCount: 0, inactiveCount: 0, onLeaveCount: 0 });
-  const [canManage, setCanManage] = useState(false);
   const [wardenModal, setWardenModal] = useState<WardenModal>(null);
   const [form, setForm] = useState<NewWardenInput>(EMPTY_FORM);
   const [formErrors, setFormErrors] = useState<FormErrors>({});
@@ -63,51 +60,43 @@ export function UsersPage() {
   const { toasts, success: toastSuccess, error: toastError, removeToast } = useToast();
   const limit = 20;
 
-  const loadUsers = useCallback(async () => {
+  const params = useMemo<ListParams>(() => ({
+    limit,
+    offset: (page - 1) * limit,
+    search: searchQuery || undefined,
+  }), [page, searchQuery]);
+
+  const { data: wardenData, isLoading: wardensLoading, error: wardensError, refresh: refreshWardens } = useCachedResource<PaginatedResponse<WardenRecord>>(
+    cacheKeys.wardens(params),
+    () => wardenApi.getWardens(params),
+    { ttl: 60_000 },
+  );
+
+  const { data: stats, refresh: refreshStats } = useCachedResource<WardenStats>(
+    cacheKeys.wardenStats(),
+    () => wardenApi.getWardenStats(),
+    { ttl: 60_000 },
+  );
+
+  const { data: kioskAdminData, isLoading: adminsLoading, refresh: refreshAdmins } = useCachedResource<KioskAdmin[]>(
+    cacheKeys.kioskAdmins(),
+    () => wardenApi.getKioskAdmins(),
+    { ttl: 60_000 },
+  );
+
+  const users = wardenData?.items ?? [];
+  const total = wardenData?.total ?? 0;
+  const kioskAdmins = kioskAdminData ?? [];
+  const canManage = !!stats?.canManageWardens;
+
+  const refreshAll = useCallback(async () => {
+    setRefreshing(true);
     try {
-      setIsLoading(true);
-      setLoadError(null);
-      const params: ListParams = {
-        limit,
-        offset: (page - 1) * limit,
-        search: searchQuery || undefined,
-      };
-      const data = await wardenApi.getWardens(params);
-      setUsers(data.items as WardenRecord[]);
-      setTotal(data.total);
-    } catch (err) {
-      console.error('Failed to load users:', err);
-      setLoadError('Failed to load wardens. Please try again.');
+      await Promise.all([refreshWardens(), refreshStats(), refreshAdmins()]);
     } finally {
-      setIsLoading(false);
+      setRefreshing(false);
     }
-  }, [page, searchQuery]);
-
-  const loadStats = useCallback(async () => {
-    try {
-      const data = await wardenApi.getWardenStats();
-      setStatsCounts({
-        activeCount: data.activeCount ?? 0,
-        inactiveCount: data.inactiveCount ?? 0,
-        onLeaveCount: data.onLeaveCount ?? 0,
-      });
-      setCanManage(!!data.canManageWardens);
-    } catch {
-      // silently fail for stats
-    }
-  }, []);
-
-  const loadKioskAdmins = useCallback(async () => {
-    try {
-      setKioskAdmins(await wardenApi.getKioskAdmins());
-    } catch (err) {
-      console.error('Failed to load kiosk admins:', err);
-    }
-  }, []);
-
-  useEffect(() => { loadUsers(); }, [loadUsers]);
-  useEffect(() => { loadStats(); }, [loadStats]);
-  useEffect(() => { loadKioskAdmins(); }, [loadKioskAdmins]);
+  }, [refreshWardens, refreshStats, refreshAdmins]);
 
   // Persisted status switch (the old one only flipped local state). The server
   // refuses to deactivate the chief warden or your own account.
@@ -117,7 +106,7 @@ export function UsersPage() {
       setIsSaving(true);
       await wardenApi.updateWarden(w.wardenId, { status: next });
       toastSuccess(`${w.name} ${next === 'active' ? 'activated' : 'deactivated'}`);
-      await Promise.all([loadUsers(), loadStats()]);
+      await Promise.all([refreshWardens(), refreshStats()]);
     } catch (err: any) {
       toastError(err?.response?.data?.error?.message || err?.message || 'Could not change status');
     } finally {
@@ -169,7 +158,7 @@ export function UsersPage() {
       setForm(EMPTY_FORM);
       toastSuccess(isEdit ? 'Warden updated' : 'Warden added');
       if (!isEdit) setPage(1);
-      await Promise.all([loadUsers(), loadStats()]);
+      await Promise.all([refreshWardens(), refreshStats()]);
     } catch (err: any) {
       const fallback = isEdit ? 'Could not update warden' : 'Could not add warden';
       toastError(err?.response?.data?.error?.message || err?.message || fallback);
@@ -227,7 +216,7 @@ export function UsersPage() {
       setAdminModal(null);
       setAdminForm(EMPTY_ADMIN_FORM);
       toastSuccess(isEdit ? 'Kiosk admin updated' : 'Kiosk admin added');
-      await loadKioskAdmins();
+      await refreshAdmins();
     } catch (err: any) {
       const fallback = isEdit ? 'Could not update kiosk admin' : 'Could not add kiosk admin';
       toastError(err?.response?.data?.error?.message || err?.message || fallback);
@@ -243,7 +232,7 @@ export function UsersPage() {
       setIsSaving(true);
       await wardenApi.updateKioskAdmin(a.adminId, { status: next });
       toastSuccess(`${a.name} ${next === 'active' ? 'activated' : 'deactivated'}`);
-      await loadKioskAdmins();
+      await refreshAdmins();
     } catch (err: any) {
       toastError(err?.response?.data?.error?.message || err?.message || 'Could not change status');
     } finally {
@@ -289,7 +278,7 @@ export function UsersPage() {
       setIsSaving(true);
       await wardenApi.deleteWarden(w.wardenId);
       toastSuccess(`${w.name} deleted`);
-      await Promise.all([loadUsers(), loadStats()]);
+      await Promise.all([refreshWardens(), refreshStats()]);
     } catch (err: any) {
       toastError(err?.response?.data?.error?.message || err?.message || 'Could not delete warden');
     } finally {
@@ -305,7 +294,7 @@ export function UsersPage() {
       setIsSaving(true);
       await wardenApi.deleteKioskAdmin(a.adminId);
       toastSuccess(`${a.name} removed`);
-      await loadKioskAdmins();
+      await refreshAdmins();
     } catch (err: any) {
       toastError(err?.response?.data?.error?.message || err?.message || 'Could not delete kiosk admin');
     } finally {
@@ -319,26 +308,11 @@ export function UsersPage() {
     subtitle: 'Wardens and kiosk admins of your prison',
     icon: headerIcon,
     actions: useMemo(() => (
-      <button onClick={() => { loadUsers(); loadStats(); loadKioskAdmins(); }} disabled={isLoading} className="px-4 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-lg text-sm font-medium transition">
-        {isLoading ? 'Refreshing...' : 'Refresh'}
+      <button onClick={refreshAll} disabled={refreshing} className="px-4 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-lg text-sm font-medium transition">
+        {refreshing ? 'Refreshing...' : 'Refresh'}
       </button>
-    ), [isLoading, loadUsers, loadStats, loadKioskAdmins]),
+    ), [refreshing, refreshAll]),
   });
-
-  if (isLoading && users.length === 0 && !loadError) return <Loading message="Loading wardens..." />;
-
-  if (loadError) {
-    return (
-      <div className="space-y-6">
-        <Card>
-          <div className="text-center py-12">
-            <p className="text-error mb-4">{loadError}</p>
-            <button onClick={loadUsers} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700">Retry</button>
-          </div>
-        </Card>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
@@ -378,9 +352,20 @@ export function UsersPage() {
                 </thead>
                 <tbody>
                   {users.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="py-12 text-center text-neutral-600">No wardens in this prison yet</td>
-                    </tr>
+                    wardensLoading ? (
+                      <SkeletonRows rows={6} cols={4} />
+                    ) : wardensError ? (
+                      <tr>
+                        <td colSpan={3} className="py-12 text-center">
+                          <p className="text-error mb-4">{wardensError}</p>
+                          <button onClick={refreshWardens} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700">Retry</button>
+                        </td>
+                      </tr>
+                    ) : (
+                      <tr>
+                        <td colSpan={4} className="py-12 text-center text-neutral-600">No wardens in this prison yet</td>
+                      </tr>
+                    )
                   ) : users.map((user) => {
                     const isChief = !!user.isChiefWarden;
                     const isActive = user.status === 'active';
@@ -522,7 +507,7 @@ export function UsersPage() {
           <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-200">
             <div>
               <h2 className="text-sm font-bold text-neutral-900">Kiosk Admins</h2>
-              <p className="text-xs text-neutral-500">{kioskAdmins.length} in this prison · can sign in on any kiosk</p>
+              <p className="text-xs text-neutral-500">{adminsLoading && kioskAdmins.length === 0 ? <SkeletonText /> : kioskAdmins.length} in this prison · can sign in on any kiosk</p>
             </div>
             <div className="flex items-center gap-2">
               <span className="material-icons text-primary-600">badge</span>
@@ -536,7 +521,9 @@ export function UsersPage() {
             </div>
           </div>
 
-          {kioskAdmins.length === 0 ? (
+          {adminsLoading && kioskAdmins.length === 0 ? (
+            <SkeletonList rows={4} />
+          ) : kioskAdmins.length === 0 ? (
             <p className="px-4 py-8 text-sm text-neutral-500 text-center">No kiosk admins in this prison yet.</p>
           ) : (
             <ul className="divide-y divide-neutral-100 max-h-[calc(100vh-380px)] overflow-auto">

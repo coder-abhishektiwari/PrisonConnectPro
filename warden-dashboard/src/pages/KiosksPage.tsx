@@ -1,11 +1,12 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Card } from '@/components/Card';
-import { Loading } from '@/components/States';
+import { SkeletonRows, SkeletonText } from '@/components/Skeleton';
 import { ToastContainer } from '@/components/ToastContainer';
 import { KioskReportPanel } from '@/components/KioskReportPanel';
 import { useToast } from '@/hooks/useToast';
 import { usePageHeader } from '@/context/PageHeaderContext';
-import { wardenApi, KioskItem } from '@/services/api/wardenApi';
+import { useCachedResource } from '@/hooks/useCachedResource';
+import { wardenApi, cacheKeys, KioskItem } from '@/services/api/wardenApi';
 
 // 'online'/'offline' come from the device heartbeat; the rest are the states
 // a warden sets (or that registration leaves behind).
@@ -25,33 +26,23 @@ const statusStyle = (status?: string) => STATUS_STYLES[status || ''] || STATUS_S
 const isLive = (status?: string) => status === 'online' || status === 'active';
 
 export function KiosksPage() {
-  const [kiosks, setKiosks] = useState<KioskItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [selected, setSelected] = useState<KioskItem | null>(null);
   const { toasts, removeToast } = useToast();
 
-  const fetchKiosks = useCallback(async (signal?: AbortSignal) => {
-    setLoadError(null);
-    try {
-      const data = await wardenApi.getKiosks();
-      setKiosks(data);
-    } catch (err) {
-      if (!signal?.aborted) {
-        console.error('Failed to fetch kiosks:', err);
-        setLoadError('Failed to load kiosks');
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  const { data, isLoading, error, refresh } = useCachedResource<KioskItem[]>(
+    cacheKeys.kiosks(),
+    () => wardenApi.getKiosks(),
+    { ttl: 30_000, pollMs: 15_000 },
+  );
+  const kiosks = data ?? [];
 
-  useEffect(() => {
-    const controller = new AbortController();
-    fetchKiosks(controller.signal);
-    return () => controller.abort();
-  }, [fetchKiosks]);
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    await refresh();
+    setIsRefreshing(false);
+  }, [refresh]);
 
   const filtered = useMemo(() => {
     if (!searchQuery.trim()) return kiosks;
@@ -73,21 +64,19 @@ export function KiosksPage() {
     subtitle: 'All registered kiosk devices in your prison',
     icon: headerIcon,
     actions: useMemo(() => (
-      <button onClick={() => { setIsLoading(true); fetchKiosks(); }} disabled={isLoading} className="px-4 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-lg text-sm font-medium transition">
-        {isLoading ? 'Refreshing...' : 'Refresh'}
+      <button onClick={handleRefresh} disabled={isRefreshing} className="px-4 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-lg text-sm font-medium transition">
+        {isRefreshing ? 'Refreshing...' : 'Refresh'}
       </button>
-    ), [isLoading, fetchKiosks]),
+    ), [handleRefresh, isRefreshing]),
   });
 
-  if (isLoading) return <Loading message="Loading kiosks..." />;
-
-  if (loadError) {
+  if (error && kiosks.length === 0) {
     return (
       <div className="space-y-6">
         <Card>
           <div className="text-center py-12">
-            <p className="text-error mb-4">{loadError}</p>
-            <button onClick={() => { setIsLoading(true); fetchKiosks(); }} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700">Retry</button>
+            <p className="text-error mb-4">{error}</p>
+            <button onClick={() => refresh()} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700">Retry</button>
           </div>
         </Card>
       </div>
@@ -103,13 +92,15 @@ export function KiosksPage() {
       <Card>
         <div className="flex items-center justify-between gap-4 p-4 border-b border-neutral-200">
           <div>
-            <p className="text-sm text-neutral-500">{filtered.length} kiosk{filtered.length !== 1 ? 's' : ''}</p>
+            <p className="text-sm text-neutral-500">
+              {isLoading && kiosks.length === 0 ? <SkeletonText /> : `${filtered.length} kiosk${filtered.length !== 1 ? 's' : ''}`}
+            </p>
             <p className="text-xs text-neutral-400">Click a kiosk to open its full report</p>
           </div>
           <input type="text" placeholder="Search ID, serial, ward..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full sm:w-72 px-3 py-1.5 text-sm border-2 border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" />
         </div>
 
-        {filtered.length === 0 ? (
+        {filtered.length === 0 && !isLoading ? (
           <div className="text-center py-12">
             <span className="material-icons text-4xl text-neutral-300 mb-2">devices_other</span>
             <p className="text-neutral-600">{kiosks.length === 0 ? 'No kiosks registered in your prison yet.' : 'No kiosks match your search.'}</p>
@@ -130,7 +121,9 @@ export function KiosksPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((k) => (
+                {isLoading && filtered.length === 0 ? (
+                  <SkeletonRows rows={6} cols={8} />
+                ) : filtered.map((k) => (
                   <tr
                     key={k.kioskId}
                     onClick={() => setSelected(k)}

@@ -1,70 +1,64 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Card } from '@/components/Card';
-import { Loading } from '@/components/States';
+import { SkeletonRows, SkeletonText } from '@/components/Skeleton';
 import { ToastContainer } from '@/components/ToastContainer';
 import { useToast } from '@/hooks/useToast';
 import { usePageHeader } from '@/context/PageHeaderContext';
-import { wardenApi, KioskRegistrationRequestItem, ListParams } from '@/services/api/wardenApi';
+import { useCachedResource } from '@/hooks/useCachedResource';
+import { wardenApi, cacheKeys, KioskRegistrationRequestItem, ListParams, PaginatedResponse } from '@/services/api/wardenApi';
 
 const PAGE_SIZE = 20;
 
+type KioskRegistrationStats = Awaited<ReturnType<typeof wardenApi.getKioskRegistrationStats>>;
+
 export function KioskRegistrationPage() {
-  const [requests, setRequests] = useState<KioskRegistrationRequestItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
   const [searchQuery, setSearchQuery] = useState('');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectTargetId, setRejectTargetId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const { toasts, success, error: toastError, removeToast } = useToast();
 
-  const fetchRequests = useCallback(async (signal?: AbortSignal) => {
-    setLoadError(null);
+  const params = useMemo<ListParams>(() => ({
+    limit: PAGE_SIZE,
+    offset: (page - 1) * PAGE_SIZE,
+    search: searchQuery,
+    status: filter !== 'all' ? filter : undefined,
+  }), [page, searchQuery, filter]);
+
+  const { data: requestData, isLoading, error, refresh } = useCachedResource<PaginatedResponse<KioskRegistrationRequestItem>>(
+    cacheKeys.kioskRegistrations(params),
+    () => wardenApi.getKioskRegistrationRequests(params),
+    { ttl: 30_000 },
+  );
+
+  const { data: counts, refresh: refreshCounts } = useCachedResource<KioskRegistrationStats>(
+    cacheKeys.kioskRegistrationStats(),
+    () => wardenApi.getKioskRegistrationStats(),
+    { ttl: 30_000 },
+  );
+
+  const requests = requestData?.items ?? [];
+  const total = requestData?.total ?? 0;
+
+  const refreshAll = useCallback(async () => {
+    setRefreshing(true);
     try {
-      const params: ListParams = { limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE, search: searchQuery, status: filter !== 'all' ? filter : undefined };
-      const data = await wardenApi.getKioskRegistrationRequests(params);
-      setRequests(data.items);
-      setTotal(data.total);
-    } catch (err) {
-      if (!signal?.aborted) {
-        console.error('Failed to fetch registration requests:', err);
-        setLoadError('Failed to load registration requests');
-      }
+      await Promise.all([refresh(), refreshCounts()]);
     } finally {
-      setIsLoading(false);
+      setRefreshing(false);
     }
-  }, [page, searchQuery, filter]);
-
-  const fetchCounts = useCallback(async () => {
-    try {
-      const data = await wardenApi.getKioskRegistrationStats();
-      return data;
-    } catch {
-      return { total: 0, pendingCount: 0, approvedCount: 0, rejectedCount: 0 };
-    }
-  }, []);
-
-  const [counts, setCounts] = useState<{ total: number; pendingCount: number; approvedCount: number; rejectedCount: number }>({ total: 0, pendingCount: 0, approvedCount: 0, rejectedCount: 0 });
-  useEffect(() => {
-    fetchCounts().then(setCounts);
-  }, [fetchCounts, actionLoading]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    fetchRequests(controller.signal);
-    return () => controller.abort();
-  }, [fetchRequests]);
+  }, [refresh, refreshCounts]);
 
   const handleApprove = async (requestId: string) => {
     try {
       setActionLoading(requestId);
       await wardenApi.approveKioskRegistration(requestId);
       success('Device registration approved');
-      await fetchRequests();
+      await Promise.all([refresh(), refreshCounts()]);
     } catch (err) {
       console.error('Failed to approve request:', err);
       toastError('Failed to approve request');
@@ -88,7 +82,7 @@ export function KioskRegistrationPage() {
       setShowRejectModal(false);
       setRejectTargetId(null);
       setRejectReason('');
-      await fetchRequests();
+      await Promise.all([refresh(), refreshCounts()]);
     } catch (err) {
       console.error('Failed to reject request:', err);
       toastError('Failed to reject request');
@@ -107,9 +101,9 @@ export function KioskRegistrationPage() {
     setSearchQuery(value);
   };
 
-  const pendingCount = counts.pendingCount;
-  const approvedCount = counts.approvedCount;
-  const rejectedCount = counts.rejectedCount;
+  const pendingCount = counts?.pendingCount;
+  const approvedCount = counts?.approvedCount;
+  const rejectedCount = counts?.rejectedCount;
 
   const headerIcon = useMemo(() => <span className="material-icons text-primary-600 text-xl">security</span>, []);
 
@@ -118,26 +112,11 @@ export function KioskRegistrationPage() {
     subtitle: 'Device authorization and setup requests',
     icon: headerIcon,
     actions: useMemo(() => (
-      <button onClick={() => { setIsLoading(true); fetchRequests(); fetchCounts().then(setCounts); }} disabled={isLoading} className="px-4 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-lg text-sm font-medium transition">
-        {isLoading ? 'Refreshing...' : 'Refresh'}
+      <button onClick={refreshAll} disabled={refreshing} className="px-4 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-lg text-sm font-medium transition">
+        {refreshing ? 'Refreshing...' : 'Refresh'}
       </button>
-    ), [isLoading]),
+    ), [refreshing, refreshAll]),
   });
-
-  if (isLoading) return <Loading message="Loading registration requests..." />;
-
-  if (loadError) {
-    return (
-      <div className="space-y-6">
-        <Card>
-          <div className="text-center py-12">
-            <p className="text-error mb-4">{loadError}</p>
-            <button onClick={() => { setIsLoading(true); fetchRequests(); }} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700">Retry</button>
-          </div>
-        </Card>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
@@ -149,14 +128,16 @@ export function KioskRegistrationPage() {
           <div className="flex gap-2">
             {(['pending', 'approved', 'rejected', 'all'] as const).map((tab) => (
               <button key={tab} onClick={() => handleFilterChange(tab)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition ${filter === tab ? 'bg-primary-600 text-white' : 'text-neutral-600 hover:bg-neutral-100'}`}>
-                {tab === 'pending' ? `Pending (${pendingCount})` : tab}
+                {tab === 'pending' ? (
+                  <>Pending ({pendingCount ?? <SkeletonText />})</>
+                ) : tab}
               </button>
             ))}
           </div>
           <input type="text" placeholder="Search serial, ID, location..." value={searchQuery} onChange={(e) => handleSearchChange(e.target.value)} className="w-full sm:w-64 px-3 py-1.5 text-sm border-2 border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" />
         </div>
 
-        {requests.length === 0 ? (
+        {requests.length === 0 && !isLoading && !error ? (
           <div className="text-center py-12">
             <p className="text-neutral-600">No registration requests match the selected criteria.</p>
           </div>
@@ -176,7 +157,16 @@ export function KioskRegistrationPage() {
                 </tr>
               </thead>
               <tbody>
-                {requests.map((req) => (
+                {isLoading && requests.length === 0 ? (
+                  <SkeletonRows rows={6} cols={8} />
+                ) : error && requests.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="py-12 text-center">
+                      <p className="text-error mb-4">{error}</p>
+                      <button onClick={refresh} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700">Retry</button>
+                    </td>
+                  </tr>
+                ) : requests.map((req) => (
                   <tr key={req.requestId} className="border-b border-neutral-100 hover:bg-neutral-50 transition-colors">
                     <td className="py-3 px-4">
                       <span className="font-mono text-xs font-bold text-primary-700 bg-primary-50 px-2 py-0.5 rounded">{req.requestId}</span>

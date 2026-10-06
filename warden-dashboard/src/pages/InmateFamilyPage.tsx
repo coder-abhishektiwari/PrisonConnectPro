@@ -1,66 +1,51 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '@/components/Card';
-import { Loading } from '@/components/States';
-import { wardenApi } from '@/services/api/wardenApi';
+import { SkeletonRows, SkeletonText } from '@/components/Skeleton';
+import { wardenApi, cacheKeys } from '@/services/api/wardenApi';
+import { useCachedResource } from '@/hooks/useCachedResource';
 import { usePageHeader } from '@/context/PageHeaderContext';
 import { FilterDropdown } from '@/components/FilterDropdown';
 import type { ColumnFilter } from '@/components/FilterDropdown';
-import type { Inmate, ListParams } from '@/services/api/wardenApi';
+import type { Inmate, ListParams, PaginatedResponse } from '@/services/api/wardenApi';
 
 export function InmateFamilyPage() {
   const navigate = useNavigate();
-  const [inmates, setInmates] = useState<Inmate[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchPrisoner, setSearchPrisoner] = useState('');
   const [filterGender, setFilterGender] = useState<ColumnFilter>({ value: 'all', open: false });
   const [filterSecurity, setFilterSecurity] = useState<ColumnFilter>({ value: 'all', open: false });
   const [filterCell, setFilterCell] = useState<ColumnFilter>({ value: 'all', open: false });
   const [filterBlock, setFilterBlock] = useState<ColumnFilter>({ value: 'all', open: false });
   const [filterKiosk, setFilterKiosk] = useState<ColumnFilter>({ value: 'all', open: false });
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [prisonerPage, setPrisonerPage] = useState(1);
-  const [prisonerTotal, setPrisonerTotal] = useState(0);
 
-  const load = useCallback(async () => {
-    try {
-      setLoadError(null);
-      const params: ListParams = { limit: 100, offset: 0, search: searchPrisoner || undefined };
-      const im = await wardenApi.getInmates(params);
-      const items = im?.items ?? [];
-      // Sort: active first, then inactive at bottom
-      items.sort((a, b) => {
-        if (a.status === 'active' && b.status !== 'active') return -1;
-        if (a.status !== 'active' && b.status === 'active') return 1;
-        return 0;
-      });
-      setInmates(items);
-      setPrisonerTotal(im?.total ?? items.length);
-    } catch (e: any) {
-      setLoadError(e?.response?.data?.error?.message || e?.message || 'Failed to load inmates');
-      setInmates([]);
-    } finally { setLoading(false); }
-  }, [searchPrisoner]);
+  const params = useMemo<ListParams>(() => ({ limit: 100, offset: 0, search: searchPrisoner || undefined }), [searchPrisoner]);
 
-  useEffect(() => { load(); }, [load]);
+  const { data, isLoading, error, refresh } = useCachedResource<PaginatedResponse<Inmate>>(
+    cacheKeys.inmates(params),
+    () => wardenApi.getInmates(params),
+    { ttl: 60_000 },
+  );
+
+  const inmates = useMemo(() => {
+    const items = [...(data?.items ?? [])];
+    // Sort: active first, then inactive at bottom
+    items.sort((a, b) => {
+      if (a.status === 'active' && b.status !== 'active') return -1;
+      if (a.status !== 'active' && b.status === 'active') return 1;
+      return 0;
+    });
+    return items;
+  }, [data]);
+  const prisonerTotal = data?.total ?? inmates.length;
+
   useEffect(() => { setPrisonerPage(1); }, [filterGender.value, filterSecurity.value, filterCell.value, filterBlock.value, filterKiosk.value]);
 
   const toggleInmate = async (inmateId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     try {
-      const updated = await wardenApi.toggleInmate(inmateId);
-      if (updated) {
-        setInmates(prev => {
-          const next = prev.map(x => x.inmateId === updated.inmateId ? { ...x, ...updated } : x);
-          // Re-sort: active first
-          next.sort((a, b) => {
-            if (a.status === 'active' && b.status !== 'active') return -1;
-            if (a.status !== 'active' && b.status === 'active') return 1;
-            return 0;
-          });
-          return next;
-        });
-      }
+      await wardenApi.toggleInmate(inmateId);
+      await refresh();
     } catch { }
   };
 
@@ -97,15 +82,12 @@ export function InmateFamilyPage() {
 
   usePageHeader({
     title: 'Inmates & Family',
-    subtitle: `${prisonerTotal} inmates`,
+    subtitle: isLoading && prisonerTotal === 0 ? 'Loading inmates…' : `${prisonerTotal} inmates`,
     icon: headerIcon,
     actions: useMemo(() => (
       <button onClick={() => navigate('/inmates-family/new')} className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-primary-600 text-white rounded-xl text-sm font-bold hover:bg-primary-700 shadow-sm">+ Add Inmate</button>
     ), []),
   });
-
-  if (loading) return <Loading message="Loading..." />;
-  if (loadError) return <Card><div className="text-center py-12"><p className="text-error mb-4">{loadError}</p><button onClick={() => { setLoading(true); load(); }} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm">Retry</button></div></Card>;
 
   const prisonerTotalPages = Math.max(1, Math.ceil(inmates.length / 20));
   const pageInmates = inmates.filter(i => {
@@ -121,7 +103,7 @@ export function InmateFamilyPage() {
     <div className="space-y-6">
       <Card className="overflow-hidden">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-5 border-b border-neutral-200 bg-neutral-50/50">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-neutral-700 flex items-center gap-2"><span className="w-2 h-2 bg-primary-600 rounded-full animate-pulse" />All Inmates <span className="px-2 py-1 bg-white border border-neutral-200 rounded-full text-xs font-bold text-neutral-900">{prisonerTotal}</span></h2>
+          <h2 className="text-sm font-bold uppercase tracking-wide text-neutral-700 flex items-center gap-2"><span className="w-2 h-2 bg-primary-600 rounded-full animate-pulse" />All Inmates <span className="px-2 py-1 bg-white border border-neutral-200 rounded-full text-xs font-bold text-neutral-900">{isLoading && prisonerTotal === 0 ? <SkeletonText /> : prisonerTotal}</span></h2>
           <div className="relative">
             <span className="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 text-lg">search</span>
             <input value={searchPrisoner} onChange={e => { setSearchPrisoner(e.target.value); setPrisonerPage(1); }} placeholder="Search by ID or name..." className="pl-9 pr-4 py-2.5 bg-white border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm shadow-sm w-64" />
@@ -142,7 +124,11 @@ export function InmateFamilyPage() {
               </tr>
             </thead>
             <tbody>
-              {pageInmates.length === 0 ? (
+              {isLoading && pageInmates.length === 0 ? (
+                <SkeletonRows rows={8} cols={8} />
+              ) : error && pageInmates.length === 0 ? (
+                <tr><td colSpan={8} className="py-16 text-center"><p className="text-error mb-4">{error}</p><button onClick={() => refresh()} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm">Retry</button></td></tr>
+              ) : pageInmates.length === 0 ? (
                 <tr><td colSpan={5} className="py-16 text-center"><div className="w-12 h-12 bg-neutral-100 rounded-xl flex items-center justify-center mx-auto mb-3"><span className="material-icons text-neutral-400 text-2xl">person_off</span></div><p className="text-sm font-semibold text-neutral-900">No Inmates</p><p className="text-xs text-neutral-500">{prisonerTotal === 0 ? 'No inmates registered' : `No match for "${searchPrisoner}"`}</p></td></tr>
               ) : pageInmates.map(i => {
                 const disabled = i.status !== 'active';

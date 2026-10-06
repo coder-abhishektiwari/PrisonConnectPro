@@ -1,43 +1,35 @@
-import { useState, useEffect } from 'react';
 import { Card } from '@/components/Card';
-import { Loading } from '@/components/States';
-import { wardenApi } from '@/services/api/wardenApi';
+import { wardenApi, cacheKeys, Settings } from '@/services/api/wardenApi';
+import { useCachedResource } from '@/hooks/useCachedResource';
 import { getStoredUser } from '@/services/auth/tokenStorage';
 import { useToast } from '@/hooks/useToast';
 import { ToastContainer } from '@/components/ToastContainer';
 import { usePageHeader } from '@/context/PageHeaderContext';
 
 export function CallConfigurationPage() {
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const { data: settings, error, refresh } = useCachedResource<Settings>(
+    cacheKeys.settings(),
+    () => wardenApi.getSettings(),
+    { ttl: 60_000 },
+  );
   const { toasts, success: toastSuccess, error: toastError, removeToast } = useToast();
   const storedUser = getStoredUser();
   const prisonId = storedUser?.prisonId || '';
-
-  useEffect(() => {
-    const load = async () => {
-      try {
-        await wardenApi.getSettings();
-      } catch {
-        setLoadError('Failed to load configuration');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    load();
-  }, []);
 
   usePageHeader({
     title: 'Kiosk Setup PIN',
     subtitle: 'Device onboarding PIN for your facility',
   });
 
-  if (isLoading) return <Loading message="Loading configuration..." />;
-
-  if (loadError) {
+  if (error && settings === undefined) {
     return (
       <div className="space-y-6">
-        <Card><div className="text-center py-12"><p className="text-neutral-600">{loadError}</p></div></Card>
+        <Card>
+          <div className="text-center py-12">
+            <p className="text-neutral-600">{error}</p>
+            <button onClick={refresh} className="mt-4 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700">Retry</button>
+          </div>
+        </Card>
       </div>
     );
   }

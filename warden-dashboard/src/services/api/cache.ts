@@ -12,6 +12,8 @@ const inflight = new Map<string, Promise<unknown>>();
 
 const CACHE_PREFIX = 'pc_cache_';
 const DEFAULT_TTL = 30_000; // 30 seconds
+/** Keep the memory map bounded - filters and pagination create many keys. */
+const MAX_ENTRIES = 300;
 
 function storageKey(key: string): string {
   return CACHE_PREFIX + key;
@@ -70,6 +72,31 @@ export async function cachedGet<T>(key: string, fetcher: () => Promise<T>, ttl =
   return fetchFresh(key, fetcher, ttl);
 }
 
+/**
+ * Synchronous cache read for a first render: gives a component its data in the
+ * same tick it mounts, so a tab switch paints instantly instead of flashing a
+ * skeleton. Returns undefined when nothing is cached yet.
+ */
+export function peekCache<T>(key: string, ttl = DEFAULT_TTL): T | undefined {
+  const mem = memoryCache.get(key);
+  if (mem && !isStale(mem, ttl)) return mem.data as T;
+  const stored = readStorage(key);
+  if (stored && !isStale(stored, ttl)) {
+    memoryCache.set(key, stored);
+    return stored.data as T;
+  }
+  return undefined;
+}
+
+/**
+ * Always fetch fresh, then store and return the result. Used by live views
+ * (polling) where the whole point is the newest data; concurrent calls for the
+ * same key still share one request.
+ */
+export async function refreshGet<T>(key: string, fetcher: () => Promise<T>, ttl = DEFAULT_TTL): Promise<T> {
+  return fetchFresh(key, fetcher, ttl);
+}
+
 async function fetchFresh<T>(key: string, fetcher: () => Promise<T>, ttl: number): Promise<T> {
   // Deduplicate concurrent calls to the same endpoint
   if (inflight.has(key)) {
@@ -78,6 +105,15 @@ async function fetchFresh<T>(key: string, fetcher: () => Promise<T>, ttl: number
 
   const promise = fetcher()
     .then((data) => {
+      // Drop the oldest entries once the map is full, so filter combinations
+      // and pagination cannot grow it without bound.
+      if (memoryCache.size >= MAX_ENTRIES) {
+        const oldest = memoryCache.keys().next().value;
+        if (oldest !== undefined) {
+          memoryCache.delete(oldest);
+          try { localStorage.removeItem(storageKey(oldest)); } catch { /* noop */ }
+        }
+      }
       const entry = { data, timestamp: Date.now() };
       memoryCache.set(key, entry);
       writeStorage(key, data);
@@ -109,6 +145,25 @@ export function invalidateCache(...keys: string[]): void {
     memoryCache.delete(key);
     try { localStorage.removeItem(storageKey(key)); } catch { /* noop */ }
   }
+}
+
+/**
+ * Invalidate every entry whose key starts with one of the given prefixes -
+ * list keys carry page/filter parameters, so a mutation has to clear the whole
+ * family rather than one exact key.
+ */
+export function invalidatePrefix(...prefixes: string[]): void {
+  if (!prefixes.length) return;
+  const matches = (key: string) => prefixes.some((p) => key.startsWith(p));
+  for (const key of [...memoryCache.keys()]) {
+    if (matches(key)) memoryCache.delete(key);
+  }
+  try {
+    const stored = Object.keys(localStorage).filter((k) => k.startsWith(CACHE_PREFIX));
+    for (const k of stored) {
+      if (matches(k.slice(CACHE_PREFIX.length))) localStorage.removeItem(k);
+    }
+  } catch { /* noop */ }
 }
 
 /**

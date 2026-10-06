@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Card } from '@/components/Card';
-import { Loading } from '@/components/States';
-import { wardenApi } from '@/services/api/wardenApi';
-import { apiClient } from '@/services/api/client';
+import { SkeletonRows } from '@/components/Skeleton';
+import { wardenApi, cacheKeys } from '@/services/api/wardenApi';
+import { useCachedResource } from '@/hooks/useCachedResource';
 import { useWardenSocket } from '@/hooks/useWardenSocket';
 import { usePageHeader } from '@/context/PageHeaderContext';
 import { FilterDropdown } from '@/components/FilterDropdown';
@@ -12,17 +12,11 @@ import type { ColumnFilter } from '@/components/FilterDropdown';
 import { inmateLabel, contactLabel } from '@/utils/names';
 import ExcelJS from 'exceljs';
 
-import type { CallHistoryItem, Recording, Inmate, CallHistoryParams } from '@/services/api/wardenApi';
+import type { CallHistoryItem, Recording, Inmate, CallHistoryParams, PaginatedCallsResponse, PaginatedResponse, KioskItem, ListParams } from '@/services/api/wardenApi';
 
 const PAGE_SIZE = 20;
 
 export function CallHistoryPage() {
-  const [isLoading, setIsLoading] = useState(true);
-  const [calls, setCalls] = useState<CallHistoryItem[]>([]);
-  const [total, setTotal] = useState(0);
-  const [recordings, setRecordings] = useState<Record<string, Recording>>({});
-  const [inmates, setInmates] = useState<Record<string, Inmate>>({});
-  const [allKiosks, setAllKiosks] = useState<{value:string,label:string}[]>([]);
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -39,7 +33,7 @@ export function CallHistoryPage() {
   const [qualityFilter, setQualityFilter] = useState<ColumnFilter>({ value: 'all', open: false });
   const [recordingFilter, setRecordingFilter] = useState<ColumnFilter>({ value: 'all', open: false });
 
-  const buildParams = useCallback((): CallHistoryParams => ({
+  const params = useMemo<CallHistoryParams>(() => ({
     limit: PAGE_SIZE,
     offset: (page - 1) * PAGE_SIZE,
     search: search || undefined,
@@ -54,42 +48,51 @@ export function CallHistoryPage() {
     sortDir,
   }), [page, search, typeFilter.value, statusFilter.value, kioskFilter.value, qualityFilter.value, recordingFilter.value, dateFrom, dateTo, sortDir]);
 
-  const loadCalls = useCallback(async () => {
-    try {
-      const [pagedResult, recs] = await Promise.all([
-        wardenApi.getCallHistory(buildParams()),
-        wardenApi.getRecordings(),
-      ]);
-      setCalls(pagedResult.calls ?? []);
-      setTotal(pagedResult.total ?? 0);
-      const map: Record<string, Recording> = {};
-      (recs ?? []).forEach((r) => { map[r.callId] = r; });
-      setRecordings(map);
-    } catch { setCalls([]); setTotal(0); setRecordings({}); }
-    finally { setIsLoading(false); }
-  }, [buildParams]);
+  const { data, isLoading, error, refresh } = useCachedResource<PaginatedCallsResponse>(
+    cacheKeys.callHistory(params),
+    () => wardenApi.getCallHistory(params),
+    { ttl: 30_000, pollMs: 20_000 },
+  );
+  const calls = data?.calls ?? [];
+  const total = data?.total ?? 0;
 
-  const loadInmates = useCallback(async () => {
-    try {
-      const result = await wardenApi.getInmates({ limit: 1000, offset: 0 });
-      const imap: Record<string, Inmate> = {};
-      (result?.items ?? []).forEach((i) => { imap[i.inmateId] = i; });
-      setInmates(imap);
-    } catch { /* ignore */ }
-  }, []);
+  const { data: recordingsData, refresh: refreshRecordings } = useCachedResource<Recording[]>(
+    cacheKeys.recordings(),
+    () => wardenApi.getRecordings(),
+    { ttl: 30_000, pollMs: 0 },
+  );
+  const recordings = useMemo(() => {
+    const map: Record<string, Recording> = {};
+    (recordingsData ?? []).forEach((r) => { map[r.callId] = r; });
+    return map;
+  }, [recordingsData]);
 
-  const loadKiosks = useCallback(async () => {
-    try {
-      const r = await apiClient.get('/kiosks');
-      const items = r.data?.data ?? [];
-      setAllKiosks(items.map((k: any) => ({ value: k.kioskId, label: k.kioskId })));
-    } catch { /* ignore */ }
-  }, []);
+  const inmateParams = useMemo<ListParams>(() => ({ limit: 1000, offset: 0 }), []);
+  const { data: inmatesData } = useCachedResource<PaginatedResponse<Inmate>>(
+    cacheKeys.inmates(inmateParams),
+    () => wardenApi.getInmates(inmateParams),
+    { ttl: 60_000, pollMs: 0 },
+  );
+  const inmates = useMemo(() => {
+    const map: Record<string, Inmate> = {};
+    (inmatesData?.items ?? []).forEach((i) => { map[i.inmateId] = i; });
+    return map;
+  }, [inmatesData]);
 
-  useEffect(() => { loadCalls(); }, [loadCalls]);
-  useEffect(() => { loadInmates(); }, [loadInmates]);
-  useEffect(() => { loadKiosks(); }, [loadKiosks]);
-  useWardenSocket(() => { loadCalls(); });
+  const { data: kiosksData } = useCachedResource<KioskItem[]>(
+    cacheKeys.kiosks(),
+    () => wardenApi.getKiosks(),
+    { ttl: 60_000, pollMs: 0 },
+  );
+  const allKiosks = useMemo(
+    () => (kiosksData ?? []).map((k) => ({ value: k.kioskId, label: k.kioskId })),
+    [kiosksData],
+  );
+
+  const refreshRef = useRef<() => void>(refresh);
+  refreshRef.current = () => { refresh(); refreshRecordings(); };
+  const onCallUpdate = useCallback(() => { refreshRef.current(); }, []);
+  useWardenSocket(onCallUpdate);
 
   useEffect(() => { setPage(1); }, [search, dateFrom, dateTo, typeFilter.value, statusFilter.value, kioskFilter.value, qualityFilter.value, recordingFilter.value, sortDir]);
 
@@ -171,7 +174,7 @@ export function CallHistoryPage() {
       if (hasSelection) {
         rows = calls.filter((c) => selectedIds.has(c.callId));
       } else {
-        const allResult = await wardenApi.getCallHistory({ ...buildParams(), limit: 10000, offset: 0 });
+        const allResult = await wardenApi.getCallHistory({ ...params, limit: 10000, offset: 0 });
         rows = allResult.calls ?? [];
       }
       const suffix = hasSelection ? '_selected_records' : '-all';
@@ -185,7 +188,7 @@ export function CallHistoryPage() {
 
   usePageHeader({
     title: 'Call Logs',
-    subtitle: `${total} calls total`,
+    subtitle: isLoading && total === 0 ? 'Loading call history...' : `${total} calls total`,
     icon: headerIcon,
     actions: useMemo(() => (
       <button onClick={handleExport} disabled={isExporting} className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-success text-white rounded-xl text-sm font-bold hover:bg-success-700 shadow-sm disabled:opacity-50">
@@ -194,8 +197,6 @@ export function CallHistoryPage() {
       </button>
     ), [handleExport, isExporting, selectedIds.size]),
   });
-
-  if (isLoading) return <Loading message="Loading call history..." />;
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -237,7 +238,13 @@ export function CallHistoryPage() {
 
       {/* Table */}
       <Card className="overflow-hidden">
-        {calls.length === 0 ? (
+        {error && calls.length === 0 ? (
+          <div className="text-center py-16">
+            <p className="text-neutral-900 font-semibold">Couldn&apos;t load call logs</p>
+            <p className="text-sm text-neutral-500 mt-1">{error}</p>
+            <button onClick={() => refresh()} className="mt-4 px-4 py-2 bg-neutral-900 text-white rounded-xl text-sm font-bold">Retry</button>
+          </div>
+        ) : calls.length === 0 && !isLoading ? (
           <div className="text-center py-16">
             <div className="w-16 h-16 bg-neutral-100 rounded-2xl flex items-center justify-center mx-auto mb-4"><svg className="w-8 h-8 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg></div>
             <p className="text-neutral-900 font-semibold">No call logs found</p>
@@ -261,7 +268,9 @@ export function CallHistoryPage() {
                 </tr>
               </thead>
               <tbody>
-                {calls.map((call) => {
+                {isLoading && calls.length === 0 ? (
+                  <SkeletonRows rows={8} cols={10} />
+                ) : calls.map((call) => {
                   const rec = recordings[call.callId];
                   const inmate = inmates[call.inmateId];
                   const isInmateName = inmateLabel(call, inmate);

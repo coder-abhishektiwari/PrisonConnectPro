@@ -1,84 +1,82 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Card } from '@/components/Card';
-import { Loading } from '@/components/States';
-import { wardenApi } from '@/services/api/wardenApi';
+import { Skeleton, SkeletonRows, SkeletonList, SkeletonText } from '@/components/Skeleton';
+import { wardenApi, cacheKeys } from '@/services/api/wardenApi';
 import { apiClient } from '@/services/api/client';
+import { useCachedResource } from '@/hooks/useCachedResource';
 import { usePageHeader } from '@/context/PageHeaderContext';
-import type { Wallet, Transaction, Inmate, WalletRequest, ListParams } from '@/services/api/wardenApi';
+import type { Wallet, Transaction, Inmate, WalletRequest, ListParams, PaginatedResponse } from '@/services/api/wardenApi';
 
 export function TrustAccountPage() {
-  const [wallets, setWallets] = useState<Wallet[]>([]);
-  const [inmates, setInmates] = useState<Record<string, Inmate>>({});
-  const [pricing, setPricing] = useState<{ audioRate: number; videoRate: number }>({ audioRate: 1, videoRate: 2.5 });
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [error, setError] = useState<string|null>(null);
   const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
   const PAGE_SIZE = 20;
 
   const [selectedId, setSelectedId] = useState<string|null>(null);
-  const [statement, setStatement] = useState<{wallet: Wallet, transactions: Transaction[]} | null>(null);
-  const [stmtLoading, setStmtLoading] = useState(false);
   const [tab, setTab] = useState<'all'|'charge'|'recharge'|'refund'>('all');
   const [rechargeAmount, setRechargeAmount] = useState('');
   const [rechargeDesc, setRechargeDesc] = useState('');
   const [recharging, setRecharging] = useState(false);
   const [rechargeError, setRechargeError] = useState('');
   const [rechargeSuccess, setRechargeSuccess] = useState('');
-  const [requests, setRequests] = useState<WalletRequest[]>([]);
   const [reqLoading, setReqLoading] = useState(false);
   const [rechargeTarget, setRechargeTarget] = useState<string|null>(null);
 
-  const load = useCallback(async()=>{
-    try{
-      setError(null);
-      const params: ListParams = { limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE, search: search || undefined };
-      const [wResult, imResult, reqs, pricingData] = await Promise.all([
-        wardenApi.getWallets(params).catch(() => ({ items: [] as Wallet[], total: 0 })),
-        wardenApi.getInmates({ limit: 1000, offset: 0 }).catch(()=>({ items: [] as Inmate[], total: 0 })),
-        wardenApi.getWalletRequests().catch(()=>[] as WalletRequest[]),
-        apiClient.get('/pricing').then((r) => r.data?.data).catch(()=> null as any).then((d: any) => (Array.isArray(d) ? d[0] : d)),
-      ]);
-      setWallets((wResult as any).items ?? []);
-      setTotal((wResult as any).total ?? 0);
-      const map: Record<string, Inmate> = {};
-      ((imResult as any).items ?? []).forEach((i: Inmate)=> map[i.inmateId]=i);
-      setInmates(map);
-      setRequests((reqs as WalletRequest[]) ?? []);
-      if (pricingData) {
-        setPricing({
-          audioRate: Number((pricingData as any)?.audio?.ratePerMinute ?? 1),
-          videoRate: Number((pricingData as any)?.video?.ratePerMinute ?? 2.5),
-        });
-      }
-    } catch (e:any) {
-      setError(e?.response?.data?.error?.message || e?.message || 'Failed to load wallets');
-      setWallets([]);
-      setTotal(0);
-    } finally{ setLoading(false); }
-  },[page, search]);
-  useEffect(()=>{load();},[load]);
-  useEffect(()=>{ setPage(1); },[search]);
+  const params = useMemo<ListParams>(() => ({ limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE, search: search || undefined }), [page, search]);
+  const inmatesParams = useMemo<ListParams>(() => ({ limit: 1000, offset: 0 }), []);
 
-  // Fetch statement when inmate clicked
-  useEffect(()=>{
-    if(!selectedId) { setStatement(null); return; }
-    setStmtLoading(true);
-    wardenApi.getWalletStatement(selectedId)
-      .then(data=>{
-        const w = wallets.find(x=>x.inmateId===selectedId) || data?.wallet;
-        if(!w) { setStatement(null); return; }
-        setStatement({ wallet: w, transactions: data?.transactions ?? [] } as any);
-      })
-      .catch(()=>{
-        const w = wallets.find(x=>x.inmateId===selectedId);
-        if(w) setStatement({ wallet: w, transactions: [] });
-        else setStatement(null);
-      })
-      .finally(()=> setStmtLoading(false));
-  },[selectedId, wallets]);
+  const { data: walletsData, isLoading: walletsLoading, error, refresh: refreshWallets } = useCachedResource<PaginatedResponse<Wallet>>(
+    cacheKeys.wallets(params),
+    () => wardenApi.getWallets(params),
+    { ttl: 60_000 },
+  );
+  const wallets = walletsData?.items ?? [];
+  const total = walletsData?.total ?? 0;
+
+  const { data: inmatesData } = useCachedResource<PaginatedResponse<Inmate>>(
+    cacheKeys.inmates(inmatesParams),
+    () => wardenApi.getInmates(inmatesParams),
+    { ttl: 60_000 },
+  );
+  const inmates = useMemo(() => {
+    const map: Record<string, Inmate> = {};
+    (inmatesData?.items ?? []).forEach((i: Inmate) => { map[i.inmateId] = i; });
+    return map;
+  }, [inmatesData]);
+
+  const { data: pricingData } = useCachedResource<unknown>(
+    cacheKeys.pricing(),
+    () => apiClient.get('/pricing').then((r) => r.data?.data).then((d: any) => (Array.isArray(d) ? d[0] : d)),
+    { ttl: 60_000 },
+  );
+  const pricing = useMemo(() => ({
+    audioRate: Number((pricingData as any)?.audio?.ratePerMinute ?? 1),
+    videoRate: Number((pricingData as any)?.video?.ratePerMinute ?? 2.5),
+  }), [pricingData]);
+
+  const { data: requestsData, isLoading: requestsLoading, refresh: refreshRequests } = useCachedResource<WalletRequest[]>(
+    cacheKeys.walletRequests(),
+    () => wardenApi.getWalletRequests(),
+    { ttl: 30_000 },
+  );
+  const requests = requestsData ?? [];
+
+  const { data: statement, error: statementError, refresh: refreshStatement } = useCachedResource<{ wallet: Wallet; transactions: Transaction[] }>(
+    selectedId ? cacheKeys.walletStatement(selectedId) : null,
+    () => wardenApi.getWalletStatement(selectedId as string),
+    { ttl: 30_000 },
+  );
+  const statementForSelected = statement && (!statement.wallet || statement.wallet.inmateId === selectedId) ? statement : null;
+
+  const { data: walletData, refresh: refreshWallet } = useCachedResource<Wallet>(
+    selectedId ? cacheKeys.wallet(selectedId) : null,
+    () => wardenApi.getWallet(selectedId as string),
+    { ttl: 60_000 },
+  );
+  const walletForSelected = walletData && walletData.inmateId === selectedId ? walletData : null;
+
+  useEffect(()=>{ setPage(1); },[search]);
 
   const doRecharge = async () => {
     const targetId = rechargeTarget || selectedId;
@@ -87,17 +85,12 @@ export function TrustAccountPage() {
     if (!amt || amt <= 0) { setRechargeError('Enter valid amount'); return; }
     setRecharging(true); setRechargeError(''); setRechargeSuccess('');
     try {
-      const res = await wardenApi.rechargeWallet(targetId, amt, rechargeDesc || 'Manual recharge by warden');
+      await wardenApi.rechargeWallet(targetId, amt, rechargeDesc || 'Manual recharge by warden');
       setRechargeSuccess(`₹${amt} credited`);
       setRechargeAmount(''); setRechargeDesc('');
-      const [wResult] = await Promise.all([wardenApi.getWallets({ limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE, search: search || undefined })]);
-      setWallets((wResult as any).items ?? []);
+      await refreshWallets();
       if (selectedId === targetId) {
-        if (res?.wallet) setStatement(prev => prev ? { ...prev, wallet: res.wallet, transactions: [...(prev.transactions||[]), res.transaction].filter(Boolean) } : prev);
-        else {
-          const stmt = await wardenApi.getWalletStatement(targetId);
-          setStatement(stmt as any);
-        }
+        await Promise.all([refreshStatement(), refreshWallet()]);
       }
       setTimeout(() => { setRechargeTarget(null); setRechargeSuccess(''); setRechargeAmount(''); setRechargeDesc(''); }, 1200);
     } catch (e:any) {
@@ -109,12 +102,7 @@ export function TrustAccountPage() {
     setReqLoading(true);
     try {
       await wardenApi.approveWalletRequest(reqId);
-      const [wResult, reqs] = await Promise.all([wardenApi.getWallets({ limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE, search: search || undefined }), wardenApi.getWalletRequests()]);
-      setWallets((wResult as any).items ?? []); setRequests(reqs ?? []);
-      if (selectedId) {
-        const stmt = await wardenApi.getWalletStatement(selectedId);
-        setStatement(stmt as any);
-      }
+      await Promise.all([refreshWallets(), refreshRequests(), refreshStatement(), refreshWallet()]);
     } catch (e:any) {
       alert(e?.response?.data?.error?.message || e?.message || 'Approve failed');
     } finally { setReqLoading(false); }
@@ -124,8 +112,7 @@ export function TrustAccountPage() {
     setReqLoading(true);
     try {
       await wardenApi.rejectWalletRequest(reqId);
-      const reqs = await wardenApi.getWalletRequests();
-      setRequests(reqs ?? []);
+      await refreshRequests();
     } catch (e:any) {
       alert(e?.response?.data?.error?.message || e?.message || 'Reject failed');
     } finally { setReqLoading(false); }
@@ -138,7 +125,7 @@ export function TrustAccountPage() {
 
   usePageHeader({
     title: 'Inmate Wallet',
-    subtitle: `₹${totalBalance.toLocaleString('en-IN')} total • ${wallets.length} inmates • Avg ₹${avgBalance}`,
+    subtitle: walletsLoading && wallets.length === 0 ? 'Loading wallets…' : `₹${totalBalance.toLocaleString('en-IN')} total • ${wallets.length} inmates • Avg ₹${avgBalance}`,
     icon: headerIcon,
     actions: useMemo(() => (
       <div className="flex gap-2">
@@ -152,12 +139,9 @@ export function TrustAccountPage() {
     ), [pricing.audioRate, pricing.videoRate]),
   });
 
-  if(loading) return <Loading message="Loading trust accounts..." />;
-  if(error) return <Card className="bg-white border-slate-200 shadow-sm"><div className="text-center py-12"><p className="text-rose-600 mb-4">{error}</p><button onClick={()=>{setLoading(true); load();}} className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm transition-all shadow-md shadow-emerald-600/20">Retry</button></div></Card>;
-
-  const selectedWallet = selectedId ? wallets.find(w=>w.inmateId===selectedId) || statement?.wallet || null : null;
+  const selectedWallet = selectedId ? wallets.find(w=>w.inmateId===selectedId) || statementForSelected?.wallet || walletForSelected || null : null;
   const selectedInmate = selectedId ? inmates[selectedId] : null;
-  const txns = statement?.transactions ?? [];
+  const txns = statementForSelected?.transactions ?? [];
   const filteredTxns = txns.filter(t=>{
     const type = String(t.type||'').toLowerCase();
     if(tab==='charge') return type==='charge' || type==='debit';
@@ -175,7 +159,7 @@ export function TrustAccountPage() {
             <h2 className="font-bold text-sm tracking-wider uppercase text-slate-700 flex items-center gap-2">
               Wallets 
               <span className="px-2.5 py-0.5 bg-emerald-100 border border-emerald-200 text-emerald-800 rounded-full text-xs font-bold">
-                {wallets.length}
+                {walletsLoading && wallets.length === 0 ? <SkeletonText /> : wallets.length}
               </span>
             </h2>
             <span className="text-xs text-slate-400 hidden sm:inline">Click row for statement</span>
@@ -205,7 +189,16 @@ export function TrustAccountPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {wallets.length===0 ? (
+              {walletsLoading && wallets.length===0 ? (
+                <SkeletonRows rows={6} cols={5} />
+              ) : error && wallets.length===0 ? (
+                <tr>
+                  <td colSpan={5} className="py-12 text-center">
+                    <p className="text-rose-600 mb-4">{error}</p>
+                    <button onClick={()=>refreshWallets()} className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm transition-all shadow-md shadow-emerald-600/20">Retry</button>
+                  </td>
+                </tr>
+              ) : wallets.length===0 ? (
                 <tr>
                   <td colSpan={5} className="py-12 text-center text-sm text-slate-400">
                     {total===0 ? 'No trust accounts found' : `No wallets match "${search}"`}
@@ -270,7 +263,9 @@ export function TrustAccountPage() {
                     </td>
 
                     <td className="py-3.5 px-5" onClick={e=>e.stopPropagation()}>
-                      {pending ? (
+                      {requestsLoading && requests.length === 0 ? (
+                        <SkeletonText />
+                      ) : pending ? (
                         <div className="flex items-center gap-2">
                           <span className="px-2.5 py-1 bg-amber-50 border border-amber-200 rounded-lg text-xs font-bold text-amber-800">₹{pending.amount}</span>
                           <button disabled={reqLoading} onClick={()=>approveRequest(pending.requestId)} className="w-7 h-7 flex items-center justify-center bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold disabled:opacity-50 transition-all shadow-sm" title="Approve"><span className="material-icons text-sm">check</span></button>
@@ -320,7 +315,16 @@ export function TrustAccountPage() {
               <button onClick={()=> setSelectedId(null)} className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition-colors">✕</button>
             </div>
 
-            {stmtLoading ? <div className="p-12 text-center"><Loading message="Loading statement..." /></div> : !selectedWallet ? <p className="p-6 text-sm text-slate-500">No wallet found</p> : (
+            {!statementForSelected && !statementError ? (
+              <div className="p-6 space-y-6">
+                <div className="grid grid-cols-2 gap-3">
+                  <Skeleton className="h-24" />
+                  <Skeleton className="h-24" />
+                </div>
+                <Skeleton className="h-8 w-full" />
+                <SkeletonList rows={5} />
+              </div>
+            ) : !selectedWallet ? <p className="p-6 text-sm text-slate-500">No wallet found</p> : (
               <div className="flex-1 overflow-y-auto p-6 space-y-6">
                 {/* Stats */}
                 <div className="grid grid-cols-2 gap-3">
