@@ -680,8 +680,8 @@ export function MonitorScreenPage() {
 
         {/* Right Panel */}
         <div className="space-y-4">
-          {/* Prisoner Information */}
-          <Card title="Prisoner Information">
+          {/* Inmate Information */}
+          <Card title="Inmate Information">
             <div className="space-y-3">
               <div className="flex items-center gap-3">
                 {inmate?.photoUrl && (

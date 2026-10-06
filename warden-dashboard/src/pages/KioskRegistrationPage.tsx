@@ -114,7 +114,7 @@ export function KioskRegistrationPage() {
   const headerIcon = useMemo(() => <span className="material-icons text-primary-600 text-xl">security</span>, []);
 
   usePageHeader({
-    title: 'Kiosk Registration',
+    title: 'Kiosk Registration Requests',
     subtitle: 'Device authorization and setup requests',
     icon: headerIcon,
     actions: useMemo(() => (

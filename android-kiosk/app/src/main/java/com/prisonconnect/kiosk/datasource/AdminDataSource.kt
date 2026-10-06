@@ -8,7 +8,7 @@ import com.prisonconnect.kiosk.models.common.ApiResponse
  * Data source for admin operations (prisoners, contacts, biometrics, devices).
  */
 interface AdminDataSource {
-    // Prisoners
+    // Inmates
     suspend fun getPrisoners(): ApiResponse<List<Prisoner>>
     suspend fun getPrisoner(prisonerId: String): ApiResponse<Prisoner>
     suspend fun createPrisoner(request: CreatePrisonerRequest): ApiResponse<Prisoner>

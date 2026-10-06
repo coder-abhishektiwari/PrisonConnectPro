@@ -96,8 +96,8 @@ export function InmateFamilyPage() {
   }, [inmates]);
 
   usePageHeader({
-    title: 'Prisoner & Family',
-    subtitle: `${prisonerTotal} prisoners`,
+    title: 'Inmates & Family',
+    subtitle: `${prisonerTotal} inmates`,
     icon: headerIcon,
     actions: useMemo(() => (
       <button onClick={() => navigate('/inmates-family/new')} className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-primary-600 text-white rounded-xl text-sm font-bold hover:bg-primary-700 shadow-sm">+ Add Inmate</button>
@@ -132,7 +132,7 @@ export function InmateFamilyPage() {
             <thead className="sticky top-0 z-10">
               <tr className="border-b bg-neutral-50">
                 <th className="text-left py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Inmate</th>
-                <th className="text-center py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Prisoner Number</th>
+                <th className="text-center py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Inmate Number</th>
                 <th className="text-center py-3 px-4"><FilterDropdown label="Gender" options={genderOptions} filter={filterGender} setFilter={setFilterGender} /></th>
                 <th className="text-center py-3 px-4"><FilterDropdown label="Security" options={securityOptions} filter={filterSecurity} setFilter={setFilterSecurity} /></th>
                 <th className="text-center py-3 px-4"><FilterDropdown label="Cell" options={cellOptions} filter={filterCell} setFilter={setFilterCell} /></th>

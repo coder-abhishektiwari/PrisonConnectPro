@@ -134,7 +134,7 @@ interface TrustApiService {
 
     // ==================== ADMIN ENDPOINTS ====================
 
-    // Prisoners
+    // Inmates
     @GET("admin/prisoners")
     suspend fun getAdminPrisoners(): ApiResponse<List<Prisoner>>
 

@@ -73,7 +73,7 @@ export function KioskReportPanel({ kiosk, onClose }: KioskReportPanelProps) {
     return [
       { title: "Today's calls", value: stats.today.total, subtitle: split(stats.today), icon: PHONE_PATH, color: 'primary' as const },
       { title: 'Calls this month', value: stats.month.total, subtitle: split(stats.month), icon: CALENDAR_PATH, color: 'info' as const },
-      { title: 'Registered prisoners', value: stats.registeredInmates, subtitle: stats.ward ? `Ward: ${stats.ward}` : undefined, icon: PEOPLE_PATH, color: 'success' as const },
+      { title: 'Registered Inmates', value: stats.registeredInmates, subtitle: stats.ward ? `Ward: ${stats.ward}` : undefined, icon: PEOPLE_PATH, color: 'success' as const },
       { title: 'Audio calls', value: stats.allTime.audio, subtitle: 'All time', icon: MIC_PATH, color: 'warning' as const },
       { title: 'Video calls', value: stats.allTime.video, subtitle: 'All time', icon: VIDEO_PATH, color: 'primary' as const },
       { title: 'Call minutes', value: stats.allTime.minutes, subtitle: `${stats.allTime.total} calls total`, icon: CLOCK_PATH, color: 'info' as const },
@@ -153,7 +153,7 @@ export function KioskReportPanel({ kiosk, onClose }: KioskReportPanelProps) {
                       <thead>
                         <tr className="border-b border-neutral-200 bg-neutral-50">
                           <th className="text-left py-2 px-3 text-xs font-semibold text-neutral-600">Time</th>
-                          <th className="text-left py-2 px-3 text-xs font-semibold text-neutral-600">Prisoner</th>
+                          <th className="text-left py-2 px-3 text-xs font-semibold text-neutral-600">Inmate</th>
                           <th className="text-left py-2 px-3 text-xs font-semibold text-neutral-600">Family</th>
                           <th className="text-left py-2 px-3 text-xs font-semibold text-neutral-600">Type</th>
                           <th className="text-left py-2 px-3 text-xs font-semibold text-neutral-600">Status</th>

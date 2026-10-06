@@ -152,10 +152,10 @@ fun AdminDashboardContent(
                 )
             }
 
-            // Manage Prisoners Card
+            // Manage Inmates Card
             item {
                 AdminActionCard(
-                    title = "Manage Prisoners",
+                    title = "Manage Inmates",
                     description = "View, edit or delete existing prisoners",
                     icon = Icons.Default.List,
                     iconColor = Color(0xFF2196F3),

@@ -89,7 +89,7 @@ fun ManagePrisonersContent(
     Scaffold(
         topBar = {
             KioskTopBar(
-                title = "Manage Prisoners",
+                title = "Manage Inmates",
                 showBackButton = true,
                 onBackClick = onBackClick
             )
@@ -169,7 +169,7 @@ fun ManagePrisonersContent(
                 }
             }
 
-            // Prisoners List
+            // Inmates List
             if (isLoading) {
                 Box(
                     modifier = Modifier.fillMaxSize(),

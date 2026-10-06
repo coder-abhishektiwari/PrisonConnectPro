@@ -10,11 +10,11 @@ interface NavItem {
 const navItems: NavItem[] = [
   { to: '/calls', label: 'Live Calls', icon: 'phone_in_talk' },
   { to: '/calls/logs', label: 'Call Logs', icon: 'history' },
-  { to: '/inmate-wallet', label: 'Inmate Wallet', icon: 'account_balance_wallet' },
-  { to: '/inmates-family', label: 'Prisoner & Family', icon: 'family_restroom' },
-  { to: '/kiosk-registrations', label: 'Kiosk Registration', icon: 'security' },
   { to: '/kiosks', label: 'Kiosks', icon: 'devices_other' },
-  { to: '/users', label: 'Users', icon: 'people' },
+  { to: '/inmate-wallet', label: 'Inmate Wallet', icon: 'account_balance_wallet' },
+  { to: '/inmates-family', label: 'Inmates & Family', icon: 'family_restroom' },
+  { to: '/kiosk-registrations', label: 'Kiosk Registration Requests', icon: 'security' },
+  { to: '/users', label: 'Admin Management', icon: 'people' },
   { to: '/call-configuration', label: 'Call Configuration', icon: 'tune' },
 ];
 

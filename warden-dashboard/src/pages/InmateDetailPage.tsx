@@ -647,7 +647,7 @@ export function InmateDetailPage() {
               <span className="ml-auto px-2 py-0.5 bg-primary-50 text-primary-700 text-[10px] font-bold rounded-full uppercase">Auto-generated</span>
             </div>
           ) : fieldRow('Inmate ID', 'inmateId', 'badge', { readOnly: true })}
-          {fieldRow('Prisoner Number', 'prisonerNumber', 'tag')}
+          {fieldRow('Inmate Number', 'prisonerNumber', 'tag')}
           {fieldRow('Gender', 'gender', 'wc', { radio: ['male', 'female', 'other'] })}
           {fieldRow('Date of Admission', 'dateOfAdmission', 'calendar_today', { type: 'date' })}
           {searchableRow('Cell', 'cellId', 'domain', cellNames, '+ Add new cell', 'cellName')}

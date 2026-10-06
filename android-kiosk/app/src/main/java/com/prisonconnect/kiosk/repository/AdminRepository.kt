@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.Flow
  * Repository for admin operations (prisoners, contacts, biometrics, devices).
  */
 interface AdminRepository {
-    // Prisoners
+    // Inmates
     fun getPrisoners(): Flow<NetworkResult<List<Prisoner>>>
     fun getPrisoner(prisonerId: String): Flow<NetworkResult<Prisoner>>
     fun createPrisoner(request: CreatePrisonerRequest): Flow<NetworkResult<Prisoner>>

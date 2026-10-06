@@ -94,9 +94,9 @@ export function CallDetailsDrawer({ call, onClose }: CallDetailsDrawerProps) {
           <div className="p-6 text-center text-neutral-600">Loading details...</div>
         ) : (
           <div className="p-6 space-y-6">
-            {/* Prisoner Profile */}
+            {/* Inmate Profile */}
             <section>
-              <h3 className="text-sm font-semibold text-neutral-900 uppercase tracking-wide mb-3">Prisoner Profile</h3>
+              <h3 className="text-sm font-semibold text-neutral-900 uppercase tracking-wide mb-3">Inmate Profile</h3>
               <div className="bg-neutral-50 rounded-lg p-4">
                 <div className="flex items-center gap-4">
                   {inmate?.photoUrl && (

@@ -166,7 +166,7 @@ export function MonitorScreenPage() {
         </div>
 
         <div className="space-y-4">
-          <Card title="Prisoner Information" className="border-l-8 border-slate-300 bg-slate-50">
+          <Card title="Inmate Information" className="border-l-8 border-slate-300 bg-slate-50">
             <div className="space-y-3">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-full bg-[#E9EEF3] border border-[#D1D7DB] flex items-center justify-center shrink-0">
