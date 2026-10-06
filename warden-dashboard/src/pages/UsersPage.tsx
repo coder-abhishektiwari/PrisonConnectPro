@@ -7,7 +7,7 @@ import { wardenApi, WardenRecord, KioskAdmin, NewWardenInput } from '@/services/
 import { usePageHeader } from '@/context/PageHeaderContext';
 import type { ListParams } from '@/services/api/wardenApi';
 
-const EMPTY_FORM: NewWardenInput = { name: '', email: '', password: '', phone: '', department: '', designation: 'Warden' };
+const EMPTY_FORM: NewWardenInput = { name: '', email: '', password: '', phone: '', department: '' };
 
 function roleBadge(user: WardenRecord) {
   return user.isChiefWarden ? (
@@ -238,7 +238,6 @@ export function UsersPage() {
                       </td>
                       <td className="py-3 px-4">
                         {roleBadge(user)}
-                        {user.designation && <p className="mt-1 text-xs text-neutral-500">{user.designation}</p>}
                       </td>
                       <td className="py-3 px-4 font-mono text-sm text-neutral-700">{user.employeeId || '—'}</td>
                       <td className="py-3 px-4">
@@ -372,15 +371,9 @@ export function UsersPage() {
                   <input value={form.phone} onChange={(e) => setField('phone', e.target.value)} className="w-full px-3 py-2 border-2 border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="+91-9000000000" />
                 </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold uppercase text-neutral-500 mb-1">Department</label>
-                  <input value={form.department} onChange={(e) => setField('department', e.target.value)} className="w-full px-3 py-2 border-2 border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="Security" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold uppercase text-neutral-500 mb-1">Designation</label>
-                  <input value={form.designation} onChange={(e) => setField('designation', e.target.value)} className="w-full px-3 py-2 border-2 border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="Warden" />
-                </div>
+              <div>
+                <label className="block text-xs font-semibold uppercase text-neutral-500 mb-1">Department</label>
+                <input value={form.department} onChange={(e) => setField('department', e.target.value)} className="w-full px-3 py-2 border-2 border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="Security" />
               </div>
               <div>
                 <label className="block text-xs font-semibold uppercase text-neutral-500 mb-1">Password</label>
