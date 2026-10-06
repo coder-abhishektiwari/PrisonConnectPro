@@ -858,8 +858,12 @@ function createCallsRouter(broadcastEvent, signaling) {
       if (err.code !== 'SIGNALING_ERROR' && err.code !== 'MEDIA_CONFIG') throw err;
     }
     // Remove stale room membership so the room frees up for the next call.
+    // Rooms are keyed by roomId (the row minted at call creation carries no
+    // callId), so look the call's room up by its room id - matching on callId
+    // never hit and every room stayed "active" forever.
     await updateDb('rooms.json', (rooms) => {
-      const room = rooms.find((r) => r.callId === callId);
+      const room = rooms.find((r) => r.roomId === updatedCall.roomId) ||
+                   rooms.find((r) => r.callId === callId);
       if (!room) return { data: rooms, result: null };
       room.status = 'idle';
       room.participants = [];
