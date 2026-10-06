@@ -20,7 +20,7 @@ function createStatisticsRouter(broadcastEvent) {
     return sendSuccess(res, scoped);
   }));
 
-  router.get('/:callId', requireAuth, asyncRoute(async (req, res) => {
+  router.get('/:callId', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
     const statistics = await readDb('statistics.json');
     const callStats = statistics.find((s) => s.callId === req.params.callId);
     if (!callStats) return sendError(res, 'NOT_FOUND', 'Statistics not found for call', 404);

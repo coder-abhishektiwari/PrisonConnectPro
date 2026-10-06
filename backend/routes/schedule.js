@@ -28,8 +28,9 @@ router.get('/slots/:kioskId/:date', requireAuth, asyncRoute(async (req, res) => 
   const kiosks = await readDb('kiosks.json');
   const kiosk = kiosks.find((k) => k.kioskId === kioskId);
   if (!kiosk) return sendError(res, 'INVALID_REFERENCE', 'kioskId does not exist', 422);
-  const callerKiosk = kioskScopeOf(req);
-  if (callerKiosk && kioskId !== callerKiosk) {
+  // Slots belong to one device in one jail - a caller from another prison
+  // must not learn which slots are taken there.
+  if (!(await inScopeOf(req, kiosk))) {
     return sendError(res, 'FORBIDDEN', 'Cannot view slots for another kiosk', 403);
   }
 

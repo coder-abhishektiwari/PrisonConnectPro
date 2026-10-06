@@ -15,7 +15,7 @@ router.get('/:transactionId', requireAuth, requireRole('admin', 'warden'), async
   return sendSuccess(res, transaction);
 }));
 
-router.get('/wallet/:walletId', requireAuth, asyncRoute(async (req, res) => {
+router.get('/wallet/:walletId', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const transactions = await readDb('transactions.json');
   return sendSuccess(res, await scopeList(req, transactions.filter((t) => t.walletId === req.params.walletId)));
 }));

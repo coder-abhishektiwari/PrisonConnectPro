@@ -28,7 +28,7 @@ function createContactsRouter(broadcastEvent) {
 
   // ==================== CONTACT ROUTES ====================
 
-  router.get('/', requireAuth, asyncRoute(async (req, res) => {
+  router.get('/', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
     const contacts = await readDb('contacts.json');
     const scoped = await scopeList(req, contacts);
     const inmateIdFilter = req.query.inmateId;
@@ -58,7 +58,7 @@ function createContactsRouter(broadcastEvent) {
   // call to this contact registers whatever device opens the link — use when a
   // family member changed phone/browser and verification now fails with
   // DEVICE_MISMATCH / "device not verified".
-  router.delete('/:contactId/devices', requireAuth, asyncRoute(async (req, res) => {
+  router.delete('/:contactId/devices', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
     const { contactId } = req.params;
     const contacts = await readDb('contacts.json');
     const contact = contacts.find((c) => c.contactId === contactId);
@@ -84,7 +84,7 @@ function createContactsRouter(broadcastEvent) {
 
   // Remove ONE registered family device (fingerprint) from a contact. The
   // next call opens a fresh registration flow for that number.
-  router.delete('/:contactId/devices/:fingerprintId', requireAuth, asyncRoute(async (req, res) => {
+  router.delete('/:contactId/devices/:fingerprintId', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
     const { contactId, fingerprintId } = req.params;
     const contacts = await readDb('contacts.json');
     const contact = contacts.find((c) => c.contactId === contactId);

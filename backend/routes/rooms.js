@@ -45,13 +45,16 @@ function createRoomsRouter(broadcastEvent) {
   router.post('/leave', requireAuth, asyncRoute(async (req, res) => {
     const { roomId, participantId } = req.body;
     if (!roomId || !participantId) return sendError(res, 'INVALID_REQUEST', 'roomId and participantId are required', 400);
-    await updateDb('rooms.json', (rooms) => {
-      const idx = rooms.findIndex((r) => r.roomId === roomId);
-      if (idx === -1) return { data: rooms, result: null };
-      const room = rooms[idx];
+    const rooms = await readDb('rooms.json');
+    const room = rooms.find((r) => r.roomId === roomId);
+    if (!room || !(await inScopeOf(req, room))) return sendError(res, 'NOT_FOUND', 'Room not found', 404);
+    await updateDb('rooms.json', (all) => {
+      const idx = all.findIndex((r) => r.roomId === roomId);
+      if (idx === -1) return { data: all, result: null };
+      const room = all[idx];
       room.participants = (room.participants || []).filter((p) => p !== participantId);
       room.participantCount = room.participants.length;
-      return { data: rooms, result: room };
+      return { data: all, result: room };
     });
     broadcastEvent('room-participant-left', { roomId, participantId });
     return sendSuccess(res, { status: 'left' });

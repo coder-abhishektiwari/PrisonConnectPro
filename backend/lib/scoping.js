@@ -1,18 +1,46 @@
 const { readDb } = require('./db');
 
+const normRole = (r) => String(r || '').toLowerCase().replace(/[-_]/g, '');
+
+// The company operator legitimately sees every prison.
+function isSuperAdmin(req) {
+  return normRole(req.auth?.role) === 'superadmin';
+}
+
+// Roles that administer exactly one prison. Their token must carry a prison;
+// a jail-managed account with no prison attached gets "no access" rather than
+// falling through to "every jail".
+function isJailManaged(req) {
+  const role = normRole(req.auth?.role);
+  return role === 'warden' || role === 'admin' || role === 'kioskadmin';
+}
+
+// An inmate session reaches only its own records, whatever table they live in.
+function inOwnerScope(req, record) {
+  if (normRole(req.auth?.role) !== 'inmate') return true;
+  const mine = req.auth?.inmateId || null;
+  if (!mine || !record) return true;
+  const owner = record.inmateId || null;
+  if (!owner) return true;
+  return owner === mine || owner === `INM-${mine}` || `INM-${owner}` === mine;
+}
+
 function jailScopeOf(req) {
   return req.auth?.prisonId || req.auth?.jailId || null;
 }
 
 function inJailScope(req, record) {
+  if (isSuperAdmin(req)) return true;
   const jailId = jailScopeOf(req);
-  if (!jailId) return true;
+  if (!jailId) return !isJailManaged(req);
   return !!record && (record.prisonId === jailId || record.facility === jailId || record.jailId === jailId);
 }
 
 function scopeFilter(req) {
+  if (isSuperAdmin(req)) return () => true;
   const jailId = jailScopeOf(req);
-  return (x) => !jailId || x.prisonId === jailId || x.facility === jailId || x.jailId === jailId;
+  if (!jailId) return () => !isJailManaged(req);
+  return (x) => x.prisonId === jailId || x.facility === jailId || x.jailId === jailId;
 }
 
 function kioskScopeOf(req) {
@@ -26,7 +54,9 @@ function inKioskScope(req, record) {
 }
 
 function inAdminScope(req, record) {
-  return inJailScope(req, record) && inKioskScope(req, record);
+  if (isSuperAdmin(req)) return true;
+  if (isJailManaged(req) && !jailScopeOf(req)) return false;
+  return inJailScope(req, record) && inKioskScope(req, record) && inOwnerScope(req, record);
 }
 
 function adminScopeFilter(req) {
@@ -34,9 +64,11 @@ function adminScopeFilter(req) {
 }
 
 async function inScopeOf(req, record) {
+  if (isSuperAdmin(req)) return true;
   const kioskId = kioskScopeOf(req);
   const jailId = jailScopeOf(req);
-  if (!kioskId && !jailId) return true;
+  if (isJailManaged(req) && !jailId) return false;
+  if (!kioskId && !jailId) return inOwnerScope(req, record);
   if (!record) return false;
 
   let recKiosk = record.kioskId || record.assignedKioskId || null;
@@ -67,7 +99,7 @@ async function inScopeOf(req, record) {
 
   if (kioskId && recKiosk && recKiosk !== kioskId) return false;
   if (jailId && recJail && recJail !== jailId) return false;
-  return true;
+  return inOwnerScope(req, record);
 }
 
 async function scopeList(req, records) {
@@ -79,5 +111,6 @@ async function scopeList(req, records) {
 module.exports = {
   jailScopeOf, inJailScope, scopeFilter,
   kioskScopeOf, inKioskScope, inAdminScope, adminScopeFilter,
-  inScopeOf, scopeList
+  inScopeOf, scopeList,
+  isSuperAdmin, isJailManaged, inOwnerScope
 };

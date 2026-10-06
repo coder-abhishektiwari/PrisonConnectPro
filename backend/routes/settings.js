@@ -33,7 +33,7 @@ function createSettingsRouter(broadcastEvent) {
   }));
 
   // Pricing
-  router.get('/pricing', requireAuth, asyncRoute(async (req, res) => sendSuccess(res, await readDb('pricing.json'))));
+  router.get('/pricing', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'vendor', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => sendSuccess(res, await readDb('pricing.json'))));
 
   router.patch('/pricing', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
     const merged = await updateDb('pricing.json', (all) => {

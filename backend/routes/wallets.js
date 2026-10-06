@@ -36,7 +36,7 @@ router.get('/', requireAuth, requireRole('admin', 'warden', 'super-admin', 'supe
 }));
 
 // GET /wallets/:inmateId — get wallet by inmate ID (balance derived from transactions)
-router.get('/:inmateId', requireAuth, asyncRoute(async (req, res) => {
+router.get('/:inmateId', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const wallets = await readDb('wallets.json');
   const transactions = await readDb('transactions.json');
   const wallet = wallets.find((w) => w.inmateId === req.params.inmateId);

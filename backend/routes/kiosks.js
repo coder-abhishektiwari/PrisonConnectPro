@@ -642,7 +642,7 @@ router.get('/:kioskId/stats', requireAuth, requireRole('admin', 'warden', 'super
   });
 }));
 
-router.get('/:kioskId', requireAuth, asyncRoute(async (req, res) => {
+router.get('/:kioskId', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const kiosks = await readDb('kiosks.json');
   const kiosk = kiosks.find((k) => k.kioskId === req.params.kioskId && !isDemoKiosk(k) && inAdminScope(req, k));
   if (!kiosk) return sendError(res, 'NOT_FOUND', 'Kiosk not found in your kiosk/jail', 404);

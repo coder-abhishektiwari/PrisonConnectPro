@@ -136,7 +136,7 @@ app.use('/cells', createCellsRouter());
 app.use('/blocks', createBlocksRouter());
 
 // Alias routes — dashboard expects these at root, not under /settings
-app.get('/pricing', requireAuth, asyncRoute(async (req, res) => sendSuccess(res, await readDb('pricing.json'))));
+app.get('/pricing', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'vendor', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => sendSuccess(res, await readDb('pricing.json'))));
 app.patch('/pricing', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const { deepMerge } = require('./lib/response');
   const merged = await updateDb('pricing.json', (all) => {
@@ -581,7 +581,8 @@ app.get('/health', (req, res) => {
   });
 });
 
-app.get('/test-sms', asyncRoute(async (req, res) => {
+// Sends a real SMS, so it stays behind an operator login.
+app.get('/test-sms', requireAuth, requireRole('admin', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const phone = req.query.phone;
   if (!phone) return sendError(res, 'BAD_REQUEST', 'Add ?phone=XXXXXXXXXX (10 digit)');
   try {

@@ -16,12 +16,29 @@ function requireAuth(req, res, next) {
 
   if (!token) return unauthorized(res, 'Access token required');
 
+  let claims;
   try {
-    req.auth = verifyToken(token);
-    next();
+    claims = verifyToken(token);
   } catch (err) {
     return unauthorized(res, 'Invalid or expired token');
   }
+  req.auth = claims;
+
+  // Device/admin sessions are issued with a kiosk id and no prison. Resolve the
+  // prison that kiosk belongs to so every downstream scope check operates on
+  // that one jail instead of falling back to "no jail = every jail".
+  if (!claims.prisonId && claims.kioskId) {
+    readDb('kiosks.json')
+      .then((kiosks) => {
+        const kiosk = kiosks.find((k) => k.kioskId === claims.kioskId);
+        if (kiosk && kiosk.prisonId) req.auth.prisonId = kiosk.prisonId;
+        next();
+      })
+      .catch(() => next());
+    return;
+  }
+
+  next();
 }
 
 /** Use after requireAuth. Restricts a route to specific roles. */

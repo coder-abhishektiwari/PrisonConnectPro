@@ -1,16 +1,16 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { readDb, updateDb } = require('../lib/db');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, requireRole } = require('../middleware/auth');
 const { sendSuccess, sendError, asyncRoute } = require('../lib/response');
 const { jailScopeOf, kioskScopeOf, inScopeOf, scopeList } = require('../lib/scoping');
 
 const router = express.Router();
 
 function createAlertsRouter(broadcastEvent) {
-  router.get('/', requireAuth, asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('alerts.json')))));
+  router.get('/', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('alerts.json')))));
 
-  router.post('/', requireAuth, asyncRoute(async (req, res) => {
+  router.post('/', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'kiosk', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
     const alertData = req.body;
     const kioskId = kioskScopeOf(req);
     const jailId = jailScopeOf(req);
@@ -27,7 +27,7 @@ function createAlertsRouter(broadcastEvent) {
     return sendSuccess(res, newAlert, 201);
   }));
 
-  router.patch('/:alertId/resolve', requireAuth, asyncRoute(async (req, res) => {
+  router.patch('/:alertId/resolve', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
     const existing = (await readDb('alerts.json')).find((a) => a.alertId === req.params.alertId);
     if (!existing || !(await inScopeOf(req, existing))) {
       return sendError(res, 'NOT_FOUND', 'Alert not found', 404);
