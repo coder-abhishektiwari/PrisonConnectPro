@@ -7,23 +7,41 @@
  * call, and a small coordinate cache keeps even that off the wire.
  *
  * Everything is best-effort: any failure, timeout or a disabled provider
- * resolves to null, so geocoding can never delay or break a call.
+ * resolves to null, so geocoding can never delay or break a call. Failures are
+ * only cached for a minute so a single cold-start hiccup does not poison a
+ * whole instance.
  */
 
 const ENDPOINT = 'https://api.bigdatacloud.net/data/reverse-geocode-client';
-const TIMEOUT_MS = Number(process.env.GEOCODE_TIMEOUT_MS) || 3000;
+const TIMEOUT_MS = Number(process.env.GEOCODE_TIMEOUT_MS) || 5000;
 const MAX_CACHE = 500;
+const OK_TTL_MS = 24 * 60 * 60 * 1000;
+const FAIL_TTL_MS = 60 * 1000;
 
 /** ~11 m grid: two captures of the same house resolve to one request. */
 const cache = new Map();
+
+/** Last failure, surfaced by /health?geocode= for diagnosing the free API. */
+let lastError = null;
+function lastGeocodeError() { return lastError; }
 
 function cacheKey(lat, lng) {
   return `${Number(lat).toFixed(4)},${Number(lng).toFixed(4)}`;
 }
 
-function remember(key, value) {
+function remember(key, value, ttlMs) {
   if (cache.size >= MAX_CACHE) cache.delete(cache.keys().next().value);
-  cache.set(key, value);
+  cache.set(key, { value, expiresAt: Date.now() + ttlMs });
+}
+
+function recall(key) {
+  const hit = cache.get(key);
+  if (!hit) return undefined;
+  if (hit.expiresAt <= Date.now()) {
+    cache.delete(key);
+    return undefined;
+  }
+  return hit.value;
 }
 
 function normalize(data) {
@@ -45,7 +63,8 @@ async function reverseGeocode(lat, lng) {
   if ((process.env.GEOCODE_PROVIDER || '').toLowerCase() === 'off') return null;
 
   const key = cacheKey(lat, lng);
-  if (cache.has(key)) return cache.get(key);
+  const cached = recall(key);
+  if (cached !== undefined) return cached;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -54,11 +73,12 @@ async function reverseGeocode(lat, lng) {
     const res = await fetch(url, { signal: controller.signal });
     if (!res.ok) throw new Error(`geocode HTTP ${res.status}`);
     const place = normalize(await res.json());
-    remember(key, place);
+    lastError = null;
+    remember(key, place, OK_TTL_MS);
     return place;
   } catch (err) {
-    // Negative-cache too: a dead endpoint must not be retried on every call.
-    remember(key, null);
+    lastError = { at: new Date().toISOString(), message: err.message, lat, lng };
+    remember(key, null, FAIL_TTL_MS);
     console.warn(`[geocode] ${err.message} (lat=${lat} lng=${lng})`);
     return null;
   } finally {
@@ -66,4 +86,31 @@ async function reverseGeocode(lat, lng) {
   }
 }
 
-module.exports = { reverseGeocode };
+/**
+ * Diagnostics for `/health?geocode=lat,lng`: does this host actually reach
+ * the free API, how long does it take, and what was the last failure?
+ * Never throws.
+ */
+async function probeGeo(input, fresh) {
+  try {
+    if (fresh) cache.clear();
+    const [lat, lng] = String(input).split(',').map(Number);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return { error: 'expected ?geocode=lat,lng' };
+    }
+    const t0 = Date.now();
+    const place = await reverseGeocode(lat, lng);
+    return {
+      ms: Date.now() - t0,
+      place,
+      fresh: !!fresh,
+      provider: process.env.GEOCODE_PROVIDER || 'bigdatacloud',
+      timeoutMs: TIMEOUT_MS,
+      lastError,
+    };
+  } catch (err) {
+    return { error: err.message };
+  }
+}
+
+module.exports = { reverseGeocode, lastGeocodeError, probeGeo };

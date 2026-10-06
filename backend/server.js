@@ -754,12 +754,16 @@ app.get('/inmate/wallet/:inmateId', requireAuth, asyncRoute(async (req, res) => 
 app.use('/admin', requireAuth, adminRouter);
 
 // ==================== HEALTH CHECK ====================
-app.get('/health', (req, res) => {
+app.get('/health', asyncRoute(async (req, res) => {
   const { PROVIDER, senderIdFor, effectiveProvider } = require('./lib/sms');
+  const { probeGeo } = require('./lib/geocode');
   res.json({
     status: 'ok',
     timestamp: Date.now(),
     version: '2.0.0-real',
+    // /health?geocode=19.076,72.8777 (&fresh=1 to skip the cache) -> live check
+    // that this host reaches the free reverse-geocoder, plus the last failure.
+    geocode: req.query.geocode !== undefined ? await probeGeo(req.query.geocode, req.query.fresh !== undefined) : undefined,
     sms: {
       provider: PROVIDER || process.env.SMS_PROVIDER || 'log',
       hasApiKey: !!process.env.FAST2SMS_API_KEY,
@@ -780,7 +784,7 @@ app.get('/health', (req, res) => {
       },
     }
   });
-});
+}));
 
 // Sends a real SMS, so it stays behind an operator login.
 app.get('/test-sms', requireAuth, requireRole('admin', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
