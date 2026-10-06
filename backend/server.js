@@ -15,6 +15,9 @@ const { jailScopeOf, inAdminScope, inScopeOf, scopeList, kioskScopeOf } = requir
 const { paginate } = require('./lib/paginate');
 const { buildWardIndex } = require('./lib/kioskView');
 
+/** Kiosk-admin username: what the operator types on the terminal to sign in. */
+const EMPLOYEE_ID_RE = /^[A-Za-z0-9._-]{3,40}$/;
+
 const { router: authRouter } = require('./auth-routes');
 const { router: adminRouter } = require('./admin-routes');
 
@@ -490,9 +493,58 @@ app.get('/kiosk-admins', requireAuth, requireRole('admin', 'warden', 'super-admi
   return sendSuccess(res, data);
 }));
 
-// Kiosk admins are this jail's staff, so the jail's wardens may edit or remove
-// them here; the vendor console keeps its own super-admin-only /admin routes.
-// Both routes refuse a row from another prison unless the caller is a super admin.
+// Kiosk admins are this jail's staff, so the jail's wardens may create, edit or
+// remove them here; the vendor console keeps its own super-admin-only /admin
+// routes. All three routes refuse a row from another prison unless the caller
+// is a super admin.
+app.post('/kiosk-admins', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+  const isSuper = ['super-admin', 'super_admin'].includes(req.auth?.role);
+  const jailId = await effectiveJailId(req);
+  if (!isSuper && !jailId) return sendError(res, 'FORBIDDEN', 'Your account is not linked to a prison yet', 403);
+
+  const name = String(req.body.name || '').trim();
+  const employeeId = String(req.body.employeeId || '').trim();
+  const email = String(req.body.email || '').trim().toLowerCase();
+  const password = String(req.body.password || '');
+
+  if (!name || !employeeId || !password) {
+    return sendError(res, 'INVALID_REQUEST', 'name, username and password are required', 400);
+  }
+  if (!EMPLOYEE_ID_RE.test(employeeId)) {
+    return sendError(res, 'INVALID_REQUEST', 'username must be 3-40 characters: letters, digits, dot, dash or underscore', 400);
+  }
+  if (password.length < 6) return sendError(res, 'INVALID_REQUEST', 'password must be at least 6 characters', 400);
+
+  const admins = await readDb('admins.json');
+  if (admins.some((a) => String(a.employeeId || '').toLowerCase() === employeeId.toLowerCase())) {
+    return sendError(res, 'DUPLICATE', 'That username is already taken', 409);
+  }
+  if (email && admins.some((a) => String(a.email || '').toLowerCase() === email)) {
+    return sendError(res, 'DUPLICATE', 'A kiosk admin with this email already exists', 409);
+  }
+
+  const record = {
+    adminId: `ADMIN-${uuidv4().substring(0, 8).toUpperCase()}`,
+    employeeId,
+    name,
+    email: email || null,
+    role: 'kiosk_admin',
+    permissions: ['manage_inmates', 'manage_contacts', 'view_calls', 'view_schedule', 'manage_alerts'],
+    status: 'active',
+    password: await hashSecret(password),
+    kioskId: null,
+    prisonId: jailId || req.body.prisonId || null,
+    createdAt: new Date().toISOString(),
+  };
+  await updateDb('admins.json', (all) => ({ data: [...all, record], result: record }));
+
+  const { password: _password, pin, biometricData, ...safe } = record;
+  void _password;
+  void pin;
+  void biometricData;
+  return sendSuccess(res, safe, 201);
+}));
+
 app.patch('/kiosk-admins/:adminId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const isSuper = ['super-admin', 'super_admin'].includes(req.auth?.role);
   const jailId = await effectiveJailId(req);
@@ -503,6 +555,18 @@ app.patch('/kiosk-admins/:adminId', requireAuth, requireRole('admin', 'warden', 
     const name = String(req.body.name).trim();
     if (!name) return sendError(res, 'INVALID_REQUEST', 'name cannot be empty', 400);
     patch.name = name;
+  }
+  // The username a kiosk operator types on the terminal - unique, like on create.
+  if (req.body.employeeId !== undefined) {
+    const employeeId = String(req.body.employeeId).trim();
+    if (!EMPLOYEE_ID_RE.test(employeeId)) {
+      return sendError(res, 'INVALID_REQUEST', 'username must be 3-40 characters: letters, digits, dot, dash or underscore', 400);
+    }
+    const admins = await readDb('admins.json');
+    if (admins.some((a) => a.adminId !== req.params.adminId && String(a.employeeId || '').toLowerCase() === employeeId.toLowerCase())) {
+      return sendError(res, 'DUPLICATE', 'That username is already taken', 409);
+    }
+    patch.employeeId = employeeId;
   }
   if (req.body.status !== undefined) {
     const status = String(req.body.status);

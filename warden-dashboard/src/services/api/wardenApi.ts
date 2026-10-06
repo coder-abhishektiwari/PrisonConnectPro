@@ -52,9 +52,18 @@ export interface KioskAdmin {
 
 export interface KioskAdminUpdate {
   name?: string;
+  /** The username the operator types on the kiosk terminal. */
+  employeeId?: string;
   status?: string;
   permissions?: string[];
   password?: string;
+}
+
+export interface NewKioskAdminInput {
+  name: string;
+  employeeId: string;
+  email?: string;
+  password: string;
 }
 
 /**
@@ -830,6 +839,9 @@ export const wardenApi = {
 
   getKioskAdmins: () =>
     apiClient.get<ApiResponse<KioskAdmin[]>>('/kiosk-admins').then((r) => r.data?.data ?? []),
+
+  createKioskAdmin: (payload: NewKioskAdminInput) =>
+    apiClient.post<ApiResponse<KioskAdmin>>('/kiosk-admins', payload).then((r) => r.data?.data),
 
   updateKioskAdmin: (adminId: string, patch: KioskAdminUpdate) =>
     apiClient

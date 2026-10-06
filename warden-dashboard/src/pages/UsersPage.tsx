@@ -12,6 +12,11 @@ const EMPTY_FORM: NewWardenInput = { name: '', email: '', password: '', phone: '
 /** One card adds and edits a warden; `mode` is all that tells them apart. */
 type WardenModal = { mode: 'add' } | { mode: 'edit'; warden: WardenRecord } | null;
 
+const EMPTY_ADMIN_FORM = { name: '', employeeId: '', email: '', password: '' };
+
+/** Same card for kiosk admins - `employeeId` is the username used on a kiosk. */
+type AdminModal = { mode: 'add' } | { mode: 'edit'; admin: KioskAdmin } | null;
+
 function roleBadge(user: WardenRecord) {
   return user.isChiefWarden ? (
     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-warning/15 text-warning border border-warning/30">
@@ -40,7 +45,6 @@ export function UsersPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'on_leave'>('all');
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [statsCounts, setStatsCounts] = useState({ activeCount: 0, inactiveCount: 0, onLeaveCount: 0 });
@@ -49,8 +53,9 @@ export function UsersPage() {
   const [form, setForm] = useState<NewWardenInput>(EMPTY_FORM);
   const [formErrors, setFormErrors] = useState<FormErrors>({});
   const [isSaving, setIsSaving] = useState(false);
-  const [editingAdmin, setEditingAdmin] = useState<KioskAdmin | null>(null);
-  const [adminForm, setAdminForm] = useState({ name: '' });
+  const [adminModal, setAdminModal] = useState<AdminModal>(null);
+  const [adminForm, setAdminForm] = useState(EMPTY_ADMIN_FORM);
+  const [adminFormErrors, setAdminFormErrors] = useState<FormErrors>({});
   const [resetTarget, setResetTarget] = useState<{ kind: 'warden' | 'kiosk'; id: string; name: string; tag: string } | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -66,7 +71,6 @@ export function UsersPage() {
         limit,
         offset: (page - 1) * limit,
         search: searchQuery || undefined,
-        status: statusFilter !== 'all' ? statusFilter : undefined,
       };
       const data = await wardenApi.getWardens(params);
       setUsers(data.items as WardenRecord[]);
@@ -77,7 +81,7 @@ export function UsersPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [page, searchQuery, statusFilter]);
+  }, [page, searchQuery]);
 
   const loadStats = useCallback(async () => {
     try {
@@ -173,24 +177,59 @@ export function UsersPage() {
     }
   }
 
-  function openEditAdmin(a: KioskAdmin) {
-    setPendingDeleteId(null);
-    setAdminForm({ name: a.name });
-    setEditingAdmin(a);
+  function setAdminField(key: keyof typeof EMPTY_ADMIN_FORM, value: string) {
+    setAdminForm(prev => ({ ...prev, [key]: value }));
+    setAdminFormErrors(prev => ({ ...prev, [key]: '' }));
   }
 
-  async function saveAdmin() {
-    if (!editingAdmin) return;
+  function openAddAdmin() {
+    setPendingDeleteId(null);
+    setAdminForm(EMPTY_ADMIN_FORM);
+    setAdminFormErrors({});
+    setAdminModal({ mode: 'add' });
+  }
+
+  function openEditAdmin(a: KioskAdmin) {
+    setPendingDeleteId(null);
+    setAdminFormErrors({});
+    setAdminForm({ name: a.name, employeeId: a.employeeId || '', email: a.email || '', password: '' });
+    setAdminModal({ mode: 'edit', admin: a });
+  }
+
+  // One card for both: username (employeeId) and name in either mode, password
+  // only when the account is created.
+  async function submitAdmin() {
+    if (!adminModal) return;
+    const isEdit = adminModal.mode === 'edit';
+    const errors: FormErrors = {};
     const name = adminForm.name.trim();
-    if (!name) { toastError('Name cannot be empty'); return; }
+    const employeeId = adminForm.employeeId.trim();
+    const email = adminForm.email.trim();
+    if (!name) errors.name = 'Name is required';
+    if (!employeeId) errors.employeeId = 'Username is required';
+    else if (!/^[A-Za-z0-9._-]{3,40}$/.test(employeeId)) errors.employeeId = '3-40 characters: letters, digits, dot, dash or underscore';
+    if (!isEdit) {
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.email = 'Enter a valid email';
+      if (!adminForm.password) errors.password = 'Password is required';
+      else if (adminForm.password.length < 6) errors.password = 'At least 6 characters';
+    }
+    setAdminFormErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
     try {
       setIsSaving(true);
-      await wardenApi.updateKioskAdmin(editingAdmin.adminId, { name });
-      setEditingAdmin(null);
-      toastSuccess('Kiosk admin updated');
+      if (isEdit) {
+        await wardenApi.updateKioskAdmin(adminModal.admin.adminId, { name, employeeId });
+      } else {
+        await wardenApi.createKioskAdmin({ name, employeeId, email: email || undefined, password: adminForm.password });
+      }
+      setAdminModal(null);
+      setAdminForm(EMPTY_ADMIN_FORM);
+      toastSuccess(isEdit ? 'Kiosk admin updated' : 'Kiosk admin added');
       await loadKioskAdmins();
     } catch (err: any) {
-      toastError(err?.response?.data?.error?.message || err?.message || 'Could not update kiosk admin');
+      const fallback = isEdit ? 'Could not update kiosk admin' : 'Could not add kiosk admin';
+      toastError(err?.response?.data?.error?.message || err?.message || fallback);
     } finally {
       setIsSaving(false);
     }
@@ -315,16 +354,6 @@ export function UsersPage() {
               onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
               className="flex-1 px-4 py-2 border-2 border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
-            <select
-              value={statusFilter}
-              onChange={(e) => { setStatusFilter(e.target.value as typeof statusFilter); setPage(1); }}
-              className="px-4 py-2 border-2 border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-            >
-              <option value="all">All Status</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-              <option value="on_leave">On Leave</option>
-            </select>
             {canManage && (
               <button
                 onClick={openAddWarden}
@@ -333,6 +362,12 @@ export function UsersPage() {
                 <span className="material-icons text-base">person_add</span> Add New Warden
               </button>
             )}
+            <button
+              onClick={openAddAdmin}
+              className="px-4 py-2 border-2 border-primary-600 text-primary-700 hover:bg-primary-50 rounded-lg text-sm font-semibold transition inline-flex items-center gap-1.5"
+            >
+              <span className="material-icons text-base">badge</span> Add Kiosk Admin
+            </button>
           </div>
 
           <Card>
@@ -634,7 +669,6 @@ export function UsersPage() {
                     type="email"
                     value={form.email}
                     onChange={(e) => setField('email', e.target.value)}
-                    disabled={wardenModal.mode === 'edit'}
                     className="w-full px-3 py-2 border-2 border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-neutral-100 disabled:text-neutral-500 disabled:cursor-not-allowed"
                     placeholder="name@prison.gov.in"
                   />
@@ -670,18 +704,23 @@ export function UsersPage() {
           </div>
         </div>
       )}
-      {/* Edit kiosk admin modal */}
-      {editingAdmin && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-neutral-900/50 p-4 sm:p-8" onClick={() => setEditingAdmin(null)}>
-          <div className="w-full max-w-md bg-white rounded-2xl shadow-xl" onClick={(e) => e.stopPropagation()}>
+      {/* One card for both adding and editing a kiosk admin: the username
+          (employeeId) is editable in either mode, the password only on create. */}
+      {adminModal && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-neutral-900/50 p-4 sm:p-8" onClick={() => setAdminModal(null)}>
+          <div className="w-full max-w-lg bg-white rounded-2xl shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-200">
               <div>
-                <h2 className="text-base font-bold text-neutral-900">Edit Kiosk Admin</h2>
-                <p className="text-xs text-neutral-500 mt-0.5">
-                  User ID <span className="font-mono font-bold text-primary-700">{editingAdmin.employeeId || '—'}</span>
-                </p>
+                <h2 className="text-base font-bold text-neutral-900">
+                  {adminModal.mode === 'edit' ? 'Edit Kiosk Admin' : 'Add Kiosk Admin'}
+                </h2>
+                {adminModal.mode === 'edit' && (
+                  <p className="text-xs text-neutral-500 mt-0.5">
+                    User ID <span className="font-mono font-bold text-primary-700">{adminForm.employeeId || '—'}</span>
+                  </p>
+                )}
               </div>
-              <button onClick={() => setEditingAdmin(null)} className="text-neutral-400 hover:text-neutral-700" title="Close">
+              <button onClick={() => setAdminModal(null)} className="text-neutral-400 hover:text-neutral-700" title="Close">
                 <span className="material-icons">close</span>
               </button>
             </div>
@@ -691,19 +730,67 @@ export function UsersPage() {
                 <label className="block text-xs font-semibold uppercase text-neutral-500 mb-1">Full name</label>
                 <input
                   value={adminForm.name}
-                  onChange={(e) => setAdminForm((p) => ({ ...p, name: e.target.value }))}
+                  onChange={(e) => setAdminField('name', e.target.value)}
                   className="w-full px-3 py-2 border-2 border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                   placeholder="e.g. Neha Gupta"
                   autoFocus
                 />
+                {adminFormErrors.name && <p className="mt-1 text-xs text-error">{adminFormErrors.name}</p>}
               </div>
-              <p className="text-xs text-neutral-500">Status is switched with the toggle on the row; the password with the reset icon.</p>
+              <div>
+                <label className="block text-xs font-semibold uppercase text-neutral-500 mb-1">Username (employee ID)</label>
+                <input
+                  value={adminForm.employeeId}
+                  onChange={(e) => setAdminField('employeeId', e.target.value)}
+                  className="w-full px-3 py-2 border-2 border-neutral-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  placeholder="e.g. empsa003"
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+                <p className="mt-1 text-xs text-neutral-500">What the operator types on the kiosk to sign in.</p>
+                {adminFormErrors.employeeId && <p className="mt-1 text-xs text-error">{adminFormErrors.employeeId}</p>}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold uppercase text-neutral-500 mb-1">Email (optional)</label>
+                  <input
+                    type="email"
+                    value={adminForm.email}
+                    onChange={(e) => setAdminField('email', e.target.value)}
+                    disabled={adminModal.mode === 'edit'}
+                    className="w-full px-3 py-2 border-2 border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-neutral-100 disabled:text-neutral-500 disabled:cursor-not-allowed"
+                    placeholder="name@prisonconnect.io"
+                  />
+                  {adminFormErrors.email && <p className="mt-1 text-xs text-error">{adminFormErrors.email}</p>}
+                </div>
+                {adminModal.mode === 'add' && (
+                  <div>
+                    <label className="block text-xs font-semibold uppercase text-neutral-500 mb-1">Password</label>
+                    <input
+                      type="password"
+                      value={adminForm.password}
+                      onChange={(e) => setAdminField('password', e.target.value)}
+                      className="w-full px-3 py-2 border-2 border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      placeholder="At least 6 characters"
+                      autoComplete="new-password"
+                    />
+                    {adminFormErrors.password && <p className="mt-1 text-xs text-error">{adminFormErrors.password}</p>}
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-neutral-500">
+                {adminModal.mode === 'edit'
+                  ? 'Status is switched with the toggle on the row; the password with the reset icon.'
+                  : 'Signs in on any kiosk of this prison with username and password.'}
+              </p>
             </div>
 
             <div className="flex justify-end gap-2 px-5 py-4 border-t border-neutral-200">
-              <button onClick={() => setEditingAdmin(null)} className="px-4 py-2 rounded-lg text-sm font-medium border border-neutral-200 text-neutral-700 hover:bg-neutral-50">Cancel</button>
-              <button onClick={saveAdmin} disabled={isSaving} className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-60">
-                {isSaving ? 'Saving...' : 'Save Changes'}
+              <button onClick={() => setAdminModal(null)} className="px-4 py-2 rounded-lg text-sm font-medium border border-neutral-200 text-neutral-700 hover:bg-neutral-50">Cancel</button>
+              <button onClick={submitAdmin} disabled={isSaving} className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-60">
+                {isSaving
+                  ? (adminModal.mode === 'edit' ? 'Saving...' : 'Adding...')
+                  : (adminModal.mode === 'edit' ? 'Save Changes' : 'Add Kiosk Admin')}
               </button>
             </div>
           </div>
