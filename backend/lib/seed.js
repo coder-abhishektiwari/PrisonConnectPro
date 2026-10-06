@@ -23,7 +23,10 @@ function load(file) {
   const p = path.join(SRC_DIR, file);
   if (!fs.existsSync(p)) return null;
   try {
-    return JSON.parse(fs.readFileSync(p, 'utf8'));
+    // Strip the UTF-8 BOM Windows editors leave behind: JSON.parse rejects it
+    // and the whole file (a full year of history, in one case) would be skipped.
+    const text = fs.readFileSync(p, 'utf8').replace(/^\uFEFF/, '');
+    return JSON.parse(text);
   } catch (err) {
     console.warn(`[seed] skipping corrupt ${file}: ${err.message}`);
     return null;
@@ -53,9 +56,9 @@ async function main() {
     'prisons.json', 'wardens.json', 'kiosks.json', 'users.json', 'inmates.json',
     'contacts.json', 'rooms.json', 'calls.json', 'recordings.json', 'schedule.json',
     'wallets.json', 'transactions.json', 'alerts.json', 'incidents.json',
-    'devices.json', 'kiosk-registration-requests.json', 'statistics.json',
+    'devices.json', 'statistics.json',
     'admins.json', 'super-admins.json', 'biometrics.json', 'subscriptions.json',
-    'setup-pins.json', 'reports.json', 'servers.json', 'pricing.json', 'settings.json', 'storage.json',
+    'reports.json', 'servers.json', 'pricing.json', 'settings.json', 'storage.json',
     'cells.json', 'blocks.json'
   ]) {
     raw[f] = load(f);
@@ -127,7 +130,6 @@ async function main() {
     'statistics.json': { callId: 'callId' },
     'biometrics.json': { inmateId: 'inmateId' },
     'subscriptions.json': { prisonId: 'prisonId' },
-    'setup-pins.json': { prisonId: 'prisonId' },
     'reports.json': { prisonId: 'prisonId' }
   };
   for (const [file, fields] of Object.entries(ALIAS_FIELDS)) {
@@ -200,6 +202,15 @@ async function main() {
   // contacts -> inmates
   raw['contacts.json'] = link(raw['contacts.json'], 'inmateId', inmateIdsF, true, 'contact');
   const contactIdsF = idSet(raw['contacts.json'], 'contactId');
+  // A contact belongs to its inmate's jail, so it inherits that prison.
+  const prisonOfInmate = new Map((raw['inmates.json'] || []).map((i) => [i.inmateId, i.prisonId || null]));
+  for (const c of raw['contacts.json'] || []) c.prisonId = c.prisonId || prisonOfInmate.get(c.inmateId) || null;
+  // Devices are named after the kiosk they report for ("KIOSK-001").
+  const kioskById = new Map((raw['kiosks.json'] || []).map((k) => [k.kioskId, k]));
+  for (const d of raw['devices.json'] || []) {
+    const k = kioskById.get(d.name);
+    if (k) { d.kioskId = k.kioskId; d.prisonId = k.prisonId || null; }
+  }
   // rooms
   raw['rooms.json'] = link(raw['rooms.json'], 'kioskId', kioskIds, true, 'room');
   raw['rooms.json'] = link(raw['rooms.json'], 'inmateId', inmateIdsF, false, 'room');
@@ -239,9 +250,8 @@ async function main() {
   raw['statistics.json'] = stats;
   // biometrics -> inmates
   raw['biometrics.json'] = link(raw['biometrics.json'], 'inmateId', inmateIdsF, false, 'biometric');
-  // subscriptions / setup-pins / reports
+  // subscriptions / reports
   raw['subscriptions.json'] = link(raw['subscriptions.json'], 'prisonId', prisonIds, false, 'subscription');
-  raw['setup-pins.json'] = link(raw['setup-pins.json'], 'prisonId', prisonIds, false, 'setup-pin');
   raw['reports.json'] = link(raw['reports.json'], 'prisonId', prisonIds, false, 'report');
 
   // ---- enforce "one active call per inmate" ----
@@ -299,13 +309,11 @@ async function main() {
   await write('alerts.json');
   await write('incidents.json');
   await write('devices.json');
-  await write('kiosk-registration-requests.json');
   await write('statistics.json');
   await write('admins.json');
   await write('super-admins.json');
   await write('biometrics.json');
   await write('subscriptions.json');
-  await write('setup-pins.json');
   await write('reports.json');
   await write('servers.json');
   await write('pricing.json');

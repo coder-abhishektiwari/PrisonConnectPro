@@ -6,7 +6,7 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 const { sendSuccess, sendError, asyncRoute } = require('../lib/response');
 const { jailScopeOf, inAdminScope, adminScopeFilter, inScopeOf, scopeList } = require('../lib/scoping');
 const { paginate } = require('../lib/paginate');
-const { isDemoKiosk, wardLabel, buildWardIndex } = require('../lib/kioskView');
+const { wardLabel, buildWardIndex } = require('../lib/kioskView');
 
 const router = express.Router();
 
@@ -182,7 +182,7 @@ router.post('/heartbeat', asyncRoute(async (req, res) => {
   }
 
   // Demo rows are not real devices, so no heartbeat can ever light one up.
-  const kiosks = (await readDb('kiosks.json')).filter((k) => !isDemoKiosk(k));
+  const kiosks = await readDb('kiosks.json');
   const match = kiosks.find((k) =>
     (tokenKioskId && k.kioskId === tokenKioskId) ||
     (deviceSerialNumber && k.deviceSerialNumber === deviceSerialNumber) ||
@@ -407,7 +407,7 @@ router.get('/registration-status/:identifier', asyncRoute(async (req, res) => {
 
 router.get('/registration-requests/stats', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const kiosks = await readDb('kiosks.json');
-  const scoped = kiosks.filter(adminScopeFilter(req)).filter((k) => !isDemoKiosk(k));
+  const scoped = kiosks.filter(adminScopeFilter(req));
   return sendSuccess(res, {
     total: scoped.length,
     pendingCount: scoped.filter((k) => k.authorizationStatus === 'pending' || k.status === 'pending').length,
@@ -419,7 +419,7 @@ router.get('/registration-requests/stats', requireAuth, requireRole('admin', 'wa
 router.get('/registration-requests', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const [kiosks, prisons] = await Promise.all([readDb('kiosks.json'), readDb('prisons.json')]);
   const statusFilter = req.query.status;
-  const realKiosks = kiosks.filter((k) => !isDemoKiosk(k));
+  const realKiosks = kiosks;
   let registrationRequests;
   if (statusFilter && statusFilter !== 'all') {
     const statusMap = { approved: 'authorized', rejected: 'unauthorized', pending: 'pending' };
@@ -493,6 +493,9 @@ router.patch('/registration/:requestId/approve', requireAuth, requireRole('admin
     return { data: kiosks, result: kiosks[idx] };
   });
   if (!updated) return sendError(res, 'NOT_FOUND', 'Registration request not found or already processed', 404);
+  // Approval is when the device actually joins the jail: the prison's kiosk
+  // roster has to learn about it here, not at registration time.
+  await addToPrisonKiosks(updated.prisonId, updated.kioskId);
   return sendSuccess(res, { success: true });
 }));
 
@@ -538,7 +541,7 @@ router.get('/', requireAuth, requireRole('admin', 'warden', 'super-admin', 'supe
   const index = buildWardIndex({ inmates, blocks, inScope });
 
   const data = kiosks
-    .filter((k) => inScope(k) && !isDemoKiosk(k))
+    .filter((k) => inScope(k))
     .map((k) => {
       const wards = index.wardsFor(k.kioskId);
       return {
@@ -569,7 +572,7 @@ router.get('/:kioskId/stats', requireAuth, requireRole('admin', 'warden', 'super
     readDb('prisons.json'),
   ]);
   const kiosk = kiosks.find((k) => k.kioskId === req.params.kioskId);
-  if (!kiosk || isDemoKiosk(kiosk) || !(await inScopeOf(req, kiosk))) {
+  if (!kiosk || !(await inScopeOf(req, kiosk))) {
     return sendError(res, 'NOT_FOUND', 'Kiosk not found in your jail', 404);
   }
 
@@ -644,25 +647,64 @@ router.get('/:kioskId/stats', requireAuth, requireRole('admin', 'warden', 'super
 
 router.get('/:kioskId', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const kiosks = await readDb('kiosks.json');
-  const kiosk = kiosks.find((k) => k.kioskId === req.params.kioskId && !isDemoKiosk(k) && inAdminScope(req, k));
+  const kiosk = kiosks.find((k) => k.kioskId === req.params.kioskId && inAdminScope(req, k));
   if (!kiosk) return sendError(res, 'NOT_FOUND', 'Kiosk not found in your kiosk/jail', 404);
   return sendSuccess(res, kiosk);
 }));
+// A prison lists the devices it owns; keep that array in step with the kiosks
+// table so nothing has to guess which kiosks belong to which jail.
+async function addToPrisonKiosks(prisonId, kioskId) {
+  if (!prisonId || !kioskId) return;
+  await updateDb('prisons.json', (prisons) => {
+    const idx = prisons.findIndex((p) => p.prisonId === prisonId);
+    if (idx === -1) return { data: prisons, result: null };
+    const owned = Array.isArray(prisons[idx].kioskIds) ? prisons[idx].kioskIds : [];
+    if (owned.includes(kioskId)) return { data: prisons, result: prisons[idx] };
+    prisons[idx] = { ...prisons[idx], kioskIds: [...owned, kioskId] };
+    return { data: prisons, result: prisons[idx] };
+  });
+}
+
+async function removeFromPrisonKiosks(prisonId, kioskId) {
+  if (!prisonId || !kioskId) return;
+  await updateDb('prisons.json', (prisons) => {
+    const idx = prisons.findIndex((p) => p.prisonId === prisonId);
+    if (idx === -1) return { data: prisons, result: null };
+    const owned = Array.isArray(prisons[idx].kioskIds) ? prisons[idx].kioskIds : [];
+    if (!owned.includes(kioskId)) return { data: prisons, result: prisons[idx] };
+    prisons[idx] = { ...prisons[idx], kioskIds: owned.filter((id) => id !== kioskId) };
+    return { data: prisons, result: prisons[idx] };
+  });
+}
+
 router.post('/', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
-  const kioskData = req.body;
+  const kioskData = req.body || {};
   const jailId = jailScopeOf(req);
   if (jailId && kioskData.prisonId && kioskData.prisonId !== jailId) {
     return sendError(res, 'FORBIDDEN', 'Cannot create a kiosk outside your jail', 403);
   }
+  const prisonId = jailId || kioskData.prisonId || null;
+  const kioskId = kioskData.kioskId || `KIOSK-${uuidv4().substring(0, 8).toUpperCase()}`;
+  const [kiosks, prisons] = await Promise.all([readDb('kiosks.json'), readDb('prisons.json')]);
+  // kiosk_id is the primary key: a client-supplied id must not collide.
+  if (kiosks.some((k) => k.kioskId === kioskId)) {
+    return sendError(res, 'DUPLICATE', `A kiosk with id ${kioskId} already exists`, 409);
+  }
+  // prison_id is a foreign key — reject an unknown jail here rather than
+  // letting the write fail inside the database.
+  if (prisonId && !prisons.some((p) => p.prisonId === prisonId)) {
+    return sendError(res, 'INVALID_REFERENCE', `prisonId '${prisonId}' does not exist`, 422);
+  }
   const newKiosk = {
-    kioskId: `KIOSK-${uuidv4().substring(0, 8).toUpperCase()}`,
     ...kioskData,
-    prisonId: jailId || kioskData.prisonId,
+    kioskId,
+    prisonId,
     status: kioskData.status || 'pending',
     authorizationStatus: kioskData.authorizationStatus || 'pending',
     createdAt: new Date().toISOString()
   };
   await updateDb('kiosks.json', (k) => ({ data: [...k, newKiosk], result: newKiosk }));
+  await addToPrisonKiosks(newKiosk.prisonId, newKiosk.kioskId);
   return sendSuccess(res, newKiosk, 201);
 }));
 router.patch('/:kioskId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
@@ -676,14 +718,38 @@ router.patch('/:kioskId', requireAuth, requireRole('admin', 'warden', 'super-adm
   return sendSuccess(res, updated);
 }));
 router.delete('/:kioskId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
-  const deleted = await updateDb('kiosks.json', (kiosks) => {
-    const idx = kiosks.findIndex((k) => k.kioskId === req.params.kioskId && inAdminScope(req, k));
-    if (idx === -1) return { data: kiosks, result: null };
-    const [removed] = kiosks.splice(idx, 1);
-    return { data: kiosks, result: removed };
+  const kiosks = await readDb('kiosks.json');
+  const kiosk = kiosks.find((k) => k.kioskId === req.params.kioskId && inAdminScope(req, k));
+  if (!kiosk) return sendError(res, 'NOT_FOUND', 'Kiosk not found in your kiosk/jail', 404);
+
+  // Deleting a device that still holds prisoners would silently unassign all of
+  // them (inmates.kiosk_id is SET NULL), so the roster has to be emptied first.
+  const inmates = await readDb('inmates.json');
+  const assigned = inmates.filter((i) => i.assignedKioskId === kiosk.kioskId);
+  if (assigned.length) {
+    return sendError(
+      res, 'CONFLICT',
+      `Reassign ${assigned.length} prisoner(s) to another kiosk before deleting this one`,
+      409
+    );
+  }
+
+  const removed = await updateDb('kiosks.json', (rows) => {
+    const idx = rows.findIndex((k) => k.kioskId === kiosk.kioskId);
+    if (idx === -1) return { data: rows, result: null };
+    const [gone] = rows.splice(idx, 1);
+    return { data: rows, result: gone };
   });
-  if (!deleted) return sendError(res, 'NOT_FOUND', 'Kiosk not found in your kiosk/jail', 404);
-  return sendSuccess(res, { message: 'Kiosk deleted successfully', kioskId: deleted.kioskId });
+  if (!removed) return sendError(res, 'NOT_FOUND', 'Kiosk not found in your kiosk/jail', 404);
+
+  // Rows that only this kiosk owns go with it; everything historical (calls,
+  // alerts, incidents) keeps its history and is unlinked by the foreign keys.
+  await updateDb('rooms.json', (rooms) => ({
+    data: rooms.filter((r) => r.kioskId !== removed.kioskId),
+    result: null,
+  }));
+  await removeFromPrisonKiosks(removed.prisonId, removed.kioskId);
+  return sendSuccess(res, { message: 'Kiosk deleted successfully', kioskId: removed.kioskId });
 }));
 
 // ==================== KIOSK SETUP PIN ====================

@@ -655,6 +655,27 @@ function createCallsRouter(broadcastEvent, signaling) {
     }
 
     await updateDb('calls.json', (calls) => ({ data: [...calls, newCall], result: newCall }));
+    // Every call owns exactly one room row. Minting the room id without the
+    // row left calls.room_id pointing at nothing, which the new foreign key
+    // would reject.
+    await updateDb('rooms.json', (rooms) => {
+      if (rooms.some((r) => r.roomId === newCall.roomId)) return { data: rooms, result: null };
+      const minutes = Number(newCall.maxDurationMinutes) || 15;
+      return {
+        data: [...rooms, {
+          roomId: newCall.roomId,
+          kioskId: newCall.kioskId,
+          inmateId: newCall.inmateId,
+          contactId: newCall.contactId,
+          status: 'active',
+          participants: [],
+          participantCount: 0,
+          createdAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + minutes * 60000 + 120000).toISOString(),
+        }],
+        result: null,
+      };
+    });
     broadcastEvent('call-created', newCall);
 
     // Scheduled call launched from the dashboard: mark that booking completed so

@@ -65,7 +65,7 @@ const REGISTRY = {
   'users.json':        { table: 'users',                   idKey: 'userId', cols: { username: 'username', email: 'email', kioskId: 'kiosk_id', prisonId: 'prison_id' } },
   'inmates.json':      { table: 'inmates',                 idKey: 'inmateId', cols: { prisonId: 'prison_id', assignedKioskId: 'kiosk_id', cellId: 'cell_id', blockId: 'block_id' } },
   'kiosks.json':       { table: 'kiosks',                  idKey: 'kioskId', cols: { prisonId: 'prison_id', deviceSerialNumber: 'serial', uid: 'uid' } },
-  'contacts.json':     { table: 'contacts',                idKey: 'contactId', cols: { inmateId: 'inmate_id' } },
+  'contacts.json':     { table: 'contacts',                idKey: 'contactId', cols: { inmateId: 'inmate_id', prisonId: 'prison_id' } },
   'rooms.json':        { table: 'rooms',                   idKey: 'roomId', cols: { kioskId: 'kiosk_id', inmateId: 'inmate_id', contactId: 'contact_id', status: 'status' } },
   'calls.json':        { table: 'calls',                   idKey: 'callId', cols: { roomId: 'room_id', inmateId: 'inmate_id', contactId: 'contact_id', kioskId: 'kiosk_id', prisonId: 'prison_id', status: 'status', startTime: 'start_time', endTime: 'end_time' } },
   'recordings.json':   { table: 'recordings',              idKey: 'recordingId', cols: { callId: 'call_id', kioskId: 'kiosk_id', inmateId: 'inmate_id' } },
@@ -75,14 +75,12 @@ const REGISTRY = {
   'wallet-requests.json': { table: 'wallet_requests',     idKey: 'requestId', cols: { inmateId: 'inmate_id' } },
   'alerts.json':       { table: 'alerts',                  idKey: 'alertId', cols: { prisonId: 'prison_id', kioskId: 'kiosk_id', callId: 'call_id' } },
   'incidents.json':    { table: 'incidents',               idKey: 'incidentId', cols: { prisonId: 'prison_id', inmateId: 'inmate_id', kioskId: 'kiosk_id', callId: 'call_id', wardenId: 'warden_id' } },
-  'devices.json':      { table: 'devices',                 idKey: 'deviceId', cols: {} },
-  'kiosk-registration-requests.json': { table: 'kiosk_registration_requests', idKey: 'requestId', cols: { prisonId: 'prison_id' } },
+  'devices.json':      { table: 'devices',                 idKey: 'deviceId', cols: { kioskId: 'kiosk_id', prisonId: 'prison_id' } },
   'statistics.json':   { table: 'statistics',              idKey: null, idKeyFn: (d) => `${d.callId}:${d.timestamp}`, cols: { callId: 'call_id' } },
-  'admins.json':       { table: 'admins',                  idKey: 'adminId', cols: {} },
+  'admins.json':       { table: 'admins',                  idKey: 'adminId', cols: { kioskId: 'kiosk_id', prisonId: 'prison_id' } },
   'super-admins.json': { table: 'super_admins',            idKey: 'adminId', cols: {} },
   'biometrics.json':   { table: 'biometrics',              idKey: 'biometricId', cols: { inmateId: 'inmate_id' } },
   'subscriptions.json':{ table: 'subscriptions',           idKey: 'id', cols: { prisonId: 'prison_id' } },
-  'setup-pins.json':   { table: 'setup_pins',              idKey: 'prisonId', cols: { prisonId: 'prison_id' } },
   'cells.json':        { table: 'cells',                   idKey: 'cellId', cols: { prisonId: 'prison_id', name: 'name' } },
   'blocks.json':       { table: 'blocks',                  idKey: 'blockId', cols: { prisonId: 'prison_id', name: 'name' } },
   'reports.json':      { table: 'reports',                 idKey: 'reportId', cols: { prisonId: 'prison_id' } },
@@ -154,7 +152,17 @@ async function readAll(reg) {
     for (const [key, col] of colEntries) {
       if (doc[key] == null && r[col] != null) fromCols[key] = r[col];
     }
-    return { ...fromCols, ...doc };
+    const out = { ...fromCols, ...doc };
+    // A `*_id` column is what the foreign keys enforce, and ON DELETE SET NULL
+    // only clears the column - the JSONB document keeps the stale id. Folding
+    // the document over the column here is what used to resurface references to
+    // rows that no longer exist, so the relational side wins for pointer fields.
+    for (const [key, col] of colEntries) {
+      if (!col.endsWith('_id') || r[col] === undefined) continue;
+      if (r[col] == null) delete out[key];
+      else out[key] = r[col];
+    }
+    return out;
   });
   const bad = docs.filter((d) => d == null);
   if (bad.length) {

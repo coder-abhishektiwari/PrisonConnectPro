@@ -6,6 +6,7 @@ const { hashSecret } = require('./lib/auth');
 const { requireRole } = require('./middleware/auth');
 const { inAdminScope, adminScopeFilter, jailScopeOf, kioskScopeOf } = require('./lib/scoping');
 const { paginate } = require('./lib/paginate');
+const { inmateDeleteHandler, validateInmateRefs } = require('./routes/inmates');
 
 const ALL_ROLES = ['admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'];
 const ADMIN_ROLES = ['admin', 'warden', 'super-admin', 'super_admin'];
@@ -70,6 +71,15 @@ router.post('/prisoners', requireRole(...ALL_ROLES), async (req, res) => {
   if (kioskId && inmateData.assignedKioskId && inmateData.assignedKioskId !== kioskId) {
     return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Cannot create prisoner for another kiosk' } });
   }
+  const refs = await validateInmateRefs({
+    prisonId: jailId || inmateData.prisonId,
+    assignedKioskId: kioskId || inmateData.assignedKioskId,
+    cellId: inmateData.cellId,
+    blockId: inmateData.blockId,
+  });
+  if (!refs.ok) {
+    return res.status(422).json({ success: false, error: { code: 'INVALID_REFERENCE', message: refs.message } });
+  }
   const record = {
     ...inmateData,
     inmateId: inmateData.inmateId || `INM-${uuidv4().substring(0, 8).toUpperCase()}`,
@@ -98,6 +108,17 @@ router.post('/prisoners', requireRole(...ALL_ROLES), async (req, res) => {
 router.put('/prisoners/:prisonerId', requireRole(...ALL_ROLES), async (req, res) => {
   const updates = { ...req.body };
   delete updates.inmateId; delete updates.createdAt;
+  // A prisoner's jail never changes through an edit — same rule as the
+  // /inmates handler, and prison_id is a foreign key.
+  delete updates.prisonId;
+  const refs = await validateInmateRefs({
+    assignedKioskId: updates.assignedKioskId,
+    cellId: updates.cellId,
+    blockId: updates.blockId,
+  });
+  if (!refs.ok) {
+    return res.status(422).json({ success: false, error: { code: 'INVALID_REFERENCE', message: refs.message } });
+  }
   if (updates.name) {
     updates.firstName = updates.name.split(' ')[0];
     updates.lastName = updates.name.split(' ').slice(1).join(' ');
@@ -143,14 +164,10 @@ router.patch('/prisoners/:prisonerId/status', requireRole(...ALL_ROLES), async (
 });
 
 router.delete('/prisoners/:prisonerId', requireRole(...ALL_ROLES), async (req, res) => {
-  const deleted = await updateDb('inmates.json', (inmates) => {
-    const idx = inmates.findIndex((i) => i.inmateId === req.params.prisonerId && inAdminScope(req, i));
-    if (idx === -1) return { data: inmates, result: null };
-    const [removed] = inmates.splice(idx, 1);
-    return { data: inmates, result: removed };
-  });
-  if (!deleted) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Prisoner not found' } });
-  return res.json({ success: true, data: { message: 'Prisoner deleted', prisonerId: req.params.prisonerId } });
+  // Delegate to the guarded handler behind /inmates: it refuses while a call
+  // is live, archives the money and call trail, and clears bookings and rooms
+  // before the row goes away.
+  return inmateDeleteHandler(req, res);
 });
 
 // ==================== PRISONER CONTACTS (via prisoner) ====================
@@ -166,19 +183,28 @@ router.get('/prisoners/:prisonerId/contacts', requireRole(...ALL_ROLES), async (
 
 router.post('/prisoners/:prisonerId/contacts', requireRole(...ALL_ROLES), async (req, res) => {
   const inmates = await readDb('inmates.json');
-  if (!inmates.find((i) => i.inmateId === req.params.prisonerId && inAdminScope(req, i))) {
+  const owner = inmates.find((i) => i.inmateId === req.params.prisonerId && inAdminScope(req, i));
+  if (!owner) {
     return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Prisoner not found' } });
   }
-  const contactData = req.body;
+  const contactData = req.body || {};
+  // The client payload comes first: contactId and inmateId are the primary key
+  // and a foreign key, so they are server-owned and must not be overridable.
   const newContact = {
+    ...contactData,
     contactId: contactData.contactId || `CONT-${uuidv4().substring(0, 8).toUpperCase()}`,
     inmateId: req.params.prisonerId,
-    ...contactData,
+    // The jail a contact belongs to follows its prisoner.
+    prisonId: owner.prisonId || null,
     status: 'approved',
     active: true,
     approvalStatus: 'approved',
     createdAt: new Date().toISOString()
   };
+  const existing = await readDb('contacts.json');
+  if (existing.some((c) => c.contactId === newContact.contactId)) {
+    return res.status(409).json({ success: false, error: { code: 'DUPLICATE', message: 'A contact with this ID already exists' } });
+  }
   const updated = await updateDb('contacts.json', (contacts) => ({ data: [...contacts, newContact], result: newContact }));
   return res.status(201).json({ success: true, data: normalizeContact(updated) });
 });
@@ -192,9 +218,10 @@ router.put('/contacts/:contactId', requireRole(...ALL_ROLES), async (req, res) =
   const inmates = await readDb('inmates.json');
   const contacts = await readDb('contacts.json');
   const contact = contacts.find((c) => c.contactId === contactId);
+  let owner = null;
   if (contact) {
-    const inmate = inmates.find((i) => i.inmateId === contact.inmateId);
-    if (inmate && !inAdminScope(req, inmate)) {
+    owner = inmates.find((i) => i.inmateId === contact.inmateId);
+    if (owner && !inAdminScope(req, owner)) {
       return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Contact not found' } });
     }
   }
@@ -208,6 +235,11 @@ router.put('/contacts/:contactId', requireRole(...ALL_ROLES), async (req, res) =
     // would leave readers disagreeing about which number is current.
     const newPhone = updates.phoneNumber || updates.phone || updates.mobileNumber;
     if (newPhone) { merged.phoneNumber = newPhone; merged.phone = newPhone; merged.mobileNumber = newPhone; }
+    // Pointers stay put: a payload must never re-parent a contact or point it
+    // at a jail/prisoner that does not exist (both are foreign keys).
+    merged.contactId = ct[idx].contactId;
+    merged.inmateId = ct[idx].inmateId;
+    merged.prisonId = ct[idx].prisonId || (owner && owner.prisonId) || null;
     ct[idx] = merged;
     return { data: ct, result: ct[idx] };
   });

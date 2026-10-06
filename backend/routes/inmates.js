@@ -12,6 +12,36 @@ const router = express.Router();
 
 const INMATE_IMMUTABLE_FIELDS = ['inmateId', 'createdAt'];
 
+/**
+ * Every pointer on a prisoner row (jail, kiosk, cell, block) is a foreign key.
+ * Checking the ids against the tables they name turns what would be a database
+ * error (500) into a clear 422 the caller can act on.
+ * Returns `{ ok: true }` or `{ ok: false, message }`.
+ */
+async function validateInmateRefs(refs) {
+  const wanted = [
+    ['prisonId', refs.prisonId, 'prisons.json', 'prisonId'],
+    ['assignedKioskId', refs.assignedKioskId, 'kiosks.json', 'kioskId'],
+    ['cellId', refs.cellId, 'cells.json', 'cellId'],
+    ['blockId', refs.blockId, 'blocks.json', 'blockId'],
+  ].filter(([, value]) => value);
+  if (!wanted.length) return { ok: true };
+  try {
+    const tables = await Promise.all(wanted.map(([, , file]) => readDb(file)));
+    const missing = [];
+    wanted.forEach(([label, value, , key], i) => {
+      if (!tables[i].some((row) => row[key] === value)) {
+        missing.push(`${label} '${value}' does not exist`);
+      }
+    });
+    return missing.length ? { ok: false, message: missing.join('; ') } : { ok: true };
+  } catch (err) {
+    // If a lookup table cannot be read, let the write proceed and let the
+    // database decide — validation must never become an outage.
+    return { ok: true };
+  }
+}
+
 function normalizeInmate(i) {
   if (!i) return i;
   const out = { ...i };
@@ -98,6 +128,13 @@ async function inmateCreateHandler(req, res) {
       return sendError(res, 'FORBIDDEN', 'Cannot assign a kiosk from another prison', 403);
     }
   }
+  const refs = await validateInmateRefs({
+    prisonId: jailId || inmateData.prisonId || inmateData.facility,
+    assignedKioskId: kioskId || inmateData.assignedKioskId,
+    cellId: inmateData.cellId,
+    blockId: inmateData.blockId,
+  });
+  if (!refs.ok) return sendError(res, 'INVALID_REFERENCE', refs.message, 422);
   try {
     const newInmate = await updateDb('inmates.json', async (inmates) => {
       if (inmateData.prisonerNumber && inmates.find((i) => i.prisonerNumber === inmateData.prisonerNumber)) {
@@ -183,6 +220,12 @@ async function inmateUpdateHandler(req, res) {
     }
   }
   delete updates.prisonId;
+  const updatedRefs = await validateInmateRefs({
+    assignedKioskId: updates.assignedKioskId,
+    cellId: updates.cellId,
+    blockId: updates.blockId,
+  });
+  if (!updatedRefs.ok) return sendError(res, 'INVALID_REFERENCE', updatedRefs.message, 422);
   const updated = await updateDb('inmates.json', (inmates) => {
     const idx = inmates.findIndex((i) => i.inmateId === id && inAdminScope(req, i));
     if (idx === -1) return { data: inmates, result: null };
@@ -212,6 +255,34 @@ async function inmateUpdateHandler(req, res) {
 
 async function inmateDeleteHandler(req, res) {
   const id = req.params.inmateId || req.params.prisonerId;
+  const existing = (await readDb('inmates.json')).find((i) => i.inmateId === id && inAdminScope(req, i));
+  if (!existing) return sendError(res, 'NOT_FOUND', 'Inmate not found', 404);
+
+  const [calls, transactions, schedule, rooms] = await Promise.all([
+    readDb('calls.json'),
+    readDb('transactions.json'),
+    readDb('schedule.json'),
+    readDb('rooms.json'),
+  ]);
+  const active = calls.find((c) => c.inmateId === id && c.status === 'active');
+  if (active) return sendError(res, 'CONFLICT', 'This prisoner has a call in progress', 409);
+
+  // Money and call history outlive the prisoner. Deleting the row makes the
+  // wallet cascade away and the foreign keys null the call/transaction links,
+  // so the archive pointer has to be written first or the trail disappears.
+  const stampHistory = (rows) => rows.map((r) => {
+    if (r.inmateId !== id) return r;
+    const stamped = { ...r, inmateId: null, archivedInmateId: r.inmateId };
+    if (r.walletId) { stamped.archivedWalletId = r.walletId; stamped.walletId = null; }
+    return stamped;
+  });
+  await updateDb('calls.json', (rows) => ({ data: stampHistory(rows), result: null }));
+  await updateDb('transactions.json', (rows) => ({ data: stampHistory(rows), result: null }));
+
+  // Bookings and rooms without a prisoner can never be used again.
+  await updateDb('schedule.json', (rows) => ({ data: rows.filter((s) => s.inmateId !== id), result: null }));
+  await updateDb('rooms.json', (rows) => ({ data: rows.filter((r) => r.inmateId !== id), result: null }));
+
   const deleted = await updateDb('inmates.json', (inmates) => {
     const idx = inmates.findIndex((i) => i.inmateId === id && inAdminScope(req, i));
     if (idx === -1) return { data: inmates, result: null };
@@ -310,3 +381,9 @@ router.put('/:inmateId', requireAuth, requireRole('admin', 'warden'), asyncRoute
 router.delete('/:inmateId', requireAuth, requireRole('admin', 'warden'), asyncRoute(inmateDeleteHandler));
 
 module.exports = router;
+// Shared with admin-routes.js so its duplicate prisoner endpoints run the very
+// same guarded logic instead of a stripped-down copy.
+module.exports.inmateCreateHandler = inmateCreateHandler;
+module.exports.inmateUpdateHandler = inmateUpdateHandler;
+module.exports.inmateDeleteHandler = inmateDeleteHandler;
+module.exports.validateInmateRefs = validateInmateRefs;

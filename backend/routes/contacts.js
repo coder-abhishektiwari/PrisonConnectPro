@@ -154,6 +154,9 @@ function createContactsRouter(broadcastEvent) {
     const newContact = {
       contactId: contactData.contactId || `CONT-${uuidv4().substring(0, 8).toUpperCase()}`,
       inmateId: prisonerId,
+      // The jail a contact belongs to is a fact of its prisoner, never a
+      // client-supplied value.
+      prisonId: inmate.prisonId || null,
       name: contactData.name,
       firstName: contactData.firstName || contactData.name?.split(' ')[0] || '',
       lastName: contactData.lastName || contactData.name?.split(' ').slice(1).join(' ') || '',
@@ -216,6 +219,12 @@ function createContactsRouter(broadcastEvent) {
       } else {
         delete merged.deviceFingerprints;
       }
+      // Pointers are relational facts: a client payload must not be able to
+      // detach a contact from its prisoner or point it at another jail (both
+      // are foreign keys). The jail is backfilled for rows that predate it.
+      merged.contactId = all[idx].contactId;
+      merged.inmateId = all[idx].inmateId;
+      merged.prisonId = all[idx].prisonId || owner.prisonId || null;
       all[idx] = merged;
       return { data: all, result: all[idx] };
     });

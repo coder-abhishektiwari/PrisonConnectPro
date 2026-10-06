@@ -18,9 +18,31 @@ function createRoomsRouter(broadcastEvent) {
     if (!(await inScopeOf(req, inmate))) {
       return sendError(res, 'FORBIDDEN', 'Cannot create a room for an inmate outside your kiosk/jail', 403);
     }
+
+    // Both pointers are foreign keys; validating here turns what would be a
+    // database error into a clear 422.
+    const kioskId = kioskScopeOf(req) || roomData.kioskId;
+    if (kioskId) {
+      const kiosks = await readDb('kiosks.json');
+      if (!kiosks.some((k) => k.kioskId === kioskId)) {
+        return sendError(res, 'INVALID_REFERENCE', 'kioskId does not exist', 422);
+      }
+    }
+    if (roomData.contactId) {
+      const contacts = await readDb('contacts.json');
+      const contact = contacts.find((c) => c.contactId === roomData.contactId);
+      if (!contact) return sendError(res, 'INVALID_REFERENCE', 'contactId does not exist', 422);
+      const owner = contact.inmateId || null;
+      const mine = inmate.inmateId;
+      const sameInmate = !owner || owner === mine || owner === `INM-${mine}` || `INM-${owner}` === mine;
+      if (!sameInmate) {
+        return sendError(res, 'INVALID_REFERENCE', 'contactId belongs to another prisoner', 422);
+      }
+    }
+
     const newRoom = {
       roomId: roomData.roomId || `ROOM-${uuidv4().substring(0, 8).toUpperCase()}`,
-      kioskId: kioskScopeOf(req) || roomData.kioskId,
+      kioskId,
       inmateId: roomData.inmateId, contactId: roomData.contactId,
       status: 'idle', participants: [], participantCount: 0,
       createdAt: new Date().toISOString(),

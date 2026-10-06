@@ -447,6 +447,16 @@ app.post('/wardens', requireAuth, requireRole('admin', 'warden', 'super-admin', 
     createdAt: now,
   };
   await updateDb('wardens.json', (rows) => ({ data: [...rows, newWarden], result: newWarden }));
+  // The jail keeps its own roster: without this the array written at
+  // registration stays frozen and effectiveJailId can never fall back to it.
+  await updateDb('prisons.json', (prisons) => {
+    const idx = prisons.findIndex((p) => p.prisonId === jailId);
+    if (idx === -1) return { data: prisons, result: null };
+    const roster = Array.isArray(prisons[idx].wardenIds) ? prisons[idx].wardenIds : [];
+    if (roster.includes(newWarden.wardenId)) return { data: prisons, result: prisons[idx] };
+    prisons[idx] = { ...prisons[idx], wardenIds: [...roster, newWarden.wardenId] };
+    return { data: prisons, result: prisons[idx] };
+  });
   return sendSuccess(res, withoutSecrets(newWarden), 201);
 }));
 
@@ -614,6 +624,12 @@ async function autoSeed() {
     return;
   }
   try {
+    // Migrations run on every boot: they are idempotent (tracked in
+    // schema_migrations) and a redeploy must never leave a table behind the
+    // code that reads it.
+    const { migrate } = require('./lib/migrate');
+    await migrate();
+
     const { Pool } = require('pg');
     const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 2, connectionTimeoutMillis: 5000 });
     const { rows } = await pool.query("SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'");
@@ -621,15 +637,13 @@ async function autoSeed() {
     await pool.end();
 
     if (tableCount === 0 || process.env.FORCE_SEED === 'true') {
-      console.log('[startup] database empty or FORCE_SEED set — running migrations + seed...');
-      const { migrate } = require('./lib/migrate');
-      await migrate();
+      console.log('[startup] database empty or FORCE_SEED set — running seed...');
       // seed.js is a standalone script — exec it in a child process
       const { execSync } = require('child_process');
       execSync('node lib/seed.js', { cwd: __dirname, stdio: 'inherit', env: { ...process.env, FORCE_SEED: 'true' } });
       console.log('[startup] auto-seed complete');
     } else {
-      console.log(`[startup] database has ${tableCount} tables — skipping seed`);
+      console.log(`[startup] database has ${tableCount} tables — schema up to date, seed skipped`);
     }
   } catch (err) {
     console.error('[startup] auto-seed failed (non-blocking):', err.message);
