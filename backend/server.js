@@ -39,6 +39,7 @@ const prisonsRouter = require('./routes/prisons');
 const transactionsRouter = require('./routes/transactions');
 const createSettingsRouter = require('./routes/settings');
 const { createCellsRouter, createBlocksRouter } = require('./routes/cells-blocks');
+const misRouter = require('./routes/mis');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -137,6 +138,7 @@ app.use('/settings', settingsRouter);
 app.use('/wallets', walletsRouter);
 app.use('/cells', createCellsRouter());
 app.use('/blocks', createBlocksRouter());
+app.use('/mis', misRouter);
 
 // Alias routes — dashboard expects these at root, not under /settings
 app.get('/pricing', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'vendor', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => sendSuccess(res, await readDb('pricing.json'))));

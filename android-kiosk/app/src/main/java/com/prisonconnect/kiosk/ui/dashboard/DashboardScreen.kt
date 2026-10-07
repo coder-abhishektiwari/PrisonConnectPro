@@ -501,11 +501,6 @@ fun WalletDetailCard(balance: InmateBalance?, onClick: () -> Unit) {
                 Text("BALANCE", style = MaterialTheme.typography.labelSmall, color = TextGray)
                 Text("₹${String.format("%.2f", balance?.credits ?: 0.0)}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = PrimaryNavy)
             }
-            VerticalDivider(modifier = Modifier.height(40.dp).padding(horizontal = 24.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text("TOTAL SPENT", style = MaterialTheme.typography.labelSmall, color = TextGray)
-                Text("₹${String.format("%.2f", balance?.totalSpent ?: 0.0)}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = PrimaryNavy)
-            }
             Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Open wallet", tint = PrimaryNavy)
         }
     }

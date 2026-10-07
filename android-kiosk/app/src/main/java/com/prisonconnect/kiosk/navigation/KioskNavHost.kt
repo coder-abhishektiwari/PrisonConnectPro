@@ -44,6 +44,7 @@ object KioskRoutes {
     const val ADMIN_PRISONER_CONTACTS = "admin_prisoner_contacts/{prisonerId}"
     const val ADMIN_PRISONER_BIOMETRICS = "admin_prisoner_biometrics/{prisonerId}/{prisonerName}"
     const val ADMIN_DEVICE_INFO = "admin_device_info"
+    const val ADMIN_MIS_REPORT = "admin_mis_report"
     const val WALLET = "wallet"
     const val SCHEDULE = "schedule/{contactId}/{contactName}/{callType}"
     const val VIDEO_CALL = "video_call/{contactName}/{roomId}"
@@ -179,6 +180,9 @@ fun KioskNavHost(
                 onDeviceInfoClick = {
                     navController.navigate(KioskRoutes.ADMIN_DEVICE_INFO)
                 },
+                onMisReportClick = {
+                    navController.navigate(KioskRoutes.ADMIN_MIS_REPORT)
+                },
                 onLogoutClick = {
                     navController.navigate(KioskRoutes.LOGIN) {
                         popUpTo(KioskRoutes.ADMIN_DASHBOARD) { inclusive = true }
@@ -238,6 +242,12 @@ fun KioskNavHost(
         }
         composable(KioskRoutes.ADMIN_DEVICE_INFO) {
             DeviceInfoScreen(
+                windowSizeClass = windowSizeClass,
+                onBackClick = { navController.popBackStack() }
+            )
+        }
+        composable(KioskRoutes.ADMIN_MIS_REPORT) {
+            com.prisonconnect.kiosk.ui.admin.MisReportScreen(
                 windowSizeClass = windowSizeClass,
                 onBackClick = { navController.popBackStack() }
             )

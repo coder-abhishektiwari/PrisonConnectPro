@@ -213,4 +213,20 @@ interface TrustApiService {
 
     @GET("admin/devices/{deviceId}")
     suspend fun getAdminDevice(@Path("deviceId") deviceId: String): ApiResponse<KioskDevice>
+
+    // ==================== REPORTS ====================
+
+    /**
+     * Calls MIS report for this kiosk session's device. The kiosk id comes from
+     * the access token, so a session can never read another device's numbers.
+     * [tzOffsetMinutes] is the device's UTC offset - the backend uses it to cut
+     * the local day boundaries for the requested from/to dates.
+     */
+    @GET("mis/calls")
+    suspend fun getCallsMisReport(
+        @Query("from") from: String,
+        @Query("to") to: String,
+        @Query("tzOffset") tzOffsetMinutes: Int,
+        @Query("kioskId") kioskId: String? = null
+    ): ApiResponse<com.prisonconnect.kiosk.models.report.CallsMisReport>
 }

@@ -767,7 +767,7 @@ export const wardenApi = {
 
   // End Call (force disconnect) — immediately moves from active → call logs (completed) + synthesizes recording
   endCall: (callId: string) =>
-    apiClient.post<ApiResponse<ActiveCall>>(`/calls/${callId}/end`).then((r) => {
+    apiClient.post<ApiResponse<ActiveCall>>(`/calls/${callId}/end`, { endReason: 'warden_ended' }).then((r) => {
       // Bust live + history + recordings + stats caches so next fetches are fresh, not 30s stale
       invalidatePrefix('calls:active', 'calls:all', 'calls:history', `calls:${callId}`, 'recordings', `recordings:${callId}`, 'statistics');
       return r.data?.data;

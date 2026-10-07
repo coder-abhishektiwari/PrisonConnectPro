@@ -70,6 +70,7 @@ function buildEndReasonDescription(status, reason, call, neverConnected, extra) 
   }
 
   // Connected calls
+  if (reason === 'warden_ended') return 'Call force ended by warden';
   if (reason === 'timeout') return 'Call ended — maximum duration reached';
   if (reason === 'sweep') return 'Call ended — session timed out (kiosk may have disconnected)';
   if (reason === 'completed') return 'Call completed successfully';

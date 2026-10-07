@@ -32,6 +32,7 @@ fun AdminDashboardScreen(
     onAddPrisonerClick: () -> Unit,
     onManagePrisonersClick: () -> Unit,
     onDeviceInfoClick: () -> Unit,
+    onMisReportClick: () -> Unit,
     onLogoutClick: () -> Unit,
     viewModel: AdminDashboardViewModel = hiltViewModel()
 ) {
@@ -42,6 +43,7 @@ fun AdminDashboardScreen(
         onAddPrisonerClick = onAddPrisonerClick,
         onManagePrisonersClick = onManagePrisonersClick,
         onDeviceInfoClick = onDeviceInfoClick,
+        onMisReportClick = onMisReportClick,
         onLogoutClick = onLogoutClick
     )
 }
@@ -52,6 +54,7 @@ fun AdminDashboardContent(
     onAddPrisonerClick: () -> Unit,
     onManagePrisonersClick: () -> Unit,
     onDeviceInfoClick: () -> Unit,
+    onMisReportClick: () -> Unit,
     onLogoutClick: () -> Unit
 ) {
     Scaffold(
@@ -160,6 +163,17 @@ fun AdminDashboardContent(
                     icon = Icons.Default.List,
                     iconColor = Color(0xFF2196F3),
                     onClick = onManagePrisonersClick
+                )
+            }
+
+            // MIS Report Card
+            item {
+                AdminActionCard(
+                    title = "MIS Report",
+                    description = "Print the kiosk's calls report for any period",
+                    icon = Icons.Default.Assessment,
+                    iconColor = Color(0xFF9C27B0),
+                    onClick = onMisReportClick
                 )
             }
 
@@ -273,6 +287,7 @@ fun PreviewAdminDashboardMobile() {
             onAddPrisonerClick = {},
             onManagePrisonersClick = {},
             onDeviceInfoClick = {},
+            onMisReportClick = {},
             onLogoutClick = {}
         )
     }
