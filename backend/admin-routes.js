@@ -89,7 +89,6 @@ router.post('/prisoners', requireRole(...ALL_ROLES), async (req, res) => {
     status: inmateData.status || 'active',
     dateOfAdmission: inmateData.dateOfAdmission || new Date().toISOString().slice(0, 10),
     biometricData: inmateData.biometricData || {
-      faceRegistered: false, faceEmbedding: null,
       fingerprintRegistered: false, rfidRegistered: false, lastBiometricUpdate: null
     },
     createdAt: new Date().toISOString()
@@ -339,7 +338,6 @@ router.get('/prisoners/:prisonerId/biometrics', requireRole(...ALL_ROLES), async
   const biometricData = inmate.biometricData || {};
   const biometricsList = inmate.biometrics || [];
   const result = biometricsList.length > 0 ? biometricsList : [
-    biometricData.faceRegistered ? { biometricId: `BIO-${prisonerId}-FACE`, prisonerId, type: 'face', status: 'registered', registeredAt: biometricData.lastBiometricUpdate } : null,
     biometricData.fingerprintRegistered ? { biometricId: `BIO-${prisonerId}-FGP`, prisonerId, type: 'fingerprint', status: 'registered', registeredAt: biometricData.lastBiometricUpdate } : null,
     biometricData.rfidRegistered ? { biometricId: `BIO-${prisonerId}-RFID`, prisonerId, type: 'rfid', status: 'registered', registeredAt: biometricData.lastBiometricUpdate } : null,
   ].filter(Boolean);
@@ -348,10 +346,10 @@ router.get('/prisoners/:prisonerId/biometrics', requireRole(...ALL_ROLES), async
 
 router.post('/prisoners/:prisonerId/biometrics', requireRole(...ALL_ROLES), async (req, res) => {
   const { prisonerId } = req.params;
-  const { type, image, capture, rfidToken } = req.body;
+  const { type, capture, rfidToken } = req.body;
 
-  if (!['face', 'fingerprint', 'rfid'].includes(type)) {
-    return res.status(400).json({ success: false, error: { code: 'INVALID_TYPE', message: 'type must be face, fingerprint, or rfid' } });
+  if (!['fingerprint', 'rfid'].includes(type)) {
+    return res.status(400).json({ success: false, error: { code: 'INVALID_TYPE', message: 'type must be fingerprint or rfid' } });
   }
 
   const inmates = await readDb('inmates.json');
@@ -361,40 +359,7 @@ router.post('/prisoners/:prisonerId/biometrics', requireRole(...ALL_ROLES), asyn
   let updateFields = {};
   let biometricRecord = null;
 
-  if (type === 'face') {
-    if (!image) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'image (base64) is required for face registration' } });
-
-    let imageBase64 = image;
-    if (imageBase64.startsWith('data:image')) imageBase64 = imageBase64.split(',')[1];
-    const imageBuffer = Buffer.from(imageBase64, 'base64');
-
-    try {
-      const { detectAndEmbed, isLive } = require('./lib/faceRecognition');
-      const probeResult = await detectAndEmbed(imageBuffer);
-
-      const livenessThreshold = parseFloat(process.env.FACE_LIVENESS_THRESHOLD || '0.5');
-      if (!isLive(probeResult.liveness, probeResult.antispoof, livenessThreshold)) {
-        return res.status(403).json({ success: false, error: { code: 'LIVENESS_FAILED', message: 'Liveness check failed' } });
-      }
-
-      updateFields = {
-        biometricData: {
-          ...inmates[inmateIdx].biometricData,
-          faceRegistered: true,
-          faceEmbedding: probeResult.embedding,
-          faceLiveness: probeResult.liveness,
-          faceAntispoof: probeResult.antispoof,
-          lastBiometricUpdate: new Date().toISOString()
-        }
-      };
-      biometricRecord = { biometricId: `BIO-${prisonerId}-FACE`, prisonerId, type: 'face', status: 'registered', registeredAt: new Date().toISOString() };
-    } catch (err) {
-      if (err.message === 'NO_FACE_DETECTED') return res.status(400).json({ success: false, error: { code: 'NO_FACE', message: 'No face detected' } });
-      if (err.message === 'MULTIPLE_FACES_DETECTED') return res.status(400).json({ success: false, error: { code: 'MULTIPLE_FACES', message: 'Multiple faces detected' } });
-      console.error('[biometric-register] error:', err.message);
-      return res.status(500).json({ success: false, error: { code: 'FACE_REG_ERROR', message: 'Face registration failed' } });
-    }
-  } else if (type === 'fingerprint') {
+  if (type === 'fingerprint') {
     if (!capture) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'capture is required for fingerprint' } });
     updateFields = {
       biometricData: { ...inmates[inmateIdx].biometricData, fingerprintRegistered: true, fingerprintTemplate: capture, lastBiometricUpdate: new Date().toISOString() }
@@ -425,9 +390,8 @@ router.post('/prisoners/:prisonerId/biometrics', requireRole(...ALL_ROLES), asyn
 // Type suffixes actually used by the ID convention BIO-<prisonerId>-<SUFFIX>.
 // Fingerprint's suffix is FGP (not the word "fingerprint"), so an ID parse
 // alone used to reject the only biometric people delete most often.
-const BIOMETRIC_TYPES = ['face', 'fingerprint', 'rfid'];
+const BIOMETRIC_TYPES = ['fingerprint', 'rfid'];
 const TYPE_FROM_SUFFIX = {
-  face: 'face',
   fingerprint: 'fingerprint',
   fgp: 'fingerprint',
   finger: 'fingerprint',
@@ -464,8 +428,7 @@ router.delete('/biometrics/:biometricId', requireRole(...ALL_ROLES), async (req,
     const idx = inmates.findIndex((i) => i.inmateId === prisonerId && inAdminScope(req, i));
     if (idx === -1) return { data: inmates, result: null };
     const biometricData = { ...(inmates[idx].biometricData || {}) };
-    if (type === 'face') { biometricData.faceRegistered = false; biometricData.faceEmbedding = null; }
-    else if (type === 'fingerprint') { biometricData.fingerprintRegistered = false; biometricData.fingerprintTemplate = null; }
+    if (type === 'fingerprint') { biometricData.fingerprintRegistered = false; biometricData.fingerprintTemplate = null; }
     else if (type === 'rfid') { biometricData.rfidRegistered = false; biometricData.rfidToken = null; }
     biometricData.lastBiometricUpdate = new Date().toISOString();
     // Drop by id AND by type: one record per type is allowed, so a stale or

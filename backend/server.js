@@ -941,25 +941,7 @@ async function autoSeed() {
   }
 }
 
-console.warn('[startup] attempting to load face recognition models (non-blocking)...');
-
-try {
-  const faceRecognition = require('./lib/faceRecognition');
-  autoSeed().then(() => faceRecognition.loadModels())
-    .then(() => {
-      console.log('[startup] face recognition models loaded successfully');
-      startServer();
-    })
-    .catch((err) => {
-      console.warn('[startup] face recognition models failed to load (non-blocking):', err.message);
-      console.warn('[startup] server will continue without face recognition capabilities');
-      startServer();
-    });
-} catch (err) {
-  console.warn('[startup] face recognition module not available (non-blocking):', err.message);
-  console.warn('[startup] server will continue without face recognition capabilities');
-  autoSeed().then(() => startServer());
-}
+autoSeed().then(() => startServer());
 
 function startServer() {
   server.listen(PORT, () => {

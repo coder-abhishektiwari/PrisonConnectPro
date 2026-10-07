@@ -20,7 +20,6 @@
     "requireDeviceVerification": true,
     "enableRfid": true,
     "enableBiometric": true,
-    "enableFaceRecognition": true,
     "allowedBrowsers": ["Chrome", "Firefox", "Safari", "Edge"],
     "blockScreenshots": true,
     "forceHttps": true

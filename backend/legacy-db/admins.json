@@ -18,7 +18,6 @@
     "kioskId": "KIOSK-001",
     "prisonId": "PRISON-001",
     "biometricData": {
-      "faceRegistered": true,
       "fingerprintRegistered": false,
       "rfidRegistered": true,
       "lastBiometricUpdate": "2026-01-01T00:00:00Z"
@@ -44,7 +43,6 @@
     "kioskId": "KIOSK-002",
     "prisonId": "PRISON-001",
     "biometricData": {
-      "faceRegistered": true,
       "fingerprintRegistered": true,
       "rfidRegistered": false,
       "lastBiometricUpdate": "2026-01-01T00:00:00Z"
@@ -70,7 +68,6 @@
     "kioskId": "KIOSK-003",
     "prisonId": "PRISON-001",
     "biometricData": {
-      "faceRegistered": false,
       "fingerprintRegistered": true,
       "rfidRegistered": true,
       "lastBiometricUpdate": "2026-01-01T00:00:00Z"

@@ -41,7 +41,6 @@ data class Prisoner(
 }
 
 data class BiometricData(
-    @SerializedName("faceRegistered") val faceRegistered: Boolean = false,
     @SerializedName("fingerprintRegistered") val fingerprintRegistered: Boolean = false,
     @SerializedName("rfidRegistered") val rfidRegistered: Boolean = false,
     @SerializedName("lastBiometricUpdate") val lastBiometricUpdate: String? = null
@@ -86,7 +85,7 @@ data class VerifiedContact(
 data class BiometricRegistration(
     @SerializedName("biometricId") val biometricId: String,
     @SerializedName("inmateId") val inmateId: String,
-    @SerializedName("type") val type: String, // 'face' | 'fingerprint' | 'rfid'
+    @SerializedName("type") val type: String, // 'fingerprint' | 'rfid'
     @SerializedName("status") val status: String, // 'registered' | 'pending' | 'failed'
     @SerializedName("registeredAt") val registeredAt: String? = null,
     @SerializedName("lastVerifiedAt") val lastVerifiedAt: String? = null,
@@ -167,7 +166,6 @@ data class CreatePrisonerRequest(
     @SerializedName("sentenceDetails") val sentenceDetails: String? = null,
     @SerializedName("pin") val pin: String? = null,
     @SerializedName("assignedDeviceId") val assignedDeviceId: String? = null,
-    @SerializedName("faceTemplate") val faceTemplate: String? = null,
     @SerializedName("fingerprintTemplate") val fingerprintTemplate: String? = null,
     @SerializedName("rfidTag") val rfidTag: String? = null
 )
@@ -224,7 +222,6 @@ data class UpdateContactStatusRequest(
 
 data class RegisterBiometricRequest(
     @SerializedName("type") val type: String,
-    @SerializedName("image") val image: String? = null,
     @SerializedName("capture") val capture: String? = null,
     @SerializedName("rfidToken") val rfidToken: String? = null,
     @SerializedName("status") val status: String? = "registered",

@@ -47,12 +47,12 @@ fun AddPrisonerScreen(
         windowWidthSizeClass = windowSizeClass.widthSizeClass,
         onBackClick = onBackClick,
         onComplete = onComplete,
-        onRegister = { firstName, lastName, mobileNumber, dateOfBirth, gender, prisonerNumber, cellBlock, cellNumber, securityLevel, sentenceStart, sentenceEnd, sentenceDetails, pin, face, finger, rfid ->
+        onRegister = { firstName, lastName, mobileNumber, dateOfBirth, gender, prisonerNumber, cellBlock, cellNumber, securityLevel, sentenceStart, sentenceEnd, sentenceDetails, pin, finger, rfid ->
             viewModel.registerPrisoner(
                 firstName, lastName, mobileNumber, dateOfBirth, gender,
                 prisonerNumber, cellBlock, cellNumber, securityLevel,
                 sentenceStart, sentenceEnd, sentenceDetails, pin,
-                face, finger, rfid
+                finger, rfid
             )
         },
         registrationState = registrationState
@@ -64,7 +64,7 @@ fun AddPrisonerContent(
     windowWidthSizeClass: WindowWidthSizeClass,
     onBackClick: () -> Unit,
     onComplete: () -> Unit,
-    onRegister: (String, String, String, String, String, String, String, String, String, String, String, String, String, String?, String?, String?) -> Unit,
+    onRegister: (String, String, String, String, String, String, String, String, String, String, String, String, String, String?, String?) -> Unit,
     registrationState: AddPrisonerViewModel.RegistrationState = AddPrisonerViewModel.RegistrationState.Idle
 ) {
     var currentStep by remember { mutableStateOf(PrisonerRegistrationStep.PERSONAL_INFO) }
@@ -85,7 +85,6 @@ fun AddPrisonerContent(
     var sentenceDetails by remember { mutableStateOf("") }
     var pin by remember { mutableStateOf("") }
     var confirmPin by remember { mutableStateOf("") }
-    var faceTemplate by remember { mutableStateOf("") }
     var fingerprintTemplate by remember { mutableStateOf("") }
     var rfidTag by remember { mutableStateOf("") }
 
@@ -194,12 +193,10 @@ fun AddPrisonerContent(
                         BiometricDataStep(
                             pin = pin,
                             confirmPin = confirmPin,
-                            faceTemplate = faceTemplate,
                             fingerprintTemplate = fingerprintTemplate,
                             rfidTag = rfidTag,
                             onPinChange = { pin = it },
                             onConfirmPinChange = { confirmPin = it },
-                            onFaceTemplateChange = { faceTemplate = it },
                             onFingerprintTemplateChange = { fingerprintTemplate = it },
                             onRfidTagChange = { rfidTag = it }
                         )
@@ -272,7 +269,7 @@ fun AddPrisonerContent(
                                         firstName, lastName, mobileNumber, dateOfBirth, gender,
                                         prisonerNumber, cellBlock, cellNumber, securityLevel,
                                         sentenceStart, sentenceEnd, sentenceDetails, pin,
-                                        faceTemplate, fingerprintTemplate, rfidTag
+                                        fingerprintTemplate, rfidTag
                                     )
                                 } else {
                                     currentStep = PrisonerRegistrationStep.values()[currentStep.ordinal + 1]
@@ -659,12 +656,10 @@ fun SecurityLevelOption(
 private fun BiometricDataStep(
     pin: String,
     confirmPin: String,
-    faceTemplate: String,
     fingerprintTemplate: String,
     rfidTag: String,
     onPinChange: (String) -> Unit,
     onConfirmPinChange: (String) -> Unit,
-    onFaceTemplateChange: (String) -> Unit,
     onFingerprintTemplateChange: (String) -> Unit,
     onRfidTagChange: (String) -> Unit
 ) {
@@ -750,15 +745,6 @@ private fun BiometricDataStep(
             )
 
             OutlinedTextField(
-                value = faceTemplate,
-                onValueChange = onFaceTemplateChange,
-                label = { Text("Face Template / ID") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                leadingIcon = { Icon(Icons.Default.Face, contentDescription = null) }
-            )
-
-            OutlinedTextField(
                 value = fingerprintTemplate,
                 onValueChange = onFingerprintTemplateChange,
                 label = { Text("Fingerprint Template") },
@@ -802,7 +788,7 @@ private fun BiometricDataStep(
                             color = Color(0xFF003366)
                         )
                         Text(
-                            text = "Face, Fingerprint, and RFID data can be entered if available. These are not required.",
+                            text = "Fingerprint and RFID data can be entered if available. These are not required.",
                             fontSize = 12.sp,
                             color = Color(0xFF003366)
                         )
@@ -852,7 +838,7 @@ private fun CompleteStep() {
             )
 
             Text(
-                text = "The prisoner has been successfully registered. Biometric data (fingerprint, face, RFID) will be collected next.",
+                text = "The prisoner has been successfully registered. Biometric data (fingerprint, RFID) will be collected next.",
                 fontSize = 14.sp,
                 color = Color(0xFF687A8F),
                 textAlign = TextAlign.Center
@@ -871,7 +857,7 @@ fun PreviewAddPrisonerMobile() {
             windowWidthSizeClass = WindowWidthSizeClass.Compact,
             onBackClick = {},
             onComplete = {},
-            onRegister = { _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> },
+            onRegister = { _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> },
             registrationState = AddPrisonerViewModel.RegistrationState.Idle
         )
     }

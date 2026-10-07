@@ -175,7 +175,6 @@ async function inmateCreateHandler(req, res) {
         status: inmateData.status || 'active',
         pin: inmateData.pin ? await hashSecret(String(inmateData.pin)) : await hashSecret(uuidv4().substring(0, 8)),
         biometricData: inmateData.biometricData || {
-          faceRegistered: false, faceEmbedding: null,
           fingerprintRegistered: false, rfidRegistered: false, lastBiometricUpdate: null
         },
         createdAt: new Date().toISOString()

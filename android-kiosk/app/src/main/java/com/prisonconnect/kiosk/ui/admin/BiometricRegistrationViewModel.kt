@@ -36,18 +36,6 @@ class BiometricRegistrationViewModel @Inject constructor(
         }
     }
 
-    fun registerFace(prisonerId: String, imageBase64: String) {
-        _registerState.value = NetworkResult.Loading
-        viewModelScope.launch {
-            val result = adminRepository.registerBiometric(
-                prisonerId,
-                RegisterBiometricRequest(type = "face", image = imageBase64)
-            )
-            _registerState.value = result
-            if (result is NetworkResult.Success) loadBiometrics(prisonerId)
-        }
-    }
-
     fun registerFingerprint(prisonerId: String, template: String) {
         _registerState.value = NetworkResult.Loading
         viewModelScope.launch {

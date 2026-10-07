@@ -679,7 +679,6 @@ export function InmateDetailPage() {
               ) : (
                 <div className="space-y-2">
                   {([
-                    { type: 'face', label: 'Face', icon: 'face' },
                     { type: 'fingerprint', label: 'Fingerprint', icon: 'fingerprint' },
                     { type: 'rfid', label: 'RFID', icon: 'credit_card' },
                   ]).map(({ type, label, icon }) => {

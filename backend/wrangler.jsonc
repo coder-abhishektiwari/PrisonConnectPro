@@ -1,7 +1,7 @@
 {
   // Cloudflare Workers configuration for PrisonConnect backend
-  // WARNING: This backend uses Express, Socket.IO, pg (PostgreSQL TCP), filesystem ops,
-  //          and TensorFlow.js WASM -- all of which are NOT COMPATIBLE with Workers.
+  // WARNING: This backend uses Express, Socket.IO, pg (PostgreSQL TCP) and filesystem ops,
+  //          which are NOT COMPATIBLE with Workers.
   //          This config is provided as a starting point for migration work.
   //
   // Entry point: backend/server.js (the Express app entry point)
@@ -25,7 +25,6 @@
     "ROOM_MAX_PARTICIPANTS": "2",
     "ACCESS_TOKEN_TTL": "1h",
     "REFRESH_TOKEN_TTL": "7d",
-    "FACE_LIVENESS_THRESHOLD": "0.5",
     "SIGNALING_URL": "http://127.0.0.1:3002",
     "SMS_PROVIDER": "log",
     "SMS_OTP_DOMAIN": "127.0.0.1",
@@ -56,15 +55,6 @@
   //   "REFRESH_TOKEN_TTL_DAYS": "",
   //   "SIGNALING_PUBLIC_URL": ""
   // },
-
-  // Static assets served by the Worker (wasm/ and human-models/ for face recognition)
-  // NOTE: Workers have no filesystem; these must be bundled or uploaded to R2
-  // "r2_buckets": [
-  //   {
-  //     "binding": "MODELS_BUCKET",
-  //     "bucket_name": "prisonconnect-models"
-  //   }
-  // ],
 
   // Durable Objects for stateful features (replaces in-memory Map/mutex/cache)
   // "durable_objects": {

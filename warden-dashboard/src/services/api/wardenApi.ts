@@ -445,7 +445,6 @@ export interface CallControlEvent {
 }
 
 export interface SecurityStatus {
-  faceVerification: string;
   rfidVerification: string;
   otpVerification: string;
   browserVerification: string;

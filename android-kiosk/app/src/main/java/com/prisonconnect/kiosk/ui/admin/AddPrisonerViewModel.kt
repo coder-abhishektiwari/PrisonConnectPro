@@ -34,7 +34,6 @@ class AddPrisonerViewModel @Inject constructor(
         sentenceEnd: String,
         sentenceDetails: String,
         pin: String,
-        faceTemplate: String? = null,
         fingerprintTemplate: String? = null,
         rfidTag: String? = null
     ) {
@@ -63,7 +62,6 @@ class AddPrisonerViewModel @Inject constructor(
             sentenceEnd = sentenceEnd.ifBlank { null },
             sentenceDetails = sentenceDetails.ifBlank { null },
             pin = pin.ifBlank { null },
-            faceTemplate = faceTemplate?.ifBlank { null },
             fingerprintTemplate = fingerprintTemplate?.ifBlank { null },
             rfidTag = rfidTag?.ifBlank { null }
         )

@@ -1,8 +1,5 @@
 package com.prisonconnect.kiosk.ui.admin
 
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.util.Base64
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -38,7 +35,6 @@ fun BiometricRegistrationScreen(
     val biometricsResult by viewModel.biometrics.collectAsState()
     val registerResult by viewModel.registerState.collectAsState()
     val deleteResult by viewModel.deleteState.collectAsState()
-    var showFaceDialog by remember { mutableStateOf(false) }
     var showFingerprintDialog by remember { mutableStateOf(false) }
     var showRfidDialog by remember { mutableStateOf(false) }
     var snackbarMessage by remember { mutableStateOf<String?>(null) }
@@ -108,19 +104,6 @@ fun BiometricRegistrationScreen(
                 }
             }
 
-            // Face Registration
-            BiometricCard(
-                title = "Face Recognition",
-                icon = Icons.Default.Face,
-                isRegistered = biometricsResult is NetworkResult.Success &&
-                        (biometricsResult as NetworkResult.Success).data.any { it.type == "face" && it.status == "registered" },
-                onRegister = { showFaceDialog = true },
-                onDelete = {
-                    val bio = (biometricsResult as? NetworkResult.Success)?.data?.find { it.type == "face" }
-                    if (bio != null) viewModel.deleteBiometric(bio.biometricId, prisonerId)
-                }
-            )
-
             // Fingerprint Registration
             BiometricCard(
                 title = "Fingerprint",
@@ -167,7 +150,6 @@ fun BiometricRegistrationScreen(
                                 ) {
                                     Icon(
                                         when (bio.type) {
-                                            "face" -> Icons.Default.Face
                                             "fingerprint" -> Icons.Default.Fingerprint
                                             else -> Icons.Default.CreditCard
                                         },
@@ -206,15 +188,6 @@ fun BiometricRegistrationScreen(
     }
 
     // Dialogs
-    if (showFaceDialog) {
-        FaceRegistrationDialog(
-            onDismiss = { showFaceDialog = false },
-            onCapture = { base64 ->
-                viewModel.registerFace(prisonerId, base64)
-                showFaceDialog = false
-            }
-        )
-    }
     if (showFingerprintDialog) {
         ManualBiometricDialog(
             title = "Fingerprint",
@@ -282,51 +255,6 @@ fun BiometricCard(
             }
         }
     }
-}
-
-@Composable
-fun FaceRegistrationDialog(
-    onDismiss: () -> Unit,
-    onCapture: (String) -> Unit
-) {
-    var imageBase64 by remember { mutableStateOf("") }
-    var previewBitmap by remember { mutableStateOf<Bitmap?>(null) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Register Face") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    "Paste a base64-encoded face image or enter the face template ID.",
-                    fontSize = 14.sp,
-                    color = Color(0xFF687A8F)
-                )
-                OutlinedTextField(
-                    value = imageBase64,
-                    onValueChange = {
-                        imageBase64 = it
-                        try {
-                            val bytes = Base64.decode(it, Base64.DEFAULT)
-                            previewBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                        } catch (_: Exception) { previewBitmap = null }
-                    },
-                    label = { Text("Face image (base64) or template ID") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 3
-                )
-                if (previewBitmap != null) {
-                    Text("Image preview available", fontSize = 12.sp, color = Color(0xFF2E7D32))
-                }
-            }
-        },
-        confirmButton = {
-            Button(onClick = { if (imageBase64.isNotBlank()) onCapture(imageBase64.trim()) }) {
-                Text("Register")
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
 }
 
 @Composable

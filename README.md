@@ -9,7 +9,7 @@ PrisonConnect provides a multi-tenant, secure ecosystem consisting of:
 - **`android-kiosk/`**: Native Android Application (Kotlin) running on hardware kiosks for inmate multi-modal authentication (RFID, Fingerprint, Prisoner ID), call scheduling, balance checks, WebRTC audio/video streams, live billing, and receipt printing.
 - **`family-web/`**: Browser-based React + TypeScript web client requiring zero application download for verified family members joining scheduled encrypted calls.
 - **`warden-dashboard/`**: React + TypeScript administration portal for silent live call monitoring, call control (mute/disconnect), inmate profile management, prisoner trust account management, recording center, kiosk health monitoring, and SaaS multi-jail management.
-- **`backend/`**: Node.js/Express API + Socket.IO gateway. PostgreSQL persistence (migrations in `db-schema/`, self-seeding from `legacy-db/`), wallet/billing ledger, call records, SMS/OTP dispatch, and prisoner face biometric registration.
+- **`backend/`**: Node.js/Express API + Socket.IO gateway. PostgreSQL persistence (migrations in `db-schema/`, self-seeding from `legacy-db/`), wallet/billing ledger, call records, and SMS/OTP dispatch.
 - **`signaling-server/`**: Node.js Socket.IO hub that relays WebRTC offer/answer/ICE between the kiosk and the family browser. Pure P2P — no media passes through it.
 - **`docs/`**: Complete architectural diagrams, infrastructure design, security policies, and technical specifications.
 

@@ -24,7 +24,7 @@ The Jail Warden Dashboard has been transformed into a production-grade **Monitor
     - Packet Loss, Latency, Bitrate, Jitter, Audio Level, FPS, Network Health.
 - **Information Panels**: Detailed Prisoner Info, Family Info, Wallet Balance, and Call Charges.
 - **Recording Panel**: Tracking of Recording ID, Duration, Encryption, and Retention Policy.
-- **Security Panel**: Multi-factor verification status (Face, RFID, OTP, Browser) and device fingerprinting (IP, Location, VPN, Developer Mode).
+- **Security Panel**: Multi-factor verification status (RFID, OTP, Browser) and device fingerprinting (IP, Location, VPN, Developer Mode).
 
 ### 3. Incident Reporting
 - **In-Session Reporting**: Warden can generate incidents directly from the monitor screen.
