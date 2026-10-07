@@ -1,6 +1,5 @@
 package com.prisonconnect.kiosk.ui.admin
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -14,34 +13,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.prisonconnect.kiosk.models.admin.EditPrisonerRequest
 import com.prisonconnect.kiosk.models.admin.Prisoner
 import com.prisonconnect.kiosk.network.NetworkResult
-import com.prisonconnect.kiosk.ui.components.KioskDateField
 import com.prisonconnect.kiosk.ui.components.KioskLoadingState
 import com.prisonconnect.kiosk.ui.components.KioskTopBar
-import java.text.SimpleDateFormat
-import java.util.Locale
-
-private const val DATE_PATTERN = "yyyy-MM-dd"
-
-private fun isAfterIso(start: String, end: String): Boolean {
-    val s = start.trim()
-    val e = end.trim()
-    if (s.isEmpty() || e.isEmpty()) return false
-    return try {
-        val sdf = SimpleDateFormat(DATE_PATTERN, Locale.US).apply { isLenient = false }
-        val sd = sdf.parse(s) ?: return false
-        val ed = sdf.parse(e) ?: return false
-        sd.after(ed)
-    } catch (_: Exception) {
-        false
-    }
-}
 
 @Composable
 fun EditPrisonerScreen(
@@ -113,22 +92,8 @@ fun EditPrisonerForm(
     onResetPinDismissed: () -> Unit,
     resetPinResult: NetworkResult<String>
 ) {
-    var fullName by remember(prisoner.inmateId) { mutableStateOf(prisoner.displayName) }
-    var mobileNumber by remember(prisoner.inmateId) { mutableStateOf(prisoner.mobileNumber ?: "") }
-    var prisonerNumber by remember(prisoner.inmateId) { mutableStateOf(prisoner.prisonerNumber ?: "") }
-    var dateOfBirth by remember(prisoner.inmateId) { mutableStateOf(prisoner.dateOfBirth ?: "") }
-    var dateOfAdmission by remember(prisoner.inmateId) { mutableStateOf(prisoner.dateOfAdmission ?: "") }
-    var gender by remember(prisoner.inmateId) { mutableStateOf(prisoner.gender ?: "") }
-    var cellBlock by remember(prisoner.inmateId) { mutableStateOf(prisoner.cellBlock ?: "") }
-    var cellId by remember(prisoner.inmateId) { mutableStateOf(prisoner.cellId ?: "") }
-    var blockId by remember(prisoner.inmateId) { mutableStateOf(prisoner.blockId ?: "") }
-    var securityLevel by remember(prisoner.inmateId) { mutableStateOf(prisoner.securityLevel ?: "medium") }
-    var sentenceStart by remember(prisoner.inmateId) { mutableStateOf(prisoner.sentenceStart ?: "") }
-    var sentenceEnd by remember(prisoner.inmateId) { mutableStateOf(prisoner.sentenceEnd ?: "") }
-    var sentenceDetails by remember(prisoner.inmateId) { mutableStateOf(prisoner.sentenceDetails ?: "") }
-    var assignedKioskId by remember(prisoner.inmateId) { mutableStateOf(prisoner.assignedKioskId ?: "") }
+    val formState = remember(prisoner.inmateId) { PrisonerFormState(prisoner) }
     var status by remember(prisoner.inmateId) { mutableStateOf(prisoner.status) }
-    var active by remember(prisoner.inmateId) { mutableStateOf(prisoner.active) }
     var showSaveDialog by remember { mutableStateOf(false) }
     var saveError by remember { mutableStateOf("") }
     var showResetPinDialog by remember { mutableStateOf(false) }
@@ -148,32 +113,36 @@ fun EditPrisonerForm(
     }
 
     val submit: () -> Unit = {
-        if (fullName.isBlank()) {
-            saveError = "Full name is required"
-        } else if (isAfterIso(sentenceStart, sentenceEnd)) {
-            saveError = "Sentence end must be after sentence start"
-        } else {
-            saveError = ""
-            onUpdate(
-                EditPrisonerRequest(
-                    name = fullName.trim(),
-                    mobileNumber = mobileNumber.ifBlank { null },
-                    prisonerNumber = prisonerNumber.ifBlank { null },
-                    dateOfBirth = dateOfBirth.ifBlank { null },
-                    dateOfAdmission = dateOfAdmission.ifBlank { null },
-                    gender = gender.ifBlank { null },
-                    cellBlock = cellBlock.ifBlank { null },
-                    cellId = cellId.ifBlank { null },
-                    blockId = blockId.ifBlank { null },
-                    securityLevel = securityLevel.ifBlank { null },
-                    sentenceStart = sentenceStart.ifBlank { null },
-                    sentenceEnd = sentenceEnd.ifBlank { null },
-                    sentenceDetails = sentenceDetails.ifBlank { null },
-                    assignedKioskId = assignedKioskId.ifBlank { null },
-                    status = status,
-                    active = active
+        val values = formState.toValues()
+        val ageNum = values.age?.toIntOrNull()
+        saveError = when {
+            values.name.isEmpty() -> "Full name is required"
+            values.age != null && ageNum == null -> "Age must be a number"
+            ageNum != null && (ageNum < 1 || ageNum > 120) -> "Age must be between 1 and 120"
+            else -> {
+                onUpdate(
+                    EditPrisonerRequest(
+                        name = values.name,
+                        prisonerNumber = values.prisonerNumber.ifBlank { null },
+                        gender = values.gender,
+                        age = ageNum,
+                        dateOfAdmission = values.dateOfAdmission,
+                        fatherName = values.fatherName,
+                        motherName = values.motherName,
+                        idProof = values.idProof,
+                        idNumber = values.idNumber,
+                        religion = values.religion,
+                        nationality = values.nationality,
+                        state = values.state,
+                        district = values.district,
+                        address = values.address,
+                        assignedKioskId = formState.assignedKioskId.trim().ifBlank { null },
+                        status = status,
+                        active = formState.active
+                    )
                 )
-            )
+                ""
+            }
         }
     }
 
@@ -304,172 +273,7 @@ fun EditPrisonerForm(
             }
         }
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            elevation = CardDefaults.cardElevation(2.dp)
-        ) {
-            Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text("Prisoner Information", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-
-                OutlinedTextField(
-                    value = fullName,
-                    onValueChange = { fullName = it; saveError = "" },
-                    label = { Text("Full Name *") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-
-                OutlinedTextField(
-                    value = prisonerNumber,
-                    onValueChange = { prisonerNumber = it },
-                    label = { Text("Prisoner Number") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-
-                OutlinedTextField(
-                    value = mobileNumber,
-                    onValueChange = { if (it.length <= 15 && it.all(Char::isDigit)) mobileNumber = it },
-                    label = { Text("Mobile Number") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Phone
-                    )
-                )
-
-                KioskDateField(
-                    value = dateOfBirth,
-                    onValueChange = { dateOfBirth = it },
-                    label = "Date of Birth"
-                )
-
-                Text("Gender", fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SelectPill(
-                        label = "Male",
-                        selected = gender == "male",
-                        onClick = { gender = "male" },
-                        modifier = Modifier.weight(1f),
-                        color = Color(0xFF003366)
-                    )
-                    SelectPill(
-                        label = "Female",
-                        selected = gender == "female",
-                        onClick = { gender = "female" },
-                        modifier = Modifier.weight(1f),
-                        color = Color(0xFFC2185B)
-                    )
-                    SelectPill(
-                        label = "Other",
-                        selected = gender == "other",
-                        onClick = { gender = "other" },
-                        modifier = Modifier.weight(1f),
-                        color = Color(0xFF7B1FA2)
-                    )
-                }
-
-                KioskDateField(
-                    value = dateOfAdmission,
-                    onValueChange = { dateOfAdmission = it },
-                    label = "Date of Admission"
-                )
-
-                OutlinedTextField(
-                    value = cellBlock,
-                    onValueChange = { cellBlock = it },
-                    label = { Text("Cell Block") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    OutlinedTextField(
-                        value = cellId,
-                        onValueChange = { cellId = it },
-                        label = { Text("Cell ID") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true
-                    )
-                    OutlinedTextField(
-                        value = blockId,
-                        onValueChange = { blockId = it },
-                        label = { Text("Block ID") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true
-                    )
-                }
-
-                Text("Security Level", fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SecurityLevelOption(
-                        label = "Low",
-                        selected = securityLevel == "low",
-                        onClick = { securityLevel = "low" },
-                        modifier = Modifier.weight(1f),
-                        color = Color(0xFF4CAF50)
-                    )
-                    SecurityLevelOption(
-                        label = "Medium",
-                        selected = securityLevel == "medium",
-                        onClick = { securityLevel = "medium" },
-                        modifier = Modifier.weight(1f),
-                        color = Color(0xFFFF9800)
-                    )
-                    SecurityLevelOption(
-                        label = "High",
-                        selected = securityLevel == "high",
-                        onClick = { securityLevel = "high" },
-                        modifier = Modifier.weight(1f),
-                        color = Color(0xFFF44336)
-                    )
-                }
-            }
-        }
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            elevation = CardDefaults.cardElevation(2.dp)
-        ) {
-            Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text("Sentence", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-
-                KioskDateField(
-                    value = sentenceStart,
-                    onValueChange = { sentenceStart = it },
-                    label = "Sentence Start"
-                )
-
-                KioskDateField(
-                    value = sentenceEnd,
-                    onValueChange = { sentenceEnd = it },
-                    label = "Sentence End"
-                )
-
-                OutlinedTextField(
-                    value = sentenceDetails,
-                    onValueChange = { sentenceDetails = it },
-                    label = { Text("Sentence Details") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 3
-                )
-
-                OutlinedTextField(
-                    value = assignedKioskId,
-                    onValueChange = { assignedKioskId = it },
-                    label = { Text("Assigned Kiosk ID") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-            }
-        }
+        PrisonerDetailsFields(formState)
 
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -480,10 +284,18 @@ fun EditPrisonerForm(
             Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text("Status & Access", fontSize = 18.sp, fontWeight = FontWeight.Bold)
 
+                OutlinedTextField(
+                    value = formState.assignedKioskId,
+                    onValueChange = { formState.assignedKioskId = it; saveError = "" },
+                    label = { Text("Assigned Kiosk ID") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Switch(checked = active, onCheckedChange = { active = it })
+                    Switch(checked = formState.active, onCheckedChange = { formState.active = it })
                     Spacer(modifier = Modifier.width(12.dp))
-                    Text(if (active) "Active" else "Suspended")
+                    Text(if (formState.active) "Active" else "Suspended")
                 }
 
                 OutlinedButton(
@@ -512,30 +324,5 @@ fun EditPrisonerForm(
             Spacer(modifier = Modifier.width(8.dp))
             Text("Save Changes", fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
-    }
-}
-
-@Composable
-private fun SelectPill(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    color: Color
-) {
-    Surface(
-        onClick = onClick,
-        modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
-        color = if (selected) color else Color.White,
-        border = BorderStroke(1.dp, if (selected) color else Color(0xFFE2E8F0))
-    ) {
-        Text(
-            text = label,
-            modifier = Modifier.padding(vertical = 16.dp),
-            textAlign = TextAlign.Center,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            color = if (selected) Color.White else Color(0xFF0B2240)
-        )
     }
 }

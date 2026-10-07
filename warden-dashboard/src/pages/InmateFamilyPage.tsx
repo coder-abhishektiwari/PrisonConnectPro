@@ -15,9 +15,6 @@ export function InmateFamilyPage() {
   const navigate = useNavigate();
   const [searchPrisoner, setSearchPrisoner] = useState('');
   const [filterGender, setFilterGender] = useState<ColumnFilter>({ value: 'all', open: false });
-  const [filterSecurity, setFilterSecurity] = useState<ColumnFilter>({ value: 'all', open: false });
-  const [filterCell, setFilterCell] = useState<ColumnFilter>({ value: 'all', open: false });
-  const [filterBlock, setFilterBlock] = useState<ColumnFilter>({ value: 'all', open: false });
   const [filterKiosk, setFilterKiosk] = useState<ColumnFilter>({ value: 'all', open: false });
   const [prisonerPage, setPrisonerPage] = useState(1);
 
@@ -88,7 +85,7 @@ export function InmateFamilyPage() {
   );
   const walletForSelected = walletData && walletData.inmateId === selectedWalletId ? walletData : null;
 
-  useEffect(() => { setPrisonerPage(1); }, [filterGender.value, filterSecurity.value, filterCell.value, filterBlock.value, filterKiosk.value]);
+  useEffect(() => { setPrisonerPage(1); }, [filterGender.value, filterKiosk.value]);
 
   const toggleInmate = async (inmateId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -132,23 +129,6 @@ export function InmateFamilyPage() {
     return vals.map(v => ({ value: v, label: v.charAt(0).toUpperCase() + v.slice(1) }));
   }, [inmates]);
 
-  const securityOptions = useMemo(() => {
-    const vals = [...new Set(inmates.map(i => i.securityLevel).filter(Boolean))];
-    return vals.map(v => ({ value: v, label: v.charAt(0).toUpperCase() + v.slice(1) }));
-  }, [inmates]);
-
-  const cellOptions = useMemo(() => {
-    const map = new Map<string, string>();
-    inmates.forEach(i => { if (i.cellId && i.cellName) map.set(i.cellId, i.cellName); });
-    return [...map.entries()].map(([id, name]) => ({ value: id, label: name }));
-  }, [inmates]);
-
-  const blockOptions = useMemo(() => {
-    const map = new Map<string, string>();
-    inmates.forEach(i => { if (i.blockId && i.blockName) map.set(i.blockId, i.blockName); });
-    return [...map.entries()].map(([id, name]) => ({ value: id, label: name }));
-  }, [inmates]);
-
   const kioskOptions = useMemo(() => {
     const map = new Map<string, string>();
     inmates.forEach(i => { if (i.assignedKioskId) map.set(i.assignedKioskId, i.kioskName || i.assignedKioskId); });
@@ -166,9 +146,6 @@ export function InmateFamilyPage() {
 
   const filteredInmates = inmates.filter(i => {
     if (filterGender.value !== 'all' && i.gender !== filterGender.value) return false;
-    if (filterSecurity.value !== 'all' && i.securityLevel !== filterSecurity.value) return false;
-    if (filterCell.value !== 'all' && i.cellId !== filterCell.value) return false;
-    if (filterBlock.value !== 'all' && i.blockId !== filterBlock.value) return false;
     if (filterKiosk.value !== 'all' && i.assignedKioskId !== filterKiosk.value) return false;
     return true;
   });
@@ -205,9 +182,6 @@ export function InmateFamilyPage() {
                 <th className="text-left py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Inmate</th>
                 <th className="text-center py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Inmate Number</th>
                 <th className="text-center py-3 px-4"><FilterDropdown label="Gender" options={genderOptions} filter={filterGender} setFilter={setFilterGender} /></th>
-                <th className="text-center py-3 px-4"><FilterDropdown label="Security" options={securityOptions} filter={filterSecurity} setFilter={setFilterSecurity} /></th>
-                <th className="text-center py-3 px-4"><FilterDropdown label="Cell" options={cellOptions} filter={filterCell} setFilter={setFilterCell} /></th>
-                <th className="text-center py-3 px-4"><FilterDropdown label="Block" options={blockOptions} filter={filterBlock} setFilter={setFilterBlock} /></th>
                 <th className="text-center py-3 px-4"><FilterDropdown label="Kiosk" options={kioskOptions} filter={filterKiosk} setFilter={setFilterKiosk} /></th>
                 <th className="text-center py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Wallet</th>
                 <th className="text-center py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Status</th>
@@ -215,11 +189,11 @@ export function InmateFamilyPage() {
             </thead>
             <tbody>
               {isLoading && pageInmates.length === 0 ? (
-                <SkeletonRows rows={8} cols={9} />
+                <SkeletonRows rows={8} cols={6} />
               ) : error && pageInmates.length === 0 ? (
-                <tr><td colSpan={9} className="py-16 text-center"><p className="text-error mb-4">{error}</p><button onClick={() => refresh()} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm">Retry</button></td></tr>
+                <tr><td colSpan={6} className="py-16 text-center"><p className="text-error mb-4">{error}</p><button onClick={() => refresh()} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm">Retry</button></td></tr>
               ) : pageInmates.length === 0 ? (
-                <tr><td colSpan={9} className="py-16 text-center"><div className="w-12 h-12 bg-neutral-100 rounded-xl flex items-center justify-center mx-auto mb-3"><span className="material-icons text-neutral-400 text-2xl">person_off</span></div><p className="text-sm font-semibold text-neutral-900">No Inmates</p><p className="text-xs text-neutral-500">{prisonerTotal === 0 ? 'No inmates registered' : searchPrisoner ? `No match for "${searchPrisoner}"` : 'No inmates match current filters'}</p></td></tr>
+                <tr><td colSpan={6} className="py-16 text-center"><div className="w-12 h-12 bg-neutral-100 rounded-xl flex items-center justify-center mx-auto mb-3"><span className="material-icons text-neutral-400 text-2xl">person_off</span></div><p className="text-sm font-semibold text-neutral-900">No Inmates</p><p className="text-xs text-neutral-500">{prisonerTotal === 0 ? 'No inmates registered' : searchPrisoner ? `No match for "${searchPrisoner}"` : 'No inmates match current filters'}</p></td></tr>
               ) : pageInmates.map(i => {
                 const disabled = i.status !== 'active';
                 return (
@@ -237,9 +211,6 @@ export function InmateFamilyPage() {
                     </td>
                     <td className="py-2.5 px-3 text-center text-sm text-neutral-600">{i.prisonerNumber || '—'}</td>
                     <td className="py-2.5 px-3 text-center text-sm text-neutral-600">{i.gender || '—'}</td>
-                    <td className="py-2.5 px-3 text-center text-sm text-neutral-600">{i.securityLevel || '—'}</td>
-                    <td className="py-2.5 px-3 text-center text-sm text-neutral-600">{i.cellName || '—'}</td>
-                    <td className="py-2.5 px-3 text-center text-sm text-neutral-600">{i.blockName || '—'}</td>
                     <td className="py-2.5 px-3 text-center text-sm">
                       <span className={`text-sm  ${i.assignedKioskId ? 'text-neutral-600 ' : ' text-neutral-300 '}`}>{i.assignedKioskId || 'Unassigned'}</span>
                     </td>

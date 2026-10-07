@@ -905,7 +905,6 @@ fun VideoCallContentMobilePreview() {
                 lastName = "Kumar",
                 prisonId = "PRIS1",
                 facility = "Central Jail",
-                cellBlock = "Block A",
                 status = InmateStatus.ACTIVE
             ),
             contactProfile = Contact(
@@ -954,7 +953,6 @@ fun VideoCallContentTabletPreview() {
                 lastName = "Kumar",
                 prisonId = "PRIS1",
                 facility = "Central Jail",
-                cellBlock = "Block A",
                 status = InmateStatus.ACTIVE
             ),
             contactProfile = Contact(

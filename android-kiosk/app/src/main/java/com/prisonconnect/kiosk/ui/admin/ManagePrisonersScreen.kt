@@ -312,16 +312,19 @@ private fun PrisonerCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = Color(0xFFE3F2FD)
-                    ) {
-                        Text(
-                            text = prisoner.cellBlock ?: "Can't fetch",
-                            fontSize = 12.sp,
-                            color = Color(0xFF003366),
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
+                    val idNumber = prisoner.idNumber
+                    if (!idNumber.isNullOrBlank()) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFFE3F2FD)
+                        ) {
+                            Text(
+                                text = idNumber,
+                                fontSize = 12.sp,
+                                color = Color(0xFF003366),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
                     }
                     Surface(
                         shape = RoundedCornerShape(8.dp),
@@ -374,21 +377,21 @@ fun PreviewManagePrisonersMobile() {
                     inmateId = "INM123456",
                     firstName = "RAHUL",
                     lastName = "KUMAR",
-                    cellBlock = "B-12 / 04",
+                    idNumber = "4521 7788 9900",
                     status = "active"
                 ),
                 Prisoner(
                     inmateId = "INM654321",
                     firstName = "AMIT",
                     lastName = "SHARMA",
-                    cellBlock = "A-05 / 10",
+                    idNumber = "7781 2233 4455",
                     status = "restricted"
                 ),
                 Prisoner(
                     inmateId = "INM999888",
                     firstName = "VIJAY",
                     lastName = "SINGH",
-                    cellBlock = "C-01 / 22",
+                    idNumber = "3390 5566 1122",
                     status = "suspended"
                 )
             ),

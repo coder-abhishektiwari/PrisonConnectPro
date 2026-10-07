@@ -13,7 +13,7 @@ const { sendSms, otpTemplateVars } = require('./lib/sms');
 const { sendSuccess, sendError, asyncRoute, deepMerge } = require('./lib/response');
 const { jailScopeOf, inAdminScope, inScopeOf, scopeList, kioskScopeOf } = require('./lib/scoping');
 const { paginate } = require('./lib/paginate');
-const { buildWardIndex } = require('./lib/kioskView');
+const { buildInmateIndex } = require('./lib/kioskView');
 
 /** Kiosk-admin username: what the operator types on the terminal to sign in. */
 const EMPLOYEE_ID_RE = /^[A-Za-z0-9._-]{3,40}$/;
@@ -464,20 +464,18 @@ app.post('/wardens', requireAuth, requireRole('admin', 'warden', 'super-admin', 
 }));
 
 // ==================== KIOSK ADMINS ====================
-// Staff who operate a kiosk device, shown with the device's location (which
-// carries the assigned wards) and prisoner load so a warden can see who is on
-// which terminal in this jail.
+// Staff who operate a kiosk device, shown with the device's location and
+// prisoner load so a warden can see who is on which terminal in this jail.
 // A kiosk admin sees the same staff page as their warden does - scoped to the
 // same prison - so the roles below include 'kiosk_admin' on all three routes.
 app.get('/kiosk-admins', requireAuth, requireRole('admin', 'kiosk_admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const jailId = await effectiveJailId(req);
-  const [admins, kiosks, inmates, blocks] = await Promise.all([
+  const [admins, kiosks, inmates] = await Promise.all([
     readDb('admins.json'),
     readDb('kiosks.json'),
     readDb('inmates.json'),
-    readDb('blocks.json').catch(() => []),
   ]);
-  const index = buildWardIndex({ inmates, blocks });
+  const index = buildInmateIndex({ inmates });
 
   const data = staffInScope(jailId, req.auth?.role, admins.filter((a) => a.role === 'kiosk_admin'))
     .map((a) => {
@@ -486,11 +484,10 @@ app.get('/kiosk-admins', requireAuth, requireRole('admin', 'kiosk_admin', 'warde
       void password;
       void pin;
       void biometricData;
-      const ward = index.wardFor(a.kioskId);
       return {
         ...safe,
         kioskId: a.kioskId || null,
-        location: [kiosk?.location, ward].filter(Boolean).join(' • ') || null,
+        location: kiosk?.location || null,
         registeredInmates: a.kioskId ? index.countFor(a.kioskId) : 0,
       };
     });
@@ -806,11 +803,8 @@ app.get('/inmate/profile/:inmateId', requireAuth, asyncRoute(async (req, res) =>
     name: inmate.name || inmate.fullName || [inmate.firstName, inmate.lastName].filter(Boolean).join(' ').trim() || 'Unknown',
     prisonId: inmate.prisonId,
     facility: inmate.facility || inmate.prisonId,
-    cellBlock: inmate.cellBlock || '',
     status: inmate.status || 'active',
-    photoUrl: inmate.photoUrl || null,
-    securityLevel: inmate.securityLevel || null,
-    sentenceDetails: inmate.sentenceDetails || null
+    photoUrl: inmate.photoUrl || null
   });
 }));
 

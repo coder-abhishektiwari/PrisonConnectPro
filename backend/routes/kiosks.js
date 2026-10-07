@@ -6,7 +6,7 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 const { sendSuccess, sendError, asyncRoute } = require('../lib/response');
 const { jailScopeOf, inAdminScope, adminScopeFilter, inScopeOf, scopeList } = require('../lib/scoping');
 const { paginate } = require('../lib/paginate');
-const { wardLabel, buildWardIndex } = require('../lib/kioskView');
+const { buildInmateIndex } = require('../lib/kioskView');
 
 const router = express.Router();
 
@@ -530,42 +530,34 @@ router.patch('/registration/:requestId/reject', requireAuth, requireRole('admin'
 // ==================== KIOSK ROUTES (CRUD added — was read-only) ====================
 
 router.get('/', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
-  const [kiosks, inmates, blocks] = await Promise.all([
+  const [kiosks, inmates] = await Promise.all([
     readDb('kiosks.json'),
     readDb('inmates.json'),
-    readDb('blocks.json').catch(() => []),
   ]);
   const inScope = adminScopeFilter(req);
-  const index = buildWardIndex({ inmates, blocks, inScope });
+  const index = buildInmateIndex({ inmates, inScope });
 
   const data = kiosks
     .filter((k) => inScope(k))
-    .map((k) => {
-      const wards = index.wardsFor(k.kioskId);
-      const ward = wards.length ? wards.join(', ') : null;
-      return {
-        ...k,
-        // Liveness is derived from the device's heartbeat, not the stored flag.
-        status: kioskDisplayStatus(k),
-        lastSeen: kioskLive(k).lastSeen,
-        lastHeartbeatAt: k.lastHeartbeatAt || null,
-        // Single location field: where the device sits plus the wards the
-        // assigned prisoners live in. There is no separate ward/block column.
-        location: [k.location, ward].filter(Boolean).join(' • ') || null,
-        registeredInmates: index.countFor(k.kioskId),
-      };
-    });
+    .map((k) => ({
+      ...k,
+      // Liveness is derived from the device's heartbeat, not the stored flag.
+      status: kioskDisplayStatus(k),
+      lastSeen: kioskLive(k).lastSeen,
+      lastHeartbeatAt: k.lastHeartbeatAt || null,
+      location: k.location || null,
+      registeredInmates: index.countFor(k.kioskId),
+    }));
   return sendSuccess(res, data);
 }));
 
 // Per-kiosk report: today / this month / all-time call counts, audio vs
 // video split, registered prisoners and the latest calls from the device.
 router.get('/:kioskId/stats', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
-  const [kiosks, inmates, calls, blocks, prisons] = await Promise.all([
+  const [kiosks, inmates, calls, prisons] = await Promise.all([
     readDb('kiosks.json'),
     readDb('inmates.json'),
     readDb('calls.json'),
-    readDb('blocks.json').catch(() => []),
     readDb('prisons.json'),
   ]);
   const kiosk = kiosks.find((k) => k.kioskId === req.params.kioskId);
@@ -574,15 +566,7 @@ router.get('/:kioskId/stats', requireAuth, requireRole('admin', 'warden', 'super
   }
 
   const inScope = adminScopeFilter(req);
-  const blockMap = new Map(blocks.map((b) => [b.blockId, b.name]));
-
   const registered = inmates.filter((i) => i.assignedKioskId === kiosk.kioskId && inScope(i));
-  const wardSet = new Set();
-  for (const i of registered) {
-    const w = wardLabel(i, blockMap);
-    if (w) wardSet.add(w);
-  }
-  const wards = [...wardSet];
 
   const placed = calls.filter((c) => c.kioskId === kiosk.kioskId && inScope(c) && PLACED_CALL_STATES.includes(c.status));
   const now = new Date();
@@ -617,14 +601,13 @@ router.get('/:kioskId/stats', requireAuth, requireRole('admin', 'warden', 'super
 
   const prison = prisons.find((p) => p.prisonId === kiosk.prisonId);
   const finish = (period) => ({ ...period, minutes: round1(period.minutes) });
-  const ward = wards.length ? wards.join(', ') : null;
 
   return sendSuccess(res, {
     kioskId: kiosk.kioskId,
     prisonId: kiosk.prisonId || null,
     prisonName: kiosk.prisonName || prison?.name || null,
     deviceSerialNumber: kiosk.deviceSerialNumber || null,
-    location: [kiosk.location, ward].filter(Boolean).join(' • ') || null,
+    location: kiosk.location || null,
     ipAddress: kiosk.ipAddress || null,
     androidVersion: kiosk.androidVersion || null,
     status: kioskDisplayStatus(kiosk),

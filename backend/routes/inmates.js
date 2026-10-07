@@ -12,9 +12,24 @@ const router = express.Router();
 
 const INMATE_IMMUTABLE_FIELDS = ['inmateId', 'createdAt'];
 
+// Cell, Block, Security Level and Sentence were dropped from the inmate
+// record entirely. Strip them from every write so older clients cannot
+// resurrect the fields after the cleanup migration has run.
+const REMOVED_INMATE_FIELDS = [
+  'cellId', 'blockId', 'cellBlock', 'cellNumber',
+  'cellName', 'blockName', 'securityLevel',
+  'sentenceDetails', 'sentenceStart', 'sentenceEnd',
+];
+
+function stripRemovedInmateFields(payload) {
+  const out = { ...payload };
+  REMOVED_INMATE_FIELDS.forEach((f) => delete out[f]);
+  return out;
+}
+
 /**
- * Every pointer on a prisoner row (jail, kiosk, cell, block) is a foreign key.
- * Checking the ids against the tables they name turns what would be a database
+ * Every pointer on a prisoner row (jail, kiosk) is a foreign key.
+ * Checking the ids against the tables they name turns a database
  * error (500) into a clear 422 the caller can act on.
  * Returns `{ ok: true }` or `{ ok: false, message }`.
  */
@@ -22,8 +37,6 @@ async function validateInmateRefs(refs) {
   const wanted = [
     ['prisonId', refs.prisonId, 'prisons.json', 'prisonId'],
     ['assignedKioskId', refs.assignedKioskId, 'kiosks.json', 'kioskId'],
-    ['cellId', refs.cellId, 'cells.json', 'cellId'],
-    ['blockId', refs.blockId, 'blocks.json', 'blockId'],
   ].filter(([, value]) => value);
   if (!wanted.length) return { ok: true };
   try {
@@ -55,18 +68,10 @@ function normalizeInmate(i) {
 }
 
 async function enrichInmates(inmates) {
-  const [cells, blocks, kiosks] = await Promise.all([
-    readDb('cells.json').catch(() => []),
-    readDb('blocks.json').catch(() => []),
-    readDb('kiosks.json').catch(() => []),
-  ]);
-  const cellMap = new Map(cells.map(c => [c.cellId, c.name]));
-  const blockMap = new Map(blocks.map(b => [b.blockId, b.name]));
+  const kiosks = await readDb('kiosks.json').catch(() => []);
   const kioskMap = new Map(kiosks.map(k => [k.kioskId, k.kioskId]));
   return inmates.map(i => ({
     ...i,
-    cellName: i.cellId ? (cellMap.get(i.cellId) || i.cellBlock || '') : (i.cellBlock || ''),
-    blockName: i.blockId ? (blockMap.get(i.blockId) || i.facility || '') : (i.facility || ''),
     kioskName: i.assignedKioskId ? (kioskMap.get(i.assignedKioskId) || i.assignedKioskId) : '',
   }));
 }
@@ -85,8 +90,8 @@ function inmateListHandler(req, res) {
       search: (i, q) =>
         (i.name || '').toLowerCase().includes(q) ||
         (i.inmateId || '').toLowerCase().includes(q) ||
-        (i.cellName || '').toLowerCase().includes(q) ||
-        (i.blockName || '').toLowerCase().includes(q) ||
+        (i.prisonerNumber || '').toLowerCase().includes(q) ||
+        (i.idNumber || '').toLowerCase().includes(q) ||
         (i.prisonId || '').toLowerCase().includes(q),
       searchFields: [],
       defaultSort: 'name',
@@ -107,7 +112,7 @@ function inmateGetHandler(req, res) {
 }
 
 async function inmateCreateHandler(req, res) {
-  const inmateData = req.body;
+  const inmateData = stripRemovedInmateFields(req.body);
   const jailId = jailScopeOf(req);
   const kioskId = kioskScopeOf(req);
   if (jailId && inmateData.prisonId && inmateData.prisonId !== jailId) {
@@ -131,8 +136,6 @@ async function inmateCreateHandler(req, res) {
   const refs = await validateInmateRefs({
     prisonId: jailId || inmateData.prisonId || inmateData.facility,
     assignedKioskId: kioskId || inmateData.assignedKioskId,
-    cellId: inmateData.cellId,
-    blockId: inmateData.blockId,
   });
   if (!refs.ok) return sendError(res, 'INVALID_REFERENCE', refs.message, 422);
   try {
@@ -197,7 +200,7 @@ async function inmateCreateHandler(req, res) {
 
 async function inmateUpdateHandler(req, res) {
   const id = req.params.inmateId || req.params.prisonerId;
-  const updates = { ...req.body };
+  const updates = stripRemovedInmateFields(req.body);
   INMATE_IMMUTABLE_FIELDS.forEach((f) => delete updates[f]);
   const jailId = jailScopeOf(req);
   const kioskId = kioskScopeOf(req);
@@ -221,8 +224,6 @@ async function inmateUpdateHandler(req, res) {
   delete updates.prisonId;
   const updatedRefs = await validateInmateRefs({
     assignedKioskId: updates.assignedKioskId,
-    cellId: updates.cellId,
-    blockId: updates.blockId,
   });
   if (!updatedRefs.ok) return sendError(res, 'INVALID_REFERENCE', updatedRefs.message, 422);
   const updated = await updateDb('inmates.json', (inmates) => {
@@ -386,3 +387,4 @@ module.exports.inmateCreateHandler = inmateCreateHandler;
 module.exports.inmateUpdateHandler = inmateUpdateHandler;
 module.exports.inmateDeleteHandler = inmateDeleteHandler;
 module.exports.validateInmateRefs = validateInmateRefs;
+module.exports.stripRemovedInmateFields = stripRemovedInmateFields;

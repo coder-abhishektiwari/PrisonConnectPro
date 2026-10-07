@@ -601,9 +601,9 @@ private fun InmateProfileCard(
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                // ID + Cell in one line
+                // Inmate ID
                 Text(
-                    text = "${inmateProfile.inmateId.orEmpty()}  •  ${inmateProfile.cellBlock.orEmpty()}",
+                    text = inmateProfile.inmateId.orEmpty(),
                     fontSize = 12.sp,
                     color = TextGray,
                     maxLines = 1,
@@ -858,7 +858,6 @@ private fun BottomNavItem(
 //                        inmateId = "INM123456",
 //                        firstName = "RAHUL",
 //                        lastName = "KUMAR",
-//                        cellBlock = "BLOCK A / CELL 102",
 //                        facility = "Central Prison",
 //                        prisonId = "P-789",
 //                        status = com.prisonconnect.kiosk.models.inmate.InmateStatus.ACTIVE
@@ -918,7 +917,6 @@ fun PreviewDashboardMobile() {
                         inmateId = "INM123456",
                         firstName = "RAHUL",
                         lastName = "KUMAR",
-                        cellBlock = "BLOCK A / CELL 102",
                         facility = "Central Prison",
                         prisonId = "P-789",
                         status = com.prisonconnect.kiosk.models.inmate.InmateStatus.ACTIVE

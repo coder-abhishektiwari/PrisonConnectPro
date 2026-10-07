@@ -111,7 +111,10 @@ class ManagePrisonersViewModel @Inject constructor(
         return _prisoners.value.filter { prisoner ->
             prisoner.displayName.contains(query, ignoreCase = true) ||
                 prisoner.inmateId.contains(query, ignoreCase = true) ||
-                (prisoner.cellBlock ?: "").contains(query, ignoreCase = true) ||
+                (prisoner.idNumber ?: "").contains(query, ignoreCase = true) ||
+                (prisoner.fatherName ?: "").contains(query, ignoreCase = true) ||
+                (prisoner.motherName ?: "").contains(query, ignoreCase = true) ||
+                (prisoner.address ?: "").contains(query, ignoreCase = true) ||
                 (prisoner.prisonerNumber ?: "").contains(query, ignoreCase = true)
         }
     }

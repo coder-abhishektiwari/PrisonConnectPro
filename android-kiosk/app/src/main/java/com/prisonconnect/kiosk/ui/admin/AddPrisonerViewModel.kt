@@ -21,24 +21,12 @@ class AddPrisonerViewModel @Inject constructor(
     val registrationState: StateFlow<RegistrationState> = _registrationState.asStateFlow()
 
     fun registerPrisoner(
-        firstName: String,
-        lastName: String,
-        mobileNumber: String,
-        dateOfBirth: String,
-        gender: String,
-        prisonerNumber: String,
-        cellBlock: String,
-        cellNumber: String,
-        securityLevel: String,
-        sentenceStart: String,
-        sentenceEnd: String,
-        sentenceDetails: String,
+        values: com.prisonconnect.kiosk.models.admin.PrisonerFormValues,
         pin: String,
         fingerprintTemplate: String? = null,
         rfidTag: String? = null
     ) {
-        val fullName = "${firstName.trim()} ${lastName.trim()}".trim()
-        if (fullName.isEmpty()) {
+        if (values.name.isEmpty()) {
             _registrationState.value = RegistrationState.Error("Prisoner name is required")
             return
         }
@@ -50,17 +38,20 @@ class AddPrisonerViewModel @Inject constructor(
         _registrationState.value = RegistrationState.Loading
 
         val request = CreatePrisonerRequest(
-            prisonerNumber = prisonerNumber.ifBlank { "PN-${System.currentTimeMillis()}" },
-            name = fullName,
-            mobileNumber = mobileNumber.ifBlank { null },
-            dateOfBirth = dateOfBirth.ifBlank { null },
-            gender = gender.ifBlank { null },
-            cellBlock = cellBlock.ifBlank { null },
-            cellNumber = cellNumber.ifBlank { null },
-            securityLevel = securityLevel.ifBlank { null },
-            sentenceStart = sentenceStart.ifBlank { null },
-            sentenceEnd = sentenceEnd.ifBlank { null },
-            sentenceDetails = sentenceDetails.ifBlank { null },
+            prisonerNumber = values.prisonerNumber.ifBlank { "PN-${System.currentTimeMillis()}" },
+            name = values.name,
+            gender = values.gender,
+            age = values.age?.toIntOrNull(),
+            dateOfAdmission = values.dateOfAdmission,
+            fatherName = values.fatherName,
+            motherName = values.motherName,
+            idProof = values.idProof,
+            idNumber = values.idNumber,
+            religion = values.religion,
+            nationality = values.nationality,
+            state = values.state,
+            district = values.district,
+            address = values.address,
             pin = pin.ifBlank { null },
             fingerprintTemplate = fingerprintTemplate?.ifBlank { null },
             rfidTag = rfidTag?.ifBlank { null }

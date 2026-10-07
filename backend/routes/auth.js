@@ -299,11 +299,8 @@ async function identifyInmate(req, res, matchFn, confidence) {
     name: match.name || match.fullName || [match.firstName, match.lastName].filter(Boolean).join(' ').trim() || 'Unknown',
     prisonId: match.prisonId,
     facility: match.prisonId,
-    cellBlock: match.cellBlock,
     status: match.status,
     photoUrl: match.photo,
-    securityLevel: match.securityLevel,
-    sentenceDetails: match.sentenceDetails,
     confidence
   });
 }
@@ -331,9 +328,9 @@ router.post('/rfid-identify', asyncRoute(async (req, res) => {
   const inmateName = inmate.name || inmate.fullName || [inmate.firstName, inmate.lastName].filter(Boolean).join(' ').trim() || 'Unknown';
   return sendSuccess(res, {
     inmateId: inmate.inmateId, name: inmateName,
-    prisonId: inmate.prisonId, facility: inmate.prisonId, cellBlock: inmate.cellBlock,
-    status: inmate.status, photoUrl: inmate.photo, securityLevel: inmate.securityLevel,
-    sentenceDetails: inmate.sentenceDetails, rfidToken, confidence: 0.98
+    prisonId: inmate.prisonId, facility: inmate.prisonId,
+    status: inmate.status, photoUrl: inmate.photo,
+    rfidToken, confidence: 0.98
   });
 }));
 
@@ -365,9 +362,8 @@ router.post('/prisoner/identify', asyncRoute(async (req, res) => {
   return sendSuccess(res, {
     inmateId: inmate.inmateId,
     name: inmate.name || inmate.fullName || [inmate.firstName, inmate.lastName].filter(Boolean).join(' ').trim() || 'Unknown',
-    prisonId: inmate.prisonId, facility: inmate.facility, cellBlock: inmate.cellBlock,
-    status: inmate.status, photoUrl: inmate.photoUrl, securityLevel: inmate.securityLevel,
-    sentenceDetails: inmate.sentenceDetails, confidence: 1.0
+    prisonId: inmate.prisonId, facility: inmate.facility,
+    status: inmate.status, photoUrl: inmate.photoUrl, confidence: 1.0
   });
 }));
 

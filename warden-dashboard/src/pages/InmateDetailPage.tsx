@@ -65,6 +65,20 @@ function modelFromUserAgent(ua?: string): string | null {
 
 const digits = (v?: string) => String(v || '').replace(/\D/g, '');
 
+/** Select options for the inmate identity/address fields. */
+const ID_PROOF_OPTIONS = ['Aadhaar Card', 'Voter ID', 'PAN Card'];
+const RELIGION_OPTIONS = ['Hindu', 'Muslim', 'Christian', 'Sikh', 'Buddhist', 'Jain', 'Other'];
+const NATIONALITY_OPTIONS = ['Indian', 'Other'];
+const STATE_OPTIONS = [
+  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
+  'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka',
+  'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram',
+  'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu',
+  'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+  'Andaman and Nicobar Islands', 'Chandigarh', 'Dadra and Nagar Haveli and Daman and Diu',
+  'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry',
+];
+
 /** A contact has exactly one verified device — pick the one on file. */
 function primaryDevice(c: Contact): DeviceFingerprint | null {
   const list = c.deviceFingerprints || [];
@@ -82,7 +96,7 @@ export function InmateDetailPage() {
   const navigate = useNavigate();
   const isNew = !inmateId || inmateId === 'new';
   const [editingInmate, setEditingInmate] = useState(isNew);
-  const [editData, setEditData] = useState<Partial<Inmate>>(isNew ? { status: 'active', securityLevel: 'medium', gender: 'male' } : {});
+  const [editData, setEditData] = useState<Partial<Inmate>>(isNew ? { status: 'active', gender: 'male' } : {});
   const [saving, setSaving] = useState(false);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [editingContact, setEditingContact] = useState(false);
@@ -91,8 +105,6 @@ export function InmateDetailPage() {
   const [newFamily, setNewFamily] = useState({ name: '', relationship: '', phoneNumber: '', address: '', city: '', state: '' });
   const [addFamilyError, setAddFamilyError] = useState('');
   const [saveContactError, setSaveContactError] = useState('');
-  const [cellNames, setCellNames] = useState<{ id: string; name: string }[]>([]);
-  const [blockNames, setBlockNames] = useState<{ id: string; name: string }[]>([]);
   const [kioskNames, setKioskNames] = useState<{ id: string; name: string }[]>([]);
   const [toggling, setToggling] = useState(false);
   const [showResetPin, setShowResetPin] = useState(false);
@@ -132,14 +144,10 @@ export function InmateDetailPage() {
   const contacts = contactsData ?? [];
 
   const loadAux = useCallback(async () => {
-    const [cells, blocks, kiosks, generatedId] = await Promise.all([
-      wardenApi.getCells().catch(() => []),
-      wardenApi.getBlocks().catch(() => []),
+    const [kiosks, generatedId] = await Promise.all([
       apiClient.get('/kiosks').then(r => r.data?.data?.items ?? r.data?.data ?? []).catch(() => []),
       isNew ? wardenApi.getNextInmateId().catch(() => '') : Promise.resolve(''),
     ]);
-    setCellNames(cells.map((c: any) => ({ id: c.cellId, name: c.name })).filter(c => c.id && c.name));
-    setBlockNames(blocks.map((b: any) => ({ id: b.blockId, name: b.name })).filter(b => b.id && b.name));
     setKioskNames(kiosks.map((k: any) => ({ id: k.kioskId, name: k.kioskId })).filter(k => k.id));
     setNextId(generatedId || '');
   }, [isNew]);
@@ -368,7 +376,7 @@ export function InmateDetailPage() {
   const headerIcon = useMemo(() => <span className="material-icons text-primary-600 text-xl">{isNew ? 'person_add' : 'person'}</span>, [isNew]);
   usePageHeader({
     title: isNew ? 'Add New Inmate' : (inmate?.name || 'Inmate Details'),
-    subtitle: isNew ? 'Fill in inmate details' : (inmate ? `${inmate.inmateId} • ${inmate.cellBlock || 'No block'}` : ''),
+    subtitle: isNew ? 'Fill in inmate details' : (inmate ? `${inmate.inmateId}${inmate.prisonerNumber ? ` • ${inmate.prisonerNumber}` : ''}` : ''),
     icon: headerIcon,
     actions: useMemo(() => (
       <button onClick={() => navigate('/inmates-family')} className="inline-flex items-center gap-1.5 px-4 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-lg text-sm font-medium transition">
@@ -382,7 +390,7 @@ export function InmateDetailPage() {
 
   const fieldsPending = !isNew && !inmate;
 
-  const fieldRow = (label: string, key: keyof Inmate, icon: string, opts?: { type?: string; radio?: string[]; placeholder?: string; readOnly?: boolean }) => {
+  const fieldRow = (label: string, key: keyof Inmate, icon: string, opts?: { type?: string; radio?: string[]; select?: string[]; textarea?: boolean; placeholder?: string; readOnly?: boolean; min?: number; max?: number }) => {
     const val = editingInmate ? (editData[key] ?? '') : (inmate?.[key] ?? '');
     if (editingInmate && !opts?.readOnly) {
       if (opts?.radio) {
@@ -392,11 +400,40 @@ export function InmateDetailPage() {
             <div className="flex gap-3">
               {opts.radio.map(r => (
                 <label key={r} className="flex items-center gap-2 cursor-pointer">
-                  <input type="radio" name={key} value={r} checked={val === r} onChange={() => setEditData({ ...editData, [key]: r })} className="text-primary-600 focus:ring-primary-500" />
+                  <input type="radio" name={key} value={r} checked={val === r} onChange={() => setEditData({ ...editData, [key]: r } as Partial<Inmate>)} className="text-primary-600 focus:ring-primary-500" />
                   <span className="text-sm capitalize">{r}</span>
                 </label>
               ))}
             </div>
+          </div>
+        );
+      }
+      if (opts?.select) {
+        return (
+          <div key={key} className="py-3 border-b border-neutral-100 last:border-0">
+            <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">{label}</p>
+            <select
+              value={String(val)}
+              onChange={e => setEditData({ ...editData, [key]: e.target.value } as Partial<Inmate>)}
+              className="w-full px-3 py-2 bg-white border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            >
+              <option value="">Select {label}</option>
+              {opts.select.map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
+        );
+      }
+      if (opts?.textarea) {
+        return (
+          <div key={key} className="py-3 border-b border-neutral-100 last:border-0">
+            <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">{label}</p>
+            <textarea
+              value={String(val)}
+              onChange={e => setEditData({ ...editData, [key]: e.target.value } as Partial<Inmate>)}
+              placeholder={opts?.placeholder || label}
+              rows={3}
+              className="w-full px-3 py-2 bg-white border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            />
           </div>
         );
       }
@@ -406,7 +443,15 @@ export function InmateDetailPage() {
           <input
             type={opts?.type || 'text'}
             value={String(val)}
-            onChange={e => setEditData({ ...editData, [key]: e.target.value })}
+            min={opts?.min}
+            max={opts?.max}
+            onChange={e => {
+              const raw = e.target.value;
+              const next = opts?.type === 'number'
+                ? (raw === '' ? null : (Number.isNaN(Number(raw)) ? null : Number(raw)))
+                : raw;
+              setEditData({ ...editData, [key]: next } as Partial<Inmate>);
+            }}
             placeholder={opts?.placeholder || label}
             className="w-full px-3 py-2 bg-white border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
           />
@@ -437,15 +482,7 @@ export function InmateDetailPage() {
             onChange={v => setEditData({ ...editData, [key]: v })}
             fallbackLabel={fallback}
             onAdd={async (name) => {
-              if (key === 'cellId') {
-                const created = await wardenApi.createCell(name).catch(() => null);
-                if (created) setCellNames(prev => [...prev, { id: created.cellId, name }]);
-                else setCellNames(prev => [...prev, { id: `temp-${Date.now()}`, name }]);
-              } else if (key === 'blockId') {
-                const created = await wardenApi.createBlock(name).catch(() => null);
-                if (created) setBlockNames(prev => [...prev, { id: created.blockId, name }]);
-                else setBlockNames(prev => [...prev, { id: `temp-${Date.now()}`, name }]);
-              } else if (key === 'assignedKioskId') {
+              if (key === 'assignedKioskId') {
                 setKioskNames(prev => [...prev, { id: name, name }]);
               }
             }}
@@ -657,11 +694,17 @@ export function InmateDetailPage() {
           ) : fieldRow('Inmate ID', 'inmateId', 'badge', { readOnly: true })}
           {fieldRow('Inmate Number', 'prisonerNumber', 'tag')}
           {fieldRow('Gender', 'gender', 'wc', { radio: ['male', 'female', 'other'] })}
+          {fieldRow('Age', 'age', 'cake', { type: 'number', min: 1, max: 120, placeholder: 'Years' })}
           {fieldRow('Date of Admission', 'dateOfAdmission', 'calendar_today', { type: 'date' })}
-          {searchableRow('Cell', 'cellId', 'domain', cellNames, '+ Add new cell', 'cellName')}
-          {searchableRow('Block', 'blockId', 'location_on', blockNames, '+ Add new block', 'blockName')}
-          {fieldRow('Security Level', 'securityLevel', 'security', { radio: ['minimum', 'medium', 'maximum'] })}
-          {fieldRow('Sentence Details', 'sentenceDetails', 'gavel')}
+          {fieldRow('Father/Husband Name', 'fatherName', 'face')}
+          {fieldRow('Mother Name', 'motherName', 'family_restroom')}
+          {fieldRow('ID Proof', 'idProof', 'how_to_reg', { select: ID_PROOF_OPTIONS })}
+          {fieldRow('ID Number', 'idNumber', 'pin')}
+          {fieldRow('Religion', 'religion', 'church', { select: RELIGION_OPTIONS })}
+          {fieldRow('Nationality', 'nationality', 'public', { select: NATIONALITY_OPTIONS })}
+          {fieldRow('State', 'state', 'map', { select: STATE_OPTIONS })}
+          {fieldRow('District', 'district', 'location_city')}
+          {fieldRow('Address', 'address', 'home', { textarea: true })}
           {searchableRow('Assigned Kiosk', 'assignedKioskId', 'tablet_mac', kioskNames, '+ Add new kiosk', 'kioskName')}
 
           {/* Biometrics Section */}

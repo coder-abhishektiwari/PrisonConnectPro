@@ -219,10 +219,6 @@ export function MonitorScreenPage() {
                   <span className="text-neutral-500">Facility</span>
                   <span className="font-medium text-neutral-900">{inmatesLoading && !inmate ? <SkeletonText /> : inmate?.facility || '—'}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-neutral-500">Cell Block</span>
-                  <span className="font-medium text-neutral-900">{inmatesLoading && !inmate ? <SkeletonText /> : inmate?.cellBlock || '—'}</span>
-                </div>
               </div>
             </div>
           </Card>

@@ -6,7 +6,7 @@ const { hashSecret } = require('./lib/auth');
 const { requireRole } = require('./middleware/auth');
 const { inAdminScope, adminScopeFilter, jailScopeOf, kioskScopeOf } = require('./lib/scoping');
 const { paginate } = require('./lib/paginate');
-const { inmateDeleteHandler, validateInmateRefs } = require('./routes/inmates');
+const { inmateDeleteHandler, validateInmateRefs, stripRemovedInmateFields } = require('./routes/inmates');
 
 const ALL_ROLES = ['admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'];
 const ADMIN_ROLES = ['admin', 'warden', 'super-admin', 'super_admin'];
@@ -62,7 +62,7 @@ router.get('/prisoners/:prisonerId', requireRole(...ALL_ROLES), async (req, res)
 });
 
 router.post('/prisoners', requireRole(...ALL_ROLES), async (req, res) => {
-  const inmateData = req.body;
+  const inmateData = stripRemovedInmateFields(req.body);
   const jailId = jailScopeOf(req);
   const kioskId = kioskScopeOf(req);
   if (jailId && inmateData.prisonId && inmateData.prisonId !== jailId) {
@@ -74,8 +74,6 @@ router.post('/prisoners', requireRole(...ALL_ROLES), async (req, res) => {
   const refs = await validateInmateRefs({
     prisonId: jailId || inmateData.prisonId,
     assignedKioskId: kioskId || inmateData.assignedKioskId,
-    cellId: inmateData.cellId,
-    blockId: inmateData.blockId,
   });
   if (!refs.ok) {
     return res.status(422).json({ success: false, error: { code: 'INVALID_REFERENCE', message: refs.message } });
@@ -105,15 +103,13 @@ router.post('/prisoners', requireRole(...ALL_ROLES), async (req, res) => {
 });
 
 router.put('/prisoners/:prisonerId', requireRole(...ALL_ROLES), async (req, res) => {
-  const updates = { ...req.body };
+  const updates = stripRemovedInmateFields(req.body);
   delete updates.inmateId; delete updates.createdAt;
   // A prisoner's jail never changes through an edit — same rule as the
   // /inmates handler, and prison_id is a foreign key.
   delete updates.prisonId;
   const refs = await validateInmateRefs({
     assignedKioskId: updates.assignedKioskId,
-    cellId: updates.cellId,
-    blockId: updates.blockId,
   });
   if (!refs.ok) {
     return res.status(422).json({ success: false, error: { code: 'INVALID_REFERENCE', message: refs.message } });

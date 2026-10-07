@@ -63,7 +63,7 @@ const REGISTRY = {
   'prisons.json':      { table: 'prisons',                 idKey: 'prisonId', cols: { name: 'name', status: 'status' } },
   'wardens.json':      { table: 'wardens',                 idKey: 'wardenId', cols: { email: 'email', prisonId: 'prison_id' } },
   'users.json':        { table: 'users',                   idKey: 'userId', cols: { username: 'username', email: 'email', kioskId: 'kiosk_id', prisonId: 'prison_id' } },
-  'inmates.json':      { table: 'inmates',                 idKey: 'inmateId', cols: { prisonId: 'prison_id', assignedKioskId: 'kiosk_id', cellId: 'cell_id', blockId: 'block_id' } },
+  'inmates.json':      { table: 'inmates',                 idKey: 'inmateId', cols: { prisonId: 'prison_id', assignedKioskId: 'kiosk_id' } },
   'kiosks.json':       { table: 'kiosks',                  idKey: 'kioskId', cols: { prisonId: 'prison_id', deviceSerialNumber: 'serial', uid: 'uid' } },
   'contacts.json':     { table: 'contacts',                idKey: 'contactId', cols: { inmateId: 'inmate_id', prisonId: 'prison_id' } },
   'rooms.json':        { table: 'rooms',                   idKey: 'roomId', cols: { kioskId: 'kiosk_id', inmateId: 'inmate_id', contactId: 'contact_id', status: 'status' } },
