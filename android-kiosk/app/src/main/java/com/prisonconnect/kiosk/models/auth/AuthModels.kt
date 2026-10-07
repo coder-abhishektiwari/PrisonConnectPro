@@ -33,11 +33,6 @@ data class PinVerifyRequest(
     @SerializedName("kioskId") val kioskId: String
 )
 
-data class FaceIdentifyRequest(
-    @SerializedName("kioskId") val kioskId: String,
-    @SerializedName("image") val image: String
-)
-
 data class FingerprintIdentifyRequest(
     @SerializedName("kioskId") val kioskId: String,
     @SerializedName("capture") val capture: String

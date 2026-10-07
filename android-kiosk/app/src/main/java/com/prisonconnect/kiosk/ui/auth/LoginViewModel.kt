@@ -5,12 +5,10 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
-import android.graphics.Bitmap
 import com.prisonconnect.kiosk.core.BaseViewModel
 import com.prisonconnect.kiosk.core.Constants
 import com.prisonconnect.kiosk.core.Logger
 import com.prisonconnect.kiosk.core.UiState
-import com.prisonconnect.kiosk.hardware.FaceAuthProcessor
 import com.prisonconnect.kiosk.hardware.FingerprintHardwareManager
 import com.prisonconnect.kiosk.models.auth.AdminProfile
 import com.prisonconnect.kiosk.models.auth.AdminVerifyPasswordRequest
@@ -29,7 +27,7 @@ import javax.inject.Inject
 import kotlin.time.Duration.Companion.milliseconds
 
 enum class LoginStage {
-    METHOD_SELECTION, FACE_SCANNING, FINGERPRINT_SCANNING, RFID_SCANNING, PRISONER_ID_ENTRY, PIN_ENTRY, ADMIN_USERNAME_ENTRY, ADMIN_PIN_ENTRY
+    METHOD_SELECTION, FINGERPRINT_SCANNING, RFID_SCANNING, PRISONER_ID_ENTRY, PIN_ENTRY, ADMIN_USERNAME_ENTRY, ADMIN_PIN_ENTRY
 }
 
 @HiltViewModel
@@ -47,9 +45,6 @@ class LoginViewModel @Inject constructor(
 
     private val _identifiedAdmin = MutableStateFlow<AdminProfile?>(null)
     val identifiedAdmin = _identifiedAdmin.asStateFlow()
-
-    private val _faceQuality = MutableStateFlow(FaceAuthProcessor.FaceQuality.GOOD)
-    val faceQuality = _faceQuality.asStateFlow()
 
     private val _navigationEvent = MutableSharedFlow<LoginNavigation>()
     val navigationEvent = _navigationEvent.asSharedFlow()
@@ -103,10 +98,6 @@ class LoginViewModel @Inject constructor(
         }
     }
 
-    fun startFaceAuth() {
-        _loginStage.value = LoginStage.FACE_SCANNING
-    }
-
     fun startFingerprintAuth() {
         _loginStage.value = LoginStage.FINGERPRINT_SCANNING
         fingerprintHardwareManager.scanForDevices()
@@ -116,38 +107,6 @@ class LoginViewModel @Inject constructor(
         val device = fingerprintHardwareManager.connectedScanner.value
         if (device != null) {
             fingerprintHardwareManager.requestPermission(device)
-        }
-    }
-
-    fun onFaceDetected(quality: FaceAuthProcessor.FaceQuality) {
-        _faceQuality.value = quality
-    }
-
-    fun onValidFaceCaptured(bitmap: Bitmap) {
-        if (uiState.value is UiState.Loading) return
-
-        launch {
-            setLoading()
-
-            authRepository.identifyFace(bitmap).collect { result ->
-                when (result) {
-                    is NetworkResult.Success -> {
-                        _identifiedInmate.value = result.data
-                        _loginStage.value = LoginStage.PIN_ENTRY
-                        setSuccess()
-                    }
-                    is NetworkResult.Failure -> {
-                        val errorMessage = getFriendlyErrorMessage(
-                            statusCode = result.statusCode,
-                            defaultMessage = "Face recognition failed. Please try again."
-                        )
-                        setError(errorMessage)
-                        delay(2000.milliseconds)
-                        setIdle()
-                    }
-                    else -> {}
-                }
-            }
         }
     }
 

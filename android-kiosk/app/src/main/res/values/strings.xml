@@ -9,10 +9,8 @@
     <string name="please_authenticate">Please Authenticate</string>
     <string name="rfid_card">RFID Card</string>
     <string name="fingerprint">Fingerprint</string>
-    <string name="face_id">Face ID</string>
     <string name="tap_card_desc">Tap your card\non the reader</string>
     <string name="place_finger_desc">Place your finger\non the scanner</string>
-    <string name="look_camera_desc">Look at the camera\nfor face recognition</string>
 
     <!-- Dashboard -->
     <string name="verified_contacts">VERIFIED CONTACTS</string>

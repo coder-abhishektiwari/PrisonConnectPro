@@ -1,6 +1,5 @@
 package com.prisonconnect.kiosk.repository
 
-import android.graphics.Bitmap
 import com.prisonconnect.kiosk.models.auth.AdminProfile
 import com.prisonconnect.kiosk.models.auth.AdminVerifyPasswordRequest
 import com.prisonconnect.kiosk.models.auth.AuthToken
@@ -17,7 +16,6 @@ interface AuthRepository {
     fun login(request: LoginRequest): Flow<NetworkResult<AuthToken>>
     fun refreshToken(): Flow<NetworkResult<AuthToken>>
     fun logout(): Flow<NetworkResult<Unit>>
-    fun identifyFace(image: Bitmap): Flow<NetworkResult<InmateProfile>>
     fun identifyFingerprint(capture: ByteArray): Flow<NetworkResult<InmateProfile>>
     fun identifyRfid(request: LoginRequest): Flow<NetworkResult<InmateProfile>>
     fun identifyPrisoner(id: String): Flow<NetworkResult<InmateProfile>>

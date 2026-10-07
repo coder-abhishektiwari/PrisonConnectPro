@@ -36,7 +36,7 @@ uploaded to the backend after the call ends.
 ## Functional Workflows
 
 ### 1. Inmate Kiosk Flow (`android-kiosk`)
-1. **Multi-Modal Login**: RFID / Fingerprint / Face ID.
+1. **Multi-Modal Login**: RFID / Fingerprint / Prisoner ID.
 2. **Dashboard**: Profile, trust bank balance, family contacts.
 3. **Call Scheduling & Slot Validation**: Verify slot availability & balance.
 4. **WebRTC Media Connection**: Establish encrypted DTLS-SRTP audio/video stream.

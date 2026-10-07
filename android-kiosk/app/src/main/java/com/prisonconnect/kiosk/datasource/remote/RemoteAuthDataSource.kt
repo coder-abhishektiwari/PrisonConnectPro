@@ -1,6 +1,5 @@
 package com.prisonconnect.kiosk.datasource.remote
 
-import android.graphics.Bitmap
 import android.util.Base64
 import com.prisonconnect.kiosk.api.TrustApiService
 import com.prisonconnect.kiosk.core.ApiCache
@@ -8,7 +7,6 @@ import com.prisonconnect.kiosk.datasource.AuthDataSource
 import com.prisonconnect.kiosk.models.auth.*
 import com.prisonconnect.kiosk.models.common.ApiResponse
 import com.prisonconnect.kiosk.models.inmate.InmateProfile
-import java.io.ByteArrayOutputStream
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -25,13 +23,6 @@ class RemoteAuthDataSource @Inject constructor(
 
     override suspend fun logout(accessToken: String): ApiResponse<Unit> =
         apiService.logout("Bearer $accessToken")
-
-    override suspend fun identifyFace(kioskId: String, image: Bitmap): ApiResponse<InmateProfile> {
-        val stream = ByteArrayOutputStream()
-        image.compress(Bitmap.CompressFormat.JPEG, 90, stream)
-        val imageBase64 = Base64.encodeToString(stream.toByteArray(), Base64.NO_WRAP)
-        return apiService.identifyFace(FaceIdentifyRequest(kioskId, imageBase64))
-    }
 
     override suspend fun identifyFingerprint(kioskId: String, capture: ByteArray): ApiResponse<InmateProfile> {
         val captureBase64 = Base64.encodeToString(capture, Base64.NO_WRAP)

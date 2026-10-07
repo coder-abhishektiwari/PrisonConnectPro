@@ -263,10 +263,6 @@ try {
     record('PLAINTEXT: kiosk user PINs in clear', u && u.password === 'pin1234' ? 'FAIL' : 'PASS', `stored=${String(u?.password).slice(0, 6)}...`);
   } catch (e) { record('PLAINTEXT: users.json inspection', 'FAIL', e.message); }
 
-  // Face identify without image
-  const faceNoImage = await api('POST', '/auth/face-identify', { kioskId: 'KIOSK-001' });
-  record('POST /auth/face-identify without image -> 400', faceNoImage.status === 400 ? 'PASS' : 'FAIL', `status=${faceNoImage.status}, code=${faceNoImage.json?.error?.code}`);
-
   // Kiosk verify endpoint
   const kioskVerify = await api('POST', '/kiosks/verify', { deviceSerialNumber: 'SN-TEST-000' });
   record('POST /kiosks/verify (unknown serial) graceful', kioskVerify.status === 200 ? 'PASS' : 'FAIL', `status=${kioskVerify.status}, authorized=${kioskVerify.json?.data?.authorized}`);

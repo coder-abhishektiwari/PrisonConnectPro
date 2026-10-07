@@ -47,11 +47,11 @@ Calls are **pure 1-to-1 P2P WebRTC**. The backend holds no media stack at all:
   from concurrent requests.
 
 ## Honest limitations — what you still need before production
-- **Face/fingerprint matching**: `/auth/face-identify` and
-  `/auth/fingerprint-identify` now check the kiosk assignment correctly but
-  do **not** compare biometric templates — that needs a real matcher
-  (e.g. a face-embedding service) wired into `identifyInmate()` in
-  `server.js`.
+- **Fingerprint matching**: `/auth/fingerprint-identify` checks the kiosk
+  assignment correctly but does **not** compare biometric templates — that
+  needs a real matcher wired into `identifyInmate()` in `server.js`. Face
+  login (`/auth/face-identify`) was removed; face **registration** still
+  stores an embedding via `POST /admin/prisoners/:id/biometrics`.
 - **NAT traversal**: clients behind symmetric NAT need the TURN server
   reachable (see `coturn/turnserver.conf`); STUN-only networks will fail to
   connect without it.

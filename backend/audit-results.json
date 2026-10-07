@@ -209,11 +209,6 @@
       "detail": "stored=pin123..."
     },
     {
-      "name": "POST /auth/face-identify without image -> 400",
-      "status": "PASS",
-      "detail": "status=400, code=INVALID_REQUEST"
-    },
-    {
       "name": "POST /kiosks/verify (unknown serial) graceful",
       "status": "PASS",
       "detail": "status=200, authorized=false"

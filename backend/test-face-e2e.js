@@ -15,9 +15,8 @@ async function test() {
   console.log(`[test] Note: This test requires a real face image.`);
   console.log(`[test] To test manually:`);
   console.log(`[test] 1. Register: POST /auth/face-register with { inmateId, kioskId, image: <base64 jpeg> }`);
-  console.log(`[test] 2. Identify: POST /auth/face-identify with { kioskId, image: <base64 jpeg> }`);
-  console.log(`[test] 3. Check response includes similarity, liveness, antispoof scores`);
-  console.log(`[test] 4. Verify LIVENESS_FAILED is returned for spoof attempts`);
+  console.log(`[test] 2. Register a face for a prisoner from the kiosk: POST /admin/prisoners/:id/biometrics with { type: 'face', image }`);
+  console.log(`[test] 3. Verify LIVENESS_FAILED is returned for spoof attempts`);
   console.log(`\n[test] Testing cosineSimilarity...`);
   const a = [1, 0, 0];
   const b = [1, 0, 0];

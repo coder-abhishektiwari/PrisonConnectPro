@@ -2,7 +2,6 @@ package com.prisonconnect.kiosk.ui.auth
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -23,8 +22,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 
 // --- Premium Color Palette ---
 val PremiumNavy = Color(0xFF001F3F)
@@ -161,110 +158,6 @@ private fun KeypadButton(
             }
         }
     }
-}
-
-@Composable
-fun ScanningDialog(
-    type: String,
-    status: ScanningStatus,
-    onDismiss: () -> Unit
-) {
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.85f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                ScanningVisual(type, status)
-                Spacer(modifier = Modifier.height(40.dp))
-                Text(
-                    text = when (status) {
-                        ScanningStatus.SCANNING -> "Scanning $type..."
-                        ScanningStatus.SUCCESS -> "Verified Successfully"
-                        ScanningStatus.ERROR -> "Scan Failed. Try again."
-                    },
-                    color = Color.White,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                if (status == ScanningStatus.ERROR) {
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Button(
-                        onClick = onDismiss,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.White),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("CANCEL", color = Color.Black, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ScanningVisual(type: String, status: ScanningStatus) {
-    val infiniteTransition = rememberInfiniteTransition(label = "Scanning")
-    val pulse by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.2f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "Pulse"
-    )
-
-    val icon = when (type) {
-        "Fingerprint" -> Icons.Default.Fingerprint
-        "Face ID" -> Icons.Default.Face
-        else -> Icons.Default.CreditCard
-    }
-
-    val color = when (status) {
-        ScanningStatus.SCANNING -> AccentBlue
-        ScanningStatus.SUCCESS -> SuccessGreen
-        ScanningStatus.ERROR -> ErrorRed
-    }
-
-    Box(contentAlignment = Alignment.Center) {
-        if (status == ScanningStatus.SCANNING) {
-            Box(
-                modifier = Modifier
-                    .size(120.dp)
-                    .scale(pulse)
-                    .border(2.dp, color.copy(alpha = 0.5f), CircleShape)
-            )
-        }
-
-        Surface(
-            modifier = Modifier.size(120.dp),
-            shape = CircleShape,
-            color = color,
-            shadowElevation = 12.dp
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = if (status == ScanningStatus.SUCCESS) Icons.Default.Check else icon,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(60.dp)
-                )
-            }
-        }
-    }
-}
-
-enum class ScanningStatus {
-    SCANNING, SUCCESS, ERROR
 }
 
 @Composable

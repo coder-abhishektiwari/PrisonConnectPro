@@ -25,7 +25,6 @@
     "ROOM_MAX_PARTICIPANTS": "2",
     "ACCESS_TOKEN_TTL": "1h",
     "REFRESH_TOKEN_TTL": "7d",
-    "FACE_MATCH_THRESHOLD": "0.5",
     "FACE_LIVENESS_THRESHOLD": "0.5",
     "SIGNALING_URL": "http://127.0.0.1:3002",
     "SMS_PROVIDER": "log",

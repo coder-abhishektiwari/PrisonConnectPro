@@ -1,6 +1,5 @@
 package com.prisonconnect.kiosk.datasource
 
-import android.graphics.Bitmap
 import com.prisonconnect.kiosk.models.auth.AdminProfile
 import com.prisonconnect.kiosk.models.auth.AuthToken
 import com.prisonconnect.kiosk.models.auth.KioskVerifyRequest
@@ -14,7 +13,6 @@ interface AuthDataSource {
     suspend fun login(request: LoginRequest): ApiResponse<AuthToken>
     suspend fun refreshToken(refreshToken: String): ApiResponse<AuthToken>
     suspend fun logout(accessToken: String): ApiResponse<Unit>
-    suspend fun identifyFace(kioskId: String, image: Bitmap): ApiResponse<InmateProfile>
     suspend fun identifyFingerprint(kioskId: String, capture: ByteArray): ApiResponse<InmateProfile>
     suspend fun identifyRfid(request: LoginRequest): ApiResponse<InmateProfile>
     suspend fun identifyPrisoner(kioskId: String, prisonerId: String): ApiResponse<InmateProfile>

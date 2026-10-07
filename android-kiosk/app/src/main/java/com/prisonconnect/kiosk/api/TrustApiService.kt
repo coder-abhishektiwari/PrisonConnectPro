@@ -44,11 +44,6 @@ interface TrustApiService {
     @GET("admin/profile")
     suspend fun getAdminProfile(): ApiResponse<AdminProfile>
 
-    @POST("auth/face-identify")
-    suspend fun identifyFace(
-        @Body request: FaceIdentifyRequest
-    ): ApiResponse<InmateProfile>
-
     @POST("auth/fingerprint-identify")
     suspend fun identifyFingerprint(
         @Body request: FingerprintIdentifyRequest

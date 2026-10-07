@@ -1,6 +1,5 @@
 package com.prisonconnect.kiosk.repository
 
-import android.graphics.Bitmap
 import com.prisonconnect.kiosk.core.Constants
 import com.prisonconnect.kiosk.core.Logger
 import com.prisonconnect.kiosk.core.SessionManager
@@ -121,31 +120,6 @@ class AuthRepositoryImpl @Inject constructor(
             emit(NetworkResult.Success(Unit))
         } catch (e: Exception) {
             emit(NetworkResult.Failure(ApiError("EXCEPTION", "Logout failed")))
-        }
-    }
-
-    override fun identifyFace(image: Bitmap): Flow<NetworkResult<InmateProfile>> = flow {
-        emit(NetworkResult.Loading)
-        try {
-            val kioskId = verifiedKiosk?.kioskId ?: Constants.KIOSK_ID
-            val response = dataSource.identifyFace(kioskId, image)
-            if (response.success && response.data != null) {
-                sessionManager.saveInmateProfile(response.data)
-                emit(NetworkResult.Success(response.data))
-            } else {
-                val error = response.error?.let {
-                    getFriendlyError("Face recognition failed. Please try again.", it.code)
-                } ?: ApiError("IDENTIFY_FAILED", "Face recognition failed. Please try again.")
-                emit(NetworkResult.Failure(error))
-            }
-        } catch (e: Exception) {
-            val statusCode = if (e is HttpException) e.code() else null
-            val error = when {
-                statusCode == 401 || statusCode == 403 -> ApiError("UNAUTHORIZED", "Unauthorized access. Please contact administrator.")
-                statusCode == 404 -> ApiError("NOT_FOUND", "Face not recognized. Please try again.")
-                else -> ApiError("EXCEPTION", "Face recognition failed. Please try again.")
-            }
-            emit(NetworkResult.Failure(error, statusCode = statusCode))
         }
     }
 
