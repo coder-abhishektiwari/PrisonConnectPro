@@ -133,6 +133,35 @@ data class RecordingUploadResponse(
     @SerializedName("status") val status: String? = null
 )
 
+// ---- chunked, resumable upload (chunks are raw bytes, base64 on the wire) ----
+
+data class RecordingUploadInitRequest(
+    @SerializedName("callId") val callId: String,
+    @SerializedName("fileName") val fileName: String,
+    @SerializedName("size") val size: Long,
+    @SerializedName("sha256") val sha256: String,
+    @SerializedName("chunkSize") val chunkSize: Int
+)
+
+/** `receivedBytes` > 0 means the server already holds part of this file. */
+data class RecordingUploadInitResponse(
+    @SerializedName("uploadId") val uploadId: String? = null,
+    @SerializedName("receivedBytes") val receivedBytes: Long = 0L,
+    @SerializedName("chunkSize") val chunkSize: Int? = null
+)
+
+data class RecordingUploadChunkRequest(
+    @SerializedName("index") val index: Int,
+    @SerializedName("offset") val offset: Long,
+    @SerializedName("data") val data: String
+)
+
+/** Server always reports its true offset - the client follows it. */
+data class RecordingUploadChunkResponse(
+    @SerializedName("receivedBytes") val receivedBytes: Long = 0L,
+    @SerializedName("complete") val complete: Boolean = false
+)
+
 /** Slim snapshot of a call used by the kiosk progress screen. */
 data class CallStatusSnapshot(
     @SerializedName("callId") val callId: String? = null,

@@ -1,21 +1,385 @@
 const express = require('express');
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const { readDb, updateDb } = require('../lib/db');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { sendSuccess, sendError, asyncRoute } = require('../lib/response');
 const { inAdminScope, kioskScopeOf, inScopeOf, scopeList } = require('../lib/scoping');
-const { saveUploadedRecording } = require('../lib/recorder');
+const { saveUploadedRecording, saveUploadedRecordingFromPath, recordingFileOf, RECORDINGS_DIR } = require('../lib/recorder');
 
 const router = express.Router();
 
+// ============ chunked, resumable kiosk upload (recordings/.uploads/<id>) ============
+const UPLOADS_DIR = path.join(RECORDINGS_DIR, '.uploads');
+const CHUNK_MAX_BYTES = 5 * 1024 * 1024;
+const RECORDING_MAX_BYTES = 512 * 1024 * 1024;
+const PARTIAL_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Chunks of one upload must be appended strictly in order; this serialises them.
+const chunkLocks = new Map();
+
+// The kiosk uploads with whichever session is live on the device: at call
+// time that is the inmate PIN session (role 'inmate' + kioskId claim), but a
+// kiosk operator/admin session is equally valid for the same device.
+const KIOSK_UPLOAD_ROLES = ['admin', 'warden', 'kiosk', 'kiosk_admin', 'inmate'];
+
+function uploadDir(uploadId) {
+  return path.join(UPLOADS_DIR, uploadId);
+}
+
+function uploadMetaPath(uploadId) {
+  return path.join(uploadDir(uploadId), 'meta.json');
+}
+
+function uploadPartPath(uploadId) {
+  return path.join(uploadDir(uploadId), 'part.bin');
+}
+
+async function readUploadMeta(uploadId) {
+  try {
+    return JSON.parse(await fs.promises.readFile(uploadMetaPath(uploadId), 'utf8'));
+  } catch (err) {
+    return null;
+  }
+}
+
+async function writeUploadMeta(meta) {
+  await fs.promises.writeFile(uploadMetaPath(meta.uploadId), JSON.stringify(meta));
+}
+
+function withUploadLock(uploadId, fn) {
+  const prev = chunkLocks.get(uploadId) || Promise.resolve();
+  const run = prev.then(fn, fn);
+  const tail = run.then(() => {}, () => {});
+  chunkLocks.set(uploadId, tail);
+  tail.then(() => {
+    if (chunkLocks.get(uploadId) === tail) chunkLocks.delete(uploadId);
+  });
+  return run;
+}
+
+function sha256File(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256');
+    fs.createReadStream(filePath)
+      .on('error', reject)
+      .on('data', (chunk) => hash.update(chunk))
+      .on('end', () => resolve(hash.digest('hex')));
+  });
+}
+
+async function sweepStaleUploads() {
+  try {
+    const entries = await fs.promises.readdir(UPLOADS_DIR);
+    const cutoff = Date.now() - PARTIAL_TTL_MS;
+    for (const id of entries) {
+      const st = await fs.promises.stat(uploadDir(id)).catch(() => null);
+      if (st && st.mtimeMs < cutoff) {
+        await fs.promises.rm(uploadDir(id), { recursive: true, force: true });
+      }
+    }
+  } catch (err) {
+    // Nothing to sweep yet.
+  }
+}
+
+/**
+ * The device that ran the call uploads from its own session; if a different
+ * inmate has since logged in on that same kiosk, the call's own device id is
+ * still enough to hand over the file it produced.
+ */
+async function inUploadScope(req, call) {
+  if (await inScopeOf(req, call)) return true;
+  const kioskId = kioskScopeOf(req);
+  return !!kioskId && !!call.kioskId && call.kioskId === kioskId;
+}
+
+async function findCall(callId) {
+  const calls = await readDb('calls.json');
+  return calls.find((c) => c.callId === callId || c.roomId === callId) || null;
+}
+
+/** Shared tail for every accepted upload: DB record + call status + event. */
+async function persistUpload(broadcastEvent, callId, rec) {
+  await updateDb('recordings.json', (all) => {
+    const existingIdx = all.findIndex((r) => r.callId === callId || r.recordingId === rec.recordingId);
+    if (existingIdx !== -1) {
+      all[existingIdx] = { ...all[existingIdx], ...rec };
+      return { data: all, result: all[existingIdx] };
+    }
+    return { data: [...all, rec], result: rec };
+  });
+
+  await updateDb('calls.json', (calls) => {
+    const c = calls.find((x) => x.callId === callId || x.roomId === callId);
+    if (c) {
+      c.recordingStatus = 'completed';
+      c.recordingId = rec.recordingId;
+    }
+    return { data: calls, result: c };
+  });
+
+  broadcastEvent('recording-finished', rec);
+  return rec;
+}
+
+// ---- signed streaming URLs ----
+// <video>/<audio> tags cannot attach a Bearer header, so playback goes through
+// a short-lived HMAC-signed link issued only to authenticated, in-scope users.
+const STREAM_TTL_SECONDS = Number(process.env.RECORDING_URL_TTL_SECONDS) > 0
+  ? Number(process.env.RECORDING_URL_TTL_SECONDS)
+  : 7200;
+
+function streamSecret() {
+  return process.env.RECORDING_URL_SECRET || process.env.JWT_SECRET;
+}
+
+function signStream(recordingId, exp) {
+  return crypto.createHmac('sha256', streamSecret())
+    .update(`stream:${recordingId}:${exp}`)
+    .digest('base64url');
+}
+
+/** Constant-time comparison (hash first so lengths never leak). */
+function safeEqual(a, b) {
+  const ha = crypto.createHash('sha256').update(String(a)).digest();
+  const hb = crypto.createHash('sha256').update(String(b)).digest();
+  return crypto.timingSafeEqual(ha, hb);
+}
+
+/** Recording as exposed to dashboards: playable flag, never server paths. */
+function publicRecording(rec) {
+  const { filePath, ...rest } = rec || {};
+  return { ...rest, url: null, available: !!recordingFileOf(rec) };
+}
+
 function createRecordingsRouter(broadcastEvent) {
-  router.get('/', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('recordings.json')))));
+  router.get('/', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) =>
+    sendSuccess(res, (await scopeList(req, await readDb('recordings.json'))).map(publicRecording))));
+
+  // ---- chunked upload: init (also the resume point) ----
+  router.post('/upload/init', requireAuth, requireRole(...KIOSK_UPLOAD_ROLES), asyncRoute(async (req, res) => {
+    const { callId, fileName, size, sha256, chunkSize } = req.body || {};
+    if (!callId || !fileName || !sha256 || !Number.isFinite(size) || size <= 0) {
+      return sendError(res, 'INVALID_REQUEST', 'callId, fileName, size and sha256 are required', 400);
+    }
+    if (size > RECORDING_MAX_BYTES) {
+      return sendError(res, 'RECORDING_TOO_LARGE', 'Recording exceeds the maximum accepted size', 413);
+    }
+
+    const call = await findCall(callId);
+    if (!call || !(await inUploadScope(req, call))) {
+      return sendError(res, 'CALL_NOT_FOUND', 'No call matches the given callId', 404);
+    }
+
+    await fs.promises.mkdir(UPLOADS_DIR, { recursive: true });
+
+    // Resume: a partial for the same content already exists - hand back how
+    // much of it landed so the kiosk can skip those chunks.
+    const entries = await fs.promises.readdir(UPLOADS_DIR);
+    for (const id of entries) {
+      const meta = await readUploadMeta(id);
+      if (!meta || meta.callId !== callId || meta.sha256 !== sha256 || meta.size !== size) continue;
+      const st = await fs.promises.stat(uploadPartPath(id)).catch(() => null);
+      if (!st) continue;
+      if (st.size > size) {
+        await fs.promises.rm(uploadDir(id), { recursive: true, force: true }).catch(() => {});
+        continue;
+      }
+      meta.receivedBytes = st.size;
+      await writeUploadMeta(meta);
+      return sendSuccess(res, { uploadId: id, receivedBytes: st.size, chunkSize: meta.chunkSize });
+    }
+
+    const uploadId = `UPL-${uuidv4().substring(0, 8).toUpperCase()}`;
+    await fs.promises.mkdir(uploadDir(uploadId), { recursive: true });
+    const meta = {
+      uploadId,
+      callId,
+      fileName,
+      mimeType: 'video/mp4',
+      size,
+      sha256,
+      chunkSize: Math.min(Math.max(1, Number(chunkSize) || CHUNK_MAX_BYTES), CHUNK_MAX_BYTES),
+      receivedBytes: 0,
+      kioskId: kioskScopeOf(req) || null,
+      createdBy: req.auth?.sub || null,
+      createdAt: new Date().toISOString()
+    };
+    await writeUploadMeta(meta);
+    await fs.promises.writeFile(uploadPartPath(uploadId), '');
+    sweepStaleUploads();
+    return sendSuccess(res, { uploadId, receivedBytes: 0, chunkSize: meta.chunkSize }, 201);
+  }));
+
+  // ---- chunked upload: append one chunk at its exact offset ----
+  router.post('/upload/:uploadId/chunk', requireAuth, requireRole(...KIOSK_UPLOAD_ROLES), asyncRoute(async (req, res) =>
+    withUploadLock(req.params.uploadId, async () => {
+      const { uploadId } = req.params;
+      const { index, offset, data } = req.body || {};
+
+      const meta = await readUploadMeta(uploadId);
+      if (!meta) return sendError(res, 'UPLOAD_NOT_FOUND', 'Unknown or expired upload session', 404);
+      const requesterKiosk = kioskScopeOf(req);
+      if (meta.kioskId && requesterKiosk && meta.kioskId !== requesterKiosk) {
+        return sendError(res, 'UPLOAD_NOT_FOUND', 'Unknown or expired upload session', 404);
+      }
+
+      const st = await fs.promises.stat(uploadPartPath(uploadId)).catch(() => null);
+      const receivedBytes = st ? st.size : 0;
+      if (receivedBytes >= meta.size) {
+        return sendSuccess(res, { receivedBytes: meta.size, complete: true });
+      }
+      if (!Number.isFinite(offset) || offset < 0 || typeof data !== 'string' || !data.length) {
+        return sendError(res, 'INVALID_REQUEST', 'offset and data are required', 400);
+      }
+      if (offset < receivedBytes) {
+        // Retried chunk that already landed - acknowledge without appending.
+        return sendSuccess(res, { receivedBytes, complete: receivedBytes >= meta.size });
+      }
+      if (offset !== receivedBytes) {
+        return sendError(res, 'OUT_OF_ORDER', `Expected chunk offset ${receivedBytes}`, 409);
+      }
+
+      const buf = Buffer.from(data, 'base64');
+      if (!buf.length) return sendError(res, 'INVALID_REQUEST', 'Chunk decoded to zero bytes', 400);
+      if (receivedBytes + buf.length > meta.size) {
+        return sendError(res, 'CHUNK_OVERFLOW', 'Chunk would exceed the declared size', 400);
+      }
+
+      await fs.promises.appendFile(uploadPartPath(uploadId), buf);
+      meta.receivedBytes = receivedBytes + buf.length;
+      await writeUploadMeta(meta);
+      return sendSuccess(res, { receivedBytes: meta.receivedBytes, complete: meta.receivedBytes >= meta.size, index });
+    })));
+
+  // ---- chunked upload: verify checksum, move into place, publish ----
+  router.post('/upload/:uploadId/complete', requireAuth, requireRole(...KIOSK_UPLOAD_ROLES), asyncRoute(async (req, res) =>
+    withUploadLock(req.params.uploadId, async () => {
+      const { uploadId } = req.params;
+
+      const meta = await readUploadMeta(uploadId);
+      if (!meta) return sendError(res, 'UPLOAD_NOT_FOUND', 'Unknown or expired upload session', 404);
+      const requesterKiosk = kioskScopeOf(req);
+      if (meta.kioskId && requesterKiosk && meta.kioskId !== requesterKiosk) {
+        return sendError(res, 'UPLOAD_NOT_FOUND', 'Unknown or expired upload session', 404);
+      }
+
+      const st = await fs.promises.stat(uploadPartPath(uploadId)).catch(() => null);
+      const receivedBytes = st ? st.size : 0;
+      if (receivedBytes !== meta.size) {
+        return sendError(res, 'INCOMPLETE', `Received ${receivedBytes} of ${meta.size} bytes`, 409);
+      }
+
+      const digest = await sha256File(uploadPartPath(uploadId)).catch(() => null);
+      if (digest !== meta.sha256) {
+        // Corrupt assembly - drop it so the next attempt starts clean.
+        await fs.promises.rm(uploadDir(uploadId), { recursive: true, force: true });
+        return sendError(res, 'CHECKSUM_MISMATCH', 'Uploaded bytes do not match the declared sha256', 400);
+      }
+
+      const call = await findCall(meta.callId);
+      if (!call || !(await inUploadScope(req, call))) {
+        return sendError(res, 'CALL_NOT_FOUND', 'No call matches the given callId', 404);
+      }
+
+      let rec;
+      try {
+        rec = await saveUploadedRecordingFromPath({
+          callId: meta.callId,
+          kioskId: call.kioskId || null,
+          inmateId: call.inmateId || null,
+          contactId: call.contactId || null,
+          sourcePath: uploadPartPath(uploadId),
+          fileName: meta.fileName,
+          mimeType: meta.mimeType
+        });
+      } catch (err) {
+        console.error('[recordings] failed finalising chunked upload:', err.message);
+        return sendError(res, 'STORAGE_ERROR', 'Failed to store uploaded recording', 500);
+      }
+
+      await fs.promises.rm(uploadDir(uploadId), { recursive: true, force: true });
+      await persistUpload(broadcastEvent, meta.callId, rec);
+      return sendSuccess(res, rec, 200);
+    })));
+
+  // ---- signed playback link (authenticated, in-scope callers only) ----
+  router.get('/:recordingId/url', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
+    const recordings = await readDb('recordings.json');
+    const recording = recordings.find((r) => r.recordingId === req.params.recordingId);
+    if (!recording || !(await inScopeOf(req, recording))) {
+      return sendError(res, 'NOT_FOUND', 'Recording not found', 404);
+    }
+    if (!recordingFileOf(recording)) {
+      return sendError(res, 'NO_FILE', 'No stored file for this recording', 404);
+    }
+    const exp = Math.floor(Date.now() / 1000) + STREAM_TTL_SECONDS;
+    return sendSuccess(res, {
+      url: `/recordings/${encodeURIComponent(recording.recordingId)}/stream?exp=${exp}&sig=${signStream(recording.recordingId, exp)}`,
+      expiresAt: new Date(exp * 1000).toISOString()
+    });
+  }));
+
+  // ---- the media itself: signed + HTTP Range (seek) ----
+  router.get('/:recordingId/stream', asyncRoute(async (req, res) => {
+    const exp = Number(req.query.exp);
+    const sig = String(req.query.sig || '');
+    if (!Number.isFinite(exp) || !sig || Date.now() / 1000 > exp) {
+      return sendError(res, 'LINK_EXPIRED', 'Recording link is invalid or has expired', 403);
+    }
+    if (!safeEqual(sig, signStream(req.params.recordingId, exp))) {
+      return sendError(res, 'FORBIDDEN', 'Recording link signature is invalid', 403);
+    }
+
+    const recordings = await readDb('recordings.json');
+    const recording = recordings.find((r) => r.recordingId === req.params.recordingId);
+    const file = recordingFileOf(recording);
+    if (!file) return sendError(res, 'NOT_FOUND', 'Recording file not found', 404);
+
+    const size = (await fs.promises.stat(file)).size;
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate');
+
+    const range = req.headers.range;
+    if (!range) {
+      res.setHeader('Content-Length', size);
+      return fs.createReadStream(file).pipe(res);
+    }
+
+    const match = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
+    if (!match) {
+      res.setHeader('Content-Range', `bytes */${size}`);
+      return res.status(416).end();
+    }
+    let start = match[1] === '' ? null : Number(match[1]);
+    let end = match[2] === '' ? null : Number(match[2]);
+    if (start === null) {
+      // Suffix form: bytes=-N (last N bytes)
+      start = Math.max(0, size - (end || 0));
+      end = size - 1;
+    } else {
+      end = end === null ? size - 1 : Math.min(end, size - 1);
+    }
+    if (!Number.isFinite(start) || start >= size || start > end) {
+      res.setHeader('Content-Range', `bytes */${size}`);
+      return res.status(416).end();
+    }
+
+    res.status(206);
+    res.setHeader('Content-Range', `bytes ${start}-${end}/${size}`);
+    res.setHeader('Content-Length', end - start + 1);
+    return fs.createReadStream(file, { start, end }).pipe(res);
+  }));
 
   router.get('/:recordingId', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
     const recordings = await readDb('recordings.json');
     const recording = recordings.find((r) => r.recordingId === req.params.recordingId);
     if (!recording || !(await inScopeOf(req, recording))) return sendError(res, 'NOT_FOUND', 'Recording not found', 404);
-    return sendSuccess(res, recording);
+    return sendSuccess(res, publicRecording(recording));
   }));
 
   router.post('/', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
@@ -70,25 +434,7 @@ function createRecordingsRouter(broadcastEvent) {
       return sendError(res, 'STORAGE_ERROR', 'Failed to store uploaded recording', 500);
     }
 
-    await updateDb('recordings.json', (all) => {
-      const existingIdx = all.findIndex((r) => r.callId === callId || r.recordingId === rec.recordingId);
-      if (existingIdx !== -1) {
-        all[existingIdx] = { ...all[existingIdx], ...rec };
-        return { data: all, result: all[existingIdx] };
-      }
-      return { data: [...all, rec], result: rec };
-    });
-
-    await updateDb('calls.json', (calls) => {
-      const c = calls.find((x) => x.callId === callId || x.roomId === callId);
-      if (c) {
-        c.recordingStatus = 'completed';
-        c.recordingId = rec.recordingId;
-      }
-      return { data: calls, result: c };
-    });
-
-    broadcastEvent('recording-finished', rec);
+    await persistUpload(broadcastEvent, callId, rec);
     return sendSuccess(res, rec, 200);
   }));
 

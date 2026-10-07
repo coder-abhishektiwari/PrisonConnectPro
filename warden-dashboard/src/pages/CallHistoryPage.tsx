@@ -24,6 +24,7 @@ export function CallHistoryPage() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [selected, setSelected] = useState<CallHistoryItem | null>(null);
   const [playing, setPlaying] = useState<Recording | null>(null);
+  const [detailUrl, setDetailUrl] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isExporting, setIsExporting] = useState(false);
 
@@ -66,6 +67,28 @@ export function CallHistoryPage() {
     (recordingsData ?? []).forEach((r) => { map[r.callId] = r; });
     return map;
   }, [recordingsData]);
+
+  // Signed playback link for the row drawer - fetched on demand so the link
+  // is fresh each time the panel opens (it expires server-side).
+  useEffect(() => {
+    let stale = false;
+    setDetailUrl(null);
+    const rec = selected ? recordings[selected.callId] : undefined;
+    if (rec?.available) {
+      wardenApi.getRecordingUrl(rec.recordingId)
+        .then((url) => { if (!stale) setDetailUrl(url); })
+        .catch(() => { /* drawer simply hides the player */ });
+    }
+    return () => { stale = true; };
+  }, [selected, recordings]);
+
+  const playRecording = async (rec: Recording) => {
+    try {
+      setPlaying({ ...rec, url: await wardenApi.getRecordingUrl(rec.recordingId) });
+    } catch {
+      setPlaying({ ...rec, url: null });
+    }
+  };
 
   const inmateParams = useMemo<ListParams>(() => ({ limit: 1000, offset: 0 }), []);
   const { data: inmatesData } = useCachedResource<PaginatedResponse<Inmate>>(
@@ -132,7 +155,7 @@ export function CallHistoryPage() {
       const row = ws.addRow([
         c.callId, fmtDate(c.startTime), inmateLabel(c, inmates[c.inmateId]),
         contactLabel(c), locationLabel(c.family?.location) || '', c.kioskId, c.type, fmtDur(c.durationMinutes),
-        c.status, c.connectionQuality || '', rec?.url ? 'Yes' : 'No'
+        c.status, c.connectionQuality || '', rec?.available ? 'Yes' : 'No'
       ]);
       row.eachCell((cell) => { cell.numFmt = '@'; });
     });
@@ -332,8 +355,8 @@ export function CallHistoryPage() {
                         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${call.connectionQuality === 'excellent' ? 'bg-success/10 text-success border-success/20' : call.connectionQuality === 'good' ? 'bg-info-100 text-info border-info/20' : call.connectionQuality === 'fair' ? 'bg-warning/10 text-warning border-warning/20' : 'bg-error/10 text-error border-error/20'}`}>{call.connectionQuality || '—'}</span>
                       </td>
                       <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
-                        {rec?.url ? (
-                          <button onClick={() => setPlaying(rec)} className="w-9 h-9 bg-neutral-900 text-white rounded-full flex items-center justify-center hover:bg-black transition-colors shadow-sm" title="Play recording">
+                        {rec?.available ? (
+                          <button onClick={() => void playRecording(rec)} className="w-9 h-9 bg-neutral-900 text-white rounded-full flex items-center justify-center hover:bg-black transition-colors shadow-sm" title="Play recording">
                             <svg className="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
                           </button>
                         ) : (
@@ -370,7 +393,9 @@ export function CallHistoryPage() {
                 <h3 className="font-bold text-neutral-900">Recording — {playing.callId}</h3>
                 <button onClick={() => setPlaying(null)} className="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center text-neutral-500 hover:text-neutral-900">✕</button>
               </div>
-              {calls.find((c) => c.callId === playing.callId)?.type === 'audio' ? (
+              {!playing.url ? (
+                <p className="py-8 text-center text-sm text-neutral-500">Recording file could not be loaded.</p>
+              ) : calls.find((c) => c.callId === playing.callId)?.type === 'audio' ? (
                 <audio controls autoPlay src={playing.url || ''} className="w-full" />
               ) : (
                 <video controls autoPlay src={playing.url || ''} className="w-full rounded-lg bg-black" style={{ maxHeight: '60vh' }} />
@@ -461,11 +486,11 @@ export function CallHistoryPage() {
                   </div>
                 </div>
 
-                {recordings[selected.callId]?.url && (
+                {detailUrl && (
                   <div className="mt-6">
                     <p className="text-sm font-semibold text-neutral-900 mb-2">Recording</p>
-                    <video controls src={recordings[selected.callId].url!} className="w-full rounded-lg bg-black" />
-                    <a href={recordings[selected.callId].url!} download className="mt-2 inline-block px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-bold hover:bg-primary-700">⬇ Download</a>
+                    <video controls src={detailUrl} className="w-full rounded-lg bg-black" />
+                    <a href={detailUrl} download className="mt-2 inline-block px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-bold hover:bg-primary-700">⬇ Download</a>
                   </div>
                 )}
               </div>

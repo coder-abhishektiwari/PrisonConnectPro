@@ -2,10 +2,13 @@ package com.prisonconnect.kiosk
 
 import android.app.Application
 import android.os.Build
+import androidx.work.Configuration
 import com.prisonconnect.kiosk.api.TrustApiService
 import com.prisonconnect.kiosk.core.Logger
 import com.prisonconnect.kiosk.hardware.DeviceInfoProvider
 import com.prisonconnect.kiosk.models.auth.KioskHeartbeatRequest
+import com.prisonconnect.kiosk.upload.RecordingUploadWorker
+import com.prisonconnect.kiosk.upload.RecordingUploadWorkerFactory
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -19,12 +22,18 @@ import javax.inject.Inject
  * PrisonConnect Inmate Kiosk Entry Application Class.
  */
 @HiltAndroidApp
-class PrisonKioskApp : Application() {
+class PrisonKioskApp : Application(), Configuration.Provider {
 
     @Inject lateinit var trustApiService: TrustApiService
     @Inject lateinit var deviceInfoProvider: DeviceInfoProvider
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** Custom factory so recording-upload workers get their Hilt deps. */
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder()
+            .setWorkerFactory(RecordingUploadWorkerFactory(this))
+            .build()
 
     // Device identity and OS facts never change while the process lives, so
     // they are resolved once instead of on every ping.
@@ -34,6 +43,11 @@ class PrisonKioskApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+
+        // Any recording that did not make it to the server before the last
+        // process died (crash, reboot, network outage) is queued again; the
+        // uploader resumes each one where the server stopped acknowledging.
+        RecordingUploadWorker.scanPending(this)
 
         // Single background ping. This is what the dashboard reads to decide
         // Online/Offline and Last Seen — without it a kiosk that is sitting idle

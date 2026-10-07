@@ -11,6 +11,7 @@ const { maskedPhone, contactPhone, buildLinkSms, buildCallLink } = require('../l
 const { paginate } = require('../lib/paginate');
 const { personName, callInmateName, callContactName } = require('../lib/names');
 const { pickWallet, ensureWallet } = require('../lib/wallets');
+const { recordingFileOf } = require('../lib/recorder');
 
 // ==================== CALL STATE MACHINE ====================
 const CALL_STATES = ['scheduled', 'ringing', 'connecting', 'active', 'reconnecting', 'completed', 'failed', 'cancelled', 'rejected', 'missed'];
@@ -431,14 +432,17 @@ function createCallsRouter(broadcastEvent, signaling) {
     if (qualityFilterVal && qualityFilterVal !== 'all') {
       calls = calls.filter((c) => (c.connectionQuality || 'unknown') === qualityFilterVal);
     }
+    // Recording filter: the dashboard sends available/none (the older yes/no
+    // pair is still accepted). "Available" means a stored, playable file —
+    // the same condition that makes the Play button show up.
     const recordingFilterVal = req.query.recording;
-    const recordings = await readDb('recordings.json').catch(() => []);
-    const recMap = {};
-    recordings.forEach((r) => { recMap[r.callId] = r; });
-    if (recordingFilterVal === 'yes') {
-      calls = calls.filter((c) => recMap[c.callId]?.url);
-    } else if (recordingFilterVal === 'no') {
-      calls = calls.filter((c) => !recMap[c.callId]?.url);
+    if (recordingFilterVal === 'yes' || recordingFilterVal === 'available' ||
+        recordingFilterVal === 'no' || recordingFilterVal === 'none') {
+      const recordings = await readDb('recordings.json').catch(() => []);
+      const recMap = {};
+      recordings.forEach((r) => { recMap[r.callId] = r; });
+      const wanted = recordingFilterVal === 'yes' || recordingFilterVal === 'available';
+      calls = calls.filter((c) => (wanted === !!recordingFileOf(recMap[c.callId])));
     }
 
     // --- Date Range ---

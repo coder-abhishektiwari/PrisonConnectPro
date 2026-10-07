@@ -1,0 +1,236 @@
+package com.prisonconnect.kiosk.ui.call
+
+import android.graphics.Matrix
+import android.opengl.GLES20
+import com.prisonconnect.kiosk.core.Logger
+import org.webrtc.GlRectDrawer
+import org.webrtc.VideoFrame
+import org.webrtc.VideoFrameDrawer
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.locks.LockSupport
+
+/**
+ * Composites the two video sides onto the recording encoder's input surface:
+ * the family's video fills the frame, the kiosk camera sits in a picture-in-
+ * picture corner, and both are drawn straight onto the hardware H.264 input
+ * surface by [RecordingVideoEncoder] — GPU compose + hardware encode, no CPU
+ * pixel copies and nothing extra running on WebRTC's own threads.
+ *
+ * [VideoFrameDrawer] takes care of rotation, I420 uploads and texture frames,
+ * so both sources go through the same call. A single render thread ticks at
+ * the profile's frame rate and always uses the latest frame per side
+ * (older ones are dropped instead of queued, so a slow decode can never build
+ * up latency).
+ */
+internal class VideoComposer(
+    private val encoder: RecordingVideoEncoder,
+    private val profile: RecordingProfile
+) {
+    private val running = AtomicBoolean(false)
+    private var thread: Thread? = null
+
+    private val localSlot = FrameSlot()
+    private val remoteSlot = FrameSlot()
+
+    private var drawer: GlRectDrawer? = null
+    private var frameDrawer: VideoFrameDrawer? = null
+
+    @Volatile private var framesRendered = 0L
+
+    val isRunning: Boolean get() = running.get()
+    val frameCount: Long get() = framesRendered
+
+    fun onLocalFrame(frame: VideoFrame) {
+        if (running.get()) localSlot.set(frame)
+    }
+
+    fun onRemoteFrame(frame: VideoFrame) {
+        if (running.get()) remoteSlot.set(frame)
+    }
+
+    /** Spawns the render thread; returns false when the GL side failed. */
+    fun start(): Boolean {
+        if (running.getAndSet(true)) return true
+        val latch = CountDownLatch(1)
+        var ok = false
+        thread = Thread({
+            ok = initGl()
+            latch.countDown()
+            if (ok) {
+                loop()
+                cleanupGl()
+            }
+        }, "rec-compose").apply {
+            isDaemon = true
+            start()
+        }
+        val waited = latch.await(START_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        if (!waited || !ok) {
+            running.set(false)
+            try { thread?.join(1000) } catch (_: InterruptedException) {}
+            thread = null
+            Logger.w("VideoComposer failed to initialise (waited=$waited ok=$ok)")
+        }
+        return ok && running.get()
+    }
+
+    /** Stops rendering and waits for the thread to release its GL resources. */
+    fun stop() {
+        if (!running.compareAndSet(true, false)) return
+        try {
+            thread?.join(STOP_TIMEOUT_MS)
+        } catch (_: InterruptedException) {}
+        thread = null
+        localSlot.clear()
+        remoteSlot.clear()
+        Logger.d("VideoComposer stopped frames=$framesRendered")
+    }
+
+    // ---- render thread ----
+
+    private fun initGl(): Boolean = try {
+        encoder.makeCurrent()
+        drawer = GlRectDrawer()
+        frameDrawer = VideoFrameDrawer()
+        true
+    } catch (e: Throwable) {
+        Logger.e("VideoComposer GL init failed", e)
+        false
+    }
+
+    private fun cleanupGl() {
+        try {
+            encoder.makeCurrent()
+            frameDrawer?.release()
+            drawer?.release()
+        } catch (e: Throwable) {
+            Logger.w("VideoComposer GL cleanup failed: ${e.message}")
+        }
+        frameDrawer = null
+        drawer = null
+    }
+
+    private fun loop() {
+        val intervalNs = NANOS_PER_SECOND / profile.fps
+        val startNs = System.nanoTime()
+        var index = 0L
+
+        while (running.get()) {
+            val targetNs = startNs + index * intervalNs
+            val waitNs = targetNs - System.nanoTime()
+            if (waitNs > PARK_THRESHOLD_NS) LockSupport.parkNanos(waitNs)
+
+            renderOnce(index * intervalNs)
+
+            // If rendering fell behind, jump the clock forward instead of
+            // bursting frames: the file stays in sync with the wall clock and
+            // the encoder never gets a queue of back-dated frames.
+            index++
+            val behind = System.nanoTime() - (startNs + index * intervalNs)
+            if (behind > intervalNs * 2) {
+                index += (behind / intervalNs).coerceAtMost(profile.fps * 10L)
+            }
+        }
+    }
+
+    private fun renderOnce(ptsNs: Long) {
+        val local = localSlot.take()
+        val remote = remoteSlot.take()
+        try {
+            val drawn = encoder.renderFrame(ptsNs) { compose(local, remote) }
+            if (drawn) framesRendered++
+        } finally {
+            local?.release()
+            remote?.release()
+        }
+    }
+
+    private fun compose(local: VideoFrame?, remote: VideoFrame?) {
+        val d = drawer ?: return
+        val fd = frameDrawer ?: return
+        GLES20.glViewport(0, 0, profile.width, profile.height)
+        GLES20.glClearColor(BACKGROUND_R, BACKGROUND_G, BACKGROUND_B, 1f)
+        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+
+        when {
+            local == null && remote == null -> Unit // nothing captured yet
+            remote == null -> fd.drawFrame(local, d, IDENTITY, 0, 0, profile.width, profile.height)
+            local == null -> fd.drawFrame(remote, d, IDENTITY, 0, 0, profile.width, profile.height)
+            else -> {
+                // Family video letterboxed over the whole frame.
+                val r = fit(remote.rotatedWidth, remote.rotatedHeight, 0, 0, profile.width, profile.height)
+                fd.drawFrame(remote, d, IDENTITY, r[0], r[1], r[2], r[3])
+
+                // Kiosk camera in the bottom-right corner.
+                val boxW = (profile.width * PIP_WIDTH_FRACTION).toInt()
+                val boxH = (profile.height * PIP_HEIGHT_FRACTION).toInt()
+                val margin = (profile.width * PIP_MARGIN_FRACTION).toInt()
+                val pip = fit(
+                    local.rotatedWidth, local.rotatedHeight,
+                    profile.width - boxW - margin, margin, boxW, boxH
+                )
+                fd.drawFrame(local, d, IDENTITY, pip[0], pip[1], pip[2], pip[3])
+            }
+        }
+    }
+
+    /** Largest rect of [srcW]x[srcH] that fits inside the destination, centred. */
+    private fun fit(srcW: Int, srcH: Int, dstX: Int, dstY: Int, dstW: Int, dstH: Int): IntArray {
+        if (srcW <= 0 || srcH <= 0) return intArrayOf(dstX, dstY, dstW, dstH)
+        val scale = minOf(dstW.toFloat() / srcW, dstH.toFloat() / srcH)
+        val w = (srcW * scale).toInt().coerceIn(1, dstW)
+        val h = (srcH * scale).toInt().coerceIn(1, dstH)
+        return intArrayOf(dstX + (dstW - w) / 2, dstY + (dstH - h) / 2, w, h)
+    }
+
+    /**
+     * Holds the newest frame per side with its own retain, so the WebRTC
+     * threads can swap it out while the render thread is still drawing it.
+     */
+    private class FrameSlot {
+        private var frame: VideoFrame? = null
+
+        fun set(new: VideoFrame) {
+            val old: VideoFrame?
+            synchronized(this) {
+                new.retain()
+                old = frame
+                frame = new
+            }
+            old?.release()
+        }
+
+        fun take(): VideoFrame? = synchronized(this) {
+            frame?.also { it.retain() }
+        }
+
+        fun clear() {
+            val old: VideoFrame?
+            synchronized(this) {
+                old = frame
+                frame = null
+            }
+            old?.release()
+        }
+    }
+
+    companion object {
+        private const val NANOS_PER_SECOND = 1_000_000_000L
+        private const val PARK_THRESHOLD_NS = 200_000L
+        private const val START_TIMEOUT_MS = 4_000L
+        private const val STOP_TIMEOUT_MS = 4_000L
+
+        private const val PIP_WIDTH_FRACTION = 0.30f
+        private const val PIP_HEIGHT_FRACTION = 0.22f
+        private const val PIP_MARGIN_FRACTION = 0.035f
+
+        private const val BACKGROUND_R = 0.04f
+        private const val BACKGROUND_G = 0.06f
+        private const val BACKGROUND_B = 0.09f
+
+        /** Identity transform — [VideoFrameDrawer] already applies rotation/flip. */
+        private val IDENTITY = Matrix()
+    }
+}

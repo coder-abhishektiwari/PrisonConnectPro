@@ -190,6 +190,9 @@ export interface Recording {
   duration: number;
   size?: number;
   url?: string | null;
+  /** True when a stored, playable file exists (drives the Play button). */
+  available?: boolean;
+  fileName?: string;
   encryptionKey?: string | null;
   encryption?: string;
   retentionDays?: number;
@@ -550,6 +553,21 @@ export const wardenApi = {
 
   getRecording: (recordingId: string) =>
     cachedGet(`recordings:${recordingId}`, () => apiClient.get<ApiResponse<Recording>>(`/recordings/${recordingId}`).then((r) => r.data?.data)),
+
+  /**
+   * Short-lived, signed streaming URL for the <video> tag (media requests
+   * cannot carry the Authorization header). Absolute, so it can be used
+   * directly as src/href.
+   */
+  getRecordingUrl: (recordingId: string) =>
+    apiClient
+      .get<ApiResponse<{ url: string; expiresAt: string }>>(`/recordings/${recordingId}/url`)
+      .then((r) => {
+        const url = r.data?.data?.url;
+        if (!url) throw new Error('Recording URL missing');
+        const base = (apiClient.defaults.baseURL || '').replace(/\/+$/, '');
+        return `${base}${url}`;
+      }),
 
   startRecording: (recordingId: string) =>
     apiClient.post<ApiResponse<Recording>>(`/recordings/${recordingId}/start`).then((r) => {

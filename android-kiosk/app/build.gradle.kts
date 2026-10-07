@@ -136,4 +136,7 @@ dependencies {
 
     // DataStore (secure token persistence)
     implementation(libs.androidx.datastore.preferences)
+
+    // WorkManager: recording uploads must outlive the process
+    implementation(libs.androidx.work.runtime.ktx)
 }

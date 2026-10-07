@@ -1,20 +1,20 @@
 package com.prisonconnect.kiosk.ui.call
 
 import android.content.Context
+import android.location.LocationManager
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
 import android.media.MediaFormat
-import android.media.MediaMuxer
 import com.prisonconnect.kiosk.core.Logger
-import com.prisonconnect.kiosk.models.call.RecordingUploadRequest
-import com.prisonconnect.kiosk.network.NetworkResult
-import com.prisonconnect.kiosk.repository.CallRepository
+import com.prisonconnect.kiosk.upload.RecordingUploadWorker
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import org.webrtc.EglBase
+import org.webrtc.VideoFrame
+import org.webrtc.VideoSink
+import org.webrtc.VideoTrack
 import org.webrtc.audio.JavaAudioDeviceModule
 import java.io.File
 import java.util.concurrent.ArrayBlockingQueue
@@ -24,26 +24,57 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Kiosk-side call recording. Captures raw microphone PCM tapped from the
- * WebRTC audio device module, encodes AAC, muxes a local .mp4, and on call end
- * performs: record -> upload -> verify server ack -> delete local file.
+ * Kiosk-side, BOTH-sides call recording.
+ *
+ * Audio: the WebRTC audio device module taps the kiosk microphone AND the
+ * family's playout, [StereoStitcher] merges them into one stereo stream
+ * (left = kiosk, right = family) and a single AAC encoder writes it.
+ *
+ * Video: [VideoComposer] composites the kiosk camera over the family's video
+ * straight onto a hardware H.264 encoder's input surface.
+ *
+ * Both tracks land in one MP4 under `Android/data/.../files/Recordings`, with
+ * the kiosk's last known coordinates in the container metadata. On call end
+ * the file is finalised and then uploaded (kept locally until the server
+ * acknowledges it).
  */
 @Singleton
 class KioskCallRecorder @Inject constructor(
-    @ApplicationContext private val appContext: Context,
-    private val callRepository: CallRepository
-) : JavaAudioDeviceModule.SamplesReadyCallback {
+    @ApplicationContext private val appContext: Context
+) : JavaAudioDeviceModule.SamplesReadyCallback,
+    JavaAudioDeviceModule.PlaybackSamplesReadyCallback {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
-    // Encoder state lives entirely inside [worker]; guarded by its own loop.
-    @Volatile private var worker: Thread? = null
-    @Volatile private var pcmQueue: ArrayBlockingQueue<ByteArray>? = null
-
-    // PCM stream properties, learned from the first delivered samples.
-    @Volatile private var sampleRate = 0
-    @Volatile private var channelCount = 0
     private val running = AtomicBoolean(false)
+
+    private val _isRecording = MutableStateFlow(false)
+    val isRecording: StateFlow<Boolean> = _isRecording.asStateFlow()
+
+    // Audio side: stitcher feeds the PCM queue, the worker drains it.
+    @Volatile private var stitcher: StereoStitcher? = null
+    @Volatile private var pcmQueue: ArrayBlockingQueue<ByteArray>? = null
+    @Volatile private var worker: Thread? = null
+
+    // Video side: encoder + composition thread.
+    @Volatile private var encoder: RecordingVideoEncoder? = null
+    @Volatile private var composer: VideoComposer? = null
+    @Volatile private var muxer: RecordingMuxer? = null
+    @Volatile private var outputFile: File? = null
+
+    private var localTrack: VideoTrack? = null
+    private var remoteTrack: VideoTrack? = null
+    private var profile: RecordingProfile = RecordingProfile.current
+
+    private val localSink = object : VideoSink {
+        override fun onFrame(frame: VideoFrame) {
+            composer?.onLocalFrame(frame)
+        }
+    }
+
+    private val remoteSink = object : VideoSink {
+        override fun onFrame(frame: VideoFrame) {
+            composer?.onRemoteFrame(frame)
+        }
+    }
 
     /** Identifier recorded into the uploaded file metadata. roomId doubles as
      *  callId — the backend resolves calls by callId OR roomId. */
@@ -53,196 +84,288 @@ class KioskCallRecorder @Inject constructor(
         currentCallId = roomId
     }
 
-    /** Called by WebRTC's audio device module on every captured mic chunk. */
+    // ---- WebRTC audio taps (different threads: record / playout) ----
+
+    /** Kiosk microphone chunk. */
     override fun onWebRtcAudioRecordSamplesReady(samples: JavaAudioDeviceModule.AudioSamples) {
-        if (!running.get()) return
-        sampleRate = samples.sampleRate
-        channelCount = samples.channelCount
-        val bytes = samples.data
-        if (bytes.isNotEmpty()) {
-            // Offer only; recording must never block or crash the call itself.
-            pcmQueue?.offer(bytes)
+        val st = stitcher ?: return
+        st.pushMic(samples)
+        pump()
+    }
+
+    /** Family-side playout chunk — this is the other half of the recording. */
+    override fun onWebRtcAudioTrackSamplesReady(samples: JavaAudioDeviceModule.AudioSamples) {
+        stitcher?.pushPlayback(samples)
+    }
+
+    private fun pump() {
+        val queue = pcmQueue ?: return
+        val st = stitcher ?: return
+        while (true) {
+            val frame = st.poll() ?: return
+            queue.offer(frame)
+        }
+    }
+
+    // ---- video track wiring (called from WebRtcManager) ----
+
+    @Synchronized
+    fun setLocalVideoTrack(track: VideoTrack?) {
+        if (track === localTrack) return
+        try { localTrack?.removeSink(localSink) } catch (_: Throwable) {}
+        localTrack = track
+        try { track?.addSink(localSink) } catch (e: Throwable) {
+            Logger.w("Recorder: local video sink attach failed: ${e.message}")
         }
     }
 
     @Synchronized
-    fun startRecording() {
+    fun setRemoteVideoTrack(track: VideoTrack?) {
+        if (track === remoteTrack) return
+        try { remoteTrack?.removeSink(remoteSink) } catch (_: Throwable) {}
+        remoteTrack = track
+        try { track?.addSink(remoteSink) } catch (e: Throwable) {
+            Logger.w("Recorder: remote video sink attach failed: ${e.message}")
+        }
+    }
+
+    // ---- session lifecycle ----
+
+    @Synchronized
+    fun startRecording(eglContext: EglBase.Context?, recordVideo: Boolean = true) {
         if (running.getAndSet(true)) return
-        sampleRate = 0
-        channelCount = 0
+        profile = RecordingProfile.current
+        _isRecording.value = true
 
-        val dir = File(appContext.cacheDir, "call-recordings")
+        val st = StereoStitcher().also { it.reset() }
+        stitcher = st
+
+        val dir = appContext.getExternalFilesDir("Recordings")
+            ?: File(appContext.filesDir, "Recordings")
         if (!dir.exists()) dir.mkdirs()
-        val file = File(dir, "rec-${currentCallId.ifEmpty { "unknown" }}-${System.currentTimeMillis()}.mp4")
+        val file = File(
+            dir,
+            "rec-${currentCallId.ifEmpty { "unknown" }}-${System.currentTimeMillis()}.mp4"
+        )
+        outputFile = file
 
-        val queue = ArrayBlockingQueue<ByteArray>(512)
+        val wantVideo = recordVideo && eglContext != null
+        val location = lastKnownLocation()
+        val newMuxer = RecordingMuxer(file, if (wantVideo) 2 else 1, location)
+        muxer = newMuxer
+
+        // Audio first: its format is fixed (48 kHz stereo AAC), so it can start
+        // feeding the muxer immediately and gets buffered until video is in.
+        val queue = ArrayBlockingQueue<ByteArray>(AUDIO_QUEUE_FRAMES)
         pcmQueue = queue
+        worker = Thread(
+            { audioLoop(queue, newMuxer) },
+            "kiosk-call-recorder"
+        ).apply { start() }
 
-        worker = Thread({ encodeLoop(file, queue) }, "kiosk-call-recorder").apply { start() }
-        Logger.d("Recording started -> ${file.absolutePath}")
+        if (wantVideo) {
+            val enc = RecordingVideoEncoder(
+                muxer = newMuxer,
+                width = profile.width,
+                height = profile.height,
+                fps = profile.fps,
+                bitrate = profile.videoBitrate,
+                sharedEglContext = eglContext
+            )
+            if (enc.start()) {
+                encoder = enc
+                val comp = VideoComposer(enc, profile)
+                if (comp.start()) {
+                    composer = comp
+                } else {
+                    Logger.e("Recorder: composer failed - falling back to audio-only")
+                    newMuxer.completeTrackList()
+                    runCatching { enc.stop() }
+                    encoder = null
+                }
+            } else {
+                Logger.e("Recorder: video encoder failed - falling back to audio-only")
+                newMuxer.completeTrackList()
+                encoder = null
+            }
+        }
+
+        Logger.i(
+            "Recording started profile=${profile.name} ${profile.width}x${profile.height}@${profile.fps} " +
+                "video=${encoder != null} file=${file.name} location=${location != null}"
+        )
     }
 
     @Synchronized
     fun stopRecordingAndUpload() {
         if (!running.getAndSet(false)) return
+        _isRecording.value = false
+        stitcher = null
         pcmQueue = null
-        val thread = worker ?: return
+
+        composer?.stop()
+        composer = null
+        encoder?.stop()
+        encoder = null
+
         try {
-            // Signal EOS via interrupt-safe poll timeout exit; join the worker.
-            thread.join(10_000)
+            worker?.join(10_000)
         } catch (_: InterruptedException) {}
         worker = null
+
+        val file = outputFile
+        outputFile = null
+        val sessionMuxer = muxer
+        muxer = null
+        sessionMuxer?.finish()
+
+        val path = file?.absolutePath ?: ""
+        val size = file?.length() ?: 0L
+        Logger.i("Recording finalized size=$size path=$path")
+        if (file != null && size > 0) {
+            // WorkManager takes over: retries with backoff across restarts and
+            // only deletes the local file once the server has acknowledged it.
+            RecordingUploadWorker.enqueue(appContext, file, currentCallId)
+        }
     }
 
+    // ---- audio encode loop ----
+
     /**
-     * Runs on a dedicated thread for one session: drains queued PCM into an
-     * AAC encoder + MediaMuxer, finalizes the MP4 when the session stops.
+     * Drains the stitched stereo PCM into an AAC encoder and the shared muxer.
+     * Runs for one session; the caller stops it by flipping [running] and
+     * clearing the queue, then joining.
      */
-    private fun encodeLoop(file: File, queue: ArrayBlockingQueue<ByteArray>) {
+    private fun audioLoop(queue: ArrayBlockingQueue<ByteArray>, sessionMuxer: RecordingMuxer) {
         var codec: MediaCodec? = null
-        var muxer: MediaMuxer? = null
-        var muxerTrack = -1
-        var muxerStarted = false
+        var trackIndex = -1
         var totalPcmBytes = 0L
 
         try {
+            val format = MediaFormat.createAudioFormat(
+                MediaFormat.MIMETYPE_AUDIO_AAC,
+                StereoStitcher.TARGET_RATE,
+                StereoStitcher.CHANNELS
+            ).apply {
+                setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
+                setInteger(MediaFormat.KEY_BIT_RATE, profile.audioBitrate)
+                setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 32_768)
+            }
+            val audioCodec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC)
+            audioCodec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+            audioCodec.start()
+            codec = audioCodec
+
+            val info = MediaCodec.BufferInfo()
             while (running.get() || !queue.isEmpty()) {
                 val chunk = queue.poll(200, TimeUnit.MILLISECONDS) ?: continue
 
-                if (codec == null && sampleRate > 0 && channelCount > 0) {
-                    val format = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, sampleRate, channelCount).apply {
-                        setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
-                        setInteger(MediaFormat.KEY_BIT_RATE, if (channelCount == 2) 128_000 else 64_000)
-                        setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 16_384)
-                    }
-                    muxer = MediaMuxer(file.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-                    codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC).also {
-                        it.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-                        it.start()
-                    }
-                }
-                if (codec == null || muxer == null) continue // still waiting for stream properties
-
-                val bufferInfo = MediaCodec.BufferInfo()
-
-                // Feed input.
-                val inIdx = codec.dequeueInputBuffer(10_000)
+                val inIdx = audioCodec.dequeueInputBuffer(10_000)
                 if (inIdx >= 0) {
-                    val input = codec.getInputBuffer(inIdx)!!
+                    val input = audioCodec.getInputBuffer(inIdx)!!
                     input.clear()
                     val size = minOf(chunk.size, input.capacity())
                     input.put(chunk, 0, size)
-                    val ptsUs = totalPcmBytes * 1_000_000 /
-                        (sampleRate.toLong() * channelCount * 2).coerceAtLeast(1)
-                    codec.queueInputBuffer(inIdx, 0, size, ptsUs, 0)
+                    audioCodec.queueInputBuffer(inIdx, 0, size, pcmPtsUs(totalPcmBytes), 0)
                     totalPcmBytes += size
                 }
 
-                // Drain output.
                 while (true) {
-                    val outIdx = codec.dequeueOutputBuffer(bufferInfo, 0)
+                    val outIdx = audioCodec.dequeueOutputBuffer(info, 0)
                     if (outIdx == MediaCodec.INFO_TRY_AGAIN_LATER) break
                     if (outIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                        if (!muxerStarted) {
-                            muxerTrack = muxer.addTrack(codec.outputFormat)
-                            muxer.start()
-                            muxerStarted = true
-                        }
+                        trackIndex = sessionMuxer.registerTrack(audioCodec.outputFormat) ?: -1
+                        if (trackIndex < 0) Logger.w("Recorder: muxer rejected audio track")
                         continue
                     }
-                    val encoded = codec.getOutputBuffer(outIdx) ?: continue
-                    if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0) {
-                        bufferInfo.size = 0
-                    }
-                    if (bufferInfo.size > 0 && muxerStarted && muxerTrack >= 0) {
-                        encoded.position(bufferInfo.offset)
-                        encoded.limit(bufferInfo.offset + bufferInfo.size)
-                        muxer.writeSampleData(muxerTrack, encoded, bufferInfo)
-                    }
-                    codec.releaseOutputBuffer(outIdx, false)
+                    if (outIdx == MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED) continue
+                    if (outIdx < 0) continue
+                    writeIfData(audioCodec, outIdx, info, sessionMuxer, trackIndex)
                 }
             }
 
-            // Session stopped — queue an EOS marker, then drain until the
-            // encoder emits it (bounded so a wedged codec can't hang us).
-            if (codec != null && muxer != null) {
-                val bufferInfo = MediaCodec.BufferInfo()
-                val finalPtsUs = totalPcmBytes * 1_000_000 /
-                    (sampleRate.toLong() * channelCount * 2).coerceAtLeast(1)
-                var eosSent = false
-                repeat(10) {
-                    if (eosSent) return@repeat
-                    val inIdx = codec.dequeueInputBuffer(10_000)
-                    if (inIdx >= 0) {
-                        codec.queueInputBuffer(inIdx, 0, 0, finalPtsUs, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-                        eosSent = true
-                    }
-                }
-                val deadline = System.currentTimeMillis() + 2_000
-                while (eosSent) {
-                    val outIdx = codec.dequeueOutputBuffer(bufferInfo, 10_000)
-                    if (outIdx == MediaCodec.INFO_TRY_AGAIN_LATER) break
-                    if (outIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) continue
-                    val encoded = codec.getOutputBuffer(outIdx) ?: continue
-                    if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0) bufferInfo.size = 0
-                    if (bufferInfo.size > 0 && muxerStarted && muxerTrack >= 0) {
-                        encoded.position(bufferInfo.offset)
-                        encoded.limit(bufferInfo.offset + bufferInfo.size)
-                        muxer.writeSampleData(muxerTrack, encoded, bufferInfo)
-                    }
-                    codec.releaseOutputBuffer(outIdx, false)
-                    if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) break
-                    if (System.currentTimeMillis() > deadline) break
+            // Session stopped: EOS, then drain until the encoder hands it back.
+            val bufferInfo = MediaCodec.BufferInfo()
+            var eosSent = false
+            repeat(10) {
+                if (eosSent) return@repeat
+                val inIdx = audioCodec.dequeueInputBuffer(10_000)
+                if (inIdx >= 0) {
+                    audioCodec.queueInputBuffer(
+                        inIdx, 0, 0, pcmPtsUs(totalPcmBytes),
+                        MediaCodec.BUFFER_FLAG_END_OF_STREAM
+                    )
+                    eosSent = true
                 }
             }
-
-            codec?.stop(); codec?.release()
-            if (muxerStarted) muxer?.stop()
-            muxer?.release()
-            Logger.d("Recording finalized: ${file.length()} bytes")
-            scope.launch { uploadVerifyDelete(file) }
+            val deadline = System.currentTimeMillis() + 2_000
+            while (eosSent && System.currentTimeMillis() < deadline) {
+                val outIdx = audioCodec.dequeueOutputBuffer(bufferInfo, 10_000)
+                if (outIdx == MediaCodec.INFO_TRY_AGAIN_LATER) continue
+                if (outIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                    if (trackIndex < 0) {
+                        trackIndex = sessionMuxer.registerTrack(audioCodec.outputFormat) ?: -1
+                    }
+                    continue
+                }
+                if (outIdx == MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED) continue
+                if (outIdx < 0) continue
+                val eos = bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
+                writeIfData(audioCodec, outIdx, bufferInfo, sessionMuxer, trackIndex)
+                if (eos) break
+            }
         } catch (e: Exception) {
-            Logger.e("Recording encode failed - discarding partial file", e)
-            try { codec?.stop(); codec?.release() } catch (_: Exception) {}
-            try { if (muxerStarted) muxer?.stop(); muxer?.release() } catch (_: Exception) {}
-            file.delete()
+            Logger.e("Recorder: audio encode failed", e)
+        } finally {
+            try { codec?.stop() } catch (_: Throwable) {}
+            try { codec?.release() } catch (_: Throwable) {}
         }
     }
 
-    private suspend fun uploadVerifyDelete(file: File) {
-        // Nothing usable captured (e.g. call abandoned before audio started):
-        // MediaMuxer leaves an empty/missing file — skip upload entirely.
-        if (!file.exists() || file.length() < 1024) {
-            Logger.d("Recording empty (${file.length()} bytes) - nothing to upload, discarding")
-            file.delete()
-            return
-        }
+    /** PTS in microseconds, counted from the first stitched sample. */
+    private fun pcmPtsUs(totalPcmBytes: Long): Long =
+        totalPcmBytes * 1_000_000L /
+            (StereoStitcher.TARGET_RATE.toLong() * StereoStitcher.CHANNELS * 2)
+
+    private fun writeIfData(
+        codec: MediaCodec,
+        index: Int,
+        info: MediaCodec.BufferInfo,
+        sessionMuxer: RecordingMuxer,
+        trackIndex: Int
+    ) {
         try {
-            val base64 = android.util.Base64.encodeToString(file.readBytes(), android.util.Base64.NO_WRAP)
-            // Collect exactly one terminal result from the upload flow.
-            val result = callRepository.uploadRecording(
-                RecordingUploadRequest(
-                    callId = currentCallId,
-                    base64Data = base64,
-                    fileName = file.name,
-                    mimeType = "video/mp4"
-                )
-            ).first()
-            when (result) {
-                is NetworkResult.Success -> {
-                    val recordingId = result.data.recordingId
-                    if (!recordingId.isNullOrEmpty()) {
-                        // Verified upload — safe to delete the local copy.
-                        val deleted = file.delete()
-                        Logger.d("Recording uploaded ($recordingId), local deleted=$deleted")
-                    } else {
-                        Logger.e("Recording upload ACK missing recordingId - keeping local file ${file.name}")
-                    }
+            if (info.size > 0 && trackIndex >= 0 &&
+                info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG == 0
+            ) {
+                val buffer = codec.getOutputBuffer(index)
+                if (buffer != null) {
+                    buffer.position(info.offset)
+                    buffer.limit(info.offset + info.size)
+                    sessionMuxer.write(trackIndex, buffer, info)
                 }
-                else -> Logger.e("Recording upload failed - keeping local file ${file.name}")
             }
-        } catch (e: Exception) {
-            Logger.e("Recording upload error - keeping local file", e)
+        } finally {
+            codec.releaseOutputBuffer(index, false)
         }
+    }
+
+    // ---- helpers ----
+
+    /** Last known position, recorded into the MP4 container metadata. */
+    private fun lastKnownLocation(): DoubleArray? = try {
+        val lm = appContext.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        val loc = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+            ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+            ?: lm.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER)
+        if (loc != null) doubleArrayOf(loc.latitude, loc.longitude) else null
+    } catch (e: Throwable) {
+        Logger.d("Recorder: location unavailable: ${e.message}")
+        null
+    }
+
+    companion object {
+        /** ~4 s of stitched stereo PCM held before frames start being dropped. */
+        private const val AUDIO_QUEUE_FRAMES = 400
     }
 }

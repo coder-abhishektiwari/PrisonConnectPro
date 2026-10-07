@@ -8,6 +8,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -15,8 +19,10 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
 import com.prisonconnect.kiosk.BuildConfig
+import com.prisonconnect.kiosk.core.KioskPermissions
 import com.prisonconnect.kiosk.core.SessionManager
 import com.prisonconnect.kiosk.navigation.KioskNavHost
+import com.prisonconnect.kiosk.ui.setup.SetupPermissionsScreen
 import com.prisonconnect.kiosk.ui.theme.PrisonKioskTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Job
@@ -52,16 +58,39 @@ class MainActivity : FragmentActivity() {
             PrisonKioskTheme {
                 val windowSizeClass = calculateWindowSizeClass(this)
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    val navController = rememberNavController()
-                    KioskNavHost(
-                        navController = navController,
-                        windowSizeClass = windowSizeClass
-                    )
+                    // One-time setup gate: nothing runs until every runtime
+                    // permission the kiosk needs has been collected.
+                    var setupComplete by remember {
+                        mutableStateOf(KioskPermissions.missing(this).isEmpty())
+                    }
+                    if (setupComplete) {
+                        val navController = rememberNavController()
+                        KioskNavHost(
+                            navController = navController,
+                            windowSizeClass = windowSizeClass
+                        )
+                    } else {
+                        SetupPermissionsScreen(onGranted = { setupComplete = true })
+                    }
                 }
             }
         }
 
         resetInactivityTimer()
+
+        maybeRunRecorderSpike()
+    }
+
+    /**
+     * Debug hook: `adb shell am start -n com.prisonconnect.kiosk/.MainActivity --ez run_spike true`
+     * runs the on-device encoder probe (com.prisonconnect.kiosk.debug.RecorderSpike).
+     */
+    private fun maybeRunRecorderSpike() {
+        if (!BuildConfig.DEBUG) return
+        if (intent?.getBooleanExtra(EXTRA_RUN_SPIKE, false) != true) return
+        intent?.removeExtra(EXTRA_RUN_SPIKE)
+        val app = applicationContext
+        Thread { com.prisonconnect.kiosk.debug.RecorderSpike.run(app) }.start()
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent?): Boolean {
@@ -96,5 +125,9 @@ class MainActivity : FragmentActivity() {
     override fun onResume() {
         super.onResume()
         resetInactivityTimer()
+    }
+
+    companion object {
+        private const val EXTRA_RUN_SPIKE = "run_spike"
     }
 }

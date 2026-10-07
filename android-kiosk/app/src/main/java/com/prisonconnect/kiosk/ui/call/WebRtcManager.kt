@@ -11,6 +11,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -73,6 +74,9 @@ class WebRtcManager @Inject constructor(
 
     private val _localVideoTrackFlow = MutableStateFlow<VideoTrack?>(null)
     val localVideoTrackFlow = _localVideoTrackFlow.asStateFlow()
+
+    /** Live recording state of [callRecorder] — drives the in-call badge. */
+    val isRecording: StateFlow<Boolean> = callRecorder.isRecording
 
     private val _connectionState = MutableStateFlow(PeerConnection.PeerConnectionState.NEW)
     val connectionState = _connectionState.asStateFlow()
@@ -143,10 +147,13 @@ class WebRtcManager @Inject constructor(
                 .createInitializationOptions()
         )
 
-        // Audio device module doubles as the recorder tap: every captured mic
-        // PCM chunk is handed to the kiosk-side recorder while a call runs.
+        // Audio device module doubles as the recorder tap: the kiosk mic is
+        // handed over on every captured chunk, and the family's playout (what
+        // actually reaches the speaker) on every playback chunk — that is how
+        // ONE stereo file ends up carrying both sides of the call.
         val adm = JavaAudioDeviceModule.builder(context.applicationContext)
             .setSamplesReadyCallback(callRecorder)
+            .setPlaybackSamplesReadyCallback(callRecorder)
             .createAudioDeviceModule()
 
         // Software encoder only: some OEM hardware codecs (e.g. Samsung
@@ -216,6 +223,7 @@ class WebRtcManager @Inject constructor(
                         if (!isCurrentRoom(event.data)) return@collect
                         Logger.d("Peer left room")
                         _remoteVideoTrack.value = null
+                        callRecorder.setRemoteVideoTrack(null)
                     }
                     "call-ended" -> {
                         if (gen != sessionGen) return@collect
@@ -231,7 +239,7 @@ class WebRtcManager @Inject constructor(
         // Record on the kiosk side for the whole session; upload+verify+delete
         // runs when stopRecordingAndUpload() fires during endCall().
         callRecorder.setCallInfo(roomId)
-        callRecorder.startRecording()
+        callRecorder.startRecording(eglBaseContext, isVideoCall)
 
         // Optimistic navigation: the POST /calls may still be in flight, and
         // the signaling socket authenticates with the backend-minted token.
@@ -353,6 +361,7 @@ class WebRtcManager @Inject constructor(
                     if (track is VideoTrack) {
                         Logger.d("Remote video track received")
                         _remoteVideoTrack.value = track
+                        callRecorder.setRemoteVideoTrack(track)
                     } else if (track is AudioTrack) {
                         // Remote audio plays automatically through the audio device module.
                         Logger.d("Remote audio track received")
@@ -537,6 +546,7 @@ class WebRtcManager @Inject constructor(
 
             localVideoTrack = peerConnectionFactory?.createVideoTrack("ARDMSv0", localVideoSource)
             _localVideoTrackFlow.value = localVideoTrack
+            callRecorder.setLocalVideoTrack(localVideoTrack)
         }
 
         val audioConstraints = MediaConstraints().apply {
@@ -609,7 +619,10 @@ class WebRtcManager @Inject constructor(
         val hadRealSession = roomId.isNotEmpty() && peerConnection != null
 
         // Stop + upload + verify + delete happens asynchronously; the UI can
-        // tear down immediately.
+        // tear down immediately. Detach the recording sinks first so no frame
+        // from this session's tracks reaches a stopped composer.
+        callRecorder.setLocalVideoTrack(null)
+        callRecorder.setRemoteVideoTrack(null)
         callRecorder.stopRecordingAndUpload()
 
         if (hadRealSession) {

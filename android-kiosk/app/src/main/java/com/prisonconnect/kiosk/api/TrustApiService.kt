@@ -13,6 +13,10 @@ import com.prisonconnect.kiosk.models.call.CreateCallRequest
 import com.prisonconnect.kiosk.models.call.EndCallRequest
 import com.prisonconnect.kiosk.models.call.RecordingUploadRequest
 import com.prisonconnect.kiosk.models.call.RecordingUploadResponse
+import com.prisonconnect.kiosk.models.call.RecordingUploadInitRequest
+import com.prisonconnect.kiosk.models.call.RecordingUploadInitResponse
+import com.prisonconnect.kiosk.models.call.RecordingUploadChunkRequest
+import com.prisonconnect.kiosk.models.call.RecordingUploadChunkResponse
 import com.prisonconnect.kiosk.models.call.CallStatusSnapshot
 import com.prisonconnect.kiosk.models.call.CallStatsReport
 import com.prisonconnect.kiosk.models.schedule.SlotsResponse
@@ -120,6 +124,19 @@ interface TrustApiService {
 
     @POST("recordings/upload")
     suspend fun uploadRecording(@Body request: RecordingUploadRequest): ApiResponse<RecordingUploadResponse>
+
+    /** Chunked upload: open (or resume) the session for one recording file. */
+    @POST("recordings/upload/init")
+    suspend fun initRecordingUpload(@Body request: RecordingUploadInitRequest): ApiResponse<RecordingUploadInitResponse>
+
+    @POST("recordings/upload/{uploadId}/chunk")
+    suspend fun sendRecordingChunk(
+        @Path("uploadId") uploadId: String,
+        @Body request: RecordingUploadChunkRequest
+    ): ApiResponse<RecordingUploadChunkResponse>
+
+    @POST("recordings/upload/{uploadId}/complete")
+    suspend fun completeRecordingUpload(@Path("uploadId") uploadId: String): ApiResponse<RecordingUploadResponse>
 
     @PATCH("schedule/cancel/{bookingId}")
     suspend fun cancelBooking(@Path("bookingId") bookingId: String): ApiResponse<Unit>

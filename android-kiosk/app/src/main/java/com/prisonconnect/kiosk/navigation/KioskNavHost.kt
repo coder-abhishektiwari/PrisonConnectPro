@@ -47,6 +47,7 @@ object KioskRoutes {
     const val ADMIN_MIS_REPORT = "admin_mis_report"
     const val ADMIN_KIOSK_ADMINS = "admin_kiosk_admins"
     const val WALLET = "wallet"
+    const val SETUP_PERMISSIONS = "setup_permissions"
     const val SCHEDULE = "schedule/{contactId}/{contactName}/{callType}"
     const val VIDEO_CALL = "video_call/{contactName}/{roomId}"
     const val AUDIO_CALL = "audio_call/{contactName}/{roomId}"
@@ -164,8 +165,14 @@ fun KioskNavHost(
                 onScheduleCall = { contactId, contactName ->
                     navController.navigate("schedule/${Uri.encode(contactId)}/${Uri.encode(contactName)}/Video")
                 },
-                onStartCall = { contactId, contactName, roomId, isVideo ->
-                    navController.navigate("call_progress/${Uri.encode(contactName)}/$roomId/$isVideo")
+                onStartCall = { _, contactName, roomId, isVideo ->
+                    // Permissions were collected during setup; if any went missing
+                    // (revoke in settings) divert here instead of prompting mid-call.
+                    if (com.prisonconnect.kiosk.core.KioskPermissions.missing(context).isEmpty()) {
+                        navController.navigate("call_progress/${Uri.encode(contactName)}/$roomId/$isVideo")
+                    } else {
+                        navController.navigate(KioskRoutes.SETUP_PERMISSIONS)
+                    }
                 }
             )
         }
@@ -260,6 +267,12 @@ fun KioskNavHost(
             com.prisonconnect.kiosk.ui.admin.KioskAdminsScreen(
                 windowSizeClass = windowSizeClass,
                 onBackClick = { navController.popBackStack() }
+            )
+        }
+        composable(KioskRoutes.SETUP_PERMISSIONS) {
+            com.prisonconnect.kiosk.ui.setup.SetupPermissionsScreen(
+                onGranted = { navController.popBackStack() },
+                onBack = { navController.popBackStack() }
             )
         }
         composable(KioskRoutes.WALLET) {

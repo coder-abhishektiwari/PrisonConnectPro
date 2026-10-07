@@ -160,9 +160,8 @@ class CallEngine @Inject constructor(
     private val _endLabel = MutableStateFlow<String?>(null)
     val endLabel: StateFlow<String?> = _endLabel.asStateFlow()
 
-    /** UI badge: the kiosk always records calls (KioskCallRecorder). */
-    private val _isRecording = MutableStateFlow(true)
-    val isRecording = _isRecording.asStateFlow()
+    /** True while KioskCallRecorder is actually writing this call's file. */
+    val isRecording: StateFlow<Boolean> = webRtcManager.isRecording
 
     /**
      * Live WebRTC quality ("excellent" | "good" | "fair" | "poor" | "unknown"),
@@ -362,6 +361,29 @@ class CallEngine @Inject constructor(
                 if (result is NetworkResult.Success) _contactProfile.value = result.data.firstOrNull()
             }
         }
+        refreshRecordingProfile()
+    }
+
+    /**
+     * Picks up the warden's `recordingProfile` setting (light / balanced /
+     * high). Applies to the recording of the next call — the current one has
+     * already fixed its encoder.
+     */
+    private fun refreshRecordingProfile() {
+        scope.launch {
+            runCatching {
+                val result = callRepository.getSettings()
+                val json = (result as? NetworkResult.Success)?.data ?: return@runCatching
+                val name = if (json.has("recordingProfile") && !json.get("recordingProfile").isJsonNull)
+                    json.get("recordingProfile").asString else null
+                RecordingProfile.fromSetting(name)?.let {
+                    if (it != RecordingProfile.current) {
+                        RecordingProfile.current = it
+                        Logger.i("Recording profile -> ${it.name}")
+                    }
+                }
+            }.onFailure { Logger.d("Recording profile lookup failed: ${it.message}") }
+        }
     }
 
     /** Starts a call session. No-ops when the same room is already live. */
@@ -392,6 +414,7 @@ class CallEngine @Inject constructor(
         webRtcManager.startCall(roomId, context, isVideoCall)
         callSessionActive = true
         startFamilyPolling(callId)
+        refreshRecordingProfile()
     }
 
     /**
@@ -525,7 +548,7 @@ class CallEngine @Inject constructor(
                 if (System.currentTimeMillis() - lastReportAt < 5000) continue
                 val callId = activeCallId ?: continue
                 lastReportAt = System.currentTimeMillis()
-                val recordingStatus = if (_isRecording.value) "recording" else "inactive"
+                val recordingStatus = if (isRecording.value) "recording" else "inactive"
                 callRepository.reportStats(
                     callId,
                     com.prisonconnect.kiosk.models.call.CallStatsReport(
