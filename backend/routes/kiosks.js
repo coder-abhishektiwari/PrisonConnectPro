@@ -345,8 +345,6 @@ router.post('/register', asyncRoute(async (req, res) => {
     network: { status: 'unknown', type: 'unknown', signalStrength: 0, bandwidth: '0Mbps' },
     installationDate: null,
     lastMaintenance: null,
-    assignedBlock: null,
-    assignedCellArea: null,
     deviceFingerprint: deviceFingerprint || null,
     rejectionReason: null,
     createdAt: new Date().toISOString()
@@ -544,17 +542,16 @@ router.get('/', requireAuth, requireRole('admin', 'warden', 'super-admin', 'supe
     .filter((k) => inScope(k))
     .map((k) => {
       const wards = index.wardsFor(k.kioskId);
+      const ward = wards.length ? wards.join(', ') : null;
       return {
         ...k,
         // Liveness is derived from the device's heartbeat, not the stored flag.
         status: kioskDisplayStatus(k),
         lastSeen: kioskLive(k).lastSeen,
         lastHeartbeatAt: k.lastHeartbeatAt || null,
-        // Where the assigned prisoners actually live is the only truthful
-        // source — a kiosk has no cell range of its own, and every device that
-        // went through registration leaves assignedBlock null.
-        ward: wards.length ? wards.join(', ') : null,
-        wards,
+        // Single location field: where the device sits plus the wards the
+        // assigned prisoners live in. There is no separate ward/block column.
+        location: [k.location, ward].filter(Boolean).join(' • ') || null,
         registeredInmates: index.countFor(k.kioskId),
       };
     });
@@ -620,13 +617,14 @@ router.get('/:kioskId/stats', requireAuth, requireRole('admin', 'warden', 'super
 
   const prison = prisons.find((p) => p.prisonId === kiosk.prisonId);
   const finish = (period) => ({ ...period, minutes: round1(period.minutes) });
+  const ward = wards.length ? wards.join(', ') : null;
 
   return sendSuccess(res, {
     kioskId: kiosk.kioskId,
     prisonId: kiosk.prisonId || null,
     prisonName: kiosk.prisonName || prison?.name || null,
     deviceSerialNumber: kiosk.deviceSerialNumber || null,
-    location: kiosk.location || null,
+    location: [kiosk.location, ward].filter(Boolean).join(' • ') || null,
     ipAddress: kiosk.ipAddress || null,
     androidVersion: kiosk.androidVersion || null,
     status: kioskDisplayStatus(kiosk),
@@ -634,8 +632,6 @@ router.get('/:kioskId/stats', requireAuth, requireRole('admin', 'warden', 'super
     lastSeen: kioskLive(kiosk).lastSeen,
     lastHeartbeatAt: kiosk.lastHeartbeatAt || null,
     installationDate: kiosk.installationDate || null,
-    ward: wards.length ? wards.join(', ') : null,
-    wards,
     registeredInmates: registered.length,
     today: finish(today),
     month: finish(month),

@@ -9,7 +9,7 @@ import { useCachedResource } from '@/hooks/useCachedResource';
 import { useWardenSocket } from '@/hooks/useWardenSocket';
 import { usePageHeader } from '@/context/PageHeaderContext';
 import { inmateLabel, contactLabel } from '@/utils/names';
-import type { ActiveCall, ListParams, PaginatedResponse } from '@/services/api/wardenApi';
+import type { ActiveCall, ListParams, PaginatedResponse, Pricing } from '@/services/api/wardenApi';
 
 const PAGE_SIZE = 20;
 
@@ -17,7 +17,6 @@ export function ActiveCallsPage() {
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState<'all' | 'video' | 'audio'>('all');
   const [toast, setToast] = useState<string | null>(null);
   const [confirmForceEnd, setConfirmForceEnd] = useState<ActiveCall | null>(null);
 
@@ -25,8 +24,7 @@ export function ActiveCallsPage() {
     limit: PAGE_SIZE,
     offset: (page - 1) * PAGE_SIZE,
     search: search || undefined,
-    type: typeFilter !== 'all' ? typeFilter : undefined,
-  }), [page, search, typeFilter]);
+  }), [page, search]);
 
   const { data, isLoading, error, refresh } = useCachedResource<PaginatedResponse<ActiveCall>>(
     cacheKeys.activeCalls(params),
@@ -41,11 +39,21 @@ export function ActiveCallsPage() {
   refreshRef.current = refresh;
   const onCallUpdate = useCallback(() => { refreshRef.current(); }, []);
   useWardenSocket(onCallUpdate, undefined, undefined, undefined);
-  useEffect(() => { setPage(1); }, [search, typeFilter]);
+  useEffect(() => { setPage(1); }, [search]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const headerIcon = useMemo(() => <span className="material-icons text-primary-600 text-xl">video_call</span>, []);
+
+  const { data: pricingData } = useCachedResource<Pricing>(
+    cacheKeys.pricing(),
+    () => wardenApi.getPricing(),
+    { ttl: 60_000 },
+  );
+  const pricing = useMemo(() => ({
+    audioRate: Number(pricingData?.audio?.ratePerMinute ?? 1),
+    videoRate: Number(pricingData?.video?.ratePerMinute ?? 2.5),
+  }), [pricingData]);
 
   usePageHeader({
     title: 'Live Calls',
@@ -53,13 +61,14 @@ export function ActiveCallsPage() {
     icon: headerIcon,
     actions: useMemo(() => (
       <div className="flex gap-2">
-        <button onClick={() => { setTypeFilter('all'); setPage(1); }} className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors ${typeFilter === 'all' ? 'bg-neutral-900 text-white' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'}`}>
-          <span className={`w-2 h-2 rounded-full ${typeFilter === 'all' ? 'bg-white' : 'bg-neutral-400'}`} />All
-        </button>
-        <button onClick={() => { setTypeFilter('video'); setPage(1); }} className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors ${typeFilter === 'video' ? 'bg-primary-600 text-white' : 'bg-primary-50 border border-primary-200 text-primary-700 hover:bg-primary-100'}`}>Video</button>
-        <button onClick={() => { setTypeFilter('audio'); setPage(1); }} className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors ${typeFilter === 'audio' ? 'bg-info text-white' : 'bg-info-50 border border-info/20 text-info hover:bg-info-100'}`}>Audio</button>
+        <div className="px-3.5 py-2 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-semibold shadow-sm">
+          Audio <span className="font-bold text-emerald-950">₹{pricing.audioRate}/min</span>
+        </div>
+        <div className="px-3.5 py-2 bg-cyan-50 border border-cyan-200 text-cyan-800 rounded-xl text-xs font-semibold shadow-sm">
+          Video <span className="font-bold text-cyan-950">₹{pricing.videoRate}/min</span>
+        </div>
       </div>
-    ), [typeFilter]),
+    ), [pricing.audioRate, pricing.videoRate]),
   });
 
   const formatDuration = (minutes: number) => {

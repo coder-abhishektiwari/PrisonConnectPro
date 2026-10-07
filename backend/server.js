@@ -464,8 +464,9 @@ app.post('/wardens', requireAuth, requireRole('admin', 'warden', 'super-admin', 
 }));
 
 // ==================== KIOSK ADMINS ====================
-// Staff who operate a kiosk device, shown with the device's ward and prisoner
-// load so a warden can see who is on which terminal in this jail.
+// Staff who operate a kiosk device, shown with the device's location (which
+// carries the assigned wards) and prisoner load so a warden can see who is on
+// which terminal in this jail.
 // A kiosk admin sees the same staff page as their warden does - scoped to the
 // same prison - so the roles below include 'kiosk_admin' on all three routes.
 app.get('/kiosk-admins', requireAuth, requireRole('admin', 'kiosk_admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
@@ -485,12 +486,11 @@ app.get('/kiosk-admins', requireAuth, requireRole('admin', 'kiosk_admin', 'warde
       void password;
       void pin;
       void biometricData;
+      const ward = index.wardFor(a.kioskId);
       return {
         ...safe,
         kioskId: a.kioskId || null,
-        location: kiosk?.location || null,
-        ward: index.wardFor(a.kioskId),
-        wards: index.wardsFor(a.kioskId),
+        location: [kiosk?.location, ward].filter(Boolean).join(' • ') || null,
         registeredInmates: a.kioskId ? index.countFor(a.kioskId) : 0,
       };
     });

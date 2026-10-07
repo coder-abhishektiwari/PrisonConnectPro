@@ -10,7 +10,6 @@ import { MonitorScreenPage } from '@/pages/MonitorScreenPage';
 import { CallHistoryPage } from '@/pages/CallHistoryPage';
 import { InmateFamilyPage } from '@/pages/InmateFamilyPage';
 import { InmateDetailPage } from '@/pages/InmateDetailPage';
-import { TrustAccountPage } from '@/pages/TrustAccountPage';
 import { KioskRegistrationPage } from '@/pages/KioskRegistrationPage';
 import { KiosksPage } from '@/pages/KiosksPage';
 import { UsersPage } from '@/pages/UsersPage';
@@ -28,7 +27,6 @@ export const RoutePaths = {
   inmateFamily: '/inmates-family',
   inmateNew: '/inmates-family/new',
   inmateDetail: '/inmates-family/:inmateId',
-  trustAccount: '/inmate-wallet',
   kioskRegistrations: '/kiosk-registrations',
   kiosks: '/kiosks',
   users: '/users',
@@ -65,9 +63,8 @@ export const router = createBrowserRouter([
       { path: RoutePaths.callHistory, element: <CallHistoryPage /> },
       { path: RoutePaths.inmateFamily, element: <InmateFamilyPage /> },
       { path: RoutePaths.inmateNew, element: <InmateDetailPage /> },
-      { path: RoutePaths.inmateDetail, element: <InmateDetailPage /> },
-      { path: RoutePaths.trustAccount, element: <TrustAccountPage /> },
-      { path: RoutePaths.kioskRegistrations, element: <KioskRegistrationPage /> },
+  { path: RoutePaths.inmateDetail, element: <InmateDetailPage /> },
+  { path: RoutePaths.kioskRegistrations, element: <KioskRegistrationPage /> },
       { path: RoutePaths.kiosks, element: <KiosksPage /> },
       { path: RoutePaths.users, element: <UsersPage /> },
       { path: RoutePaths.callConfiguration, element: <CallConfigurationPage /> },

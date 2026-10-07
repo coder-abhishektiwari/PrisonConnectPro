@@ -42,9 +42,15 @@ class RecordingVideoEncoder(
     val isRunning: Boolean get() = running.get()
     val frameCount: Long get() = encodedFrames
 
-    /** Binds this encoder's EGL surface to the calling thread (render thread). */
+    /** Binds this encoder's EGL surface to the calling thread (render thread).
+     *  May throw — callers decide whether a failed bind is fatal. */
     fun makeCurrent() {
-        try { egl?.makeCurrent() } catch (_: Throwable) {}
+        egl?.makeCurrent()
+    }
+
+    /** Unbinds the EGL surface from the calling thread. */
+    fun detachCurrent() {
+        try { egl?.detachCurrent() } catch (_: Throwable) {}
     }
 
     fun start(): Boolean {
@@ -69,7 +75,11 @@ class RecordingVideoEncoder(
             // EglBase.create(...) builds the context eagerly in this WebRTC build.
             val eglBase = EglBase.create(sharedEglContext, EglBase.CONFIG_RECORDABLE)
             eglBase.createSurface(surface)
+            // Validate the surface here, then IMMEDIATELY unbind: an EGL
+            // context can only be current on one thread at a time, and the
+            // composer thread must be able to make it current for rendering.
             eglBase.makeCurrent()
+            eglBase.detachCurrent()
             this.egl = eglBase
 
             Logger.d("VideoEncoder started codec=${encoder.name} ${width}x$height@$fps ${bitrate}bps")

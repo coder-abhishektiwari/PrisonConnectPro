@@ -108,6 +108,9 @@ internal class VideoComposer(
         } catch (e: Throwable) {
             Logger.w("VideoComposer GL cleanup failed: ${e.message}")
         }
+        // Unbind before this thread dies, so the session's stop path can
+        // destroy the context from whatever thread ends up owning it.
+        encoder.detachCurrent()
         frameDrawer = null
         drawer = null
     }

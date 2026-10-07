@@ -516,20 +516,47 @@ fun VideoCallContent(
                     // Live connection quality — sampled from the peer
                     // connection, so a bad line is visible instead of silent.
                     QualityChip(connectionQuality)
+                }
+            }
+        }
 
-                    // Timer Chip
-                    Surface(
-                        color = Color.White.copy(alpha = 0.15f),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text(
-                            text = "${formatTime(timerSeconds)} / ${formatTime(maxCallSeconds)}",
-                            color = Color.White,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
-                    }
+        // ALWAYS-VISIBLE call duration: the header above auto-hides after a
+        // few idle seconds, but the elapsed time (and the REC dot) must stay
+        // readable for the whole call.
+        Surface(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 70.dp)
+                .zIndex(2f),
+            color = Color.Black.copy(alpha = 0.7f),
+            shape = RoundedCornerShape(14.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                if (isRecording) {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .background(AlertRed, CircleShape)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                }
+                Text(
+                    text = formatTime(timerSeconds),
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                if (maxCallSeconds > 0) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "/ ${formatTime(maxCallSeconds)}",
+                        color = Color.White.copy(alpha = 0.65f),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium
+                    )
                 }
             }
         }

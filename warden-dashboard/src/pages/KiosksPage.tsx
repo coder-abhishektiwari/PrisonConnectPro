@@ -52,7 +52,6 @@ export function KiosksPage() {
       (k.location || '').toLowerCase().includes(q) ||
       (k.ipAddress || '').toLowerCase().includes(q) ||
       (k.deviceSerialNumber || '').toLowerCase().includes(q) ||
-      (k.ward || '').toLowerCase().includes(q) ||
       (k.prisonName || k.prisonId || '').toLowerCase().includes(q)
     );
   }, [kiosks, searchQuery]);
@@ -97,7 +96,7 @@ export function KiosksPage() {
             </p>
             <p className="text-xs text-neutral-400">Click a kiosk to open its full report</p>
           </div>
-          <input type="text" placeholder="Search ID, serial, ward..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full sm:w-72 px-3 py-1.5 text-sm border-2 border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" />
+          <input type="text" placeholder="Search ID, serial, location..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full sm:w-72 px-3 py-1.5 text-sm border-2 border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" />
         </div>
 
         {filtered.length === 0 && !isLoading ? (
@@ -114,15 +113,13 @@ export function KiosksPage() {
                   <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Serial</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Location</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">IP Address</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Ward / Block</th>
                   <th className="text-right py-3 px-4 text-sm font-semibold text-neutral-900">Inmates</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Android</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Status</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading && filtered.length === 0 ? (
-                  <SkeletonRows rows={6} cols={8} />
+                  <SkeletonRows rows={6} cols={7} />
                 ) : filtered.map((k) => (
                   <tr
                     key={k.kioskId}
@@ -136,13 +133,11 @@ export function KiosksPage() {
                     <td className="py-3 px-4 font-mono text-sm text-neutral-700">{k.deviceSerialNumber || '—'}</td>
                     <td className="py-3 px-4 text-sm text-neutral-700">{k.location || '—'}</td>
                     <td className="py-3 px-4 font-mono text-sm text-neutral-700">{k.ipAddress || '—'}</td>
-                    <td className="py-3 px-4 text-sm text-neutral-700">{k.ward || '—'}</td>
                     <td className="py-3 px-4 text-right">
                       <span className="inline-block min-w-8 px-2 py-0.5 rounded-full text-xs font-bold bg-info/10 text-info text-center">
                         {k.registeredInmates ?? 0}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-sm text-neutral-600">{k.androidVersion || '—'}</td>
                     <td className="py-3 px-4">
                       <span className={`px-2.5 py-1 rounded-full text-xs font-bold capitalize ${statusStyle(k.status)}`}>{k.status || 'pending'}</span>
                       {!isLive(k.status) && (

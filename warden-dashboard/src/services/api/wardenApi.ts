@@ -46,8 +46,6 @@ export interface KioskAdmin {
   permissions?: string[];
   createdAt?: string;
   location?: string | null;
-  ward?: string | null;
-  wards?: string[];
   registeredInmates?: number;
 }
 
@@ -1037,10 +1035,6 @@ export interface KioskItem {
   speaker?: Record<string, unknown>;
   printer?: Record<string, unknown>;
   network?: Record<string, unknown>;
-  assignedBlock?: string;
-  assignedCellArea?: string;
-  ward?: string | null;
-  wards?: string[];
   registeredInmates?: number;
 }
 
@@ -1074,8 +1068,6 @@ export interface KioskStats {
   lastSeen: string | null;
   lastHeartbeatAt: string | null;
   installationDate: string | null;
-  ward: string | null;
-  wards: string[];
   registeredInmates: number;
   today: KioskPeriodStats;
   month: KioskPeriodStats;

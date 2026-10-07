@@ -66,15 +66,24 @@ class KioskCallRecorder @Inject constructor(
 
     private val localSink = object : VideoSink {
         override fun onFrame(frame: VideoFrame) {
+            if (loggedLocalFrame.compareAndSet(false, true)) {
+                Logger.d("Recorder: first local camera frame reached recorder")
+            }
             composer?.onLocalFrame(frame)
         }
     }
 
     private val remoteSink = object : VideoSink {
         override fun onFrame(frame: VideoFrame) {
+            if (loggedRemoteFrame.compareAndSet(false, true)) {
+                Logger.d("Recorder: first remote (family) frame reached recorder")
+            }
             composer?.onRemoteFrame(frame)
         }
     }
+
+    private val loggedLocalFrame = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val loggedRemoteFrame = java.util.concurrent.atomic.AtomicBoolean(false)
 
     /** Identifier recorded into the uploaded file metadata. roomId doubles as
      *  callId — the backend resolves calls by callId OR roomId. */
@@ -136,6 +145,8 @@ class KioskCallRecorder @Inject constructor(
         if (running.getAndSet(true)) return
         profile = RecordingProfile.current
         _isRecording.value = true
+        loggedLocalFrame.set(false)
+        loggedRemoteFrame.set(false)
 
         val st = StereoStitcher().also { it.reset() }
         stitcher = st

@@ -12,7 +12,7 @@ import type { ColumnFilter } from '@/components/FilterDropdown';
 import { inmateLabel, contactLabel } from '@/utils/names';
 import ExcelJS from 'exceljs';
 
-import type { CallHistoryItem, Recording, Inmate, CallHistoryParams, PaginatedCallsResponse, PaginatedResponse, KioskItem, ListParams } from '@/services/api/wardenApi';
+import type { CallHistoryItem, Recording, Inmate, CallHistoryParams, PaginatedCallsResponse, PaginatedResponse, KioskItem, ListParams, Pricing } from '@/services/api/wardenApi';
 
 const PAGE_SIZE = 20;
 
@@ -25,7 +25,6 @@ export function CallHistoryPage() {
   const [selected, setSelected] = useState<CallHistoryItem | null>(null);
   const [playing, setPlaying] = useState<Recording | null>(null);
   const [detailUrl, setDetailUrl] = useState<string | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isExporting, setIsExporting] = useState(false);
 
   const [typeFilter, setTypeFilter] = useState<ColumnFilter>({ value: 'all', open: false });
@@ -56,6 +55,28 @@ export function CallHistoryPage() {
   );
   const calls = data?.calls ?? [];
   const total = data?.total ?? 0;
+
+  // Live duration tick: an active call has durationMinutes=0 until the
+  // backend finalizes it, so while any call is live the column is computed
+  // from its media-connect (or start) time and re-rendered every second.
+  const [now, setNow] = useState(() => Date.now());
+  const hasLiveCall = calls.some((c) => c.status === 'active');
+  useEffect(() => {
+    if (!hasLiveCall) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [hasLiveCall]);
+
+  const liveDurationSeconds = (c: CallHistoryItem) => {
+    const start = new Date(c.mediaConnectedAt || c.startTime || '').getTime();
+    if (!Number.isFinite(start) || start <= 0) return 0;
+    return Math.max(0, Math.floor((now - start) / 1000));
+  };
+  const fmtSec = (totalSeconds: number) => {
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
 
   const { data: recordingsData, refresh: refreshRecordings } = useCachedResource<Recording[]>(
     cacheKeys.recordings(),
@@ -112,6 +133,16 @@ export function CallHistoryPage() {
     [kiosksData],
   );
 
+  const { data: pricingData } = useCachedResource<Pricing>(
+    cacheKeys.pricing(),
+    () => wardenApi.getPricing(),
+    { ttl: 60_000 },
+  );
+  const pricing = useMemo(() => ({
+    audioRate: Number(pricingData?.audio?.ratePerMinute ?? 1),
+    videoRate: Number(pricingData?.video?.ratePerMinute ?? 2.5),
+  }), [pricingData]);
+
   const refreshRef = useRef<() => void>(refresh);
   refreshRef.current = () => { refresh(); refreshRecordings(); };
   const onCallUpdate = useCallback(() => { refreshRef.current(); }, []);
@@ -154,7 +185,8 @@ export function CallHistoryPage() {
       const rec = recordings[c.callId];
       const row = ws.addRow([
         c.callId, fmtDate(c.startTime), inmateLabel(c, inmates[c.inmateId]),
-        contactLabel(c), locationLabel(c.family?.location) || '', c.kioskId, c.type, fmtDur(c.durationMinutes),
+        contactLabel(c), locationLabel(c.family?.location) || '', c.kioskId, c.type,
+        c.status === 'active' ? fmtSec(liveDurationSeconds(c)) : fmtDur(c.durationMinutes),
         c.status, c.connectionQuality || '', rec?.available ? 'Yes' : 'No'
       ]);
       row.eachCell((cell) => { cell.numFmt = '@'; });
@@ -192,18 +224,11 @@ export function CallHistoryPage() {
   const handleExport = async () => {
     setIsExporting(true);
     try {
-      const hasSelection = selectedIds.size > 0;
-      let rows: CallHistoryItem[];
-      if (hasSelection) {
-        rows = calls.filter((c) => selectedIds.has(c.callId));
-      } else {
-        const allResult = await wardenApi.getCallHistory({ ...params, limit: 10000, offset: 0 });
-        rows = allResult.calls ?? [];
-      }
-      const suffix = hasSelection ? '_selected_records' : '-all';
+      const allResult = await wardenApi.getCallHistory({ ...params, limit: 10000, offset: 0 });
+      const rows = allResult.calls ?? [];
       const now = new Date();
-      const ts = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}-${String(now.getMinutes()).padStart(2,'0')}-${String(now.getSeconds()).padStart(2,'0')}`;
-      await exportExcel(rows, `call-logs${suffix}_${ts}.xlsx`);
+      const ts = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}-${String(now.getSeconds()).padStart(2, '0')}`;
+      await exportExcel(rows, `call-logs-all_${ts}.xlsx`);
     } finally { setIsExporting(false); }
   };
 
@@ -214,18 +239,28 @@ export function CallHistoryPage() {
     subtitle: isLoading && total === 0 ? 'Loading call history...' : `${total} calls total`,
     icon: headerIcon,
     actions: useMemo(() => (
-      <button onClick={handleExport} disabled={isExporting} className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-success text-white rounded-xl text-sm font-bold hover:bg-success-700 shadow-sm disabled:opacity-50">
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-        {isExporting ? 'Exporting...' : `Export Excel${selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}`}
-      </button>
-    ), [handleExport, isExporting, selectedIds.size]),
+      <div className="flex items-center gap-2">
+        <button onClick={handleExport} disabled={isExporting} className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-success text-white rounded-xl text-sm font-bold hover:bg-success-700 shadow-sm disabled:opacity-50">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+          {isExporting ? 'Exporting...' : 'Export Excel'}
+        </button>
+        <div className="px-3.5 py-2 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-semibold shadow-sm">
+          Audio <span className="font-bold text-emerald-950">₹{pricing.audioRate}/min</span>
+        </div>
+        <div className="px-3.5 py-2 bg-cyan-50 border border-cyan-200 text-cyan-800 rounded-xl text-xs font-semibold shadow-sm">
+          Video <span className="font-bold text-cyan-950">₹{pricing.videoRate}/min</span>
+        </div>
+      </div>
+    ), [handleExport, isExporting, pricing.audioRate, pricing.videoRate]),
   });
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const fmtDur = (m: number) => {
     if (!Number.isFinite(m) || m == null) return '00:00';
-    const mins = Math.floor(m); const secs = Math.floor((m % 1) * 60);
+    const totalSeconds = Math.round(m * 60);
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
   const fmtDate = (iso: string) => { if (!iso) return '—'; const d = new Date(iso); return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }); };
@@ -240,8 +275,10 @@ export function CallHistoryPage() {
     return 'Call ended unexpectedly';
   };
 
-  const toggleBulk = (id: string) => { setSelectedIds((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; }); };
-  const toggleAll = () => { if (calls.every((c) => selectedIds.has(c.callId))) setSelectedIds(new Set()); else setSelectedIds(new Set(calls.map((c) => c.callId))); };
+  const emptyTitle = recordingFilter.value === 'available' ? 'No calls with recordings found'
+    : recordingFilter.value === 'none' ? 'No calls without recordings found'
+    : 'No call logs found';
+  const emptySub = recordingFilter.value !== 'all' ? 'Try a different filter or date range' : 'Try adjusting filters or date range';
 
   return (
     <div className="space-y-6">
@@ -261,24 +298,10 @@ export function CallHistoryPage() {
 
       {/* Table */}
       <Card className="overflow-hidden">
-        {error && calls.length === 0 ? (
-          <div className="text-center py-16">
-            <p className="text-neutral-900 font-semibold">Couldn&apos;t load call logs</p>
-            <p className="text-sm text-neutral-500 mt-1">{error}</p>
-            <button onClick={() => refresh()} className="mt-4 px-4 py-2 bg-neutral-900 text-white rounded-xl text-sm font-bold">Retry</button>
-          </div>
-        ) : calls.length === 0 && !isLoading ? (
-          <div className="text-center py-16">
-            <div className="w-16 h-16 bg-neutral-100 rounded-2xl flex items-center justify-center mx-auto mb-4"><svg className="w-8 h-8 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg></div>
-            <p className="text-neutral-900 font-semibold">No call logs found</p>
-            <p className="text-sm text-neutral-500 mt-1">Try adjusting filters or date range</p>
-          </div>
-        ) : (
           <div className="overflow-auto max-h-[calc(100vh-280px)]">
             <table className="w-full">
-               <thead className="sticky top-0 z-10">
-                 <tr className="border-b bg-neutral-50">
-                  <th className="px-4 py-3 w-10"><input type="checkbox" checked={calls.length > 0 && calls.every((c) => selectedIds.has(c.callId))} onChange={toggleAll} className="rounded border-neutral-300" /></th>
+              <thead className="sticky top-0 z-10">
+                <tr className="border-b bg-neutral-50">
                   <th className="text-left py-3 px-4"><FilterDropdown label="Type" options={[{ value: 'video', label: 'Video' }, { value: 'audio', label: 'Audio' }]} filter={typeFilter} setFilter={setTypeFilter} /></th>
                   <th className="text-left py-3 px-4"><button onClick={() => setSortDir((d) => d === 'asc' ? 'desc' : 'asc')} className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-neutral-500 hover:text-primary-600 transition-colors">Date {sortDir === 'asc' ? '↑' : '↓'}</button></th>
                   <th className="text-left py-3 px-4"><span className="text-xs font-bold uppercase tracking-wider text-neutral-500">Inmate ⇄ Family</span></th>
@@ -292,7 +315,19 @@ export function CallHistoryPage() {
               </thead>
               <tbody>
                 {isLoading && calls.length === 0 ? (
-                  <SkeletonRows rows={8} cols={10} />
+                  <SkeletonRows rows={8} cols={9} />
+                ) : error && calls.length === 0 ? (
+                  <tr><td colSpan={9} className="py-16 text-center">
+                    <p className="text-neutral-900 font-semibold">Couldn&apos;t load call logs</p>
+                    <p className="text-sm text-neutral-500 mt-1">{error}</p>
+                    <button onClick={() => refresh()} className="mt-4 px-4 py-2 bg-neutral-900 text-white rounded-xl text-sm font-bold">Retry</button>
+                  </td></tr>
+                ) : calls.length === 0 ? (
+                  <tr><td colSpan={9} className="py-16 text-center">
+                    <div className="w-16 h-16 bg-neutral-100 rounded-2xl flex items-center justify-center mx-auto mb-4"><svg className="w-8 h-8 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg></div>
+                    <p className="text-neutral-900 font-semibold">{emptyTitle}</p>
+                    <p className="text-sm text-neutral-500 mt-1">{emptySub}</p>
+                  </td></tr>
                 ) : calls.map((call) => {
                   const rec = recordings[call.callId];
                   const inmate = inmates[call.inmateId];
@@ -302,7 +337,6 @@ export function CallHistoryPage() {
 
                   return (
                     <tr key={call.callId} onClick={() => setSelected(call)} className={`border-b border-neutral-100 hover:bg-neutral-50 cursor-pointer ${isLive ? 'bg-success/5' : 'even:bg-neutral-50/50'}`}>
-                      <td className="px-4" onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={selectedIds.has(call.callId)} onChange={() => toggleBulk(call.callId)} className="rounded border-neutral-300" /></td>
                       <td className="py-3 px-4">
                         <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${call.type === 'video' ? 'bg-primary-600 text-white border-primary-600' : 'bg-info text-white border-info'}`}>{call.type === 'video' ? '▶ Video' : '● Audio'}</span>
                       </td>
@@ -324,7 +358,7 @@ export function CallHistoryPage() {
                         {isLive ? (
                           <span className="inline-flex items-center gap-1.5 text-sm font-bold text-success">
                             <span className="w-2 h-2 bg-success rounded-full animate-pulse" />
-                            {fmtDur(call.durationMinutes)}
+                            {fmtSec(liveDurationSeconds(call))}
                           </span>
                         ) : (
                           <span className="text-sm text-neutral-900">{fmtDur(call.durationMinutes)}</span>
@@ -360,7 +394,7 @@ export function CallHistoryPage() {
                             <svg className="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
                           </button>
                         ) : (
-                          <span className="text-xs text-neutral-400">—</span>
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border bg-neutral-100 text-neutral-500 border-neutral-200">Not Available</span>
                         )}
                       </td>
                     </tr>
@@ -369,7 +403,6 @@ export function CallHistoryPage() {
               </tbody>
             </table>
           </div>
-        )}
 
         {totalPages > 1 && (
           <div className="flex items-center justify-between px-5 py-4 bg-neutral-50 border-t border-neutral-200">
@@ -443,7 +476,7 @@ export function CallHistoryPage() {
                       <div className="flex justify-between gap-3"><span className="text-sm text-neutral-600 shrink-0">Location</span><span className="text-sm text-neutral-900 text-right"><LocationLink location={selected.family?.location} /></span></div>
                       <div className="flex justify-between"><span className="text-sm text-neutral-600">Started</span><span className="text-sm text-neutral-900">{fmtDateTime(selected.startTime)}</span></div>
                       <div className="flex justify-between"><span className="text-sm text-neutral-600">Ended</span><span className="text-sm text-neutral-900">{selected.endTime ? fmtDateTime(selected.endTime) : '—'}</span></div>
-                      <div className="flex justify-between"><span className="text-sm text-neutral-600">Duration</span><span className="text-sm font-semibold text-neutral-900">{fmtDur(selected.durationMinutes)}</span></div>
+                      <div className="flex justify-between"><span className="text-sm text-neutral-600">Duration</span><span className="text-sm font-semibold text-neutral-900">{selected.status === 'active' ? fmtSec(liveDurationSeconds(selected)) : fmtDur(selected.durationMinutes)}</span></div>
                     </div>
                   </div>
 

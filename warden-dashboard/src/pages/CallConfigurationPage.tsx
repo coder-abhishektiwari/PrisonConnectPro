@@ -17,8 +17,8 @@ export function CallConfigurationPage() {
   const prisonId = storedUser?.prisonId || '';
 
   usePageHeader({
-    title: 'Kiosk Setup PIN',
-    subtitle: 'Device onboarding PIN for your facility',
+    title: 'Configurations',
+    subtitle: 'Manage facility setup & kiosk configuration',
   });
 
   if (error && settings === undefined) {
