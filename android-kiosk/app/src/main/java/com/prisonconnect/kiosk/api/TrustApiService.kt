@@ -214,6 +214,21 @@ interface TrustApiService {
     @GET("admin/devices/{deviceId}")
     suspend fun getAdminDevice(@Path("deviceId") deviceId: String): ApiResponse<KioskDevice>
 
+    // Kiosk admin staff (same list, create and edit the warden panel offers)
+    @GET("kiosk-admins")
+    suspend fun getKioskAdmins(): ApiResponse<List<com.prisonconnect.kiosk.models.admin.KioskAdmin>>
+
+    @POST("kiosk-admins")
+    suspend fun createKioskAdmin(
+        @Body request: com.prisonconnect.kiosk.models.admin.CreateKioskAdminRequest
+    ): ApiResponse<com.prisonconnect.kiosk.models.admin.KioskAdmin>
+
+    @PATCH("kiosk-admins/{adminId}")
+    suspend fun updateKioskAdmin(
+        @Path("adminId") adminId: String,
+        @Body request: com.prisonconnect.kiosk.models.admin.UpdateKioskAdminRequest
+    ): ApiResponse<com.prisonconnect.kiosk.models.admin.KioskAdmin>
+
     // ==================== REPORTS ====================
 
     /**

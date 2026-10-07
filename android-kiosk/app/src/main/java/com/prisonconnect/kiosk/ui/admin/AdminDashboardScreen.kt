@@ -33,6 +33,7 @@ fun AdminDashboardScreen(
     onManagePrisonersClick: () -> Unit,
     onDeviceInfoClick: () -> Unit,
     onMisReportClick: () -> Unit,
+    onKioskAdminsClick: () -> Unit,
     onLogoutClick: () -> Unit,
     viewModel: AdminDashboardViewModel = hiltViewModel()
 ) {
@@ -44,6 +45,7 @@ fun AdminDashboardScreen(
         onManagePrisonersClick = onManagePrisonersClick,
         onDeviceInfoClick = onDeviceInfoClick,
         onMisReportClick = onMisReportClick,
+        onKioskAdminsClick = onKioskAdminsClick,
         onLogoutClick = onLogoutClick
     )
 }
@@ -55,6 +57,7 @@ fun AdminDashboardContent(
     onManagePrisonersClick: () -> Unit,
     onDeviceInfoClick: () -> Unit,
     onMisReportClick: () -> Unit,
+    onKioskAdminsClick: () -> Unit,
     onLogoutClick: () -> Unit
 ) {
     Scaffold(
@@ -115,18 +118,35 @@ fun AdminDashboardContent(
                                 fontSize = 14.sp,
                                 color = Color(0xFF687A8F)
                             )
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = Color(0xFFE3F2FD),
-                                modifier = Modifier.padding(top = 8.dp)
+                            Row(
+                                modifier = Modifier.padding(top = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = adminProfile?.role?.uppercase() ?: "ADMIN",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF003366),
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                                )
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color(0xFFE3F2FD)
+                                ) {
+                                    Text(
+                                        text = adminProfile?.role?.uppercase() ?: "ADMIN",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF003366),
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                                    )
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color(0xFFEEF2F7)
+                                ) {
+                                    Text(
+                                        text = adminProfile?.employeeId ?: "",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF0B2240),
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -163,6 +183,17 @@ fun AdminDashboardContent(
                     icon = Icons.Default.List,
                     iconColor = Color(0xFF2196F3),
                     onClick = onManagePrisonersClick
+                )
+            }
+
+            // Kiosk Admins Card
+            item {
+                AdminActionCard(
+                    title = "Kiosk Admins",
+                    description = "Add or edit staff who sign in on this kiosk",
+                    icon = Icons.Default.ManageAccounts,
+                    iconColor = Color(0xFF00ACC1),
+                    onClick = onKioskAdminsClick
                 )
             }
 
@@ -288,6 +319,7 @@ fun PreviewAdminDashboardMobile() {
             onManagePrisonersClick = {},
             onDeviceInfoClick = {},
             onMisReportClick = {},
+            onKioskAdminsClick = {},
             onLogoutClick = {}
         )
     }

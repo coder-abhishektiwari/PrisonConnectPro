@@ -466,7 +466,9 @@ app.post('/wardens', requireAuth, requireRole('admin', 'warden', 'super-admin', 
 // ==================== KIOSK ADMINS ====================
 // Staff who operate a kiosk device, shown with the device's ward and prisoner
 // load so a warden can see who is on which terminal in this jail.
-app.get('/kiosk-admins', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+// A kiosk admin sees the same staff page as their warden does - scoped to the
+// same prison - so the roles below include 'kiosk_admin' on all three routes.
+app.get('/kiosk-admins', requireAuth, requireRole('admin', 'kiosk_admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const jailId = await effectiveJailId(req);
   const [admins, kiosks, inmates, blocks] = await Promise.all([
     readDb('admins.json'),
@@ -499,7 +501,7 @@ app.get('/kiosk-admins', requireAuth, requireRole('admin', 'warden', 'super-admi
 // remove them here; the vendor console keeps its own super-admin-only /admin
 // routes. All three routes refuse a row from another prison unless the caller
 // is a super admin.
-app.post('/kiosk-admins', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+app.post('/kiosk-admins', requireAuth, requireRole('admin', 'kiosk_admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const isSuper = ['super-admin', 'super_admin'].includes(req.auth?.role);
   const jailId = await effectiveJailId(req);
   if (!isSuper && !jailId) return sendError(res, 'FORBIDDEN', 'Your account is not linked to a prison yet', 403);
@@ -547,7 +549,7 @@ app.post('/kiosk-admins', requireAuth, requireRole('admin', 'warden', 'super-adm
   return sendSuccess(res, safe, 201);
 }));
 
-app.patch('/kiosk-admins/:adminId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+app.patch('/kiosk-admins/:adminId', requireAuth, requireRole('admin', 'kiosk_admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const isSuper = ['super-admin', 'super_admin'].includes(req.auth?.role);
   const jailId = await effectiveJailId(req);
   if (!isSuper && !jailId) return sendError(res, 'FORBIDDEN', 'Your account is not linked to a prison yet', 403);
