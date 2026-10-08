@@ -363,7 +363,7 @@ private fun PrisonerCard(
                         contentColor = Color(0xFF003366)
                     )
                 }
-                val idNumber = prisoner.idNumber
+                val idNumber = prisoner.rfidCardNumber
                 if (!idNumber.isNullOrBlank()) {
                     MetaChip(
                         text = idNumber,

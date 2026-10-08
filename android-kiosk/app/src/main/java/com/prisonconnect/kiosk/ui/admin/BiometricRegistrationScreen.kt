@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -21,6 +22,7 @@ import com.prisonconnect.kiosk.hardware.FingerprintCaptureState
 import com.prisonconnect.kiosk.hardware.RfidReaderState
 import com.prisonconnect.kiosk.models.admin.BiometricRegistration
 import com.prisonconnect.kiosk.network.NetworkResult
+import com.prisonconnect.kiosk.ui.auth.RfidKeypadEntry
 import com.prisonconnect.kiosk.ui.components.KioskLoadingState
 import com.prisonconnect.kiosk.ui.components.KioskTopBar
 import java.io.ByteArrayOutputStream
@@ -331,7 +333,8 @@ fun BiometricCard(
 
 /**
  * Small capture dialog: instruction card with live hardware status on top.
- * [showManualEntry] adds the manual number field (RFID only).
+ * [showManualEntry] adds the manual number fallback (RFID only): a link to an
+ * on-screen 12-dot keypad that auto-registers when the number is complete.
  */
 @Composable
 private fun BiometricCaptureDialog(
@@ -345,13 +348,24 @@ private fun BiometricCaptureDialog(
     onManualConfirm: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var value by remember { mutableStateOf("") }
+    var showKeypad by remember { mutableStateOf(false) }
+    var digits by remember { mutableStateOf("") }
+
+    // A failed attempt clears the number so the next try starts clean.
+    LaunchedEffect(registerError) {
+        if (registerError != null) digits = ""
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(icon, contentDescription = null, tint = Color(0xFF003366), modifier = Modifier.size(32.dp)) },
         title = { Text("Register $title") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()).fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 // Instruction card — what to do + live reader status.
                 Surface(
                     color = Color(0xFFF5F7FA),
@@ -392,37 +406,40 @@ private fun BiometricCaptureDialog(
                     }
                 }
 
-                if (showManualEntry) {
-                    Text(hint, fontSize = 12.sp, color = Color(0xFF687A8F))
-
-                    Text(
-                        "Can't use the reader? Enter the number manually.",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = Color(0xFF0B2240)
-                    )
-                    OutlinedTextField(
-                        value = value,
-                        onValueChange = { value = it },
-                        label = { Text("Card number") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
+                if (showManualEntry && showKeypad) {
+                    RfidKeypadEntry(
+                        digits = digits,
+                        onDigitsChange = { new ->
+                            digits = new
+                            if (new.length == 12) onManualConfirm(new)
+                        }
                     )
                 } else {
                     Text(hint, fontSize = 12.sp, color = Color(0xFF687A8F))
+                    if (showManualEntry) {
+                        TextButton(onClick = { showKeypad = true }) {
+                            Text(
+                                "Enter card number instead",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF003366)
+                            )
+                        }
+                    }
                 }
 
                 if (registerError != null) {
-                    Text(registerError, fontSize = 12.sp, color = Color(0xFFD32F2F))
+                    Text(
+                        registerError,
+                        fontSize = 12.sp,
+                        color = Color(0xFFD32F2F),
+                        textAlign = TextAlign.Center
+                    )
                 }
             }
         },
-        confirmButton = {
-            if (showManualEntry) {
-                Button(onClick = { if (value.isNotBlank()) onManualConfirm(value.trim()) }) { Text("Register") }
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(if (showManualEntry) "Cancel" else "Close") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(if (showManualEntry) "Cancel" else "Close") } },
+        confirmButton = {}
     )
 }
 

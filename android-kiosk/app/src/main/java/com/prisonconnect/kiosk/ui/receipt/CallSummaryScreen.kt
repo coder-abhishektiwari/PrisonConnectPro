@@ -59,7 +59,6 @@ fun CallSummaryScreen(
         // The profile API returns `name` only (firstName/lastName are stripped
         // server-side), so reading those fields printed a blank inmate name.
         inmateName = inmateProfile?.displayName ?: "N/A",
-        inmateId = inmateProfile?.inmateId ?: "N/A",
         contactName = contactName,
         duration = duration,
         totalCharged = totalCharged,
@@ -74,7 +73,6 @@ fun CallSummaryScreen(
 @Composable
 fun CallSummaryContent(
     inmateName: String,
-    inmateId: String,
     contactName: String,
     duration: String,
     totalCharged: String,
@@ -164,7 +162,6 @@ fun CallSummaryContent(
 
                         HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Color(0xFFE2E8F0))
 
-                        ReceiptRow("Inmate ID", inmateId, isTablet = isTablet)
                         ReceiptRow("Inmate Name", inmateName, isTablet = isTablet)
                         ReceiptRow("Contact Person", contactName, isTablet = isTablet)
                         ReceiptRow("Date", LocalDate.now().format(DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH)), isTablet = isTablet)
@@ -337,7 +334,6 @@ fun ReceiptRow(
 //    PrisonKioskTheme {
 //        CallSummaryContent(
 //            inmateName = "RAHUL KUMAR",
-//            inmateId = "INM123456",
 //            contactName = "Suresh Kumar",
 //            duration = "5:00",
 //            totalCharged = "10.00",
@@ -365,7 +361,6 @@ fun PreviewCallSummaryMobile() {
     PrisonKioskTheme {
         CallSummaryContent(
             inmateName = "RAHUL KUMAR",
-            inmateId = "INM123456",
             contactName = "Suresh Kumar",
             duration = "307",
             totalCharged = "10.00",

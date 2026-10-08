@@ -7,6 +7,7 @@ const { requireRole } = require('./middleware/auth');
 const { inAdminScope, adminScopeFilter, jailScopeOf, kioskScopeOf } = require('./lib/scoping');
 const { paginate } = require('./lib/paginate');
 const { inmateDeleteHandler, validateInmateRefs, stripRemovedInmateFields, hashBiometricData } = require('./routes/inmates');
+const { isValidRfidNumber, rfidCardNumberFor, biometricValidationError } = require('./lib/biometrics');
 
 const ALL_ROLES = ['admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'];
 const ADMIN_ROLES = ['admin', 'warden', 'super-admin', 'super_admin'];
@@ -23,20 +24,6 @@ function normalizeContact(c) {
     if (!out.phone) out.phone = phone;
   }
   return out;
-}
-
-/**
- * Display copy of the RFID card number for inmate details. Registration keeps
- * a plain rfidCardNumber next to the bcrypt-hashed rfidToken; legacy rows hold
- * the raw value in rfidToken itself. Hashed-only rows return null.
- */
-function rfidCardNumberFor(i) {
-  const bio = i.biometricData || {};
-  if (!bio.rfidRegistered) return null;
-  if (bio.rfidCardNumber) return String(bio.rfidCardNumber);
-  const token = bio.rfidToken;
-  if (token && !/^\$2[aby]\$/.test(String(token))) return String(token);
-  return null;
 }
 
 function normalizeInmate(i) {
@@ -93,6 +80,10 @@ router.post('/prisoners', requireRole(...ALL_ROLES), async (req, res) => {
   if (!refs.ok) {
     return res.status(422).json({ success: false, error: { code: 'INVALID_REFERENCE', message: refs.message } });
   }
+  const bioError = biometricValidationError(inmateData.biometricData);
+  if (bioError) {
+    return res.status(422).json({ success: false, error: { code: 'INVALID_BIOMETRIC', message: bioError } });
+  }
   const record = {
     ...inmateData,
     inmateId: inmateData.inmateId || `INM-${uuidv4().substring(0, 8).toUpperCase()}`,
@@ -133,7 +124,13 @@ router.put('/prisoners/:prisonerId', requireRole(...ALL_ROLES), async (req, res)
     updates.firstName = updates.name.split(' ')[0];
     updates.lastName = updates.name.split(' ').slice(1).join(' ');
   }
-  if (updates.biometricData) updates.biometricData = await hashBiometricData(updates.biometricData);
+  if (updates.biometricData) {
+    const bioError = biometricValidationError(updates.biometricData);
+    if (bioError) {
+      return res.status(422).json({ success: false, error: { code: 'INVALID_BIOMETRIC', message: bioError } });
+    }
+    updates.biometricData = await hashBiometricData(updates.biometricData);
+  }
   const updated = await updateDb('inmates.json', (inmates) => {
     const idx = inmates.findIndex((i) => i.inmateId === req.params.prisonerId && inAdminScope(req, i));
     if (idx === -1) return { data: inmates, result: null };
@@ -381,6 +378,9 @@ router.post('/prisoners/:prisonerId/biometrics', requireRole(...ALL_ROLES), asyn
     biometricRecord = { biometricId: `BIO-${prisonerId}-FGP`, prisonerId, type: 'fingerprint', status: 'registered', registeredAt: new Date().toISOString() };
   } else if (type === 'rfid') {
     if (!rfidToken) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'rfidToken is required for RFID' } });
+    if (!isValidRfidNumber(rfidToken)) {
+      return res.status(400).json({ success: false, error: { code: 'INVALID_RFID', message: 'RFID card number must be exactly 12 digits' } });
+    }
     updateFields = {
       biometricData: { ...inmates[inmateIdx].biometricData, rfidRegistered: true, rfidToken: await hashSecret(String(rfidToken)), rfidCardNumber: String(rfidToken), lastBiometricUpdate: new Date().toISOString() }
     };

@@ -10,7 +10,16 @@ data class InmateProfile(
     @SerializedName("prisonId") val prisonId: String = "",
     @SerializedName("facility") val facility: String = "",
     @SerializedName("status") val status: InmateStatus? = null,
-    @SerializedName("photoUrl") val photoUrl: String? = null
+    @SerializedName("photoUrl") val photoUrl: String? = null,
+    @SerializedName("gender") val gender: String? = null,
+    @SerializedName("age") val age: String? = null,
+    @SerializedName("district") val district: String? = null,
+    @SerializedName("state") val state: String? = null,
+    @SerializedName("religion") val religion: String? = null,
+    @SerializedName("nationality") val nationality: String? = null,
+    @SerializedName("dateOfAdmission") val dateOfAdmission: String? = null,
+    @SerializedName("rfidCardNumber") val rfidCardNumber: String? = null,
+    @SerializedName("rfidRegistered") val rfidRegistered: Boolean = false
 ) {
     val displayName: String
         get() = name.ifEmpty { "$firstName $lastName".trim() }.ifEmpty { "Unknown" }

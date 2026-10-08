@@ -7,6 +7,7 @@ const { sendSuccess, sendError, asyncRoute } = require('../lib/response');
 const { jailScopeOf, inJailScope, kioskScopeOf, inAdminScope, adminScopeFilter, inScopeOf, scopeList } = require('../lib/scoping');
 const { paginate } = require('../lib/paginate');
 const { ensureWallet } = require('../lib/wallets');
+const { biometricValidationError } = require('../lib/biometrics');
 
 const router = express.Router();
 
@@ -158,6 +159,8 @@ async function inmateCreateHandler(req, res) {
     assignedKioskId: kioskId || inmateData.assignedKioskId,
   });
   if (!refs.ok) return sendError(res, 'INVALID_REFERENCE', refs.message, 422);
+  const bioError = biometricValidationError(inmateData.biometricData);
+  if (bioError) return sendError(res, 'INVALID_BIOMETRIC', bioError, 422);
   try {
     const newInmate = await updateDb('inmates.json', async (inmates) => {
       if (inmateData.prisonerNumber && inmates.find((i) => i.prisonerNumber === inmateData.prisonerNumber)) {
@@ -242,7 +245,11 @@ async function inmateUpdateHandler(req, res) {
     }
   }
   delete updates.prisonId;
-  if (updates.biometricData) updates.biometricData = await hashBiometricData(updates.biometricData);
+  if (updates.biometricData) {
+    const bioError = biometricValidationError(updates.biometricData);
+    if (bioError) return sendError(res, 'INVALID_BIOMETRIC', bioError, 422);
+    updates.biometricData = await hashBiometricData(updates.biometricData);
+  }
   const updatedRefs = await validateInmateRefs({
     assignedKioskId: updates.assignedKioskId,
   });

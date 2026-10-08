@@ -20,9 +20,6 @@ import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Wallet
-import androidx.compose.material.icons.outlined.Warning
-import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Help
 import androidx.compose.material3.*
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
@@ -41,7 +38,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.prisonconnect.kiosk.models.inmate.InmateStatus
 import coil.compose.AsyncImage
 import com.prisonconnect.kiosk.core.UiState
 import com.prisonconnect.kiosk.models.call.CallType
@@ -510,107 +506,139 @@ fun WalletDetailCard(balance: InmateBalance?, onClick: () -> Unit) {
 private fun InmateProfileCard(
     inmateProfile: InmateProfile
 ) {
+    val rfidValue = inmateProfile.rfidCardNumber
+        ?: if (inmateProfile.rfidRegistered) "Registered" else "Not registered"
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 16.dp, vertical = 14.dp)
         ) {
-            // Avatar
-            AsyncImage(
-                model = inmateProfile.photoUrl,
-                contentDescription = null,
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color(0xFFF1F5F9)),
-                contentScale = ContentScale.Crop,
-                placeholder = rememberVectorPainter(Icons.Default.Person),
-                error = rememberVectorPainter(Icons.Default.Person)
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                AsyncImage(
+                    model = inmateProfile.photoUrl,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFFF1F5F9)),
+                    contentScale = ContentScale.Crop,
+                    placeholder = rememberVectorPainter(Icons.Default.Person),
+                    error = rememberVectorPainter(Icons.Default.Person)
+                )
 
-            Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(12.dp))
 
-            // Info
-            Column(modifier = Modifier.weight(1f)) {
-                // Name + Status
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = inmateProfile.displayName,
-                        fontSize = 16.sp,
+                        fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
                         color = PrimaryDarkNavy,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false)
+                        overflow = TextOverflow.Ellipsis
                     )
-
-                    val statusColor = when (inmateProfile.status) {
-                        InmateStatus.ACTIVE -> GreenActiveBg
-                        InmateStatus.INACTIVE, InmateStatus.SUSPENDED, InmateStatus.RESTRICTED -> Color(0xFFFFF3E0)
-                        InmateStatus.RELEASED, InmateStatus.TRANSFERRED -> Color(0xFFE3F2FD)
-                        null -> Color(0xFFF5F5F5)
-                    }
-                    val statusTextColor = when (inmateProfile.status) {
-                        InmateStatus.ACTIVE -> GreenActiveText
-                        InmateStatus.INACTIVE, InmateStatus.SUSPENDED, InmateStatus.RESTRICTED -> Color(0xFFE65100)
-                        InmateStatus.RELEASED, InmateStatus.TRANSFERRED -> Color(0xFF1565C0)
-                        null -> Color(0xFF9E9E9E)
-                    }
-                    val statusIcon = when (inmateProfile.status) {
-                        InmateStatus.ACTIVE -> Icons.Outlined.CheckCircle
-                        InmateStatus.INACTIVE, InmateStatus.SUSPENDED, InmateStatus.RESTRICTED -> Icons.Outlined.Warning
-                        InmateStatus.RELEASED, InmateStatus.TRANSFERRED -> Icons.Outlined.Info
-                        null -> Icons.Outlined.Help
-                    }
-                    val statusText = inmateProfile.status?.name?.uppercase() ?: "UNKNOWN"
-
-                    Surface(
-                        color = statusColor,
-                        shape = RoundedCornerShape(50)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(3.dp)
-                        ) {
-                            Icon(
-                                imageVector = statusIcon,
-                                contentDescription = null,
-                                tint = statusTextColor,
-                                modifier = Modifier.size(11.dp)
-                            )
-                            Text(
-                                text = statusText,
-                                color = statusTextColor,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
+                    Text(
+                        text = inmateProfile.facility,
+                        fontSize = 12.sp,
+                        color = TextGray,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                // Inmate ID
-                Text(
-                    text = inmateProfile.inmateId.orEmpty(),
-                    fontSize = 12.sp,
-                    color = TextGray,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
             }
+
+            Spacer(modifier = Modifier.height(14.dp))
+            HorizontalDivider(color = Color(0xFFE8EDF3), thickness = 1.dp)
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Details — plain label/value pairs, neutral colours only.
+            ProfileDetailRow(
+                "Gender", titleCase(inmateProfile.gender),
+                "Age", inmateProfile.age
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            ProfileDetailRow(
+                "District", titleCase(inmateProfile.district),
+                "State", titleCase(inmateProfile.state)
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            ProfileDetailRow(
+                "Religion", titleCase(inmateProfile.religion),
+                "Nationality", titleCase(inmateProfile.nationality)
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            ProfileDetail("RFID Card", rfidValue, modifier = Modifier.fillMaxWidth())
+            Spacer(modifier = Modifier.height(12.dp))
+            ProfileDetail(
+                "Date of Admission", formatAdmissionDate(inmateProfile.dateOfAdmission),
+                modifier = Modifier.fillMaxWidth()
+            )
         }
+    }
+}
+
+private fun titleCase(value: String?): String? =
+    value?.takeIf { it.isNotBlank() }?.replaceFirstChar { c ->
+        if (c.isLowerCase()) c.titlecase() else c.toString()
+    }
+
+private fun formatAdmissionDate(raw: String?): String? {
+    if (raw.isNullOrBlank()) return null
+    return try {
+        if (Regex("""\d{4}-\d{2}-\d{2}""").matches(raw)) {
+            val parsed = java.text.SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).parse(raw)
+            if (parsed != null) {
+                java.text.SimpleDateFormat("d MMM yyyy", Locale.getDefault()).format(parsed)
+            } else raw
+        } else raw
+    } catch (_: Exception) {
+        raw
+    }
+}
+
+@Composable
+private fun ProfileDetailRow(
+    labelA: String, valueA: String?,
+    labelB: String, valueB: String?
+) {
+    Row(modifier = Modifier.fillMaxWidth()) {
+        ProfileDetail(labelA, valueA, modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.width(16.dp))
+        ProfileDetail(labelB, valueB, modifier = Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun ProfileDetail(
+    label: String,
+    value: String?,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier) {
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            color = TextGray,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Spacer(modifier = Modifier.height(3.dp))
+        Text(
+            text = value?.takeIf { it.isNotBlank() } ?: "—",
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = TextDark,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 

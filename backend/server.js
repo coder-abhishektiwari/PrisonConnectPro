@@ -14,6 +14,7 @@ const { sendSuccess, sendError, asyncRoute, deepMerge } = require('./lib/respons
 const { jailScopeOf, inAdminScope, inScopeOf, scopeList, kioskScopeOf } = require('./lib/scoping');
 const { paginate } = require('./lib/paginate');
 const { buildInmateIndex } = require('./lib/kioskView');
+const { rfidCardNumberFor } = require('./lib/biometrics');
 
 /** Kiosk-admin username: what the operator types on the terminal to sign in. */
 const EMPLOYEE_ID_RE = /^[A-Za-z0-9._-]{3,40}$/;
@@ -804,7 +805,17 @@ app.get('/inmate/profile/:inmateId', requireAuth, asyncRoute(async (req, res) =>
     prisonId: inmate.prisonId,
     facility: inmate.facility || inmate.prisonId,
     status: inmate.status || 'active',
-    photoUrl: inmate.photoUrl || null
+    photoUrl: inmate.photoUrl || null,
+    // Display details for the kiosk profile card (no sensitive material).
+    gender: inmate.gender || null,
+    age: inmate.age != null ? String(inmate.age) : null,
+    district: inmate.district || null,
+    state: inmate.state || null,
+    religion: inmate.religion || null,
+    nationality: inmate.nationality || null,
+    dateOfAdmission: inmate.dateOfAdmission || null,
+    rfidCardNumber: rfidCardNumberFor(inmate),
+    rfidRegistered: !!(inmate.biometricData && inmate.biometricData.rfidRegistered)
   });
 }));
 

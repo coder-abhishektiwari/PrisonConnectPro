@@ -2,6 +2,7 @@ package com.prisonconnect.kiosk.ui.auth
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -157,6 +158,49 @@ private fun KeypadButton(
                 )
             }
         }
+    }
+}
+
+/**
+ * Strict 12-digit RFID card-number entry: dot indicator + on-screen numeric
+ * keypad, same interaction as the Prisoner ID entry. Digits cap at 12 —
+ * callers auto-submit when [onDigitsChange] reports a full number.
+ */
+@Composable
+fun RfidKeypadEntry(
+    digits: String,
+    onDigitsChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            repeat(12) { index ->
+                val filled = digits.length > index
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .clip(CircleShape)
+                        .background(if (filled) PremiumNavy else Color.LightGray.copy(alpha = 0.5f))
+                        .border(1.dp, if (filled) PremiumNavy else Color.Gray, CircleShape)
+                )
+            }
+        }
+
+        IPhoneKeypad(
+            onNumberClick = {
+                if (digits.length < 12) onDigitsChange(digits + it)
+            },
+            onDeleteClick = {
+                if (digits.isNotEmpty()) onDigitsChange(digits.dropLast(1))
+            }
+        )
     }
 }
 

@@ -158,7 +158,7 @@ fun RfidScanningLayout(
     onCancel: () -> Unit
 ) {
     var showManualDialog by remember { mutableStateOf(false) }
-    var manualCardNumber by remember { mutableStateOf("") }
+    var manualDigits by remember { mutableStateOf("") }
 
     Column(
         modifier = Modifier
@@ -265,7 +265,7 @@ fun RfidScanningLayout(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        TextButton(onClick = { showManualDialog = true }) {
+        TextButton(onClick = { manualDigits = ""; showManualDialog = true }) {
             Text("Enter card number instead", color = AccentBlue, fontWeight = FontWeight.Bold)
         }
 
@@ -279,38 +279,34 @@ fun RfidScanningLayout(
             onDismissRequest = { showManualDialog = false },
             title = { Text("Enter Card Number") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()).fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     Text(
-                        text = "Enter the RFID card number to continue.",
+                        text = "Enter the 12-digit RFID card number.",
                         fontSize = 14.sp,
-                        color = Color(0xFF687A8F)
+                        color = Color(0xFF687A8F),
+                        textAlign = TextAlign.Center
                     )
-                    OutlinedTextField(
-                        value = manualCardNumber,
-                        onValueChange = { manualCardNumber = it },
-                        label = { Text("Card number") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        leadingIcon = { Icon(Icons.Default.CreditCard, contentDescription = null) },
-                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Text
-                        )
+                    RfidKeypadEntry(
+                        digits = manualDigits,
+                        onDigitsChange = { new ->
+                            manualDigits = new
+                            if (new.length == 12) {
+                                onManualSubmit(new)
+                                manualDigits = ""
+                                showManualDialog = false
+                            }
+                        }
                     )
                 }
             },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        onManualSubmit(manualCardNumber.trim())
-                        manualCardNumber = ""
-                        showManualDialog = false
-                    },
-                    enabled = manualCardNumber.isNotBlank()
-                ) { Text("Continue") }
-            },
             dismissButton = {
                 TextButton(onClick = { showManualDialog = false }) { Text("Cancel") }
-            }
+            },
+            confirmButton = {}
         )
     }
 }
