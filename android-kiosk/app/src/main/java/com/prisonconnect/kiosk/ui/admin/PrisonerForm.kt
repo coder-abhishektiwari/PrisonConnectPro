@@ -2,13 +2,23 @@ package com.prisonconnect.kiosk.ui.admin
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -16,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -79,6 +90,16 @@ class PrisonerFormState(initial: Prisoner?) {
         address = address.trim().ifBlank { null },
         prisonerNumber = prisonerNumber.trim()
     )
+
+    /** Returns an error message for the personal step, or "" when it is valid. */
+    fun validatePersonal(): String {
+        val values = toValues()
+        if (values.name.isEmpty()) return "Prisoner name is required"
+        val ageNum = values.age?.toIntOrNull()
+        if (values.age != null && ageNum == null) return "Age must be a number"
+        if (ageNum != null && (ageNum < 1 || ageNum > 120)) return "Age must be between 1 and 120"
+        return ""
+    }
 }
 
 @Composable
@@ -130,12 +151,10 @@ private fun GenderPill(
     }
 }
 
-/**
- * The prisoner fields shared by add and edit: one scrollable set of cards,
- * dropdowns for choices and a date picker for the admission date.
- */
+// --- One screenful per step, so add/edit never feel like one long form ---
+
 @Composable
-fun PrisonerDetailsFields(state: PrisonerFormState) {
+fun PersonalDetailsCard(state: PrisonerFormState) {
     FormCard("Personal Details") {
         OutlinedTextField(
             value = state.fullName,
@@ -191,7 +210,10 @@ fun PrisonerDetailsFields(state: PrisonerFormState) {
             singleLine = true
         )
     }
+}
 
+@Composable
+fun IdentityAdmissionCard(state: PrisonerFormState) {
     FormCard("Identity & Admission") {
         KioskSelectField(
             value = state.idProof,
@@ -224,7 +246,10 @@ fun PrisonerDetailsFields(state: PrisonerFormState) {
             singleLine = true
         )
     }
+}
 
+@Composable
+fun AddressCard(state: PrisonerFormState) {
     FormCard("Address Details") {
         KioskSelectField(
             value = state.religion,
@@ -266,5 +291,87 @@ fun PrisonerDetailsFields(state: PrisonerFormState) {
             minLines = 2,
             maxLines = 4
         )
+    }
+}
+
+// --- Shared step chrome for add + edit ---
+
+@Composable
+fun PrisonerStepIndicator(
+    stepNumber: Int,
+    title: String,
+    isActive: Boolean,
+    isCompleted: Boolean
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.width(80.dp)
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = when {
+                isCompleted -> Color(0xFF4CAF50)
+                isActive -> Color(0xFF003366)
+                else -> Color(0xFFE2E8F0)
+            },
+            modifier = Modifier.size(40.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                if (isCompleted) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp)
+                    )
+                } else {
+                    Text(
+                        text = stepNumber.toString(),
+                        color = if (isActive) Color.White else Color(0xFF687A8F),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = title,
+            fontSize = 12.sp,
+            fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
+            color = if (isActive || isCompleted) Color(0xFF003366) else Color(0xFF687A8F),
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+/** Progress bar + numbered step titles; shared by add and edit so both match. */
+@Composable
+fun PrisonerStepHeader(titles: List<String>, currentStep: Int) {
+    LinearProgressIndicator(
+        progress = (currentStep + 1f) / titles.size,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(8.dp),
+        color = Color(0xFF003366),
+        trackColor = Color(0xFFE2E8F0)
+    )
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        titles.forEachIndexed { index, title ->
+            PrisonerStepIndicator(
+                stepNumber = index + 1,
+                title = title,
+                isActive = index == currentStep,
+                isCompleted = index < currentStep
+            )
+        }
     }
 }

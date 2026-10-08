@@ -36,6 +36,9 @@ class ManagePrisonersViewModel @Inject constructor(
     private val _deletingPrisonerId = MutableStateFlow<String?>(null)
     val deletingPrisonerId: StateFlow<String?> = _deletingPrisonerId.asStateFlow()
 
+    private val _togglingPrisonerId = MutableStateFlow<String?>(null)
+    val togglingPrisonerId: StateFlow<String?> = _togglingPrisonerId.asStateFlow()
+
     init {
         loadPrisoners()
     }
@@ -103,6 +106,36 @@ class ManagePrisonersViewModel @Inject constructor(
 
     fun updateSearchQuery(query: String) {
         _searchQuery.value = query
+    }
+
+    /** Flip the active switch on the inmate card — active <-> suspended. */
+    fun setPrisonerActive(prisonerId: String, active: Boolean) {
+        if (_togglingPrisonerId.value != null) return
+        _togglingPrisonerId.value = prisonerId
+        viewModelScope.launch {
+            adminRepository.updatePrisonerStatus(
+                prisonerId,
+                if (active) {
+                    UpdatePrisonerStatusRequest(status = "active", active = true)
+                } else {
+                    UpdatePrisonerStatusRequest(status = "suspended", active = false)
+                }
+            ).collect { result ->
+                when (result) {
+                    is NetworkResult.Success -> {
+                        _prisoners.value = _prisoners.value.map {
+                            if (it.inmateId == prisonerId) result.data else it
+                        }
+                        _togglingPrisonerId.value = null
+                    }
+                    is NetworkResult.Failure -> {
+                        _error.value = result.error.message ?: "Failed to update inmate status"
+                        _togglingPrisonerId.value = null
+                    }
+                    else -> {}
+                }
+            }
+        }
     }
 
     fun getFilteredPrisoners(): List<Prisoner> {

@@ -22,6 +22,8 @@ import com.prisonconnect.kiosk.network.NetworkResult
 import com.prisonconnect.kiosk.ui.components.KioskLoadingState
 import com.prisonconnect.kiosk.ui.components.KioskTopBar
 
+private val EDIT_STEP_TITLES = listOf("Personal", "Identity", "Address", "Access")
+
 @Composable
 fun EditPrisonerScreen(
     prisonerId: String,
@@ -93,6 +95,7 @@ fun EditPrisonerForm(
     resetPinResult: NetworkResult<String>
 ) {
     val formState = remember(prisoner.inmateId) { PrisonerFormState(prisoner) }
+    var step by remember(prisoner.inmateId) { mutableStateOf(0) }
     var status by remember(prisoner.inmateId) { mutableStateOf(prisoner.status) }
     var showSaveDialog by remember { mutableStateOf(false) }
     var saveError by remember { mutableStateOf("") }
@@ -249,80 +252,124 @@ fun EditPrisonerForm(
         )
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        if (saveError.isNotEmpty()) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFFDECEA))
+    Column(modifier = Modifier.fillMaxSize()) {
+        PrisonerStepHeader(titles = EDIT_STEP_TITLES, currentStep = step)
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            if (saveError.isNotEmpty()) {
+                ErrorCard(saveError)
+            }
+
+            when (step) {
+                0 -> PersonalDetailsCard(formState)
+                1 -> IdentityAdmissionCard(formState)
+                2 -> AddressCard(formState)
+                else -> {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        elevation = CardDefaults.cardElevation(2.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            Text("Access", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+
+                            OutlinedTextField(
+                                value = formState.assignedKioskId,
+                                onValueChange = { formState.assignedKioskId = it; saveError = "" },
+                                label = { Text("Assigned Kiosk ID") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+
+                            OutlinedButton(
+                                onClick = {
+                                    showResetPinDialog = true
+                                    resetPinSuccess = false
+                                    resetPinError = ""
+                                    resetPinValue = ""
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(
+                                    Icons.Default.LockReset,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Reset PIN")
+                            }
+                        }
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.Error, contentDescription = null, tint = Color(0xFFD32F2F))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(saveError, color = Color(0xFFD32F2F), fontSize = 14.sp)
-                }
-            }
-        }
-
-        PrisonerDetailsFields(formState)
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            elevation = CardDefaults.cardElevation(2.dp)
-        ) {
-            Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text("Status & Access", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-
-                OutlinedTextField(
-                    value = formState.assignedKioskId,
-                    onValueChange = { formState.assignedKioskId = it; saveError = "" },
-                    label = { Text("Assigned Kiosk ID") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Switch(checked = formState.active, onCheckedChange = { formState.active = it })
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(if (formState.active) "Active" else "Suspended")
+                if (step > 0) {
+                    OutlinedButton(
+                        onClick = {
+                            step -= 1
+                            saveError = ""
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(56.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Back")
+                    }
                 }
 
-                OutlinedButton(
+                Button(
                     onClick = {
-                        showResetPinDialog = true
-                        resetPinSuccess = false
-                        resetPinError = ""
-                        resetPinValue = ""
+                        if (step == EDIT_STEP_TITLES.lastIndex) {
+                            showSaveDialog = true
+                        } else if (step == 0) {
+                            val personalError = formState.validatePersonal()
+                            if (personalError.isNotEmpty()) {
+                                saveError = personalError
+                            } else {
+                                saveError = ""
+                                step += 1
+                            }
+                        } else {
+                            saveError = ""
+                            step += 1
+                        }
                     },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .weight(if (step > 0) 1f else 2f)
+                        .height(56.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF003366))
                 ) {
-                    Icon(Icons.Default.LockReset, contentDescription = null, modifier = Modifier.size(20.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Reset PIN")
+                    if (step == EDIT_STEP_TITLES.lastIndex) {
+                        Icon(Icons.Default.Save, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Save Changes", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    } else {
+                        Text("Next", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(Icons.Default.ArrowForward, contentDescription = null)
+                    }
                 }
             }
-        }
-
-        Button(
-            onClick = { showSaveDialog = true },
-            modifier = Modifier.fillMaxWidth().height(56.dp),
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF003366))
-        ) {
-            Icon(Icons.Default.Save, contentDescription = null)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Save Changes", fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
     }
 }

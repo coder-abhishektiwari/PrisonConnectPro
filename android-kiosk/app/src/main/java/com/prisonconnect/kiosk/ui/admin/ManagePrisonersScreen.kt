@@ -1,5 +1,6 @@
 package com.prisonconnect.kiosk.ui.admin
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -14,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -37,6 +39,7 @@ fun ManagePrisonersScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
     val deletingPrisonerId by viewModel.deletingPrisonerId.collectAsState()
+    val togglingPrisonerId by viewModel.togglingPrisonerId.collectAsState()
     var showDeleteDialog by remember { mutableStateOf<Pair<String, String>?>(null) }
 
     // Refresh list when screen becomes visible
@@ -63,8 +66,10 @@ fun ManagePrisonersScreen(
         isLoading = isLoading,
         error = error,
         deletingPrisonerId = deletingPrisonerId,
+        togglingPrisonerId = togglingPrisonerId,
         onBackClick = onBackClick,
         onPrisonerClick = onPrisonerClick,
+        onToggleActive = { prisonerId, active -> viewModel.setPrisonerActive(prisonerId, active) },
         onManageContactsClick = onManageContactsClick,
         onBiometricsClick = onBiometricsClick,
         onSearchQueryChange = { viewModel.updateSearchQuery(it) },
@@ -79,8 +84,10 @@ fun ManagePrisonersContent(
     isLoading: Boolean = false,
     error: String? = null,
     deletingPrisonerId: String? = null,
+    togglingPrisonerId: String? = null,
     onBackClick: () -> Unit,
     onPrisonerClick: (String) -> Unit,
+    onToggleActive: (String, Boolean) -> Unit,
     onManageContactsClick: (String) -> Unit,
     onBiometricsClick: (String, String) -> Unit,
     onSearchQueryChange: (String) -> Unit,
@@ -126,7 +133,7 @@ fun ManagePrisonersContent(
                     TextField(
                         value = searchQuery,
                         onValueChange = onSearchQueryChange,
-                        placeholder = { Text("Search prisoners...") },
+                        placeholder = { Text("Search inmates...") },
                         modifier = Modifier.fillMaxWidth(),
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = Color.Transparent,
@@ -191,7 +198,7 @@ fun ManagePrisonersContent(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "No prisoners found",
+                            text = "No inmates found",
                             fontSize = 18.sp,
                             color = Color(0xFF687A8F)
                         )
@@ -206,14 +213,16 @@ fun ManagePrisonersContent(
                     contentPadding = PaddingValues(bottom = 16.dp)
                 ) {
                     items(prisoners) { prisoner ->
-                            PrisonerCard(
-                                prisoner = prisoner,
-                                isDeleting = deletingPrisonerId == prisoner.inmateId,
-                                onClick = { onPrisonerClick(prisoner.inmateId) },
-                                onManageContactsClick = { onManageContactsClick(prisoner.inmateId) },
-                                onBiometricsClick = { onBiometricsClick(prisoner.inmateId, prisoner.displayName) },
-                                onDeleteClick = { onDeleteClick(prisoner.inmateId, prisoner.displayName) }
-                            )
+                        PrisonerCard(
+                            prisoner = prisoner,
+                            isDeleting = deletingPrisonerId == prisoner.inmateId,
+                            isToggling = togglingPrisonerId == prisoner.inmateId,
+                            onClick = { onPrisonerClick(prisoner.inmateId) },
+                            onToggleActive = { onToggleActive(prisoner.inmateId, it) },
+                            onManageContactsClick = { onManageContactsClick(prisoner.inmateId) },
+                            onBiometricsClick = { onBiometricsClick(prisoner.inmateId, prisoner.displayName) },
+                            onDeleteClick = { onDeleteClick(prisoner.inmateId, prisoner.displayName) }
+                        )
                     }
                 }
             }
@@ -222,143 +231,193 @@ fun ManagePrisonersContent(
 }
 
 @Composable
+private fun MetaChip(text: String, containerColor: Color, contentColor: Color) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = containerColor
+    ) {
+        Text(
+            text = text,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            color = contentColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+        )
+    }
+}
+
+@Composable
 private fun PrisonerCard(
     prisoner: Prisoner,
     isDeleting: Boolean = false,
+    isToggling: Boolean = false,
     onClick: () -> Unit,
+    onToggleActive: (Boolean) -> Unit,
     onManageContactsClick: () -> Unit,
     onBiometricsClick: () -> Unit,
     onDeleteClick: () -> Unit
 ) {
+    val isActive = prisoner.status.equals("active", ignoreCase = true)
+    val initial = prisoner.displayName.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "?"
+    val age = prisoner.age
+
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(2.dp)
+        elevation = CardDefaults.cardElevation(3.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Avatar
+                // Avatar with initial
                 Surface(
                     shape = CircleShape,
-                    color = Color(0xFF003366).copy(alpha = 0.1f),
+                    color = if (isActive) Color(0xFF003366).copy(alpha = 0.1f) else Color(0xFF90A4AE).copy(alpha = 0.2f),
                     modifier = Modifier.size(56.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Default.Person,
-                            contentDescription = null,
-                            tint = Color(0xFF003366),
-                            modifier = Modifier.size(32.dp)
+                        Text(
+                            text = initial,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isActive) Color(0xFF003366) else Color(0xFF687A8F)
                         )
                     }
                 }
 
                 Spacer(modifier = Modifier.width(16.dp))
 
-                // Details
+                // Name + ids
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = prisoner.displayName,
-                        fontSize = 18.sp,
+                        fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF0B2240)
+                        color = Color(0xFF0B2240),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = prisoner.inmateId,
-                        fontSize = 14.sp,
-                        color = Color(0xFF687A8F)
+                        text = listOfNotNull(
+                            prisoner.inmateId,
+                            prisoner.prisonerNumber
+                        ).joinToString("  •  "),
+                        fontSize = 13.sp,
+                        color = Color(0xFF687A8F),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    IconButton(onClick = onClick) {
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = "Edit",
-                            tint = Color(0xFF003366)
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // Active / inactive toggle
+                if (isToggling) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp,
+                        color = Color(0xFF003366)
+                    )
+                } else {
+                    Switch(
+                        checked = isActive,
+                        onCheckedChange = onToggleActive,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = Color(0xFF2E7D32),
+                            checkedBorderColor = Color(0xFF2E7D32),
+                            uncheckedThumbColor = Color.White,
+                            uncheckedTrackColor = Color(0xFFCFD8DC),
+                            uncheckedBorderColor = Color(0xFFB0BEC5)
                         )
-                    }
-                    IconButton(
-                        onClick = onDeleteClick,
-                        enabled = !isDeleting
-                    ) {
-                        if (isDeleting) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp),
-                                strokeWidth = 2.dp,
-                                color = Color(0xFFD32F2F)
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.Delete,
-                                contentDescription = "Delete",
-                                tint = Color(0xFFD32F2F)
-                            )
-                        }
-                    }
+                    )
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            // Quick info chips
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val gender = prisoner.gender
+                if (!gender.isNullOrBlank()) {
+                    MetaChip(
+                        text = gender.replaceFirstChar { it.uppercaseChar() } + (age?.let { " • $it yrs" } ?: ""),
+                        containerColor = Color(0xFFE3F2FD),
+                        contentColor = Color(0xFF003366)
+                    )
+                } else if (age != null) {
+                    MetaChip(
+                        text = "$age yrs",
+                        containerColor = Color(0xFFE3F2FD),
+                        contentColor = Color(0xFF003366)
+                    )
+                }
+                val idNumber = prisoner.idNumber
+                if (!idNumber.isNullOrBlank()) {
+                    MetaChip(
+                        text = idNumber,
+                        containerColor = Color(0xFFF1F8E9),
+                        contentColor = Color(0xFF2E7D32)
+                    )
+                }
+                val district = prisoner.district
+                if (!district.isNullOrBlank()) {
+                    MetaChip(
+                        text = district,
+                        containerColor = Color(0xFFFFF3E0),
+                        contentColor = Color(0xFFF57C00)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    val idNumber = prisoner.idNumber
-                    if (!idNumber.isNullOrBlank()) {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = Color(0xFFE3F2FD)
-                        ) {
-                            Text(
-                                text = idNumber,
-                                fontSize = 12.sp,
-                                color = Color(0xFF003366),
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = onManageContactsClick) {
+                        Icon(Icons.Default.Group, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Contacts", fontSize = 14.sp)
                     }
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = when (prisoner.status.uppercase()) {
-                            "ACTIVE" -> Color(0xFFE8F5E9)
-                            "RESTRICTED" -> Color(0xFFFFF3E0)
-                            "SUSPENDED" -> Color(0xFFFFEBEE)
-                            else -> Color(0xFFF5F5F5)
-                        }
-                    ) {
-                        Text(
-                            text = prisoner.status.uppercase(),
-                            fontSize = 12.sp,
-                            color = when (prisoner.status.uppercase()) {
-                                "ACTIVE" -> Color(0xFF2E7D32)
-                                "RESTRICTED" -> Color(0xFFF57C00)
-                                "SUSPENDED" -> Color(0xFFD32F2F)
-                                else -> Color(0xFF757575)
-                            },
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            fontWeight = FontWeight.Bold
-                        )
+                    TextButton(onClick = onBiometricsClick) {
+                        Icon(Icons.Default.Fingerprint, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Biometrics", fontSize = 14.sp)
                     }
                 }
 
-                TextButton(onClick = onManageContactsClick) {
-                    Icon(Icons.Default.Group, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Contacts", fontSize = 14.sp)
-                }
-                TextButton(onClick = onBiometricsClick) {
-                    Icon(Icons.Default.Fingerprint, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Biometrics", fontSize = 14.sp)
+                IconButton(
+                    onClick = onDeleteClick,
+                    enabled = !isDeleting
+                ) {
+                    if (isDeleting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 2.dp,
+                            color = Color(0xFFD32F2F)
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Delete",
+                            tint = Color(0xFFD32F2F)
+                        )
+                    }
                 }
             }
         }
@@ -377,27 +436,40 @@ fun PreviewManagePrisonersMobile() {
                     inmateId = "INM123456",
                     firstName = "RAHUL",
                     lastName = "KUMAR",
+                    prisonerNumber = "PR-0042",
                     idNumber = "4521 7788 9900",
+                    gender = "male",
+                    age = 34,
+                    district = "Lucknow",
                     status = "active"
                 ),
                 Prisoner(
                     inmateId = "INM654321",
                     firstName = "AMIT",
                     lastName = "SHARMA",
+                    prisonerNumber = "PR-0043",
                     idNumber = "7781 2233 4455",
-                    status = "restricted"
+                    gender = "male",
+                    age = 28,
+                    district = "Kanpur",
+                    status = "suspended"
                 ),
                 Prisoner(
                     inmateId = "INM999888",
                     firstName = "VIJAY",
                     lastName = "SINGH",
+                    prisonerNumber = "PR-0044",
                     idNumber = "3390 5566 1122",
-                    status = "suspended"
+                    gender = "male",
+                    age = 41,
+                    district = "Varanasi",
+                    status = "active"
                 )
             ),
             searchQuery = "",
             onBackClick = {},
             onPrisonerClick = {},
+            onToggleActive = { _, _ -> },
             onManageContactsClick = {},
             onBiometricsClick = { _, _ -> },
             onDeleteClick = { _, _ -> },

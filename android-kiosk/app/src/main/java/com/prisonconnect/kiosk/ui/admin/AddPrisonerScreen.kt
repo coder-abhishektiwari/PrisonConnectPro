@@ -24,6 +24,8 @@ import com.prisonconnect.kiosk.models.admin.PrisonerFormValues
 import com.prisonconnect.kiosk.ui.components.KioskTopBar
 import com.prisonconnect.kiosk.ui.theme.PrisonKioskTheme
 
+private val ADD_STEP_TITLES = listOf("Personal", "Identity", "Address", "Security")
+
 @Composable
 fun AddPrisonerScreen(
     windowSizeClass: WindowSizeClass,
@@ -53,6 +55,7 @@ fun AddPrisonerContent(
     registrationState: AddPrisonerViewModel.RegistrationState = AddPrisonerViewModel.RegistrationState.Idle
 ) {
     val formState = remember { PrisonerFormState(null) }
+    var step by remember { mutableStateOf(0) }
     var pin by remember { mutableStateOf("") }
     var confirmPin by remember { mutableStateOf("") }
     var fingerprintTemplate by remember { mutableStateOf("") }
@@ -65,6 +68,8 @@ fun AddPrisonerContent(
             completed = true
         }
     }
+
+    val loading = registrationState is AddPrisonerViewModel.RegistrationState.Loading
 
     Scaffold(
         topBar = {
@@ -102,6 +107,8 @@ fun AddPrisonerContent(
                     Text("Go to Dashboard", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
             } else {
+                PrisonerStepHeader(titles = ADD_STEP_TITLES, currentStep = step)
+
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -109,18 +116,21 @@ fun AddPrisonerContent(
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    PrisonerDetailsFields(formState)
-
-                    BiometricDataStep(
-                        pin = pin,
-                        confirmPin = confirmPin,
-                        fingerprintTemplate = fingerprintTemplate,
-                        rfidTag = rfidTag,
-                        onPinChange = { pin = it; formError = "" },
-                        onConfirmPinChange = { confirmPin = it; formError = "" },
-                        onFingerprintTemplateChange = { fingerprintTemplate = it },
-                        onRfidTagChange = { rfidTag = it }
-                    )
+                    when (step) {
+                        0 -> PersonalDetailsCard(formState)
+                        1 -> IdentityAdmissionCard(formState)
+                        2 -> AddressCard(formState)
+                        else -> BiometricDataStep(
+                            pin = pin,
+                            confirmPin = confirmPin,
+                            fingerprintTemplate = fingerprintTemplate,
+                            rfidTag = rfidTag,
+                            onPinChange = { pin = it; formError = "" },
+                            onConfirmPinChange = { confirmPin = it; formError = "" },
+                            onFingerprintTemplateChange = { fingerprintTemplate = it },
+                            onRfidTagChange = { rfidTag = it }
+                        )
+                    }
 
                     val effectiveError = when {
                         registrationState is AddPrisonerViewModel.RegistrationState.Error ->
@@ -129,76 +139,122 @@ fun AddPrisonerContent(
                         else -> ""
                     }
                     if (effectiveError.isNotEmpty()) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(16.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Error,
-                                    contentDescription = null,
-                                    tint = Color(0xFFD32F2F),
-                                    modifier = Modifier.size(24.dp)
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Text(
-                                    text = effectiveError,
-                                    color = Color(0xFFD32F2F),
-                                    fontSize = 14.sp
-                                )
-                            }
-                        }
+                        ErrorCard(effectiveError)
                     }
 
-                    Button(
-                        onClick = {
-                            val values = formState.toValues()
-                            val ageNum = values.age?.toIntOrNull()
-                            formError = when {
-                                values.name.isEmpty() -> "Prisoner name is required"
-                                values.age != null && ageNum == null -> "Age must be a number"
-                                ageNum != null && (ageNum < 1 || ageNum > 120) ->
-                                    "Age must be between 1 and 120"
-                                pin.length != 6 -> "PIN must be exactly 6 digits"
-                                pin != confirmPin -> "PINs do not match"
-                                else -> ""
-                            }
-                            if (formError.isEmpty()) {
-                                onRegister(
-                                    values,
-                                    pin,
-                                    fingerprintTemplate.ifBlank { null },
-                                    rfidTag.ifBlank { null }
-                                )
-                            }
-                        },
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(56.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF003366)),
-                        enabled = registrationState !is AddPrisonerViewModel.RegistrationState.Loading
+                            .padding(top = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        if (registrationState is AddPrisonerViewModel.RegistrationState.Loading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp),
-                                color = Color.White,
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Text(
-                                text = "Register Prisoner",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                        if (step > 0) {
+                            OutlinedButton(
+                                onClick = {
+                                    if (!loading) {
+                                        step -= 1
+                                        formError = ""
+                                    }
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(56.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                enabled = !loading
+                            ) {
+                                Icon(Icons.Default.ArrowBack, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Back")
+                            }
+                        }
+
+                        Button(
+                            onClick = {
+                                if (step == ADD_STEP_TITLES.lastIndex) {
+                                    val personalError = formState.validatePersonal()
+                                    formError = when {
+                                        personalError.isNotEmpty() -> personalError
+                                        pin.length != 6 -> "PIN must be exactly 6 digits"
+                                        pin != confirmPin -> "PINs do not match"
+                                        else -> ""
+                                    }
+                                    if (formError.isEmpty()) {
+                                        onRegister(
+                                            formState.toValues(),
+                                            pin,
+                                            fingerprintTemplate.ifBlank { null },
+                                            rfidTag.ifBlank { null }
+                                        )
+                                    }
+                                } else {
+                                    val personalError = formState.validatePersonal()
+                                    if (step == 0 && personalError.isNotEmpty()) {
+                                        formError = personalError
+                                    } else {
+                                        formError = ""
+                                        step += 1
+                                    }
+                                }
+                            },
+                            modifier = Modifier
+                                .weight(if (step > 0) 1f else 2f)
+                                .height(56.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF003366)),
+                            enabled = !loading
+                        ) {
+                            if (loading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
+                            } else if (step == ADD_STEP_TITLES.lastIndex) {
+                                Text(
+                                    text = "Register Prisoner",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            } else {
+                                Text(
+                                    text = "Next",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Icon(Icons.Default.ArrowForward, contentDescription = null)
+                            }
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+internal fun ErrorCard(message: String) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.Error,
+                contentDescription = null,
+                tint = Color(0xFFD32F2F),
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(
+                text = message,
+                color = Color(0xFFD32F2F),
+                fontSize = 14.sp
+            )
         }
     }
 }

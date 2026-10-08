@@ -40,6 +40,7 @@ object KioskRoutes {
     const val ADMIN_DASHBOARD = "admin_dashboard"
     const val ADMIN_ADD_PRISONER = "admin_add_prisoner"
     const val ADMIN_MANAGE_PRISONERS = "admin_manage_prisoners"
+    const val ADMIN_VIEW_PRISONER = "admin_view_prisoner/{prisonerId}"
     const val ADMIN_EDIT_PRISONER = "admin_edit_prisoner/{prisonerId}"
     const val ADMIN_PRISONER_CONTACTS = "admin_prisoner_contacts/{prisonerId}"
     const val ADMIN_PRISONER_BIOMETRICS = "admin_prisoner_biometrics/{prisonerId}/{prisonerName}"
@@ -217,13 +218,24 @@ fun KioskNavHost(
                 windowSizeClass = windowSizeClass,
                 onBackClick = { navController.popBackStack() },
                 onPrisonerClick = { prisonerId ->
-                    navController.navigate("admin_edit_prisoner/$prisonerId")
+                    navController.navigate("admin_view_prisoner/$prisonerId")
                 },
                 onManageContactsClick = { prisonerId ->
                     navController.navigate("admin_prisoner_contacts/$prisonerId")
                 },
                 onBiometricsClick = { prisonerId, prisonerName ->
                     navController.navigate("admin_prisoner_biometrics/$prisonerId/$prisonerName")
+                }
+            )
+        }
+        composable(KioskRoutes.ADMIN_VIEW_PRISONER) { backStackEntry ->
+            val prisonerId = backStackEntry.arguments?.getString("prisonerId") ?: ""
+            com.prisonconnect.kiosk.ui.admin.InmateDetailsScreen(
+                prisonerId = prisonerId,
+                windowSizeClass = windowSizeClass,
+                onBackClick = { navController.popBackStack() },
+                onEditClick = { id ->
+                    navController.navigate("admin_edit_prisoner/$id")
                 }
             )
         }
