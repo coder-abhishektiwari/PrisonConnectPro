@@ -138,13 +138,6 @@ class LoginViewModel @Inject constructor(
         }
     }
 
-    /** Manual fallback path: user types the fingerprint ID issued at registration. */
-    fun onFingerprintSubmitted(template: String) {
-        val cleaned = template.trim()
-        if (cleaned.isEmpty()) return
-        identifyFingerprint(cleaned)
-    }
-
     private fun identifyFingerprint(template: String) {
         if (uiState.value is UiState.Loading) return
 

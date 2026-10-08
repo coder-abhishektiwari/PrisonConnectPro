@@ -37,9 +37,12 @@ function stripRemovedInmateFields(payload) {
 async function hashBiometricData(biometricData) {
   if (!biometricData) return biometricData;
   const out = { ...biometricData };
-  for (const key of ['rfidToken', 'fingerprintTemplate']) {
-    const value = out[key];
-    if (value && !/^\$2[aby]\$/.test(String(value))) out[key] = await hashSecret(String(value));
+  if (out.rfidToken && !/^\$2[aby]\$/.test(String(out.rfidToken))) {
+    out.rfidCardNumber = String(out.rfidToken); // display copy for inmate details
+    out.rfidToken = await hashSecret(String(out.rfidToken));
+  }
+  if (out.fingerprintTemplate && !/^\$2[aby]\$/.test(String(out.fingerprintTemplate))) {
+    out.fingerprintTemplate = await hashSecret(String(out.fingerprintTemplate));
   }
   return out;
 }

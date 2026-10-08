@@ -36,6 +36,7 @@ data class Prisoner(
     @SerializedName("deviceInfo") val deviceInfo: KioskDevice? = null,
     @SerializedName("approvedContactIds") val approvedContactIds: List<String>? = null,
     @SerializedName("biometricData") val biometricData: BiometricData? = null,
+    @SerializedName("rfidCardNumber") val rfidCardNumber: String? = null,
     @SerializedName("createdAt") val createdAt: String? = null,
     @SerializedName("updatedAt") val updatedAt: String? = null
 ) {

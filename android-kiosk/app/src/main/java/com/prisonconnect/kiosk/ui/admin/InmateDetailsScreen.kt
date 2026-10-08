@@ -172,6 +172,13 @@ private fun InmateDetailsContent(
 ) {
     val initial = prisoner.displayName.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "?"
     val gender = prisoner.gender?.replaceFirstChar { it.uppercaseChar() }
+    val rfidCardText = when {
+        prisoner.biometricData?.rfidRegistered != true -> "Not registered"
+        !prisoner.rfidCardNumber.isNullOrBlank() -> prisoner.rfidCardNumber
+        else -> "Registered"
+    }
+    val fingerprintText =
+        if (prisoner.biometricData?.fingerprintRegistered == true) "Registered" else "Not registered"
 
     Column(
         modifier = Modifier
@@ -274,8 +281,12 @@ private fun InmateDetailsContent(
                 "Assigned Kiosk", prisoner.assignedKioskId
             )
             DetailRow(
-                "Facility", prisoner.facility,
-                "Registered On", prisoner.createdAt?.take(10)
+                "RFID Card", rfidCardText,
+                "Fingerprint", fingerprintText
+            )
+            DetailItem(
+                label = "Registered On",
+                value = prisoner.createdAt?.take(10)
             )
         }
 

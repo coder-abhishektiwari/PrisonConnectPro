@@ -25,6 +25,20 @@ function normalizeContact(c) {
   return out;
 }
 
+/**
+ * Display copy of the RFID card number for inmate details. Registration keeps
+ * a plain rfidCardNumber next to the bcrypt-hashed rfidToken; legacy rows hold
+ * the raw value in rfidToken itself. Hashed-only rows return null.
+ */
+function rfidCardNumberFor(i) {
+  const bio = i.biometricData || {};
+  if (!bio.rfidRegistered) return null;
+  if (bio.rfidCardNumber) return String(bio.rfidCardNumber);
+  const token = bio.rfidToken;
+  if (token && !/^\$2[aby]\$/.test(String(token))) return String(token);
+  return null;
+}
+
 function normalizeInmate(i) {
   if (!i) return i;
   const out = { ...i };
@@ -34,6 +48,7 @@ function normalizeInmate(i) {
   delete out.fullName;
   delete out.firstName;
   delete out.lastName;
+  out.rfidCardNumber = rfidCardNumberFor(i);
   return out;
 }
 
@@ -367,7 +382,7 @@ router.post('/prisoners/:prisonerId/biometrics', requireRole(...ALL_ROLES), asyn
   } else if (type === 'rfid') {
     if (!rfidToken) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'rfidToken is required for RFID' } });
     updateFields = {
-      biometricData: { ...inmates[inmateIdx].biometricData, rfidRegistered: true, rfidToken: await hashSecret(String(rfidToken)), lastBiometricUpdate: new Date().toISOString() }
+      biometricData: { ...inmates[inmateIdx].biometricData, rfidRegistered: true, rfidToken: await hashSecret(String(rfidToken)), rfidCardNumber: String(rfidToken), lastBiometricUpdate: new Date().toISOString() }
     };
     biometricRecord = { biometricId: `BIO-${prisonerId}-RFID`, prisonerId, type: 'rfid', status: 'registered', registeredAt: new Date().toISOString() };
   }
@@ -428,7 +443,7 @@ router.delete('/biometrics/:biometricId', requireRole(...ALL_ROLES), async (req,
     if (idx === -1) return { data: inmates, result: null };
     const biometricData = { ...(inmates[idx].biometricData || {}) };
     if (type === 'fingerprint') { biometricData.fingerprintRegistered = false; biometricData.fingerprintTemplate = null; }
-    else if (type === 'rfid') { biometricData.rfidRegistered = false; biometricData.rfidToken = null; }
+    else if (type === 'rfid') { biometricData.rfidRegistered = false; biometricData.rfidToken = null; biometricData.rfidCardNumber = null; }
     biometricData.lastBiometricUpdate = new Date().toISOString();
     // Drop by id AND by type: one record per type is allowed, so a stale or
     // differently-formatted id must not leave the biometric behind.

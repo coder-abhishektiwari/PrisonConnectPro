@@ -150,7 +150,7 @@ fun BiometricRegistrationScreen(
                 icon = Icons.Default.Fingerprint,
                 isRegistered = biometricsResult is NetworkResult.Success &&
                         (biometricsResult as NetworkResult.Success).data.any { it.type == "fingerprint" && it.status == "registered" },
-                hint = "Place finger on scanner or enter ID",
+                hint = "Place the finger on the scanner to register",
                 onRegister = {
                     showFingerprintDialog = true
                     viewModel.startCapture("fingerprint")
@@ -235,13 +235,16 @@ fun BiometricRegistrationScreen(
         }
     }
 
-    // Dialogs — hardware capture with a small instruction card + manual fallback.
+    // Dialogs — hardware capture with a small instruction card.
+    // Fingerprints register from the scanner only (no number to type);
+    // RFID keeps manual card-number entry as a fallback.
     if (showFingerprintDialog) {
         BiometricCaptureDialog(
             title = "Fingerprint",
             icon = Icons.Default.Fingerprint,
             instruction = "Place the finger on the USB fingerprint scanner",
             hint = "Connect the scanner to the kiosk, then hold the finger still until it is detected.",
+            showManualEntry = false,
             status = when (val s = fingerprintState) {
                 is FingerprintCaptureState.Captured -> BiometricCaptureStatus.Detected
                 is FingerprintCaptureState.Failed -> BiometricCaptureStatus.Error(s.message)
@@ -261,6 +264,7 @@ fun BiometricRegistrationScreen(
             icon = Icons.Default.CreditCard,
             instruction = "Tap the RFID card on the reader",
             hint = "Hold the card on the reader until its number is detected.",
+            showManualEntry = true,
             status = when (val s = rfidState) {
                 is RfidReaderState.CardRead -> BiometricCaptureStatus.Detected
                 is RfidReaderState.Failed -> BiometricCaptureStatus.Error(s.message)
@@ -326,8 +330,8 @@ fun BiometricCard(
 }
 
 /**
- * Small capture dialog: instruction card with live hardware status on top,
- * manual number entry as fallback when the reader can't read.
+ * Small capture dialog: instruction card with live hardware status on top.
+ * [showManualEntry] adds the manual number field (RFID only).
  */
 @Composable
 private fun BiometricCaptureDialog(
@@ -335,6 +339,7 @@ private fun BiometricCaptureDialog(
     icon: ImageVector,
     instruction: String,
     hint: String,
+    showManualEntry: Boolean,
     status: BiometricCaptureStatus,
     registerError: String?,
     onManualConfirm: (String) -> Unit,
@@ -387,21 +392,25 @@ private fun BiometricCaptureDialog(
                     }
                 }
 
-                Text(hint, fontSize = 12.sp, color = Color(0xFF687A8F))
+                if (showManualEntry) {
+                    Text(hint, fontSize = 12.sp, color = Color(0xFF687A8F))
 
-                Text(
-                    "Can't use the reader? Enter the number manually.",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color(0xFF0B2240)
-                )
-                OutlinedTextField(
-                    value = value,
-                    onValueChange = { value = it },
-                    label = { Text("Number / ID") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
+                    Text(
+                        "Can't use the reader? Enter the number manually.",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFF0B2240)
+                    )
+                    OutlinedTextField(
+                        value = value,
+                        onValueChange = { value = it },
+                        label = { Text("Card number") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                } else {
+                    Text(hint, fontSize = 12.sp, color = Color(0xFF687A8F))
+                }
 
                 if (registerError != null) {
                     Text(registerError, fontSize = 12.sp, color = Color(0xFFD32F2F))
@@ -409,9 +418,11 @@ private fun BiometricCaptureDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { if (value.isNotBlank()) onManualConfirm(value.trim()) }) { Text("Register") }
+            if (showManualEntry) {
+                Button(onClick = { if (value.isNotBlank()) onManualConfirm(value.trim()) }) { Text("Register") }
+            }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(if (showManualEntry) "Cancel" else "Close") } }
     )
 }
 

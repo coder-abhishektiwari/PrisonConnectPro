@@ -157,6 +157,7 @@ fun RfidScanningLayout(
     onManualSubmit: (String) -> Unit,
     onCancel: () -> Unit
 ) {
+    var showManualDialog by remember { mutableStateOf(false) }
     var manualCardNumber by remember { mutableStateOf("") }
 
     Column(
@@ -232,7 +233,7 @@ fun RfidScanningLayout(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Enter the card number below instead.",
+                            text = "Tap 'Enter card number instead' below.",
                             textAlign = TextAlign.Center,
                             color = Color.Gray,
                             fontSize = 13.sp
@@ -246,7 +247,7 @@ fun RfidScanningLayout(
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "Waiting for card on the reader…",
+                            text = "RFID card reader not detected",
                             fontWeight = FontWeight.Medium,
                             textAlign = TextAlign.Center,
                             color = PremiumNavy
@@ -262,62 +263,55 @@ fun RfidScanningLayout(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
-        // Manual fallback — card number entry when the reader can't read.
-        Surface(
-            color = Color.White,
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth().border(1.dp, Color.LightGray, RoundedCornerShape(16.dp))
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "Reader not detecting the card?",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                    color = PremiumNavy
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Enter the card number to continue.",
-                    color = Color.Gray,
-                    fontSize = 13.sp
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = manualCardNumber,
-                    onValueChange = { manualCardNumber = it },
-                    label = { Text("Card number") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    leadingIcon = { Icon(Icons.Default.CreditCard, contentDescription = null) },
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Text
-                    )
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                Button(
-                    onClick = { onManualSubmit(manualCardNumber.trim()) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF003366),
-                        contentColor = Color.White
-                    ),
-                    enabled = manualCardNumber.isNotBlank()
-                ) {
-                    Text("Submit Card Number", fontWeight = FontWeight.Bold)
-                }
-            }
+        TextButton(onClick = { showManualDialog = true }) {
+            Text("Enter card number instead", color = AccentBlue, fontWeight = FontWeight.Bold)
         }
-
-        Spacer(modifier = Modifier.height(12.dp))
 
         TextButton(onClick = onCancel) {
             Text("<- Back to Login Methods", color = AccentBlue, fontWeight = FontWeight.Bold)
         }
+    }
+
+    if (showManualDialog) {
+        AlertDialog(
+            onDismissRequest = { showManualDialog = false },
+            title = { Text("Enter Card Number") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Enter the RFID card number to continue.",
+                        fontSize = 14.sp,
+                        color = Color(0xFF687A8F)
+                    )
+                    OutlinedTextField(
+                        value = manualCardNumber,
+                        onValueChange = { manualCardNumber = it },
+                        label = { Text("Card number") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        leadingIcon = { Icon(Icons.Default.CreditCard, contentDescription = null) },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Text
+                        )
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onManualSubmit(manualCardNumber.trim())
+                        manualCardNumber = ""
+                        showManualDialog = false
+                    },
+                    enabled = manualCardNumber.isNotBlank()
+                ) { Text("Continue") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showManualDialog = false }) { Text("Cancel") }
+            }
+        )
     }
 }
 
@@ -395,7 +389,6 @@ fun FingerprintScanningLayout(
 ) {
     val device by viewModel.connectedScanner.collectAsState()
     val hasPermission by viewModel.usbPermissionGranted.collectAsState()
-    var manualTemplate by remember { mutableStateOf("") }
 
     Column(
         modifier = Modifier
@@ -485,7 +478,7 @@ fun FingerprintScanningLayout(
                             )
                             Spacer(modifier = Modifier.height(12.dp))
                             Text(
-                                text = "Waiting for the scanner…",
+                                text = "Fingerprint reader not detected",
                                 fontWeight = FontWeight.Medium,
                                 textAlign = TextAlign.Center,
                                 color = PremiumNavy
@@ -537,58 +530,7 @@ fun FingerprintScanningLayout(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Manual fallback — fingerprint ID entry when the scanner can't read.
-        Surface(
-            color = Color.White,
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth().border(1.dp, Color.LightGray, RoundedCornerShape(16.dp))
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "Scanner not detecting the finger?",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                    color = PremiumNavy
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Enter the fingerprint ID issued at registration.",
-                    color = Color.Gray,
-                    fontSize = 13.sp
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = manualTemplate,
-                    onValueChange = { manualTemplate = it },
-                    label = { Text("Fingerprint ID") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    leadingIcon = { Icon(Icons.Default.Fingerprint, contentDescription = null) },
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Text
-                    )
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                Button(
-                    onClick = { viewModel.onFingerprintSubmitted(manualTemplate) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF003366),
-                        contentColor = Color.White
-                    ),
-                    enabled = manualTemplate.isNotBlank()
-                ) {
-                    Text("Submit Fingerprint ID", fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
         TextButton(onClick = onCancel) {
             Text("<- Back to Login Methods", color = AccentBlue, fontWeight = FontWeight.Bold)
