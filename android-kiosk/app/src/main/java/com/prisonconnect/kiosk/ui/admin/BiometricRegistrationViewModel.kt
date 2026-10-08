@@ -2,6 +2,8 @@ package com.prisonconnect.kiosk.ui.admin
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.prisonconnect.kiosk.hardware.FingerprintHardwareManager
+import com.prisonconnect.kiosk.hardware.RfidReaderManager
 import com.prisonconnect.kiosk.models.admin.BiometricRegistration
 import com.prisonconnect.kiosk.models.admin.RegisterBiometricRequest
 import com.prisonconnect.kiosk.network.NetworkResult
@@ -15,7 +17,9 @@ import javax.inject.Inject
 
 @HiltViewModel
 class BiometricRegistrationViewModel @Inject constructor(
-    private val adminRepository: AdminRepository
+    private val adminRepository: AdminRepository,
+    private val rfidReaderManager: RfidReaderManager,
+    private val fingerprintHardwareManager: FingerprintHardwareManager
 ) : ViewModel() {
 
     private val _biometrics = MutableStateFlow<NetworkResult<List<BiometricRegistration>>>(NetworkResult.Idle)
@@ -26,6 +30,29 @@ class BiometricRegistrationViewModel @Inject constructor(
 
     private val _deleteState = MutableStateFlow<NetworkResult<Unit>>(NetworkResult.Idle)
     val deleteState: StateFlow<NetworkResult<Unit>> = _deleteState.asStateFlow()
+
+    /** Live hardware sessions consumed by the capture dialogs. */
+    val rfidState = rfidReaderManager.state
+    val fingerprintState = fingerprintHardwareManager.captureState
+
+    /**
+     * Open a hardware capture session for the given biometric type
+     * ("fingerprint" | "rfid") while its registration dialog is open.
+     */
+    fun startCapture(type: String) {
+        if (type == "rfid") rfidReaderManager.startSession() else fingerprintHardwareManager.startCapture()
+    }
+
+    /** Close both capture sessions (dialog dismissed, screen left). */
+    fun stopCapture() {
+        rfidReaderManager.stopSession()
+        fingerprintHardwareManager.stopCapture()
+    }
+
+    /** Consume a hardware read so the session keeps emitting for the next one. */
+    fun acknowledgeCapture(type: String) {
+        if (type == "rfid") rfidReaderManager.acknowledgeRead() else fingerprintHardwareManager.acknowledgeCapture()
+    }
 
     fun loadBiometrics(prisonerId: String) {
         viewModelScope.launch {

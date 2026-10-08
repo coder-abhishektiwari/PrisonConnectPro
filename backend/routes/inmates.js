@@ -28,6 +28,23 @@ function stripRemovedInmateFields(payload) {
 }
 
 /**
+ * Biometric tokens are stored hashed at rest; login verifies them via
+ * routes/auth.js matchesBiometric (bcrypt at rest, legacy plain accepted).
+ * Applied wherever biometricData may enter a write so create/update payloads
+ * never persist a raw card number or fingerprint template. Values that are
+ * already bcrypt hashes pass through untouched.
+ */
+async function hashBiometricData(biometricData) {
+  if (!biometricData) return biometricData;
+  const out = { ...biometricData };
+  for (const key of ['rfidToken', 'fingerprintTemplate']) {
+    const value = out[key];
+    if (value && !/^\$2[aby]\$/.test(String(value))) out[key] = await hashSecret(String(value));
+  }
+  return out;
+}
+
+/**
  * Every pointer on a prisoner row (jail, kiosk) is a foreign key.
  * Checking the ids against the tables they name turns a database
  * error (500) into a clear 422 the caller can act on.
@@ -177,9 +194,9 @@ async function inmateCreateHandler(req, res) {
         assignedKioskId: kioskId || inmateData.assignedKioskId,
         status: inmateData.status || 'active',
         pin: inmateData.pin ? await hashSecret(String(inmateData.pin)) : await hashSecret(uuidv4().substring(0, 8)),
-        biometricData: inmateData.biometricData || {
+        biometricData: await hashBiometricData(inmateData.biometricData || {
           fingerprintRegistered: false, rfidRegistered: false, lastBiometricUpdate: null
-        },
+        }),
         createdAt: new Date().toISOString()
       };
       return { data: [...inmates, record], result: record };
@@ -222,6 +239,7 @@ async function inmateUpdateHandler(req, res) {
     }
   }
   delete updates.prisonId;
+  if (updates.biometricData) updates.biometricData = await hashBiometricData(updates.biometricData);
   const updatedRefs = await validateInmateRefs({
     assignedKioskId: updates.assignedKioskId,
   });
@@ -388,3 +406,4 @@ module.exports.inmateUpdateHandler = inmateUpdateHandler;
 module.exports.inmateDeleteHandler = inmateDeleteHandler;
 module.exports.validateInmateRefs = validateInmateRefs;
 module.exports.stripRemovedInmateFields = stripRemovedInmateFields;
+module.exports.hashBiometricData = hashBiometricData;

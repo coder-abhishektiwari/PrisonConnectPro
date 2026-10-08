@@ -5,11 +5,15 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import androidx.lifecycle.viewModelScope
 import com.prisonconnect.kiosk.core.BaseViewModel
 import com.prisonconnect.kiosk.core.Constants
 import com.prisonconnect.kiosk.core.Logger
 import com.prisonconnect.kiosk.core.UiState
+import com.prisonconnect.kiosk.hardware.FingerprintCaptureState
 import com.prisonconnect.kiosk.hardware.FingerprintHardwareManager
+import com.prisonconnect.kiosk.hardware.RfidReaderManager
+import com.prisonconnect.kiosk.hardware.RfidReaderState
 import com.prisonconnect.kiosk.models.auth.AdminProfile
 import com.prisonconnect.kiosk.models.auth.AdminVerifyPasswordRequest
 import com.prisonconnect.kiosk.models.auth.LoginRequest
@@ -18,11 +22,13 @@ import com.prisonconnect.kiosk.network.NetworkResult
 import com.prisonconnect.kiosk.repository.AuthRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -34,7 +40,8 @@ enum class LoginStage {
 class LoginViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val authRepository: AuthRepository,
-    private val fingerprintHardwareManager: FingerprintHardwareManager
+    private val fingerprintHardwareManager: FingerprintHardwareManager,
+    private val rfidReaderManager: RfidReaderManager
 ) : BaseViewModel() {
 
     private val _loginStage = MutableStateFlow(LoginStage.METHOD_SELECTION)
@@ -51,6 +58,13 @@ class LoginViewModel @Inject constructor(
 
     val connectedScanner = fingerprintHardwareManager.connectedScanner
     val usbPermissionGranted = fingerprintHardwareManager.hasPermission
+
+    /** Live hardware sessions consumed by the fingerprint / RFID screens. */
+    val fingerprintCaptureState = fingerprintHardwareManager.captureState
+    val rfidState = rfidReaderManager.state
+
+    private var fingerprintSessionJob: Job? = null
+    private var rfidSessionJob: Job? = null
 
     private val _isNetworkAvailable = MutableStateFlow(true)
     val isNetworkAvailable = _isNetworkAvailable.asStateFlow()
@@ -88,6 +102,9 @@ class LoginViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         connectivityManager.unregisterNetworkCallback(networkCallback)
+        // viewModelScope jobs die with the VM — close any open hardware driver.
+        rfidReaderManager.stopSession()
+        fingerprintHardwareManager.stopCapture()
     }
 
     private fun getFriendlyErrorMessage(statusCode: Int?, defaultMessage: String): String {
@@ -100,7 +117,62 @@ class LoginViewModel @Inject constructor(
 
     fun startFingerprintAuth() {
         _loginStage.value = LoginStage.FINGERPRINT_SCANNING
-        fingerprintHardwareManager.scanForDevices()
+        fingerprintHardwareManager.startCapture()
+        startFingerprintSession()
+    }
+
+    /**
+     * Hardware path: the external scanner pushes a template → identify.
+     * The session stays in Searching until consumed, so a retry after a
+     * failed identify is just placing the finger again.
+     */
+    private fun startFingerprintSession() {
+        fingerprintSessionJob?.cancel()
+        fingerprintSessionJob = viewModelScope.launch {
+            fingerprintHardwareManager.captureState.collect { state ->
+                if (state is FingerprintCaptureState.Captured && uiState.value !is UiState.Loading) {
+                    fingerprintHardwareManager.acknowledgeCapture()
+                    identifyFingerprint(state.template)
+                }
+            }
+        }
+    }
+
+    /** Manual fallback path: user types the fingerprint ID issued at registration. */
+    fun onFingerprintSubmitted(template: String) {
+        val cleaned = template.trim()
+        if (cleaned.isEmpty()) return
+        identifyFingerprint(cleaned)
+    }
+
+    private fun identifyFingerprint(template: String) {
+        if (uiState.value is UiState.Loading) return
+
+        launch {
+            setLoading()
+            authRepository.identifyFingerprint(template.toByteArray(Charsets.UTF_8)).collect { result ->
+                when (result) {
+                    is NetworkResult.Success -> {
+                        _identifiedInmate.value = result.data
+                        _loginStage.value = LoginStage.PIN_ENTRY
+                        setSuccess()
+                        cancelBiometricSessions()
+                    }
+                    is NetworkResult.Failure -> {
+                        val errorMessage = getFriendlyErrorMessage(
+                            statusCode = result.statusCode,
+                            defaultMessage = "Fingerprint not recognized. Please try again."
+                        )
+                        setError(errorMessage)
+                        delay(2000.milliseconds)
+                        setIdle()
+                        // Resume scanning so the user can simply try again.
+                        fingerprintHardwareManager.startCapture()
+                    }
+                    else -> {}
+                }
+            }
+        }
     }
 
     fun requestUsbPermission() {
@@ -223,6 +295,24 @@ class LoginViewModel @Inject constructor(
 
     fun startRfidAuth() {
         _loginStage.value = LoginStage.RFID_SCANNING
+        rfidReaderManager.startSession()
+        startRfidSession()
+    }
+
+    /**
+     * Hardware path: a tap on the reader produces CardRead → identify.
+     * The read is acknowledged immediately so the next tap re-emits.
+     */
+    private fun startRfidSession() {
+        rfidSessionJob?.cancel()
+        rfidSessionJob = viewModelScope.launch {
+            rfidReaderManager.state.collect { state ->
+                if (state is RfidReaderState.CardRead && uiState.value !is UiState.Loading) {
+                    rfidReaderManager.acknowledgeRead()
+                    onRfidScanned(state.token)
+                }
+            }
+        }
     }
 
     fun onRfidScanned(rfidToken: String) {
@@ -240,6 +330,7 @@ class LoginViewModel @Inject constructor(
                         _identifiedInmate.value = result.data
                         _loginStage.value = LoginStage.PIN_ENTRY
                         setSuccess()
+                        cancelBiometricSessions()
                     }
                     is NetworkResult.Failure -> {
                         val errorMessage = getFriendlyErrorMessage(
@@ -289,10 +380,21 @@ class LoginViewModel @Inject constructor(
     }
 
     fun resetToSelection() {
+        cancelBiometricSessions()
         _loginStage.value = LoginStage.METHOD_SELECTION
         _identifiedInmate.value = null
         _identifiedAdmin.value = null
         setIdle()
+    }
+
+    /** Stop both hardware sessions and their collectors (leaving the biometric stages). */
+    private fun cancelBiometricSessions() {
+        fingerprintSessionJob?.cancel()
+        fingerprintSessionJob = null
+        rfidSessionJob?.cancel()
+        rfidSessionJob = null
+        fingerprintHardwareManager.stopCapture()
+        rfidReaderManager.stopSession()
     }
 
     sealed class LoginNavigation {

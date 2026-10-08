@@ -30,6 +30,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.prisonconnect.kiosk.core.UiState
+import com.prisonconnect.kiosk.hardware.FingerprintCaptureState
+import com.prisonconnect.kiosk.hardware.RfidReaderState
 import com.prisonconnect.kiosk.ui.components.KioskTopBar
 import com.prisonconnect.kiosk.ui.theme.PrisonKioskTheme
 import kotlin.time.Duration.Companion.milliseconds
@@ -46,6 +48,8 @@ fun LoginScreen(
     val admin by viewModel.identifiedAdmin.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
     val isNetworkAvailable by viewModel.isNetworkAvailable.collectAsState()
+    val fingerprintCaptureState by viewModel.fingerprintCaptureState.collectAsState()
+    val rfidState by viewModel.rfidState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     var lastErrorShown by remember { mutableStateOf<String?>(null) }
 
@@ -98,10 +102,12 @@ fun LoginScreen(
                     )
                     LoginStage.FINGERPRINT_SCANNING -> FingerprintScanningLayout(
                         viewModel = viewModel,
+                        captureState = fingerprintCaptureState,
                         onCancel = { viewModel.resetToSelection() }
                     )
                     LoginStage.RFID_SCANNING -> RfidScanningLayout(
-                        onRfidScanned = { viewModel.onRfidScanned(it) },
+                        state = rfidState,
+                        onManualSubmit = { viewModel.onRfidScanned(it) },
                         onCancel = { viewModel.resetToSelection() }
                     )
                     LoginStage.PRISONER_ID_ENTRY -> PrisonerIdEntryLayout(
@@ -147,65 +153,167 @@ fun LoginScreen(
 
 @Composable
 fun RfidScanningLayout(
-    @Suppress("UNUSED_PARAMETER") onRfidScanned: (String) -> Unit,
+    state: RfidReaderState,
+    onManualSubmit: (String) -> Unit,
     onCancel: () -> Unit
 ) {
+    var manualCardNumber by remember { mutableStateOf("") }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        Spacer(modifier = Modifier.height(16.dp))
+
         Icon(
             imageVector = Icons.Default.CreditCard,
             contentDescription = null,
             tint = PremiumBlue,
-            modifier = Modifier.size(120.dp)
+            modifier = Modifier.size(88.dp)
         )
 
-        Spacer(modifier = Modifier.height(40.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
         Text(
             text = "RFID Card Authentication",
-            fontSize = 28.sp,
+            fontSize = 26.sp,
             fontWeight = FontWeight.Bold,
             color = PremiumNavy
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
         Text(
             text = "Tap your RFID card on the reader",
-            fontSize = 18.sp,
+            fontSize = 17.sp,
             color = Color.Gray,
             textAlign = TextAlign.Center
         )
 
-        Spacer(modifier = Modifier.height(48.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
+        // Instruction card — live reader status.
         Surface(
-            color = Color.White.copy(alpha = 0.9f),
+            color = Color.White,
             shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth(0.8f).border(1.dp, Color.LightGray, RoundedCornerShape(16.dp))
+            modifier = Modifier.fillMaxWidth().border(1.dp, Color.LightGray, RoundedCornerShape(16.dp))
         ) {
-            Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "Waiting for RFID scan...",
-                    fontWeight = FontWeight.Medium,
-                    textAlign = TextAlign.Center,
-                    color = PremiumNavy
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                LinearProgressIndicator(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = PremiumBlue,
-                    trackColor = Color.LightGray
-                )
+            Column(
+                modifier = Modifier.padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                when (state) {
+                    is RfidReaderState.CardRead -> {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 2.dp,
+                            color = PremiumBlue
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Card detected — verifying…",
+                            fontWeight = FontWeight.Medium,
+                            textAlign = TextAlign.Center,
+                            color = PremiumNavy
+                        )
+                    }
+                    is RfidReaderState.Failed -> {
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = ErrorRed, modifier = Modifier.size(28.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = state.message,
+                            fontWeight = FontWeight.Medium,
+                            textAlign = TextAlign.Center,
+                            color = ErrorRed,
+                            fontSize = 14.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Enter the card number below instead.",
+                            textAlign = TextAlign.Center,
+                            color = Color.Gray,
+                            fontSize = 13.sp
+                        )
+                    }
+                    else -> {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 2.dp,
+                            color = PremiumBlue
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Waiting for card on the reader…",
+                            fontWeight = FontWeight.Medium,
+                            textAlign = TextAlign.Center,
+                            color = PremiumNavy
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = PremiumBlue,
+                            trackColor = Color.LightGray
+                        )
+                    }
+                }
             }
         }
 
-        Spacer(modifier = Modifier.height(60.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Manual fallback — card number entry when the reader can't read.
+        Surface(
+            color = Color.White,
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier.fillMaxWidth().border(1.dp, Color.LightGray, RoundedCornerShape(16.dp))
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Reader not detecting the card?",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    color = PremiumNavy
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Enter the card number to continue.",
+                    color = Color.Gray,
+                    fontSize = 13.sp
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = manualCardNumber,
+                    onValueChange = { manualCardNumber = it },
+                    label = { Text("Card number") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    leadingIcon = { Icon(Icons.Default.CreditCard, contentDescription = null) },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Text
+                    )
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Button(
+                    onClick = { onManualSubmit(manualCardNumber.trim()) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF003366),
+                        contentColor = Color.White
+                    ),
+                    enabled = manualCardNumber.isNotBlank()
+                ) {
+                    Text("Submit Card Number", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
 
         TextButton(onClick = onCancel) {
             Text("<- Back to Login Methods", color = AccentBlue, fontWeight = FontWeight.Bold)
@@ -282,79 +390,205 @@ fun AdminUsernameEntryLayout(
 @Composable
 fun FingerprintScanningLayout(
     viewModel: LoginViewModel,
+    captureState: FingerprintCaptureState,
     onCancel: () -> Unit
 ) {
     val device by viewModel.connectedScanner.collectAsState()
     val hasPermission by viewModel.usbPermissionGranted.collectAsState()
+    var manualTemplate by remember { mutableStateOf("") }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        Spacer(modifier = Modifier.height(16.dp))
+
         Icon(
             imageVector = Icons.Default.Fingerprint,
             contentDescription = null,
-            tint = if (device != null && hasPermission) SuccessGreen else Color.Gray,
-            modifier = Modifier.size(120.dp)
+            tint = if (captureState is FingerprintCaptureState.Captured) SuccessGreen else PremiumBlue,
+            modifier = Modifier.size(88.dp)
         )
 
-        Spacer(modifier = Modifier.height(40.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
         Text(
             text = "Fingerprint Identification",
-            fontSize = 28.sp,
+            fontSize = 26.sp,
             fontWeight = FontWeight.Bold,
             color = PremiumNavy
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
+        Text(
+            text = "Place the finger on the USB fingerprint scanner",
+            fontSize = 17.sp,
+            color = Color.Gray,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Instruction card — live scanner status.
         Surface(
-            color = Color.White.copy(alpha = 0.9f),
+            color = Color.White,
             shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth(0.8f).border(1.dp, Color.LightGray, RoundedCornerShape(16.dp))
+            modifier = Modifier.fillMaxWidth().border(1.dp, Color.LightGray, RoundedCornerShape(16.dp))
         ) {
-            Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                if (device == null) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text("Searching for physical scanner...", color = Color.Gray, textAlign = TextAlign.Center)
-                } else {
-                    val vid = String.format("%04X", device?.vendorId)
-                    val pid = String.format("%04X", device?.productId)
+            Column(
+                modifier = Modifier.padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                when (val capture = captureState) {
+                    is FingerprintCaptureState.Captured -> {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 2.dp,
+                            color = PremiumBlue
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Fingerprint captured — verifying…",
+                            fontWeight = FontWeight.Medium,
+                            textAlign = TextAlign.Center,
+                            color = PremiumNavy
+                        )
+                    }
+                    is FingerprintCaptureState.Failed -> {
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = ErrorRed, modifier = Modifier.size(28.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = capture.message,
+                            fontWeight = FontWeight.Medium,
+                            textAlign = TextAlign.Center,
+                            color = ErrorRed,
+                            fontSize = 14.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Enter the fingerprint ID below instead.",
+                            textAlign = TextAlign.Center,
+                            color = Color.Gray,
+                            fontSize = 13.sp
+                        )
+                    }
+                    else -> {
+                        if (device == null) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.dp,
+                                color = PremiumBlue
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "Waiting for the scanner…",
+                                fontWeight = FontWeight.Medium,
+                                textAlign = TextAlign.Center,
+                                color = PremiumNavy
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Connect the USB fingerprint scanner to the kiosk, then place the finger.",
+                                textAlign = TextAlign.Center,
+                                color = Color.Gray,
+                                fontSize = 13.sp
+                            )
+                        } else {
+                            val vid = String.format("%04X", device?.vendorId)
+                            val pid = String.format("%04X", device?.productId)
 
-                    Icon(Icons.Default.Usb, contentDescription = null, tint = PremiumBlue)
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "Device Detected\nVID: $vid | PID: $pid",
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center,
-                        color = PremiumNavy
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Status: Unsupported Hardware",
-                        color = ErrorRed,
-                        fontWeight = FontWeight.Medium
-                    )
+                            Icon(Icons.Default.Usb, contentDescription = null, tint = PremiumBlue)
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "Scanner detected\nVID: $vid | PID: $pid",
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center,
+                                color = PremiumNavy
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Place the finger on the scanner now",
+                                fontWeight = FontWeight.Medium,
+                                color = PremiumBlue
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            LinearProgressIndicator(
+                                modifier = Modifier.fillMaxWidth(),
+                                color = PremiumBlue,
+                                trackColor = Color.LightGray
+                            )
 
-                    if (!hasPermission) {
-                        Spacer(modifier = Modifier.height(20.dp))
-                        Button(
-                            onClick = { viewModel.requestUsbPermission() },
-                            colors = ButtonDefaults.buttonColors(containerColor = PremiumBlue, contentColor = Color.White)
-                        ) {
-                            Text("Request USB Permission", color = Color.White)
+                            if (!hasPermission) {
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Button(
+                                    onClick = { viewModel.requestUsbPermission() },
+                                    colors = ButtonDefaults.buttonColors(containerColor = PremiumBlue, contentColor = Color.White)
+                                ) {
+                                    Text("Allow USB Access", color = Color.White)
+                                }
+                            }
                         }
                     }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(60.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Manual fallback — fingerprint ID entry when the scanner can't read.
+        Surface(
+            color = Color.White,
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier.fillMaxWidth().border(1.dp, Color.LightGray, RoundedCornerShape(16.dp))
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Scanner not detecting the finger?",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    color = PremiumNavy
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Enter the fingerprint ID issued at registration.",
+                    color = Color.Gray,
+                    fontSize = 13.sp
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = manualTemplate,
+                    onValueChange = { manualTemplate = it },
+                    label = { Text("Fingerprint ID") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    leadingIcon = { Icon(Icons.Default.Fingerprint, contentDescription = null) },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Text
+                    )
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Button(
+                    onClick = { viewModel.onFingerprintSubmitted(manualTemplate) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF003366),
+                        contentColor = Color.White
+                    ),
+                    enabled = manualTemplate.isNotBlank()
+                ) {
+                    Text("Submit Fingerprint ID", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
 
         TextButton(onClick = onCancel) {
             Text("<- Back to Login Methods", color = AccentBlue, fontWeight = FontWeight.Bold)

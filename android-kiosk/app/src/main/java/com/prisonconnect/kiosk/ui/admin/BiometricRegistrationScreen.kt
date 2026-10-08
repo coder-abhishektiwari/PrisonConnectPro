@@ -17,6 +17,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.prisonconnect.kiosk.hardware.FingerprintCaptureState
+import com.prisonconnect.kiosk.hardware.RfidReaderState
 import com.prisonconnect.kiosk.models.admin.BiometricRegistration
 import com.prisonconnect.kiosk.network.NetworkResult
 import com.prisonconnect.kiosk.ui.components.KioskLoadingState
@@ -24,6 +26,13 @@ import com.prisonconnect.kiosk.ui.components.KioskTopBar
 import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
+
+/** Live hardware status shown inside the capture dialog. */
+private sealed interface BiometricCaptureStatus {
+    data object Waiting : BiometricCaptureStatus
+    data object Detected : BiometricCaptureStatus
+    data class Error(val message: String) : BiometricCaptureStatus
+}
 
 @Composable
 fun BiometricRegistrationScreen(
@@ -35,9 +44,34 @@ fun BiometricRegistrationScreen(
     val biometricsResult by viewModel.biometrics.collectAsState()
     val registerResult by viewModel.registerState.collectAsState()
     val deleteResult by viewModel.deleteState.collectAsState()
+    val fingerprintState by viewModel.fingerprintState.collectAsState()
+    val rfidState by viewModel.rfidState.collectAsState()
     var showFingerprintDialog by remember { mutableStateOf(false) }
     var showRfidDialog by remember { mutableStateOf(false) }
     var snackbarMessage by remember { mutableStateOf<String?>(null) }
+
+    val registerError = (registerResult as? NetworkResult.Failure)?.error?.message
+
+    // Hardware read → auto-register (dialog must be open for that type).
+    LaunchedEffect(fingerprintState, showFingerprintDialog) {
+        val state = fingerprintState
+        if (showFingerprintDialog && state is FingerprintCaptureState.Captured) {
+            viewModel.acknowledgeCapture("fingerprint")
+            viewModel.registerFingerprint(prisonerId, state.template)
+        }
+    }
+    LaunchedEffect(rfidState, showRfidDialog) {
+        val state = rfidState
+        if (showRfidDialog && state is RfidReaderState.CardRead) {
+            viewModel.acknowledgeCapture("rfid")
+            viewModel.registerRfid(prisonerId, state.token)
+        }
+    }
+
+    // Screen left — make sure no hardware session keeps running.
+    DisposableEffect(Unit) {
+        onDispose { viewModel.stopCapture() }
+    }
 
     LaunchedEffect(snackbarMessage) {
         if (snackbarMessage != null) {
@@ -52,7 +86,13 @@ fun BiometricRegistrationScreen(
 
     LaunchedEffect(registerResult) {
         when (registerResult) {
-            is NetworkResult.Success -> { snackbarMessage = "Biometric registered"; viewModel.resetRegisterState() }
+            is NetworkResult.Success -> {
+                snackbarMessage = "Biometric registered"
+                showFingerprintDialog = false
+                showRfidDialog = false
+                viewModel.stopCapture()
+                viewModel.resetRegisterState()
+            }
             is NetworkResult.Failure -> { snackbarMessage = "Failed to register"; viewModel.resetRegisterState() }
             else -> {}
         }
@@ -110,7 +150,11 @@ fun BiometricRegistrationScreen(
                 icon = Icons.Default.Fingerprint,
                 isRegistered = biometricsResult is NetworkResult.Success &&
                         (biometricsResult as NetworkResult.Success).data.any { it.type == "fingerprint" && it.status == "registered" },
-                onRegister = { showFingerprintDialog = true },
+                hint = "Place finger on scanner or enter ID",
+                onRegister = {
+                    showFingerprintDialog = true
+                    viewModel.startCapture("fingerprint")
+                },
                 onDelete = {
                     val bio = (biometricsResult as? NetworkResult.Success)?.data?.find { it.type == "fingerprint" }
                     if (bio != null) viewModel.deleteBiometric(bio.biometricId, prisonerId)
@@ -123,7 +167,11 @@ fun BiometricRegistrationScreen(
                 icon = Icons.Default.CreditCard,
                 isRegistered = biometricsResult is NetworkResult.Success &&
                         (biometricsResult as NetworkResult.Success).data.any { it.type == "rfid" && it.status == "registered" },
-                onRegister = { showRfidDialog = true },
+                hint = "Tap card on reader or enter number",
+                onRegister = {
+                    showRfidDialog = true
+                    viewModel.startCapture("rfid")
+                },
                 onDelete = {
                     val bio = (biometricsResult as? NetworkResult.Success)?.data?.find { it.type == "rfid" }
                     if (bio != null) viewModel.deleteBiometric(bio.biometricId, prisonerId)
@@ -187,26 +235,42 @@ fun BiometricRegistrationScreen(
         }
     }
 
-    // Dialogs
+    // Dialogs — hardware capture with a small instruction card + manual fallback.
     if (showFingerprintDialog) {
-        ManualBiometricDialog(
+        BiometricCaptureDialog(
             title = "Fingerprint",
-            placeholder = "Fingerprint template ID",
-            onDismiss = { showFingerprintDialog = false },
-            onConfirm = { template ->
-                viewModel.registerFingerprint(prisonerId, template)
+            icon = Icons.Default.Fingerprint,
+            instruction = "Place the finger on the USB fingerprint scanner",
+            hint = "Connect the scanner to the kiosk, then hold the finger still until it is detected.",
+            status = when (val s = fingerprintState) {
+                is FingerprintCaptureState.Captured -> BiometricCaptureStatus.Detected
+                is FingerprintCaptureState.Failed -> BiometricCaptureStatus.Error(s.message)
+                else -> BiometricCaptureStatus.Waiting
+            },
+            registerError = registerError,
+            onManualConfirm = { viewModel.registerFingerprint(prisonerId, it) },
+            onDismiss = {
                 showFingerprintDialog = false
+                viewModel.stopCapture()
             }
         )
     }
     if (showRfidDialog) {
-        ManualBiometricDialog(
-            title = "RFID",
-            placeholder = "RFID token / card number",
-            onDismiss = { showRfidDialog = false },
-            onConfirm = { token ->
-                viewModel.registerRfid(prisonerId, token)
+        BiometricCaptureDialog(
+            title = "RFID Card",
+            icon = Icons.Default.CreditCard,
+            instruction = "Tap the RFID card on the reader",
+            hint = "Hold the card on the reader until its number is detected.",
+            status = when (val s = rfidState) {
+                is RfidReaderState.CardRead -> BiometricCaptureStatus.Detected
+                is RfidReaderState.Failed -> BiometricCaptureStatus.Error(s.message)
+                else -> BiometricCaptureStatus.Waiting
+            },
+            registerError = registerError,
+            onManualConfirm = { viewModel.registerRfid(prisonerId, it) },
+            onDismiss = {
                 showRfidDialog = false
+                viewModel.stopCapture()
             }
         )
     }
@@ -217,6 +281,7 @@ fun BiometricCard(
     title: String,
     icon: ImageVector,
     isRegistered: Boolean,
+    hint: String? = null,
     onRegister: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -243,6 +308,9 @@ fun BiometricCard(
                     fontSize = 12.sp,
                     color = if (isRegistered) Color(0xFF2E7D32) else Color(0xFF999999)
                 )
+                if (!isRegistered && hint != null) {
+                    Text(hint, fontSize = 11.sp, color = Color(0xFF687A8F))
+                }
             }
             if (isRegistered) {
                 TextButton(onClick = onDelete) {
@@ -257,31 +325,91 @@ fun BiometricCard(
     }
 }
 
+/**
+ * Small capture dialog: instruction card with live hardware status on top,
+ * manual number entry as fallback when the reader can't read.
+ */
 @Composable
-fun ManualBiometricDialog(
+private fun BiometricCaptureDialog(
     title: String,
-    placeholder: String,
-    onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit
+    icon: ImageVector,
+    instruction: String,
+    hint: String,
+    status: BiometricCaptureStatus,
+    registerError: String?,
+    onManualConfirm: (String) -> Unit,
+    onDismiss: () -> Unit
 ) {
     var value by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
+        icon = { Icon(icon, contentDescription = null, tint = Color(0xFF003366), modifier = Modifier.size(32.dp)) },
         title = { Text("Register $title") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Enter the $title template or token ID.", fontSize = 14.sp, color = Color(0xFF687A8F))
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                // Instruction card — what to do + live reader status.
+                Surface(
+                    color = Color(0xFFF5F7FA),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        when (status) {
+                            BiometricCaptureStatus.Waiting -> {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Color(0xFF003366)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(instruction, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF0B2240))
+                                    Text("Waiting for capture…", fontSize = 12.sp, color = Color(0xFF687A8F))
+                                }
+                            }
+                            BiometricCaptureStatus.Detected -> {
+                                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF2E7D32), modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text("Detected — registering…", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF0B2240))
+                            }
+                            is BiometricCaptureStatus.Error -> {
+                                Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFD32F2F), modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(instruction, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF0B2240))
+                                    Text(status.message, fontSize = 12.sp, color = Color(0xFFD32F2F))
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Text(hint, fontSize = 12.sp, color = Color(0xFF687A8F))
+
+                Text(
+                    "Can't use the reader? Enter the number manually.",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFF0B2240)
+                )
                 OutlinedTextField(
                     value = value,
                     onValueChange = { value = it },
-                    label = { Text(placeholder) },
+                    label = { Text("Number / ID") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
+
+                if (registerError != null) {
+                    Text(registerError, fontSize = 12.sp, color = Color(0xFFD32F2F))
+                }
             }
         },
         confirmButton = {
-            Button(onClick = { if (value.isNotBlank()) onConfirm(value.trim()) }) { Text("Register") }
+            Button(onClick = { if (value.isNotBlank()) onManualConfirm(value.trim()) }) { Text("Register") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )

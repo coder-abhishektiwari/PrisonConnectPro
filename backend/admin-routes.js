@@ -6,7 +6,7 @@ const { hashSecret } = require('./lib/auth');
 const { requireRole } = require('./middleware/auth');
 const { inAdminScope, adminScopeFilter, jailScopeOf, kioskScopeOf } = require('./lib/scoping');
 const { paginate } = require('./lib/paginate');
-const { inmateDeleteHandler, validateInmateRefs, stripRemovedInmateFields } = require('./routes/inmates');
+const { inmateDeleteHandler, validateInmateRefs, stripRemovedInmateFields, hashBiometricData } = require('./routes/inmates');
 
 const ALL_ROLES = ['admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'];
 const ADMIN_ROLES = ['admin', 'warden', 'super-admin', 'super_admin'];
@@ -86,9 +86,9 @@ router.post('/prisoners', requireRole(...ALL_ROLES), async (req, res) => {
     assignedKioskId: kioskId || inmateData.assignedKioskId,
     status: inmateData.status || 'active',
     dateOfAdmission: inmateData.dateOfAdmission || new Date().toISOString().slice(0, 10),
-    biometricData: inmateData.biometricData || {
+    biometricData: await hashBiometricData(inmateData.biometricData || {
       fingerprintRegistered: false, rfidRegistered: false, lastBiometricUpdate: null
-    },
+    }),
     createdAt: new Date().toISOString()
   };
   if (record.pin && !/^\$2[aby]\$/.test(record.pin)) {
@@ -118,6 +118,7 @@ router.put('/prisoners/:prisonerId', requireRole(...ALL_ROLES), async (req, res)
     updates.firstName = updates.name.split(' ')[0];
     updates.lastName = updates.name.split(' ').slice(1).join(' ');
   }
+  if (updates.biometricData) updates.biometricData = await hashBiometricData(updates.biometricData);
   const updated = await updateDb('inmates.json', (inmates) => {
     const idx = inmates.findIndex((i) => i.inmateId === req.params.prisonerId && inAdminScope(req, i));
     if (idx === -1) return { data: inmates, result: null };
@@ -357,14 +358,16 @@ router.post('/prisoners/:prisonerId/biometrics', requireRole(...ALL_ROLES), asyn
 
   if (type === 'fingerprint') {
     if (!capture) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'capture is required for fingerprint' } });
+    // Store hashed at rest — login verifies by hashing the presented capture
+    // (see routes/auth.js matchesBiometric). Legacy rows stay plain and keep working.
     updateFields = {
-      biometricData: { ...inmates[inmateIdx].biometricData, fingerprintRegistered: true, fingerprintTemplate: capture, lastBiometricUpdate: new Date().toISOString() }
+      biometricData: { ...inmates[inmateIdx].biometricData, fingerprintRegistered: true, fingerprintTemplate: await hashSecret(String(capture)), lastBiometricUpdate: new Date().toISOString() }
     };
     biometricRecord = { biometricId: `BIO-${prisonerId}-FGP`, prisonerId, type: 'fingerprint', status: 'registered', registeredAt: new Date().toISOString() };
   } else if (type === 'rfid') {
     if (!rfidToken) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'rfidToken is required for RFID' } });
     updateFields = {
-      biometricData: { ...inmates[inmateIdx].biometricData, rfidRegistered: true, rfidToken, lastBiometricUpdate: new Date().toISOString() }
+      biometricData: { ...inmates[inmateIdx].biometricData, rfidRegistered: true, rfidToken: await hashSecret(String(rfidToken)), lastBiometricUpdate: new Date().toISOString() }
     };
     biometricRecord = { biometricId: `BIO-${prisonerId}-RFID`, prisonerId, type: 'rfid', status: 'registered', registeredAt: new Date().toISOString() };
   }

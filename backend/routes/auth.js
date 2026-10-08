@@ -285,13 +285,16 @@ async function identifyInmate(req, res, matchFn, confidence) {
   const kiosk = kiosks.find((k) => k.kioskId === kioskId);
   if (!kiosk) return sendError(res, 'NOT_FOUND', 'Record not found', 404);
 
-  // Find matching inmate in same prison + assigned to this kiosk + active
-  const match = inmates.find((i) =>
-    matchFn(i) &&
-    (!kiosk.prisonId || !i.prisonId || kiosk.prisonId === i.prisonId) &&
-    (!i.assignedKioskId || i.assignedKioskId === kioskId) &&
-    (!i.status || i.status === 'active')
-  );
+  // Find matching inmate in same prison + assigned to this kiosk + active.
+  // matchFn may be async (bcrypt verify), so iterate instead of Array.find.
+  let match = null;
+  for (const i of inmates) {
+    const inScope = (!kiosk.prisonId || !i.prisonId || kiosk.prisonId === i.prisonId) &&
+      (!i.assignedKioskId || i.assignedKioskId === kioskId) &&
+      (!i.status || i.status === 'active');
+    if (!inScope) continue;
+    if (await matchFn(i)) { match = i; break; }
+  }
   if (!match) return sendError(res, 'NOT_FOUND', 'No matching inmate identified for this kiosk', 404);
 
   return sendSuccess(res, {
@@ -305,8 +308,26 @@ async function identifyInmate(req, res, matchFn, confidence) {
   });
 }
 
-router.post('/fingerprint-identify', asyncRoute((req, res) =>
-  identifyInmate(req, res, (i) => i.biometricData?.fingerprintRegistered, 0.92)));
+// Biometric values are stored hashed at rest (admin-routes.js
+// POST /prisoners/:prisonerId/biometrics). Legacy rows may still hold the raw
+// value, so a presented token matches when it equals the stored value (legacy)
+// or verifies against the stored bcrypt hash (current storage).
+async function matchesBiometric(presented, stored) {
+  if (!presented || !stored) return false;
+  if (String(stored) === String(presented)) return true; // legacy plain value
+  if (/^\$2[aby]\$/.test(String(stored))) return verifySecret(String(presented), String(stored));
+  return false;
+}
+
+router.post('/fingerprint-identify', asyncRoute(async (req, res) => {
+  const { capture } = req.body;
+  if (!capture) return sendError(res, 'INVALID_REQUEST', 'capture is required', 400);
+  const presented = Buffer.from(String(capture), 'base64').toString('utf8').trim();
+  if (!presented) return sendError(res, 'INVALID_REQUEST', 'capture is empty', 400);
+  return identifyInmate(req, res, async (i) =>
+    i.biometricData?.fingerprintRegistered &&
+    await matchesBiometric(presented, i.biometricData?.fingerprintTemplate), 0.92);
+}));
 
 router.post('/rfid-identify', asyncRoute(async (req, res) => {
   const { kioskId, rfidToken } = req.body;
@@ -316,13 +337,16 @@ router.post('/rfid-identify', asyncRoute(async (req, res) => {
   const kiosk = kiosks.find((k) => k.kioskId === kioskId);
   if (!kiosk) return sendError(res, 'NOT_FOUND', 'Record not found', 404);
 
-  // Find inmate with matching RFID in same prison + assigned to this kiosk + active
-  const inmate = inmates.find((i) =>
-    i.biometricData?.rfidToken === rfidToken &&
-    (!kiosk.prisonId || !i.prisonId || kiosk.prisonId === i.prisonId) &&
-    (!i.assignedKioskId || i.assignedKioskId === kioskId) &&
-    (!i.status || i.status === 'active')
-  );
+  // Find inmate with matching RFID in same prison + assigned to this kiosk + active.
+  // Matching is async (bcrypt verify), so iterate instead of Array.find.
+  let inmate = null;
+  for (const i of inmates) {
+    const inScope = (!kiosk.prisonId || !i.prisonId || kiosk.prisonId === i.prisonId) &&
+      (!i.assignedKioskId || i.assignedKioskId === kioskId) &&
+      (!i.status || i.status === 'active');
+    if (!inScope) continue;
+    if (await matchesBiometric(rfidToken, i.biometricData?.rfidToken)) { inmate = i; break; }
+  }
   if (!inmate) return sendError(res, 'NOT_FOUND', 'No inmate identified for this RFID token', 404);
 
   const inmateName = inmate.name || inmate.fullName || [inmate.firstName, inmate.lastName].filter(Boolean).join(' ').trim() || 'Unknown';
@@ -330,7 +354,7 @@ router.post('/rfid-identify', asyncRoute(async (req, res) => {
     inmateId: inmate.inmateId, name: inmateName,
     prisonId: inmate.prisonId, facility: inmate.prisonId,
     status: inmate.status, photoUrl: inmate.photo,
-    rfidToken, confidence: 0.98
+    confidence: 0.98
   });
 }));
 
