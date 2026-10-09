@@ -89,24 +89,10 @@ fun InmateProfileDetailsScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "Inmate Details",
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = Color.White
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = PrimaryNavy)
+            com.prisonconnect.kiosk.ui.components.KioskTopBar(
+                title = "Inmate Details",
+                showBackButton = true,
+                onBackClick = onBackClick
             )
         },
         containerColor = LightBg

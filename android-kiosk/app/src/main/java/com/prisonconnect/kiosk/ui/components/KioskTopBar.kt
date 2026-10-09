@@ -76,7 +76,11 @@ fun KioskTopBar(
     showBackButton: Boolean = false,
     onBackClick: () -> Unit = {},
     title: String? = null,
-    isOnline: Boolean = true
+    isOnline: Boolean = true,
+    /** Optional actions rendered before the signal bars (e.g. refresh). */
+    leadingActions: (@Composable () -> Unit)? = null,
+    /** Optional actions rendered after the date-time (e.g. wallet, logout). */
+    trailingActions: (@Composable () -> Unit)? = null
 ) {
     var currentTime by remember { mutableStateOf(Calendar.getInstance().time) }
     val timeFormat = remember { SimpleDateFormat("hh:mm a", Locale.getDefault()) }
@@ -144,11 +148,13 @@ fun KioskTopBar(
 
                 Spacer(modifier = Modifier.width(spaceBetweenLeftRight))
 
-                // --- Right Section: Live Wi-Fi Strength + Time & Date ---
+                // --- Right Section: [actions] + Signal Bars + Time & Date + [actions] ---
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(if (isCompact) 8.dp else 16.dp)
                 ) {
+                    leadingActions?.invoke()
+
                     val quality by NetworkQualityMonitor.quality.collectAsState()
                     val barsSize = if (isCompact) 16.dp else 20.dp
                     WifiStrengthBars(
@@ -182,6 +188,8 @@ fun KioskTopBar(
                             softWrap = false
                         )
                     }
+
+                    trailingActions?.invoke()
                 }
             }
         }

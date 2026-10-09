@@ -95,23 +95,24 @@ fun DashboardScreen(
     var detailCallType by remember { mutableStateOf("Video") }
     var detailStatus by remember { mutableStateOf("") }
 
-    var currentTime by remember { mutableStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            currentTime = System.currentTimeMillis()
-            delay(1000)
-        }
-    }
-
     Scaffold(
         topBar = {
-            KioskTopHeader(
-                balance = jailBalance,
-                currentTime = currentTime,
-                onRefresh = { viewModel.refreshAll() },
-                onLogoutClick = {
-                    viewModel.logout()
-                    onLogoutClick()
+            // One-line header: refresh → live signal bars → date-time →
+            // wallet balance → logout, all on the standard top bar.
+            com.prisonconnect.kiosk.ui.components.KioskTopBar(
+                title = "CALLING KIOSK",
+                leadingActions = {
+                    IconButton(onClick = { viewModel.refreshAll() }) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = Color.White)
+                    }
+                },
+                trailingActions = {
+                    IconButton(onClick = {
+                        viewModel.logout()
+                        onLogoutClick()
+                    }) {
+                        Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Logout", tint = Color.White)
+                    }
                 }
             )
         },
@@ -155,8 +156,7 @@ fun DashboardScreen(
                             }
                         )
                         2 -> HistoryTabContent(
-                            callHistory = state.data.callHistory,
-                            onRefresh = { viewModel.refreshAll() }
+                            callHistory = state.data.callHistory
                         )
                     }
                 }
@@ -242,31 +242,19 @@ fun ScheduleTabContent(
 
 @Composable
 fun HistoryTabContent(
-    callHistory: List<CallHistory>,
-    onRefresh: () -> Unit
+    callHistory: List<CallHistory>
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "CALL HISTORY",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = PrimaryDarkNavy
-            )
-            TextButton(onClick = onRefresh) {
-                Icon(Icons.Default.Refresh, contentDescription = null, tint = PrimaryNavy, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Refresh", color = PrimaryNavy)
-            }
-        }
+        Text(
+            text = "CALL HISTORY",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = PrimaryDarkNavy
+        )
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -652,59 +640,6 @@ private fun ContactCardItem(
                     IconButton(onClick = onVideoClick, colors = IconButtonDefaults.iconButtonColors(containerColor = ActionButtonBg)) {
                         Icon(Icons.Default.Videocam, contentDescription = null, tint = PrimaryNavy)
                     }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun KioskTopHeader(
-    balance: Double,
-    currentTime: Long,
-    onRefresh: () -> Unit,
-    onLogoutClick: () -> Unit
-) {
-    val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
-    val dateFormat = SimpleDateFormat("EEE, d MMM yyyy", Locale.getDefault())
-
-    Surface(color = PrimaryNavy, modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text(
-                    text = timeFormat.format(Date(currentTime)).uppercase(),
-                    color = Color.White,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = dateFormat.format(Date(currentTime)).uppercase(),
-                    color = Color.White.copy(alpha = 0.8f),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                IconButton(onClick = onRefresh) {
-                    Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = Color.White)
-                }
-                Surface(
-                    color = Color.White.copy(alpha = 0.15f),
-                    shape = RoundedCornerShape(10.dp),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f))
-                ) {
-                    Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Icon(Icons.Outlined.Wallet, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                        Text(text = "₹${String.format("%.2f", balance)}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    }
-                }
-                IconButton(onClick = onLogoutClick) {
-                    Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null, tint = Color.White)
                 }
             }
         }

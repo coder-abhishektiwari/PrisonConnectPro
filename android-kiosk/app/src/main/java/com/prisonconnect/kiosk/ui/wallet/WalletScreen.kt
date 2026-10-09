@@ -79,27 +79,11 @@ fun WalletScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            text = "My Wallet",
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.White
-                        )
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = Color.White
-                        )
-                    }
-                },
-                actions = {
+            com.prisonconnect.kiosk.ui.components.KioskTopBar(
+                title = "My Wallet",
+                showBackButton = true,
+                onBackClick = onBackClick,
+                leadingActions = {
                     IconButton(onClick = { viewModel.loadWallet() }) {
                         Icon(
                             imageVector = Icons.Default.Refresh,
@@ -107,10 +91,7 @@ fun WalletScreen(
                             tint = Color.White
                         )
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = PrimaryNavy
-                )
+                }
             )
         },
         containerColor = LightBg

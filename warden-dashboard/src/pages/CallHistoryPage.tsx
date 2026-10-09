@@ -12,7 +12,7 @@ import type { ColumnFilter } from '@/components/FilterDropdown';
 import { inmateLabel, contactLabel } from '@/utils/names';
 import ExcelJS from 'exceljs';
 
-import type { CallHistoryItem, Recording, Inmate, CallHistoryParams, PaginatedCallsResponse, PaginatedResponse, KioskItem, ListParams, Pricing } from '@/services/api/wardenApi';
+import type { CallHistoryItem, Recording, Inmate, CallHistoryParams, PaginatedCallsResponse, PaginatedResponse, KioskItem, ListParams, Pricing, Settings } from '@/services/api/wardenApi';
 
 const PAGE_SIZE = 20;
 const RETRIEVAL_POLL_MS = 2_000;
@@ -222,10 +222,16 @@ export function CallHistoryPage() {
     () => wardenApi.getPricing(),
     { ttl: 60_000 },
   );
+  const { data: settingsData } = useCachedResource<Settings>(
+    cacheKeys.settings(),
+    () => wardenApi.getSettings(),
+    { ttl: 60_000 },
+  );
   const pricing = useMemo(() => ({
     audioRate: Number(pricingData?.audio?.ratePerMinute ?? 1),
     videoRate: Number(pricingData?.video?.ratePerMinute ?? 2.5),
-  }), [pricingData]);
+    maxMinutes: settingsData?.callSettings?.maxCallDurationMinutes,
+  }), [pricingData, settingsData]);
 
   const refreshRef = useRef<() => void>(refresh);
   refreshRef.current = () => { refresh(); refreshRecordings(); };
@@ -334,8 +340,13 @@ export function CallHistoryPage() {
         <div className="px-3.5 py-2 bg-cyan-50 border border-cyan-200 text-cyan-800 rounded-xl text-xs font-semibold shadow-sm">
           Video <span className="font-bold text-cyan-950">₹{pricing.videoRate}/min</span>
         </div>
+        {pricing.maxMinutes ? (
+          <div className="px-3.5 py-2 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-xs font-semibold shadow-sm">
+            Max <span className="font-bold text-amber-950">{pricing.maxMinutes} min/call</span>
+          </div>
+        ) : null}
       </div>
-    ), [handleExport, isExporting, pricing.audioRate, pricing.videoRate]),
+    ), [handleExport, isExporting, pricing.audioRate, pricing.videoRate, pricing.maxMinutes]),
   });
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));

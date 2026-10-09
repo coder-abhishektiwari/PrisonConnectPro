@@ -58,18 +58,10 @@ class SplashViewModel @Inject constructor(
         // If Device Authorization is disabled in AppConfig, bypass registration/authorization flow
         if (!AppConfig.deviceAuthorizationEnabled) {
             Logger.i("SplashViewModel: Device Authorization DISABLED in AppConfig. Bypassing gate.")
-            // Still fetch the registered kiosk identity (serial, prison id/name)
-            // in the background — the Device Info screen reads it from
-            // SessionManager, which would otherwise stay empty forever.
-            launch {
-                authRepository.hydrateKioskInfo().collect { result ->
-                    when (result) {
-                        is NetworkResult.Success -> Logger.i("SplashViewModel: Kiosk info hydrated (${result.data.kioskId})")
-                        is NetworkResult.Failure -> Logger.w("SplashViewModel: Kiosk info hydration failed: ${result.error.message}")
-                        else -> {}
-                    }
-                }
-            }
+            // Kiosk-identity hydration (serial, prison id/name) runs on the
+            // app scope in PrisonKioskApp — NOT here: this ViewModel is
+            // cleared the moment splash pops and viewModelScope cancels the
+            // in-flight verify, so nothing ever persisted from this screen.
             checkSessionAndNavigate()
             return
         }

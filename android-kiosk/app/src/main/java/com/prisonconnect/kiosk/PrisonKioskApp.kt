@@ -29,6 +29,7 @@ class PrisonKioskApp : Application(), Configuration.Provider {
     /** Injected so the connectivity callback registers at process start and
      *  survives navigation across every screen. */
     @Inject lateinit var networkMonitor: com.prisonconnect.kiosk.core.NetworkMonitor
+    @Inject lateinit var authRepository: com.prisonconnect.kiosk.repository.AuthRepository
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -50,6 +51,23 @@ class PrisonKioskApp : Application(), Configuration.Provider {
         // Latency-based internet quality probe for the header signal bars.
         // Transport-agnostic (WiFi/Ethernet/mobile) — one loop for the app.
         com.prisonconnect.kiosk.core.NetworkQualityMonitor.start()
+
+        // Fetch this kiosk's registered identity (serial, prison id/name) from
+        // the public /kiosks/verify by KIOSK_ID and persist it in SessionManager.
+        // Runs on the APP scope, not a splash ViewModel's scope: the splash
+        // screen pops in ~1 s and a viewModelScope coroutine gets cancelled
+        // mid-flight, which is why this data never used to stick.
+        appScope.launch {
+            authRepository.hydrateKioskInfo().collect { result ->
+                when (result) {
+                    is com.prisonconnect.kiosk.network.NetworkResult.Success ->
+                        Logger.i("Kiosk info hydrated: ${result.data.kioskId} / ${result.data.prisonId}")
+                    is com.prisonconnect.kiosk.network.NetworkResult.Failure ->
+                        Logger.w("Kiosk info hydration failed: ${result.error.message}")
+                    else -> {}
+                }
+            }
+        }
 
         // Any recording whose metadata never reached the server before the
         // last process died (crash, reboot, network outage) is queued for

@@ -9,7 +9,7 @@ import { useCachedResource } from '@/hooks/useCachedResource';
 import { useWardenSocket } from '@/hooks/useWardenSocket';
 import { usePageHeader } from '@/context/PageHeaderContext';
 import { inmateLabel, contactLabel } from '@/utils/names';
-import type { ActiveCall, ListParams, PaginatedResponse, Pricing } from '@/services/api/wardenApi';
+import type { ActiveCall, ListParams, PaginatedResponse, Pricing, Settings } from '@/services/api/wardenApi';
 
 const PAGE_SIZE = 20;
 
@@ -50,10 +50,16 @@ export function ActiveCallsPage() {
     () => wardenApi.getPricing(),
     { ttl: 60_000 },
   );
+  const { data: settingsData } = useCachedResource<Settings>(
+    cacheKeys.settings(),
+    () => wardenApi.getSettings(),
+    { ttl: 60_000 },
+  );
   const pricing = useMemo(() => ({
     audioRate: Number(pricingData?.audio?.ratePerMinute ?? 1),
     videoRate: Number(pricingData?.video?.ratePerMinute ?? 2.5),
-  }), [pricingData]);
+    maxMinutes: settingsData?.callSettings?.maxCallDurationMinutes,
+  }), [pricingData, settingsData]);
 
   usePageHeader({
     title: 'Live Calls',
@@ -67,8 +73,13 @@ export function ActiveCallsPage() {
         <div className="px-3.5 py-2 bg-cyan-50 border border-cyan-200 text-cyan-800 rounded-xl text-xs font-semibold shadow-sm">
           Video <span className="font-bold text-cyan-950">₹{pricing.videoRate}/min</span>
         </div>
+        {pricing.maxMinutes ? (
+          <div className="px-3.5 py-2 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-xs font-semibold shadow-sm">
+            Max <span className="font-bold text-amber-950">{pricing.maxMinutes} min/call</span>
+          </div>
+        ) : null}
       </div>
-    ), [pricing.audioRate, pricing.videoRate]),
+    ), [pricing.audioRate, pricing.videoRate, pricing.maxMinutes]),
   });
 
   const formatDuration = (minutes: number) => {
