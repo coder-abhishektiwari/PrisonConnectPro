@@ -782,7 +782,13 @@ export const wardenApi = {
 
   // Settings
   getSettings: () =>
-    cachedGet('settings', () => apiClient.get<ApiResponse<Settings>>('/settings').then((r) => r.data?.data), 60_000),
+    // Some deployments return the singleton settings row as a 1-element array
+    // ([{ callSettings… }]) instead of the object itself — normalize so
+    // callers always see the Settings object (or undefined).
+    cachedGet('settings', () => apiClient.get<ApiResponse<Settings | Settings[]>>('/settings').then((r) => {
+      const d = r.data?.data;
+      return (Array.isArray(d) ? (d[0] as Settings | undefined) : d) ?? undefined;
+    }), 60_000),
 
   updateSettings: (settings: Partial<Settings>) =>
     apiClient.patch<ApiResponse<Settings>>('/settings', settings).then((r) => {
@@ -797,7 +803,11 @@ export const wardenApi = {
 
   // Pricing (per-minute call rates set by the warden)
   getPricing: () =>
-    cachedGet('pricing', () => apiClient.get<ApiResponse<Pricing>>('/pricing').then((r) => r.data?.data), 60_000),
+    // Same singleton-as-array quirk as getSettings — normalize.
+    cachedGet('pricing', () => apiClient.get<ApiResponse<Pricing | Pricing[]>>('/pricing').then((r) => {
+      const d = r.data?.data;
+      return (Array.isArray(d) ? (d[0] as Pricing | undefined) : d) ?? undefined;
+    }), 60_000),
 
   updatePricing: (pricing: Partial<Pricing>) =>
     apiClient.patch<ApiResponse<Pricing>>('/pricing', pricing).then((r) => {

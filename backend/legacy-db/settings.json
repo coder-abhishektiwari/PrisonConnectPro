@@ -1,7 +1,7 @@
 {
   "callSettings": {
     "defaultCallType": "video",
-    "maxCallDurationMinutes": 15,
+    "maxCallDurationMinutes": 5,
     "autoEndCallMinutes": 15,
     "enableRecording": true,
     "recordingQuality": "high",

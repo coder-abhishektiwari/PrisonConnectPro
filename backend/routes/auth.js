@@ -71,6 +71,24 @@ router.post('/login', authLimiter, asyncRoute(async (req, res) => {
         user: { id: admin.adminId, name: admin.name, email: admin.email, role: claims.role, permissions: admin.permissions || [], kioskId: admin.kioskId, prisonId: admin.prisonId }
       });
     }
+
+    // Super-admin lookup (separate collection, role forced to super_admin so
+    // requireRole('super_admin') checks always match regardless of the stored
+    // legacy role spelling).
+    const superAdmins = await readDb('super-admins.json');
+    const superAdmin = superAdmins.find((a) => String(a.email || '').toLowerCase() === wanted);
+    if (superAdmin) {
+      const valid = await verifySecret(password, superAdmin.password || superAdmin.pin);
+      if (!valid) return sendError(res, 'INVALID_CREDENTIALS', 'Invalid email or password', 401);
+      const claims = { sub: superAdmin.adminId, role: 'super_admin', kioskId: null, prisonId: null };
+      const session = await createSession(claims, req);
+      return sendSuccess(res, {
+        accessToken: signAccessToken(claims),
+        refreshToken: session.refreshToken,
+        expiresIn: 3600,
+        user: { id: superAdmin.adminId, name: superAdmin.name, email: superAdmin.email, role: claims.role, permissions: superAdmin.permissions || [], kioskId: null, prisonId: null }
+      });
+    }
     return sendError(res, 'INVALID_CREDENTIALS', 'Invalid email or password', 401);
   }
 

@@ -9,9 +9,16 @@ const router = express.Router();
 
 function createSettingsRouter(broadcastEvent) {
   // Settings
-  router.get('/', requireAuth, asyncRoute(async (req, res) => sendSuccess(res, await readDb('settings.json'))));
+  // NOTE: singletons are stored as 1-element arrays after any PATCH
+  // ({ data: [result] }) — always unwrap so clients get the object itself.
+  router.get('/', requireAuth, asyncRoute(async (req, res) => {
+    const raw = await readDb('settings.json');
+    return sendSuccess(res, Array.isArray(raw) ? (raw[0] || {}) : raw);
+  }));
 
-  router.patch('/', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+  // Call limits & facility settings — VENDOR (super admin) ONLY.
+  // Wardens may read (chips on Live Calls / Call Logs) but never change them.
+  router.patch('/', requireAuth, requireRole('vendor', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
     const merged = await updateDb('settings.json', (all) => {
       const patch = { ...req.body };
       const base = all.length ? { ...all[0] } : {};
@@ -33,9 +40,13 @@ function createSettingsRouter(broadcastEvent) {
   }));
 
   // Pricing
-  router.get('/pricing', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'vendor', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => sendSuccess(res, await readDb('pricing.json'))));
+  router.get('/pricing', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'vendor', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+    const raw = await readDb('pricing.json');
+    return sendSuccess(res, Array.isArray(raw) ? (raw[0] || {}) : raw);
+  }));
 
-  router.patch('/pricing', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+  // Audio/video call rates — VENDOR (super admin) ONLY (same policy as settings).
+  router.patch('/pricing', requireAuth, requireRole('vendor', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
     const merged = await updateDb('pricing.json', (all) => {
       const base = all.length ? { ...all[0] } : {};
       const result = deepMerge(base, { ...req.body });
