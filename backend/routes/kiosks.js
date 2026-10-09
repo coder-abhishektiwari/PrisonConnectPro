@@ -124,10 +124,9 @@ router.post('/verify', asyncRoute(async (req, res) => {
   const kiosks = await readDb('kiosks.json');
   const kiosk = kiosks.find((k) =>
     k.deviceSerialNumber === deviceSerialNumber ||
-    k.kioskId === deviceSerialNumber ||
     k.deviceFingerprint === deviceSerialNumber
   );
-  if (!kiosk) return sendSuccess(res, { success: true, authorized: false, kiosk: null });
+  if (!kiosk) return sendSuccess(res, { success: true, authorized: false, reason: 'not_found', kiosk: null });
 
   const prisons = await readDb('prisons.json');
   const prison = prisons.find((p) => p.prisonId === kiosk.prisonId);
@@ -138,7 +137,7 @@ router.post('/verify', asyncRoute(async (req, res) => {
     kiosk.status !== 'disabled' && kiosk.status !== 'unauthorized'
   );
 
-  if (!authorized) return sendSuccess(res, { success: true, authorized: false, kiosk: null });
+  if (!authorized) return sendSuccess(res, { success: true, authorized: false, reason: 'unauthorized', kiosk: null });
 
   // Long-lived device credential: the kiosk's background workers (recording
   // registration, on-demand retrieval uploads) run without a logged-in user,
@@ -290,6 +289,11 @@ router.post('/heartbeat', asyncRoute(async (req, res) => {
 // ==================== KIOSK REGISTRATION (public — after PIN validation) ====================
 
 router.post('/register', asyncRoute(async (req, res) => {
+  // Basic flood protection: a device retries a handful of times at most.
+  if (!checkRateLimit(`register:${req.ip}`, 10, 60000)) {
+    return sendError(res, 'RATE_LIMITED', 'Too many registration attempts. Try again in 1 minute.', 429);
+  }
+
   const raw = { 
     deviceSerialNumber, 
     prisonId, 
@@ -304,6 +308,20 @@ router.post('/register', asyncRoute(async (req, res) => {
   
   if (!deviceSerialNumber || !prisonId) {
     return sendError(res, 'INVALID_REQUEST', 'deviceSerialNumber and prisonId are required', 400);
+  }
+
+  // The setup PIN gate must hold server-side, not just in the app UI: a
+  // successful /validate-setup-pin issues a short-lived signed token bound to
+  // that prison, and this endpoint refuses to create/refresh a kiosk without
+  // it (same prison only — a token for jail A cannot register into jail B).
+  const setupHeader = (req.get('authorization') || '').replace(/^bearer\s+/i, '').trim();
+  const setupToken = (typeof req.body.setupToken === 'string' && req.body.setupToken.trim()) || setupHeader;
+  let setupClaims = null;
+  if (setupToken) {
+    try { setupClaims = verifyToken(setupToken); } catch (e) { setupClaims = null; }
+  }
+  if (!setupClaims || setupClaims.role !== 'setup' || setupClaims.prisonId !== prisonId) {
+    return sendError(res, 'SETUP_TOKEN_REQUIRED', 'Validate the prison setup PIN first (missing or invalid setup token)', 401);
   }
   
   const prisons = await readDb('prisons.json');
@@ -831,11 +849,22 @@ router.post('/validate-setup-pin', asyncRoute(async (req, res) => {
   if (!valid) {
     return sendError(res, 'INVALID_CREDENTIALS', 'Invalid setup PIN', 401);
   }
-  
+
+  // Short-lived proof that this device knows the prison's setup PIN.
+  // POST /kiosks/register requires it, so the PIN gate cannot be bypassed by
+  // calling the register API directly. Bound to the prison it was validated
+  // against; expires in 10 minutes.
+  const setupToken = signAccessToken(
+    { sub: 'device-setup', role: 'setup', prisonId: prison.prisonId },
+    '10m'
+  );
+
   return sendSuccess(res, {
+    valid: true,
     success: true,
     prisonId: prison.prisonId,
     prisonName: prison.name,
+    setupToken,
     message: 'Setup PIN validated successfully'
   });
 }));
