@@ -22,6 +22,9 @@ export interface DeviceInfo {
   os: string;
   screen: string;
   language: string;
+  /** Real device model via UA-Client-Hints (Chrome Android UA hides it as "K"). */
+  model?: string;
+  manufacturer?: string;
 }
 
 export interface DeviceVerificationResult {

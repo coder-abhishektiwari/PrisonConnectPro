@@ -17,9 +17,12 @@ const STEPS = ['Checking your device…', 'Matching your secure profile…', 'Al
  */
 async function collectDeviceModel(): Promise<{ model?: string; manufacturer?: string }> {
   try {
-    const uad = navigator.userAgentData as unknown as {
-      getHighEntropyValues?: (hints: string[]) => Promise<{ model?: string; manufacturer?: string }>;
-    } | undefined;
+    const nav = navigator as unknown as {
+      userAgentData?: {
+        getHighEntropyValues?: (hints: string[]) => Promise<{ model?: string; manufacturer?: string }>;
+      };
+    };
+    const uad = nav.userAgentData;
     if (!uad?.getHighEntropyValues) return {};
     const extra = await uad.getHighEntropyValues(['model', 'manufacturer']);
     return {
