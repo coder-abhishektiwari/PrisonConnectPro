@@ -17,9 +17,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import javax.inject.Inject
 
 @HiltViewModel
@@ -35,6 +32,10 @@ class DeviceInfoViewModel @Inject constructor(
     private val _localDeviceInfo = MutableStateFlow<Map<String, String>>(emptyMap())
     val localDeviceInfo: StateFlow<Map<String, String>> = _localDeviceInfo.asStateFlow()
 
+    /** Identity this kiosk registered/saved with — matches what the warden sees. */
+    private val _registeredSerial = MutableStateFlow<String?>(null)
+    val registeredSerial: StateFlow<String?> = _registeredSerial.asStateFlow()
+
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
@@ -42,22 +43,24 @@ class DeviceInfoViewModel @Inject constructor(
     val error: StateFlow<String?> = _error.asStateFlow()
 
     fun loadDeviceInfo(deviceId: String) {
-        // Local hardware identity — instant and always available.
-        _localDeviceInfo.value = mapOf(
-            "Serial" to (deviceInfoProvider.getDeviceSerialNumber()
-                ?: deviceInfoProvider.getRegistrationDeviceId()),
-            "IP Address" to (deviceInfoProvider.getIpAddress() ?: "Unavailable"),
-            "Fingerprint" to deviceInfoProvider.getDeviceFingerprint()
-        )
-
         viewModelScope.launch {
-            // The admin devices API rejects a kiosk token, so the screen is
-            // built from what THIS device knows; the remote call only enriches
-            // fields we cannot know locally (location, last seen, firmware…).
-            val prisonId = (runCatching { sessionManager.getKioskInfo()?.prisonId }.getOrNull()
-                ?.takeIf { it.isNotBlank() })
+            val kioskInfo = runCatching { sessionManager.getKioskInfo() }.getOrNull()
+            val registeredSerial = kioskInfo?.deviceSerialNumber?.takeIf { it.isNotBlank() }
+            _registeredSerial.value = registeredSerial
+
+            // Local hardware identity — instant and always available. The
+            // Serial shown here is the one stored at registration/verify (the
+            // same value the warden dashboard lists), not a fresh hardware
+            // read that would fall back to a placeholder id.
+            _localDeviceInfo.value = mapOf(
+                "Serial" to (registeredSerial
+                    ?: deviceInfoProvider.getRegistrationDeviceId()),
+                "IP Address" to (deviceInfoProvider.getIpAddress() ?: "Unavailable")
+            )
+
+            val prisonId = kioskInfo?.prisonId?.takeIf { it.isNotBlank() }
                 ?: runCatching { sessionManager.getRegisteredPrisonId() }.getOrNull()
-            val local = buildLocalDevice(prisonId)
+            val local = buildLocalDevice(prisonId, kioskInfo?.prisonName, registeredSerial)
             _deviceInfo.value = local
 
             adminRepository.getDevice(deviceId).collect { result ->
@@ -78,26 +81,29 @@ class DeviceInfoViewModel @Inject constructor(
     }
 
     /** Everything the device can answer about itself, offline-first. */
-    private fun buildLocalDevice(prisonId: String?): KioskDevice {
-        val serial = deviceInfoProvider.getDeviceSerialNumber()
+    private fun buildLocalDevice(
+        prisonId: String?,
+        prisonName: String?,
+        serialOverride: String?
+    ): KioskDevice {
+        val serial = serialOverride
+            ?: deviceInfoProvider.getDeviceSerialNumber()
             ?: deviceInfoProvider.getRegistrationDeviceId()
         val ip = deviceInfoProvider.getIpAddress()
-        val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
         return KioskDevice(
             kioskId = Constants.KIOSK_ID,
             deviceId = serial,
             serialNumber = serial,
             prisonId = prisonId,
+            prisonName = prisonName,
             status = "online",
             location = null,
             ipAddress = ip,
-            firmwareVersion = Build.DISPLAY ?: "Unknown",
             appVersion = BuildConfig.VERSION_NAME,
             androidVersion = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
             model = Build.MODEL,
             manufacturer = Build.MANUFACTURER,
             deviceFingerprint = deviceInfoProvider.getDeviceFingerprint(),
-            lastSeen = now,
             hardware = KioskHardware(
                 model = Build.MODEL,
                 manufacturer = Build.MANUFACTURER,
@@ -122,9 +128,6 @@ class DeviceInfoViewModel @Inject constructor(
     /** Remote wins only where it actually knows more than the device does. */
     private fun mergeRemote(local: KioskDevice, remote: KioskDevice): KioskDevice =
         local.copy(
-            location = remote.location ?: local.location,
-            firmwareVersion = remote.firmwareVersion ?: local.firmwareVersion,
-            lastSeen = remote.lastSeen ?: local.lastSeen,
             hardware = remote.hardware?.takeIf { !it.ram.isNullOrBlank() || !it.processor.isNullOrBlank() }
                 ?: local.hardware,
             camera = remote.camera?.takeIf { !it.status.isNullOrBlank() } ?: local.camera,

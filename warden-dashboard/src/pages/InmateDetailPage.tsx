@@ -52,12 +52,13 @@ function modelFromUserAgent(ua?: string): string | null {
   const built = /Android\s+[\d.]+;\s*(.+?)\s+Build\//i.exec(ua);
   if (built?.[1]) {
     const model = built[1].trim();
-    if (model && !/^(wv|aarch64|armv81)$/i.test(model)) return model;
+    // "K" is Chrome's frozen UA placeholder — never a real model name.
+    if (model && !/^(wv|aarch64|armv81|k)$/i.test(model)) return model;
   }
   const bare = /Android\s+[\d.]+;\s*([^;)]+)/i.exec(ua);
   if (bare?.[1]) {
     const model = bare[1].trim();
-    if (model && !/^(wv|aarch64|armv81)$/i.test(model)) return model;
+    if (model && !/^(wv|aarch64|armv81|k)$/i.test(model)) return model;
   }
   const apple = /\b(iPhone\d+,\d+|iPad\d+,\d+)\b/.exec(ua);
   return apple ? apple[1] : null;
@@ -100,10 +101,8 @@ export function InmateDetailPage() {
   const [saving, setSaving] = useState(false);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [editingContact, setEditingContact] = useState(false);
+  const [creatingContact, setCreatingContact] = useState(false);
   const [contactEditData, setContactEditData] = useState<Partial<Contact>>({});
-  const [showAddFamily, setShowAddFamily] = useState(false);
-  const [newFamily, setNewFamily] = useState({ name: '', relationship: '', phoneNumber: '', address: '', city: '', state: '' });
-  const [addFamilyError, setAddFamilyError] = useState('');
   const [saveContactError, setSaveContactError] = useState('');
   const [kioskNames, setKioskNames] = useState<{ id: string; name: string }[]>([]);
   const [toggling, setToggling] = useState(false);
@@ -204,7 +203,27 @@ export function InmateDetailPage() {
   const startEditContact = (c: Contact) => {
     setContactEditData({ ...c });
     setSelectedContact(c);
+    setCreatingContact(false);
     setEditingContact(true);
+    setSaveContactError('');
+  };
+
+  // Add reuses the SAME in-place panel + edit form the detail view uses —
+  // no separate dialog.
+  const startAddContact = () => {
+    setSelectedContact(null);
+    setContactEditData({ name: '', relationship: '', phoneNumber: '' });
+    setCreatingContact(true);
+    setEditingContact(true);
+    setSaveContactError('');
+  };
+
+  const closeContactPanel = () => {
+    setSelectedContact(null);
+    setCreatingContact(false);
+    setEditingContact(false);
+    setContactEditData({});
+    setSaveContactError('');
   };
 
   // Re-read the contact list from the server so the UI always matches what
@@ -223,6 +242,41 @@ export function InmateDetailPage() {
   }, [inmateId, isNew, refreshContactsCache]);
 
   const saveContact = async () => {
+    if (creatingContact) {
+      const name = String(contactEditData.name ?? '').trim();
+      const phone = String(contactEditData.phoneNumber ?? contactEditData.mobileNumber ?? '').trim();
+      if (!name || !phone) { setSaveContactError('Full Name and Mobile Number are required'); return; }
+      setSaveContactError('');
+      let saved: Contact | undefined;
+      try {
+        saved = await wardenApi.createContact(inmateId!, {
+          name,
+          relationship: String(contactEditData.relationship ?? '').trim() || 'Family',
+          phoneNumber: phone,
+          mobileNumber: phone,
+        } as any) as Contact | undefined;
+      } catch (e: unknown) {
+        setSaveContactError(errorMessage(e, 'Failed to save contact. Please try again.'));
+        return;
+      }
+      const fresh = await refreshContacts();
+      if (fresh) {
+        const created = (saved?.contactId ? fresh.find(c => c.contactId === saved!.contactId) : null)
+          || fresh.find(c => c.name === name && String(c.phoneNumber ?? '') === phone)
+          || null;
+        if (!created) { setSaveContactError('Contact was not saved. Please try again.'); return; }
+        closeContactPanel();
+        setSelectedContact(created);
+        return;
+      }
+      if (saved?.contactId) {
+        closeContactPanel();
+        setSelectedContact(saved);
+        return;
+      }
+      setSaveContactError('Failed to verify the save. Please check your connection and try again.');
+      return;
+    }
     if (!contactEditData.contactId) return;
     setSaveContactError('');
     try {
@@ -349,37 +403,6 @@ export function InmateDetailPage() {
     } finally {
       setDeletingBiometric(null);
     }
-  };
-
-  const addFamily = async () => {
-    if (!newFamily.name.trim() || !newFamily.phoneNumber.trim()) { setAddFamilyError('Full Name and Phone are required'); return; }
-    if (!inmateId) return;
-    setAddFamilyError('');
-    const payload = { name: newFamily.name.trim(), relationship: newFamily.relationship.trim() || 'Family', phoneNumber: newFamily.phoneNumber.trim(), address: newFamily.address.trim(), city: newFamily.city.trim(), state: newFamily.state.trim() } as any;
-    let saved: Contact | undefined;
-    try {
-      saved = await wardenApi.createContact(inmateId, payload) as Contact | undefined;
-    } catch (e: unknown) {
-      setAddFamilyError(errorMessage(e, 'Failed to save contact. Please try again.'));
-      return;
-    }
-    // The create endpoint has historically returned an empty body while still
-    // writing the row, so confirm against the list instead of trusting it.
-    const fresh = await refreshContacts();
-    if (fresh) {
-      const exists = !!saved?.contactId
-        ? fresh.some(c => c.contactId === saved!.contactId)
-        : fresh.some(c => c.name === payload.name && String(c.phoneNumber ?? '') === payload.phoneNumber);
-      if (!exists && !saved) {
-        setAddFamilyError('Failed to save contact. Please try again.');
-        return;
-      }
-    } else if (!saved) {
-      setAddFamilyError('Failed to verify the save. Please check your connection and try again.');
-      return;
-    }
-    setNewFamily({ name: '', relationship: '', phoneNumber: '', address: '', city: '', state: '' });
-    setShowAddFamily(false);
   };
 
   const headerIcon = useMemo(() => <span className="material-icons text-primary-600 text-xl">{isNew ? 'person_add' : 'person'}</span>, [isNew]);
@@ -554,6 +577,14 @@ export function InmateDetailPage() {
     const info = device?.deviceInfo || {};
     const brand = brandFromUserAgent(s.userAgent);
     const model = modelFromUserAgent(s.userAgent);
+    // Real model/manufacturer come from UA-Client-Hints when the family web
+    // captured them; fall back to UA parsing (which Chrome's frozen UA
+    // reduces to the placeholder "K" — never shown).
+    const realModel = info.model || model || null;
+    const manufacturer = info.manufacturer || brand || null;
+    const deviceTitle =
+      [manufacturer, realModel && realModel !== manufacturer ? realModel : null].filter(Boolean).join(' ') ||
+      info.os || 'Registered device';
 
     return (
       <div className="pt-4 border-t border-neutral-100 mt-1">
@@ -576,44 +607,63 @@ export function InmateDetailPage() {
         {!device ? (
           <p className="text-xs text-neutral-400">No device registered yet. A device is registered the first time this contact opens a call link on their phone.</p>
         ) : (
-          <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-lg">
+          <div className="p-4 bg-white border border-neutral-200 rounded-xl shadow-sm">
             <div className="flex items-start gap-3">
-              <span className="material-icons text-neutral-400 mt-0.5">smartphone</span>
+              <div className="w-10 h-10 shrink-0 rounded-lg bg-primary-50 flex items-center justify-center">
+                <span className="material-icons text-primary-600">smartphone</span>
+              </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-neutral-900 truncate">
-                  {brand || info.os || 'Registered device'}
-                  {model && model !== brand ? <span className="font-normal text-neutral-500">{' · '}{model}</span> : null}
-                </p>
-                {(info.os || info.browser) && (
-                  <p className="text-[11px] text-neutral-500 truncate">{[info.os, info.browser].filter(Boolean).join(' · ')}</p>
-                )}
-                <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-0.5 text-[11px] text-neutral-500">
-                  {device.phone && <span>Phone: {device.phone}</span>}
-                  {(s.screen || info.screen) && <span>Screen: {s.screen || info.screen}</span>}
-                  {s.timezone && <span>TZ: {s.timezone}</span>}
-                  {s.platform && <span>Platform: {s.platform}</span>}
-                  {s.deviceMemory != null && <span>Memory: {s.deviceMemory} GB</span>}
-                  {typeof s.hardwareConcurrency === 'number' && <span>Cores: {s.hardwareConcurrency}</span>}
-                  <span>Uses: {device.verifiedCount || 0}×</span>
-                  {device.lastVerifiedAt && <span>Last: {fmtDate(device.lastVerifiedAt)}</span>}
-                  {device.firstSeenAt && <span>First: {fmtDate(device.firstSeenAt)}</span>}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-neutral-900 truncate">{deviceTitle}</p>
+                    {(info.os || info.browser) && (
+                      <p className="text-[11px] text-neutral-500 truncate">{[info.os, info.browser].filter(Boolean).join(' · ')}</p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => removeDevice(contact.contactId, device.fingerprintId)}
+                    disabled={removingDevice !== null}
+                    className="w-8 h-8 shrink-0 flex items-center justify-center bg-white border border-neutral-200 text-neutral-600 rounded-lg hover:bg-red-50 hover:text-red-600 transition disabled:opacity-50"
+                    title="Remove this device"
+                  >
+                    <span className="material-icons text-base">{removingDevice === device.fingerprintId ? 'hourglass_top' : 'delete'}</span>
+                  </button>
                 </div>
-                <div className="mt-1.5 flex items-center gap-1.5 text-[11px]">
-                  <span className="text-neutral-500 font-semibold uppercase tracking-wide">Location</span>
+                <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px]">
+                  {device.phone && (
+                    <span className="truncate"><span className="text-neutral-400">Phone:</span> <span className="font-medium text-neutral-700">{device.phone}</span></span>
+                  )}
+                  {(s.screen || info.screen) && (
+                    <span className="truncate"><span className="text-neutral-400">Screen:</span> <span className="font-medium text-neutral-700">{s.screen || info.screen}</span></span>
+                  )}
+                  {s.timezone && (
+                    <span className="truncate"><span className="text-neutral-400">TZ:</span> <span className="font-medium text-neutral-700">{s.timezone}</span></span>
+                  )}
+                  {s.platform && (
+                    <span className="truncate"><span className="text-neutral-400">Platform:</span> <span className="font-medium text-neutral-700">{s.platform}</span></span>
+                  )}
+                  {s.deviceMemory != null && (
+                    <span><span className="text-neutral-400">Memory:</span> <span className="font-medium text-neutral-700">{s.deviceMemory} GB</span></span>
+                  )}
+                  {typeof s.hardwareConcurrency === 'number' && (
+                    <span><span className="text-neutral-400">Cores:</span> <span className="font-medium text-neutral-700">{s.hardwareConcurrency}</span></span>
+                  )}
+                  <span><span className="text-neutral-400">Uses:</span> <span className="font-medium text-neutral-700">{device.verifiedCount || 0}×</span></span>
+                  {device.lastVerifiedAt && (
+                    <span className="truncate"><span className="text-neutral-400">Last:</span> <span className="font-medium text-neutral-700">{fmtDate(device.lastVerifiedAt)}</span></span>
+                  )}
+                  {device.firstSeenAt && (
+                    <span className="truncate"><span className="text-neutral-400">First:</span> <span className="font-medium text-neutral-700">{fmtDate(device.firstSeenAt)}</span></span>
+                  )}
+                </div>
+                <div className="mt-2 flex items-center gap-1.5 text-[11px]">
+                  <span className="text-neutral-400 font-semibold uppercase tracking-wide">Location</span>
                   <LocationLink location={device.location} className="font-medium text-primary-700" />
                 </div>
                 {s.deviceId && <p className="mt-1 text-[10px] font-mono text-neutral-400 truncate">ID: {s.deviceId}</p>}
               </div>
-              <button
-                onClick={() => removeDevice(contact.contactId, device.fingerprintId)}
-                disabled={removingDevice !== null}
-                className="w-8 h-8 shrink-0 flex items-center justify-center bg-white border border-neutral-200 text-neutral-600 rounded-lg hover:bg-red-50 hover:text-red-600 transition disabled:opacity-50"
-                title="Remove this device"
-              >
-                <span className="material-icons text-base">{removingDevice === device.fingerprintId ? 'hourglass_top' : 'delete'}</span>
-              </button>
             </div>
-            <p className="mt-2 text-[11px] text-neutral-400">
+            <p className="mt-3 text-[11px] text-neutral-400">
               {devices.length > 1
                 ? `${devices.length} records on file — only one device can be active. Removing forces this phone to register again on its next call.`
                 : 'Only one device can be registered per contact. Removing it lets this phone register again on its next call.'}
@@ -767,10 +817,10 @@ export function InmateDetailPage() {
             <span className="w-2 h-2 bg-success rounded-full" />Family Members
             <span className="px-2 py-0.5 bg-white border border-neutral-200 rounded-full text-xs font-bold text-neutral-900">{contactsLoading && contacts.length === 0 ? <SkeletonText /> : contacts.length}</span>
           </h2>
-          <button onClick={() => setShowAddFamily(true)} className="w-8 h-8 flex items-center justify-center bg-success text-white rounded-lg hover:bg-success-700 transition" title="Add Family"><span className="material-icons text-base">person_add</span></button>
+          <button onClick={startAddContact} className="w-8 h-8 flex items-center justify-center bg-success text-white rounded-lg hover:bg-success-700 transition" title="Add Family"><span className="material-icons text-base">person_add</span></button>
         </div>
         <div className="flex-1 overflow-y-auto min-h-0">
-          {!selectedContact ? (
+          {!selectedContact && !creatingContact ? (
             <div className="divide-y divide-neutral-100">
               {contactsLoading && contacts.length === 0 ? (
                 <SkeletonList rows={6} />
@@ -783,10 +833,10 @@ export function InmateDetailPage() {
                 <div className="py-12 text-center">
                   <span className="material-icons text-neutral-300 text-4xl">people_outline</span>
                   <p className="text-sm text-neutral-500 mt-2">No family members</p>
-                  <button onClick={() => setShowAddFamily(true)} className="mt-3 px-4 py-2 bg-success text-white rounded-lg text-xs font-medium hover:bg-success-700 transition">+ Add Family</button>
+                  <button onClick={startAddContact} className="mt-3 px-4 py-2 bg-success text-white rounded-lg text-xs font-medium hover:bg-success-700 transition">+ Add Family</button>
                 </div>
               ) : contacts.map(c => (
-                <div key={c.contactId} onClick={() => { setSelectedContact(c); setEditingContact(false); }} className="flex items-center gap-3 px-5 py-3.5 hover:bg-neutral-50 cursor-pointer transition-colors">
+                <div key={c.contactId} onClick={() => { setSelectedContact(c); setCreatingContact(false); setEditingContact(false); }} className="flex items-center gap-3 px-5 py-3.5 hover:bg-neutral-50 cursor-pointer transition-colors">
                   <div className="w-10 h-10 rounded-full bg-[#E9EEF3] border border-[#D1D7DB] flex items-center justify-center shrink-0">
                     <span className="material-icons text-[#8696A0]">person</span>
                   </div>
@@ -814,7 +864,7 @@ export function InmateDetailPage() {
             </div>
           ) : (
             <div className="p-5">
-              <button onClick={() => { setSelectedContact(null); setEditingContact(false); }} className="flex items-center gap-1 text-xs text-neutral-500 hover:text-primary-600 mb-4 transition">
+              <button onClick={closeContactPanel} className="flex items-center gap-1 text-xs text-neutral-500 hover:text-primary-600 mb-4 transition">
                 <span className="material-icons text-sm">arrow_back</span> Back to list
               </button>
               <div className="flex items-center justify-between mb-4">
@@ -823,26 +873,30 @@ export function InmateDetailPage() {
                     <span className="material-icons text-[#8696A0] text-xl">person</span>
                   </div>
                   <div>
-                    <p className="font-bold text-neutral-900">{selectedContact.name}</p>
-                    <p className="text-xs text-neutral-500">{selectedContact.relationship}</p>
+                    <p className="font-bold text-neutral-900">{creatingContact ? 'Add Family Member' : selectedContact.name}</p>
+                    <p className="text-xs text-neutral-500">{creatingContact ? 'New family contact' : selectedContact.relationship}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => resendWalletLink(selectedContact.contactId)}
-                    className="w-8 h-8 flex items-center justify-center bg-white border border-neutral-200 text-neutral-600 rounded-lg hover:bg-blue-50 hover:text-blue-600 transition"
-                    title="Resend wallet link (SMS)"
-                  ><span className="material-icons text-base">sms</span></button>
-                  <button
-                    onClick={() => toggleContact(selectedContact.contactId)}
-                    className={`transition hover:opacity-80 ${selectedContact.active !== false ? 'text-success' : 'text-neutral-400'}`}
-                    title={selectedContact.active !== false ? 'Deactivate' : 'Activate'}
-                  >
-                    <span className="material-icons" style={{ fontSize: '32px' }}>{selectedContact.active !== false ? 'toggle_on' : 'toggle_off'}</span>
-                  </button>
+                  {!creatingContact && (
+                    <>
+                      <button
+                        onClick={() => resendWalletLink(selectedContact.contactId)}
+                        className="w-8 h-8 flex items-center justify-center bg-white border border-neutral-200 text-neutral-600 rounded-lg hover:bg-blue-50 hover:text-blue-600 transition"
+                        title="Resend wallet link (SMS)"
+                      ><span className="material-icons text-base">sms</span></button>
+                      <button
+                        onClick={() => toggleContact(selectedContact.contactId)}
+                        className={`transition hover:opacity-80 ${selectedContact.active !== false ? 'text-success' : 'text-neutral-400'}`}
+                        title={selectedContact.active !== false ? 'Deactivate' : 'Activate'}
+                      >
+                        <span className="material-icons" style={{ fontSize: '32px' }}>{selectedContact.active !== false ? 'toggle_on' : 'toggle_off'}</span>
+                      </button>
+                    </>
+                  )}
                   {editingContact ? (
                     <>
-                      <button onClick={() => { setEditingContact(false); setSaveContactError(''); }} className="w-8 h-8 flex items-center justify-center bg-white border border-neutral-200 text-neutral-600 rounded-lg hover:bg-neutral-50 transition" title="Cancel"><span className="material-icons text-base">close</span></button>
+                      <button onClick={() => { if (creatingContact) { closeContactPanel(); } else { setEditingContact(false); setSaveContactError(''); } }} className="w-8 h-8 flex items-center justify-center bg-white border border-neutral-200 text-neutral-600 rounded-lg hover:bg-neutral-50 transition" title="Cancel"><span className="material-icons text-base">close</span></button>
                       <button onClick={saveContact} className="w-8 h-8 flex items-center justify-center bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition" title="Save"><span className="material-icons text-base">check</span></button>
                     </>
                   ) : (
@@ -857,38 +911,13 @@ export function InmateDetailPage() {
               {contactFieldRow('Full Name', 'name', 'person')}
               {contactFieldRow('Relationship', 'relationship', 'family_restroom')}
               {contactFieldRow('Mobile Number', 'phoneNumber', 'phone')}
-              {contactFieldRow('Email', 'email', 'email')}
-              {contactFieldRow('Address', 'address', 'home')}
-              {contactFieldRow('City', 'city', 'location_city')}
-              {contactFieldRow('State', 'state', 'map')}
-              {renderDevices(selectedContact)}
+              {!creatingContact && selectedContact && renderDevices(selectedContact)}
             </div>
           )}
         </div>
       </div>
       )}
 
-      {/* Add Family Modal */}
-      {showAddFamily && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => { setShowAddFamily(false); setAddFamilyError(''); }}>
-          <div className="bg-white rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
-            <h3 className="font-bold mb-4">Add Family Member</h3>
-            {addFamilyError && <p className="text-sm text-error bg-error/10 border border-error/20 rounded-lg px-3 py-2 mb-3">{addFamilyError}</p>}
-            <input placeholder="Full Name *" value={newFamily.name} onChange={e => setNewFamily({ ...newFamily, name: e.target.value })} className="w-full mb-3 px-3 py-2 border rounded-lg" />
-            <input placeholder="Relationship" value={newFamily.relationship} onChange={e => setNewFamily({ ...newFamily, relationship: e.target.value })} className="w-full mb-3 px-3 py-2 border rounded-lg" />
-            <input placeholder="Phone *" value={newFamily.phoneNumber} onChange={e => setNewFamily({ ...newFamily, phoneNumber: e.target.value })} className="w-full mb-3 px-3 py-2 border rounded-lg" />
-            <input placeholder="Address" value={newFamily.address} onChange={e => setNewFamily({ ...newFamily, address: e.target.value })} className="w-full mb-3 px-3 py-2 border rounded-lg" />
-            <div className="flex gap-3 mb-3">
-              <input placeholder="City" value={newFamily.city} onChange={e => setNewFamily({ ...newFamily, city: e.target.value })} className="flex-1 px-3 py-2 border rounded-lg" />
-              <input placeholder="State" value={newFamily.state} onChange={e => setNewFamily({ ...newFamily, state: e.target.value })} className="flex-1 px-3 py-2 border rounded-lg" />
-            </div>
-            <div className="flex gap-2 justify-end">
-              <button onClick={() => { setShowAddFamily(false); setAddFamilyError(''); }} className="px-4 py-2 border rounded-lg">Cancel</button>
-              <button onClick={addFamily} className="px-4 py-2 bg-success text-white rounded-lg">Add</button>
-            </div>
-          </div>
-        </div>
-      )}
       {/* Reset PIN Modal */}
       {showResetPin && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => { setShowResetPin(false); setResetPinError(''); setNewPin(''); setResetPinSuccess(false); }}>

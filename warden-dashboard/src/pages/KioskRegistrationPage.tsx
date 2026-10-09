@@ -138,8 +138,23 @@ export function KioskRegistrationPage() {
         </div>
 
         {requests.length === 0 && !isLoading && !error ? (
-          <div className="text-center py-12">
-            <p className="text-neutral-600">No registration requests match the selected criteria.</p>
+          <div className="overflow-auto max-h-[calc(100vh-280px)]">
+            <table className="w-full">
+              <thead>
+                <tr>
+                  {['Request', 'Device', 'Prison / Location', 'Serial', 'IP Address', 'Requested', 'Status', 'Actions'].map((label) => (
+                    <th key={label} className="sticky top-0 z-10 bg-neutral-50 border-b border-neutral-200 text-left py-3 px-4 text-sm font-semibold text-neutral-900">{label}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td colSpan={8} className="py-12 text-center">
+                    <p className="text-neutral-600">No registration requests match the selected criteria.</p>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         ) : (
         <div className="overflow-auto max-h-[calc(100vh-280px)]">

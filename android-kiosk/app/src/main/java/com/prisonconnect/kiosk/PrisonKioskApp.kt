@@ -47,6 +47,10 @@ class PrisonKioskApp : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
 
+        // Latency-based internet quality probe for the header signal bars.
+        // Transport-agnostic (WiFi/Ethernet/mobile) — one loop for the app.
+        com.prisonconnect.kiosk.core.NetworkQualityMonitor.start()
+
         // Any recording whose metadata never reached the server before the
         // last process died (crash, reboot, network outage) is queued for
         // register+encrypt again; encrypted files are skipped by construction.

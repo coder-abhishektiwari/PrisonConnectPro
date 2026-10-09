@@ -300,7 +300,7 @@ export interface DeviceFingerprint {
   fingerprintId: string;
   phone?: string;
   hash?: string;
-  deviceInfo?: { browser?: string; os?: string; screen?: string; language?: string } | null;
+  deviceInfo?: { browser?: string; os?: string; screen?: string; language?: string; model?: string; manufacturer?: string } | null;
   signals?: {
     userAgent?: string;
     platform?: string;
@@ -1153,6 +1153,6 @@ export interface KioskRegistrationRequestItem {
 
 export interface SetupPinData {
   prisonId: string;
-  pin: string;
+  pinSet: boolean;
   updatedAt?: string | null;
 }

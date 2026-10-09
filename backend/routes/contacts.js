@@ -13,6 +13,10 @@ function normalizeContact(c) {
   const out = { ...c };
   if (!out.name && out.fullName) out.name = out.fullName;
   delete out.fullName;
+  // A family member is only name + relationship + mobile. Everything else
+  // (email, address, city, state, derived name parts) is gone from the API
+  // even for rows written before the trim.
+  stripContactExtras(out);
   // Contacts are created with either mobileNumber (kiosk) or phoneNumber
   // (warden dashboard); expose one consistent value on all three aliases.
   const phone = out.mobileNumber || out.phoneNumber || out.phone;
@@ -24,8 +28,46 @@ function normalizeContact(c) {
   return out;
 }
 
+// The only detail fields a contact may carry beyond its ids/status/timestamps.
+const CONTACT_EXTRA_FIELDS = ['email', 'address', 'city', 'state', 'firstName', 'lastName'];
+
+function stripContactExtras(c) {
+  if (!c || typeof c !== 'object') return c;
+  for (const key of CONTACT_EXTRA_FIELDS) delete c[key];
+  return c;
+}
+
+function hasContactExtras(c) {
+  return !!c && typeof c === 'object' && CONTACT_EXTRA_FIELDS.some((k) => k in c);
+}
+
 function createContactsRouter(broadcastEvent) {
   const router = express.Router();
+
+  // One-time table cleanup: older rows (and stale clients) stored email,
+  // address, city, state and derived name parts. A contact is only
+  // name + relationship + mobile — sweep the junk out of the stored rows
+  // once at boot so the table itself matches what the UI shows.
+  setImmediate(async () => {
+    try {
+      const rows = await readDb('contacts.json');
+      const needsSweep = (c) => !!c && (hasContactExtras(c) || (!!c.fullName && !c.name));
+      if (!Array.isArray(rows) || rows.length === 0 || !rows.some(needsSweep)) return;
+      await updateDb('contacts.json', (all) => {
+        all.forEach((c) => {
+          // Legacy rows carry fullName instead of name — fold it in first so
+          // nothing below loses the person's name.
+          if (!c.name && c.fullName) c.name = c.fullName;
+          delete c.fullName;
+          stripContactExtras(c);
+        });
+        return { data: all, result: { swept: all.length } };
+      });
+      console.log('[contacts] swept legacy detail fields from stored rows');
+    } catch (err) {
+      console.warn('[contacts] field sweep skipped:', err.message);
+    }
+  });
 
   // ==================== CONTACT ROUTES ====================
 
@@ -159,16 +201,10 @@ function createContactsRouter(broadcastEvent) {
       // client-supplied value.
       prisonId: inmate.prisonId || null,
       name: contactData.name,
-      firstName: contactData.firstName || contactData.name?.split(' ')[0] || '',
-      lastName: contactData.lastName || contactData.name?.split(' ').slice(1).join(' ') || '',
-      mobileNumber: contactData.mobileNumber,
-      phoneNumber: contactData.mobileNumber || contactData.phone,
-      phone: contactData.phone || contactData.mobileNumber,
+      mobileNumber: contactData.mobileNumber || contactData.phoneNumber || contactData.phone,
+      phoneNumber: contactData.mobileNumber || contactData.phoneNumber || contactData.phone,
+      phone: contactData.mobileNumber || contactData.phoneNumber || contactData.phone,
       relationship: contactData.relationship || 'family',
-      email: contactData.email,
-      address: contactData.address || '',
-      city: contactData.city || '',
-      state: contactData.state || '',
       active: true,
       status: 'approved',
       verified: contactData.verified !== undefined ? contactData.verified : true,
@@ -176,6 +212,7 @@ function createContactsRouter(broadcastEvent) {
       verificationStatus: 'verified',
       createdAt: new Date().toISOString()
     };
+    stripContactExtras(newContact);
 
     await updateDb('contacts.json', (contacts) => ({ data: [...contacts, newContact], result: newContact }));
     // New family contact = wallet link automatically SMS'd (fire-and-forget:
@@ -207,8 +244,12 @@ function createContactsRouter(broadcastEvent) {
       const idx = all.findIndex((c) => c.contactId === contactId);
       if (idx === -1) return { data: all, result: null };
       const merged = { ...all[idx], ...updates };
-      if (updates.name) { merged.fullName = updates.name; merged.firstName = updates.name.split(' ')[0]; merged.lastName = updates.name.split(' ').slice(1).join(' '); }
-      if (updates.mobileNumber) { merged.phoneNumber = updates.mobileNumber; merged.phone = updates.mobileNumber; }
+      // The contact form carries only name / relationship / mobile: a stale
+      // payload must never reintroduce fields the table no longer stores.
+      stripContactExtras(merged);
+      if (updates.name) { merged.name = updates.name; delete merged.fullName; }
+      const reqPhone = updates.mobileNumber || updates.phoneNumber || updates.phone;
+      if (reqPhone) { merged.mobileNumber = reqPhone; merged.phoneNumber = reqPhone; merged.phone = reqPhone; }
       // Device fingerprints are server-owned: a stale client copy must never
       // resurrect a device the warden already removed (or wipe new ones).
       const prevPhone = all[idx].mobileNumber || all[idx].phoneNumber || all[idx].phone;
@@ -240,7 +281,7 @@ function createContactsRouter(broadcastEvent) {
       // and the fresh link goes to the new number.
       issueAndSendWalletSms(updated, owner).catch((err) => console.warn(`[wallet-link] re-send after phone change failed for ${updated.contactId}: ${err.message}`));
     }
-    return sendSuccess(res, updated);
+    return sendSuccess(res, normalizeContact(updated));
   }));
 
   router.patch('/admin/contacts/:contactId/status', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {

@@ -44,15 +44,12 @@ class ManageContactsViewModel @Inject constructor(
         }
     }
 
-    fun addContact(prisonerId: String, name: String, mobileNumber: String, relationship: String, address: String, city: String, state: String) {
+    fun addContact(prisonerId: String, name: String, mobileNumber: String, relationship: String) {
         _addContactState.value = NetworkResult.Loading
         val request = CreateContactRequest(
             name = name,
             mobileNumber = mobileNumber,
             relationship = relationship,
-            address = address.ifBlank { null },
-            city = city.ifBlank { null },
-            state = state.ifBlank { null },
             verified = true
         )
         viewModelScope.launch {
@@ -65,15 +62,12 @@ class ManageContactsViewModel @Inject constructor(
         }
     }
 
-    fun editContact(contactId: String, prisonerId: String, name: String, mobileNumber: String, relationship: String, address: String, city: String, state: String) {
+    fun editContact(contactId: String, prisonerId: String, name: String, mobileNumber: String, relationship: String) {
         _editContactState.value = NetworkResult.Loading
         val request = UpdateContactRequest(
             name = name,
             mobileNumber = mobileNumber,
-            relationship = relationship,
-            address = address.ifBlank { null },
-            city = city.ifBlank { null },
-            state = state.ifBlank { null }
+            relationship = relationship
         )
         viewModelScope.launch {
             adminRepository.updateContact(contactId, request).collect { result ->

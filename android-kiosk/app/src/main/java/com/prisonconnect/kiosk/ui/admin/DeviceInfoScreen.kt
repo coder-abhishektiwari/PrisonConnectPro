@@ -64,11 +64,9 @@ fun DeviceInfoContent(
             DeviceInfoItem("Device Serial", deviceInfo?.serialNumber ?: "—"),
             DeviceInfoItem("Kiosk ID", deviceInfo?.kioskId ?: "—"),
             DeviceInfoItem("Prison ID", deviceInfo?.prisonId ?: "—"),
+            DeviceInfoItem("Prison Name", deviceInfo?.prisonName ?: "—"),
             DeviceInfoItem("IP Address", deviceInfo?.ipAddress ?: "—"),
-            DeviceInfoItem("Location", deviceInfo?.location ?: "—"),
-            DeviceInfoItem("Firmware Version", deviceInfo?.firmwareVersion ?: "—"),
-            DeviceInfoItem("App Version", deviceInfo?.appVersion ?: "—"),
-            DeviceInfoItem("Last Seen", deviceInfo?.lastSeen ?: "—")
+            DeviceInfoItem("App Version", deviceInfo?.appVersion ?: "—")
         )
 
         LazyColumn(
@@ -271,8 +269,7 @@ fun PreviewDeviceInfoMobile() {
             ),
             localDeviceInfo = mapOf(
                 "Serial" to "SN-9876543210",
-                "IP Address" to "10.0.4.152",
-                "Fingerprint" to "a1b2c3d4e5f6"
+                "IP Address" to "10.0.4.152"
             ),
             onBackClick = {}
         )

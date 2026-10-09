@@ -1,14 +1,16 @@
 package com.prisonconnect.kiosk.ui.components
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -17,10 +19,57 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.prisonconnect.kiosk.R
+import com.prisonconnect.kiosk.core.NetworkQualityMonitor
 import com.prisonconnect.kiosk.ui.theme.PrimaryNavy
 import com.prisonconnect.kiosk.ui.theme.PrisonKioskTheme
 import java.text.SimpleDateFormat
 import java.util.*
+
+/**
+ * Wi-Fi strength colours mapped to the 0–4 level. Full strength stays green,
+ * weak signal drops to amber, and near-no-signal is red — so the header
+ * reflects the real link quality at a glance.
+ */
+private fun wifiStrengthColor(level: Int): Color = when (level) {
+    4 -> Color(0xFF4CAF50)
+    3 -> Color(0xFF8BC34A)
+    2 -> Color(0xFFFFC107)
+    1 -> Color(0xFFFF9800)
+    else -> Color(0xFFF44336)
+}
+
+/**
+ * Four ascending signal bars. Bars at or below the current level light up in
+ * the strength colour; the remaining bars stay dim — so the icon literally
+ * loses bars as the signal decays. Offline shows all bars red at zero.
+ */
+@Composable
+private fun WifiStrengthBars(
+    level: Int,
+    online: Boolean,
+    modifier: Modifier = Modifier,
+    barCount: Int = 4
+) {
+    val activeColor = if (online) wifiStrengthColor(level) else Color(0xFFF44336)
+    val inactiveColor = Color.White.copy(alpha = 0.35f)
+    Canvas(modifier = modifier) {
+        val barWidthPx = size.width / (barCount * 2f)
+        val gapPx = barWidthPx
+        val maxWidthPx = size.height
+        val cornerPx = barWidthPx / 2f
+        repeat(barCount) { i ->
+            val barHeight = maxWidthPx * (i + 1) / barCount
+            val x = i * (barWidthPx + gapPx)
+            val lit = !online || i < level
+            drawRoundRect(
+                color = if (lit) activeColor else inactiveColor,
+                topLeft = androidx.compose.ui.geometry.Offset(x, size.height - barHeight),
+                size = Size(barWidthPx, barHeight),
+                cornerRadius = CornerRadius(cornerPx, cornerPx)
+            )
+        }
+    }
+}
 
 @Composable
 fun KioskTopBar(
@@ -96,16 +145,17 @@ fun KioskTopBar(
 
                 Spacer(modifier = Modifier.width(spaceBetweenLeftRight))
 
-                // --- Right Section: Wifi Icon + Time & Date ---
+                // --- Right Section: Live Wi-Fi Strength + Time & Date ---
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(if (isCompact) 8.dp else 16.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Wifi,
-                        contentDescription = if (isOnline) "Online" else "Offline",
-                        tint = if (isOnline) Color(0xFF4CAF50) else Color(0xFFFF7043),
-                        modifier = Modifier.size(if (isCompact) 16.dp else 20.dp)
+                    val quality by NetworkQualityMonitor.quality.collectAsState()
+                    val barsSize = if (isCompact) 16.dp else 20.dp
+                    WifiStrengthBars(
+                        level = quality.level,
+                        online = quality.online,
+                        modifier = Modifier.size(barsSize)
                     )
 
                     Column(horizontalAlignment = Alignment.End) {

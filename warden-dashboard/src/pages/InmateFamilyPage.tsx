@@ -266,7 +266,7 @@ export function InmateFamilyPage() {
                 <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                   <span className="material-icons text-emerald-600 text-lg">account_balance_wallet</span> Wallet Details
                 </h2>
-                <p className="text-xs text-slate-500 font-mono mt-0.5">{selectedWalletId} {selectedInmate ? `• ${selectedInmate.name}` : ''}</p>
+                <p className="text-xs text-slate-500 font-mono mt-0.5">{selectedInmate ? `${selectedInmate.name}` : ''}</p>
               </div>
               <div className="flex items-center gap-2">
                 <button onClick={() => setSelectedWalletId(null)} className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition-colors">✕</button>

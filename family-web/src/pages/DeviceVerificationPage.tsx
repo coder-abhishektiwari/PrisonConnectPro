@@ -9,6 +9,28 @@ import { useHeartbeat } from '@/hooks/useHeartbeat';
 
 const STEPS = ['Checking your device…', 'Matching your secure profile…', 'Almost done…'];
 
+/**
+ * Real device model/manufacturer via User-Agent Client Hints. Chrome's
+ * frozen Android UA reports the model as the placeholder "K" — only the
+ * high-entropy hints carry the true model (e.g. "SM-A127F" / "samsung").
+ * Returns nulls on browsers without UA-CH (Safari/Firefox).
+ */
+async function collectDeviceModel(): Promise<{ model?: string; manufacturer?: string }> {
+  try {
+    const uad = navigator.userAgentData as unknown as {
+      getHighEntropyValues?: (hints: string[]) => Promise<{ model?: string; manufacturer?: string }>;
+    } | undefined;
+    if (!uad?.getHighEntropyValues) return {};
+    const extra = await uad.getHighEntropyValues(['model', 'manufacturer']);
+    return {
+      model: extra?.model || undefined,
+      manufacturer: extra?.manufacturer || undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
 export function DeviceVerificationPage() {
   const { linkToken } = useParams<{ linkToken: string }>();
   const navigate = useNavigate();
@@ -53,6 +75,7 @@ export function DeviceVerificationPage() {
     try {
       const signals = collectSignals();
       const hash = await fingerprintHash(signals);
+      const deviceModel = await collectDeviceModel();
 
       const result = await callApi.verifyDevice(linkToken, {
         fingerprint: hash,
@@ -62,6 +85,8 @@ export function DeviceVerificationPage() {
           os: /Android/.test(navigator.userAgent) ? 'Android' : /iPhone|iPad/.test(navigator.userAgent) ? 'iOS' : 'Desktop',
           screen: `${window.screen.width}x${window.screen.height}`,
           language: navigator.language,
+          model: deviceModel.model,
+          manufacturer: deviceModel.manufacturer,
         },
       });
 

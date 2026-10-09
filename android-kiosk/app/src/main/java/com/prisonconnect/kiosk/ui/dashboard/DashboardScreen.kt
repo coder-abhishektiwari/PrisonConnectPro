@@ -666,7 +666,7 @@ private fun KioskTopHeader(
     onLogoutClick: () -> Unit
 ) {
     val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
-    val dateFormat = SimpleDateFormat("h:mm a  •  d MMM yyyy", Locale.getDefault())
+    val dateFormat = SimpleDateFormat("EEE, d MMM yyyy", Locale.getDefault())
 
     Surface(color = PrimaryNavy, modifier = Modifier.fillMaxWidth()) {
         Row(

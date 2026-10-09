@@ -105,6 +105,7 @@ data class KioskDevice(
     @SerializedName("deviceId") val deviceId: String? = null,
     @SerializedName("deviceSerialNumber") val serialNumber: String? = null,
     @SerializedName("prisonId") val prisonId: String? = null,
+    @SerializedName("prisonName") val prisonName: String? = null,
     @SerializedName("status") val status: String = "offline",
     @SerializedName("authorizationStatus") val authorizationStatus: String? = null,
     @SerializedName("location") val location: String? = null,
@@ -227,10 +228,6 @@ data class CreateContactRequest(
     @SerializedName("name") val name: String,
     @SerializedName("mobileNumber") val mobileNumber: String,
     @SerializedName("relationship") val relationship: String,
-    @SerializedName("email") val email: String? = null,
-    @SerializedName("address") val address: String? = null,
-    @SerializedName("city") val city: String? = null,
-    @SerializedName("state") val state: String? = null,
     @SerializedName("verified") val verified: Boolean = false
 )
 
@@ -238,10 +235,6 @@ data class UpdateContactRequest(
     @SerializedName("name") val name: String? = null,
     @SerializedName("mobileNumber") val mobileNumber: String? = null,
     @SerializedName("relationship") val relationship: String? = null,
-    @SerializedName("email") val email: String? = null,
-    @SerializedName("address") val address: String? = null,
-    @SerializedName("city") val city: String? = null,
-    @SerializedName("state") val state: String? = null,
     @SerializedName("verified") val verified: Boolean? = null
 )
 

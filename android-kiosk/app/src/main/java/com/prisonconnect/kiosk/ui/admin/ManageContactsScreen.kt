@@ -135,24 +135,33 @@ fun ManageContactsScreen(
         }
     }
 
-    // Add Dialog
+    // Add — same form as edit (name, relationship, mobile only)
     if (showAddDialog) {
-        AddContactDialog(
+        ContactFormDialog(
+            title = "Add Verified Contact",
+            confirmLabel = "Add",
+            initialName = "",
+            initialMobile = "",
+            initialRelationship = "",
             onDismiss = { showAddDialog = false },
-            onConfirm = { name, mobile, relation, address, city, state ->
-                viewModel.addContact(prisonerId, name, mobile, relation, address, city, state)
+            onConfirm = { name, mobile, relation ->
+                viewModel.addContact(prisonerId, name, mobile, relation)
                 showAddDialog = false
             }
         )
     }
 
-    // Edit Dialog
+    // Edit — same form as add
     showEditDialog?.let { contact ->
-        EditContactDialog(
-            contact = contact,
+        ContactFormDialog(
+            title = "Edit Contact",
+            confirmLabel = "Save",
+            initialName = contact.displayName,
+            initialMobile = contact.phone,
+            initialRelationship = contact.relationship ?: "",
             onDismiss = { showEditDialog = null },
-            onConfirm = { name, mobile, relation, address, city, state ->
-                viewModel.editContact(contact.contactId, prisonerId, name, mobile, relation, address, city, state)
+            onConfirm = { name, mobile, relation ->
+                viewModel.editContact(contact.contactId, prisonerId, name, mobile, relation)
                 showEditDialog = null
             }
         )
@@ -251,23 +260,29 @@ fun EmptyContactsView(modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * The ONE form used for both adding and editing a family contact.
+ * A contact is only name, relationship and mobile number.
+ */
 @Composable
-fun AddContactDialog(
+fun ContactFormDialog(
+    title: String,
+    confirmLabel: String,
+    initialName: String,
+    initialMobile: String,
+    initialRelationship: String,
     onDismiss: () -> Unit,
-    onConfirm: (String, String, String, String, String, String) -> Unit
+    onConfirm: (String, String, String) -> Unit
 ) {
-    var name by remember { mutableStateOf("") }
-    var mobile by remember { mutableStateOf("") }
-    var relation by remember { mutableStateOf("") }
-    var address by remember { mutableStateOf("") }
-    var city by remember { mutableStateOf("") }
-    var state by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf(initialName) }
+    var mobile by remember { mutableStateOf(initialMobile) }
+    var relation by remember { mutableStateOf(initialRelationship) }
     var nameError by remember { mutableStateOf(false) }
     var mobileError by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add Verified Contact") },
+        title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
@@ -279,87 +294,11 @@ fun AddContactDialog(
                 )
                 if (nameError) Text("Name is required", color = Color(0xFFD32F2F), fontSize = 12.sp)
                 OutlinedTextField(
-                    value = mobile,
-                    onValueChange = { mobile = it; mobileError = false },
-                    label = { Text("Mobile Number *") },
-                    placeholder = { Text("+91XXXXXXXXXX") },
-                    isError = mobileError,
-                    singleLine = true
-                )
-                if (mobileError) Text("Mobile number is required", color = Color(0xFFD32F2F), fontSize = 12.sp)
-                OutlinedTextField(
                     value = relation,
                     onValueChange = { relation = it },
                     label = { Text("Relationship") },
                     singleLine = true
                 )
-                OutlinedTextField(
-                    value = address,
-                    onValueChange = { address = it },
-                    label = { Text("Address") },
-                    singleLine = true
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = city,
-                        onValueChange = { city = it },
-                        label = { Text("City") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true
-                    )
-                    OutlinedTextField(
-                        value = state,
-                        onValueChange = { state = it },
-                        label = { Text("State") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            Button(onClick = {
-                nameError = name.isBlank()
-                mobileError = mobile.isBlank()
-                if (!nameError && !mobileError) {
-                    onConfirm(name.trim(), mobile.trim(), relation.trim(), address.trim(), city.trim(), state.trim())
-                }
-            }) { Text("Add") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        }
-    )
-}
-
-@Composable
-fun EditContactDialog(
-    contact: VerifiedContact,
-    onDismiss: () -> Unit,
-    onConfirm: (String, String, String, String, String, String) -> Unit
-) {
-    var name by remember { mutableStateOf(contact.displayName) }
-    var mobile by remember { mutableStateOf(contact.phone) }
-    var relation by remember { mutableStateOf(contact.relationship ?: "") }
-    var address by remember { mutableStateOf(contact.address ?: "") }
-    var city by remember { mutableStateOf("") }
-    var state by remember { mutableStateOf("") }
-    var nameError by remember { mutableStateOf(false) }
-    var mobileError by remember { mutableStateOf(false) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Edit Contact") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it; nameError = false },
-                    label = { Text("Full Name *") },
-                    isError = nameError,
-                    singleLine = true
-                )
-                if (nameError) Text("Name is required", color = Color(0xFFD32F2F), fontSize = 12.sp)
                 OutlinedTextField(
                     value = mobile,
                     onValueChange = { mobile = it; mobileError = false },
@@ -369,34 +308,6 @@ fun EditContactDialog(
                     singleLine = true
                 )
                 if (mobileError) Text("Mobile number is required", color = Color(0xFFD32F2F), fontSize = 12.sp)
-                OutlinedTextField(
-                    value = relation,
-                    onValueChange = { relation = it },
-                    label = { Text("Relationship") },
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = address,
-                    onValueChange = { address = it },
-                    label = { Text("Address") },
-                    singleLine = true
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = city,
-                        onValueChange = { city = it },
-                        label = { Text("City") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true
-                    )
-                    OutlinedTextField(
-                        value = state,
-                        onValueChange = { state = it },
-                        label = { Text("State") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true
-                    )
-                }
             }
         },
         confirmButton = {
@@ -404,9 +315,9 @@ fun EditContactDialog(
                 nameError = name.isBlank()
                 mobileError = mobile.isBlank()
                 if (!nameError && !mobileError) {
-                    onConfirm(name.trim(), mobile.trim(), relation.trim(), address.trim(), city.trim(), state.trim())
+                    onConfirm(name.trim(), mobile.trim(), relation.trim())
                 }
-            }) { Text("Save") }
+            }) { Text(confirmLabel) }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }
