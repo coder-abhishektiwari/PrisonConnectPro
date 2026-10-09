@@ -305,11 +305,16 @@ function createCallsRouter(broadcastEvent, signaling) {
     ]);
     const byInmate = new Map(inmates.map((i) => [i.inmateId, i]));
     const byContact = new Map(contacts.map((c) => [c.contactId, c]));
-    return rows.map((c) => ({
-      ...c,
-      inmateName: callInmateName(c, byInmate.get(c.inmateId)) || c.inmateId || null,
-      contactName: callContactName(c, byContact.get(c.contactId)) || null,
-    }));
+    return rows.map((c) => {
+      const inmate = byInmate.get(c.inmateId);
+      return {
+        ...c,
+        inmateName: callInmateName(c, inmate) || c.inmateId || null,
+        // Prison number the UI shows everywhere instead of the raw INM id.
+        inmateNumber: (inmate && inmate.prisonerNumber) || null,
+        contactName: callContactName(c, byContact.get(c.contactId)) || null,
+      };
+    });
   }
 
   // ==================== CALL ROUTES ====================

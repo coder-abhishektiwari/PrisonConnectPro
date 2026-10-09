@@ -39,7 +39,7 @@ export function Sidebar() {
         </div>
         <div className="opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300 overflow-hidden whitespace-nowrap">
           <h1 className="text-lg font-bold text-white">Jail Admin Pannel</h1>
-          <p className="text-[12px] text-white">PRISON-001</p>
+          <p className="text-[12px] text-white">{user?.prisonId || '—'}</p>
         </div>
       </div>
 

@@ -144,16 +144,11 @@ export function KioskRegistrationPage() {
         ) : (
         <div className="overflow-auto max-h-[calc(100vh-280px)]">
           <table className="w-full">
-              <thead className="sticky top-0 z-10">
-                <tr className="border-b border-neutral-200 bg-neutral-50">
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Request</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Device</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Prison / Location</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Serial</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">IP Address</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Requested</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Status</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Actions</th>
+              <thead>
+                <tr>
+                  {['Request', 'Device', 'Prison / Location', 'Serial', 'IP Address', 'Requested', 'Status', 'Actions'].map((label) => (
+                    <th key={label} className="sticky top-0 z-10 bg-neutral-50 border-b border-neutral-200 text-left py-3 px-4 text-sm font-semibold text-neutral-900">{label}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>

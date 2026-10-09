@@ -101,6 +101,8 @@ export interface ActiveCall {
   jitter: number;
   iceState: string;
   inmateName?: string;
+  /** Prisoner number (prisonerNumber) — shown to wardens instead of the raw inmateId. */
+  inmateNumber?: string | null;
   familyMemberName?: string;
   contactName?: string;
   roomIdLabel?: string;
@@ -123,6 +125,7 @@ export interface CallHistoryItem {
   recordingStatus?: string;
   connectionQuality?: string;
   inmateName?: string;
+  inmateNumber?: string | null;
   familyMemberName?: string;
   contactName?: string;
   failReason?: string;

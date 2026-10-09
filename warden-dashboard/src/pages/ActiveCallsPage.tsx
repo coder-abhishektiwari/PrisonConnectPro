@@ -86,6 +86,24 @@ export function ActiveCallsPage() {
     return d.toLocaleString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit', second:'2-digit' });
   };
 
+  // Live elapsed clock: ticks every second so each card shows a running
+  // HH:MM:SS like a broadcast stopwatch (data itself still refreshes on poll).
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const elapsedOf = (iso: string) => {
+    const start = Date.parse(iso);
+    if (!Number.isFinite(start)) return '00:00:00';
+    const total = Math.max(0, Math.floor((now - start) / 1000));
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
   const getQualityBadge = (quality: string) => {
     switch (quality) {
       case 'excellent': return 'bg-success/10 text-success';
@@ -151,50 +169,78 @@ export function ActiveCallsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 p-5">
               {calls.map((call) => (
                 <div key={call.callId} className="group bg-white border border-neutral-200 rounded-2xl shadow-sm hover:shadow-lg hover:border-neutral-300 transition-all duration-200 flex flex-col overflow-hidden">
-                  <div className="h-1 bg-gradient-to-r from-primary-600 to-neutral-900" />
-                  <div className="p-4 flex flex-col gap-3.5 flex-1">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="font-mono text-xs font-bold text-neutral-900 flex items-center gap-2">{call.callId} <span className="text-[11px] font-normal text-neutral-500">• {call.roomIdLabel || call.roomId}</span></p>
-                        <p className="text-xs text-neutral-500 mt-1 flex items-center gap-1.5" title={call.startTime}><span className="w-1.5 h-1.5 bg-success rounded-full animate-pulse" />Started: {formatStartedAt(call.startTime)}</p>
+                  <div className="h-1 bg-gradient-to-r from-primary-600 via-primary-400 to-neutral-900" />
+                  <div className="p-4 flex flex-col gap-3 flex-1">
+                    <div className="flex justify-between items-start gap-2">
+                      <div className="min-w-0">
+                        <p className="font-mono text-xs font-bold text-neutral-900 truncate">{call.callId}</p>
+                        <p className="font-mono text-[11px] text-neutral-400 truncate">{call.roomIdLabel || call.roomId}</p>
                       </div>
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-success/10 text-success border border-success/20 rounded-full text-xs font-bold">● Active</span>
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-success/10 text-success border border-success/20 rounded-full text-[11px] font-bold shrink-0" title={call.startTime}>
+                        <span className="w-1.5 h-1.5 bg-success rounded-full animate-pulse" />Live
+                      </span>
                     </div>
+
+                    {/* Live running clock — the broadcast-style core of the card */}
+                    <div className="flex items-center justify-between gap-2 rounded-xl bg-neutral-900 px-3.5 py-2.5 shadow-inner">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-neutral-400">Elapsed</span>
+                      <span className="font-mono text-lg font-bold tabular-nums text-white leading-none">{elapsedOf(call.startTime)}</span>
+                    </div>
+                    <p className="-mt-1.5 text-[11px] text-neutral-500 flex items-center gap-1.5" title={call.startTime}>
+                      <span className="material-icons text-[13px] text-neutral-400">schedule</span>
+                      Started {formatStartedAt(call.startTime)}
+                    </p>
+
                     <div className="grid grid-cols-2 gap-3">
-                      <div className="flex items-center gap-3 p-3 bg-neutral-50 rounded-xl border border-neutral-200">
-                        <div className="w-10 h-10 rounded-xl bg-white border border-neutral-200 flex items-center justify-center shrink-0 shadow-sm">
-                          <svg className="w-6 h-6 text-neutral-600" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" /></svg>
+                      <div className="flex items-center gap-2.5 p-3 bg-primary-50/60 rounded-xl border border-primary-100">
+                        <div className="w-9 h-9 rounded-full bg-white border border-primary-200 flex items-center justify-center shrink-0">
+                          <span className="material-icons text-primary-600 text-lg">person</span>
                         </div>
                         <div className="min-w-0">
-                          <p className="text-[11px] font-bold text-primary-600 uppercase tracking-wide">Inmate</p>
-                          <p className="text-sm font-semibold text-neutral-900 truncate">{inmateLabel(call)}</p>
-                          <p className="text-xs text-neutral-500 truncate">{call.inmateId} • {call.kioskId}</p>
+                          <p className="text-[10px] font-bold text-primary-600 uppercase tracking-wide">Inmate</p>
+                          <p className="text-sm font-semibold text-neutral-900 truncate leading-tight">{inmateLabel(call)}</p>
+                          <p className="text-[11px] text-neutral-500 font-mono truncate" title={`${call.inmateNumber || call.inmateId} • ${call.kioskId}`}>{call.inmateNumber || call.inmateId} • {call.kioskId}</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3 p-3 bg-neutral-50 rounded-xl border border-neutral-200">
-                        <div className="w-10 h-10 rounded-xl bg-white border border-neutral-200 flex items-center justify-center shrink-0 shadow-sm">
-                          <svg className="w-5 h-5 text-neutral-600" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" /></svg>
+                      <div className="flex items-center gap-2.5 p-3 bg-info/5 rounded-xl border border-info/20">
+                        <div className="w-9 h-9 rounded-full bg-white border border-info/30 flex items-center justify-center shrink-0">
+                          <span className="material-icons text-info text-lg">face</span>
                         </div>
                         <div className="min-w-0">
-                          <p className="text-[11px] font-bold text-info uppercase tracking-wide">Family</p>
-                          <p className="text-sm font-semibold text-neutral-900 truncate">{contactLabel(call)}</p>
-                          <p className="text-xs text-neutral-500 truncate">{call.contactId}</p>
+                          <p className="text-[10px] font-bold text-info uppercase tracking-wide">Family</p>
+                          <p className="text-sm font-semibold text-neutral-900 truncate leading-tight">{contactLabel(call)}</p>
+                          <p className="text-[11px] text-neutral-500 font-mono truncate" title={call.contactId}>{call.contactId}</p>
                         </div>
                       </div>
                     </div>
+
                     {/* Captured when this call's device was verified - the
                         family side's current location for THIS call. */}
                     <div className="text-xs text-neutral-600 -mt-1">
                       <LocationLink location={call.family?.location} />
                     </div>
+
                     <div className="flex flex-wrap gap-2">
-                      <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${call.type==='video'?'bg-primary-600 text-white border-primary-600':'bg-info text-white border-info'}`}>{call.type==='video'?'▶ Video':'● Audio'}</span>
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${getRecordingBadge(call.recordingStatus)}`}>{call.recordingStatus}</span>
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${getQualityBadge(call.connectionQuality)}`}>{call.connectionQuality}</span>
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border uppercase tracking-wide ${call.type==='video'?'bg-primary-600 text-white border-primary-600':'bg-info text-white border-info'}`}>
+                        <span className="material-icons text-[13px]">{call.type==='video'?'videocam':'mic'}</span>
+                        {call.type==='video'?'Video':'Audio'}
+                      </span>
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border uppercase tracking-wide ${getRecordingBadge(call.recordingStatus)}`}>
+                        <span className={`material-icons text-[13px] ${call.recordingStatus==='recording'?'animate-pulse':''}`}>fiber_manual_record</span>
+                        {call.recordingStatus || '—'}
+                      </span>
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border uppercase tracking-wide ${getQualityBadge(call.connectionQuality)}`}>
+                        <span className="material-icons text-[13px]">signal_cellular_alt</span>
+                        {call.connectionQuality || '—'}
+                      </span>
                     </div>
-                    <div className="grid grid-cols-2 gap-2.5 mt-auto pt-2">
+
+                    <div className="mt-auto pt-1">
                       {/* <button onClick={() => navigate(`/monitoring/live/${call.callId}`)} className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 bg-white border-2 border-neutral-900 text-neutral-900 rounded-xl text-xs font-bold hover:bg-neutral-900 hover:text-white transition-colors"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a9 9 0 11-18 0 9 9 0 0118 0zM15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg> Monitor</button> */}
-                      <button onClick={() => setConfirmForceEnd(call)} className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 bg-error text-white rounded-xl text-xs font-bold hover:bg-error-700 shadow-sm transition-colors"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L18.364 5.636M5.636 18.364l12.728-12.728" /></svg> Disconnect</button>
+                      <button onClick={() => setConfirmForceEnd(call)} className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-error text-white rounded-xl text-sm font-bold hover:bg-error-700 focus:outline-none focus:ring-2 focus:ring-error/40 shadow-sm transition-colors">
+                        <span className="material-icons text-lg">call_end</span>
+                        Disconnect
+                      </button>
                     </div>
                   </div>
                 </div>
