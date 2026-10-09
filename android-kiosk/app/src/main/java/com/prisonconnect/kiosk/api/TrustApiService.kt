@@ -17,6 +17,8 @@ import com.prisonconnect.kiosk.models.call.RecordingUploadInitRequest
 import com.prisonconnect.kiosk.models.call.RecordingUploadInitResponse
 import com.prisonconnect.kiosk.models.call.RecordingUploadChunkRequest
 import com.prisonconnect.kiosk.models.call.RecordingUploadChunkResponse
+import com.prisonconnect.kiosk.models.call.RecordingRegisterRequest
+import com.prisonconnect.kiosk.models.call.RecordingRegisterResponse
 import com.prisonconnect.kiosk.models.call.CallStatusSnapshot
 import com.prisonconnect.kiosk.models.call.CallStatsReport
 import com.prisonconnect.kiosk.models.schedule.SlotsResponse
@@ -143,6 +145,10 @@ interface TrustApiService {
 
     @POST("recordings/upload/{uploadId}/complete")
     suspend fun completeRecordingUpload(@Path("uploadId") uploadId: String): ApiResponse<RecordingUploadResponse>
+
+    /** Metadata-only registration: the encrypted file stays on the device until a warden retrieves it. */
+    @POST("recordings/register")
+    suspend fun registerRecording(@Body request: RecordingRegisterRequest): ApiResponse<RecordingRegisterResponse>
 
     @PATCH("schedule/cancel/{bookingId}")
     suspend fun cancelBooking(@Path("bookingId") bookingId: String): ApiResponse<Unit>

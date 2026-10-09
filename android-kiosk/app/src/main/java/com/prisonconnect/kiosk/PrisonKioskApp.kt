@@ -44,16 +44,19 @@ class PrisonKioskApp : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
 
-        // Any recording that did not make it to the server before the last
-        // process died (crash, reboot, network outage) is queued again; the
-        // uploader resumes each one where the server stopped acknowledging.
+        // Any recording whose metadata never reached the server before the
+        // last process died (crash, reboot, network outage) is queued for
+        // register+encrypt again; encrypted files are skipped by construction.
         RecordingUploadWorker.scanPending(this)
 
         // Single background ping. This is what the dashboard reads to decide
         // Online/Offline and Last Seen — without it a kiosk that is sitting idle
         // would never report in. A kiosk roams between Wi-Fi networks, so a
         // failed ping retries in a few seconds instead of waiting out the whole
-        // interval and looking offline for an extra half minute.
+        // interval and looking offline for an extra half minute. The response
+        // also carries any warden retrieval requests — the only channel that
+        // can ask a kiosk to push a recording up (no kiosk socket; the session
+        // token dies on every app restart, but this public ping always works).
         appScope.launch {
             var intervalMs = HEARTBEAT_INTERVAL_MS
             while (isActive) {
@@ -65,7 +68,7 @@ class PrisonKioskApp : Application(), Configuration.Provider {
 
     private suspend fun sendHeartbeat(): Boolean {
         return try {
-            trustApiService.heartbeat(
+            val response = trustApiService.heartbeat(
                 KioskHeartbeatRequest(
                     deviceSerialNumber = deviceId,
                     deviceFingerprint = deviceFingerprint,
@@ -73,6 +76,10 @@ class PrisonKioskApp : Application(), Configuration.Provider {
                     appVersion = com.prisonconnect.kiosk.BuildConfig.VERSION_NAME
                 )
             )
+            response.data?.pendingRetrievals.orEmpty().forEach { pending ->
+                Logger.i("Heartbeat: retrieve requested recordingId=${pending.recordingId}")
+                RecordingUploadWorker.enqueueRetrieve(this, pending)
+            }
             true
         } catch (t: Throwable) {
             Logger.w("Heartbeat failed: ${t.message}")

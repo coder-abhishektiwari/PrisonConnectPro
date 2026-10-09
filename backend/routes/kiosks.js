@@ -1,7 +1,7 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { readDb, updateDb } = require('../lib/db');
-const { hashSecret, verifySecret, verifyToken } = require('../lib/auth');
+const { hashSecret, verifySecret, verifyToken, signAccessToken } = require('../lib/auth');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { sendSuccess, sendError, asyncRoute } = require('../lib/response');
 const { jailScopeOf, inAdminScope, adminScopeFilter, inScopeOf, scopeList } = require('../lib/scoping');
@@ -63,6 +63,12 @@ function parseWhen(value) {
 // the moment they are written, so they are never trusted for online/offline.
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const HEARTBEAT_GRACE_MS = 4 * HEARTBEAT_INTERVAL_MS;
+// Keep in step with routes/recordings.js: a retrieve request the kiosk never
+// picked up stops being delivered after this long.
+const RETRIEVE_REQUEST_TTL_MS = 30 * 60 * 1000;
+// Once bytes are moving, the request stays on the queue much longer so a
+// mid-transfer process restart can resume instead of stranding the row.
+const RETRIEVE_TRANSFER_TTL_MS = 2 * 60 * 60 * 1000;
 
 function kioskLive(k) {
   const beat = parseWhen(k?.lastHeartbeatAt);
@@ -134,9 +140,24 @@ router.post('/verify', asyncRoute(async (req, res) => {
 
   if (!authorized) return sendSuccess(res, { success: true, authorized: false, kiosk: null });
 
+  // Long-lived device credential: the kiosk's background workers (recording
+  // registration, on-demand retrieval uploads) run without a logged-in user,
+  // so they authenticate with this instead of an expiring session token.
+  const deviceToken = signAccessToken(
+    {
+      sub: kiosk.kioskId,
+      role: 'kiosk',
+      kioskId: kiosk.kioskId,
+      prisonId: kiosk.prisonId,
+      device: true
+    },
+    process.env.DEVICE_TOKEN_TTL || '365d'
+  );
+
   return sendSuccess(res, {
     success: true,
     authorized: true,
+    deviceToken,
     kiosk: {
       kioskId: kiosk.kioskId,
       deviceSerialNumber: kiosk.deviceSerialNumber,
@@ -225,11 +246,44 @@ router.post('/heartbeat', asyncRoute(async (req, res) => {
   });
   if (!updated) return sendError(res, 'NOT_FOUND', 'Unknown kiosk device', 404);
 
+  // On-demand retrieval queue: recordings whose master sits on this device and
+  // a warden has asked for. The heartbeat is how the request reaches a kiosk
+  // that holds no user session (idle, between inmates). Fresh 'requested'
+  // items expire after 30 minutes (warden just re-requests); 'transferring'
+  // items get a 2-hour window measured from their start so a slow upload or a
+  // kiosk process restart mid-transfer can still re-queue itself.
+  let pendingRetrievals = [];
+  try {
+    const recordings = await readDb('recordings.json');
+    const now = Date.now();
+    pendingRetrievals = recordings
+      .filter((r) => {
+        if (r.kioskId !== updated.kioskId) return false;
+        if (r.storage !== 'kiosk' || !r.retrieval) return false;
+        const st = r.retrieval.status;
+        if (st !== 'requested' && st !== 'transferring') return false;
+        const windowMs = st === 'transferring' ? RETRIEVE_TRANSFER_TTL_MS : RETRIEVE_REQUEST_TTL_MS;
+        const anchor = st === 'transferring'
+          ? (r.retrieval.startedAt || r.retrieval.requestedAt)
+          : r.retrieval.requestedAt;
+        const at = anchor ? Date.parse(anchor) : 0;
+        return at >= now - windowMs;
+      })
+      .map((r) => ({
+        recordingId: r.recordingId,
+        callId: r.callId,
+        fileName: r.localFileName || r.fileName || null
+      }));
+  } catch (err) {
+    console.warn('[kiosks] pendingRetrievals lookup failed:', err.message);
+  }
+
   return sendSuccess(res, {
     ok: true,
     kioskId: updated.kioskId,
     status: kioskDisplayStatus(updated),
     lastSeen: updated.lastSeen,
+    pendingRetrievals
   });
 }));
 

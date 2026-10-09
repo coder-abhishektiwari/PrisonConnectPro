@@ -46,6 +46,12 @@ class SessionManager @Inject constructor(
         private val KEY_KIOSK_IP = stringPreferencesKey("kiosk_ip")
         private val KEY_KIOSK_AUTHORIZED = booleanPreferencesKey("kiosk_authorized")
 
+        // Device credential issued by /kiosks/verify — NOT an auth session, so
+        // clearAuthOnly() leaves it alone: background workers (recording
+        // register/retrieve) still authenticate after an app restart wiped
+        // every user token.
+        private val KEY_DEVICE_TOKEN = stringPreferencesKey("device_token")
+
         private val KEY_ADMIN_ID = stringPreferencesKey("admin_id")
         private val KEY_ADMIN_EMPLOYEE_ID = stringPreferencesKey("admin_employee_id")
         private val KEY_ADMIN_NAME = stringPreferencesKey("admin_name")
@@ -81,6 +87,22 @@ class SessionManager @Inject constructor(
      */
     suspend fun getAccessToken(): String? =
         context.dataStore.data.first()[KEY_ACCESS_TOKEN]
+
+    /**
+     * Save the long-lived device token from /kiosks/verify.
+     */
+    suspend fun saveDeviceToken(token: String?) {
+        context.dataStore.edit { prefs ->
+            if (token.isNullOrBlank()) prefs.remove(KEY_DEVICE_TOKEN)
+            else prefs[KEY_DEVICE_TOKEN] = token
+        }
+    }
+
+    /**
+     * Get the device token (used when no user session exists).
+     */
+    suspend fun getDeviceToken(): String? =
+        context.dataStore.data.first()[KEY_DEVICE_TOKEN]
 
     /**
      * Get the current refresh token, or null if not logged in.

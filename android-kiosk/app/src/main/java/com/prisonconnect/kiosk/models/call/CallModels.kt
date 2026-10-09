@@ -162,6 +162,22 @@ data class RecordingUploadChunkResponse(
     @SerializedName("complete") val complete: Boolean = false
 )
 
+// ---- on-demand retrieval: metadata registration, file stays on the device ----
+
+/** Metadata-only registration — the encrypted master copy never leaves the kiosk. */
+data class RecordingRegisterRequest(
+    @SerializedName("callId") val callId: String,
+    @SerializedName("fileName") val fileName: String,
+    @SerializedName("size") val size: Long,
+    @SerializedName("sha256") val sha256: String,
+    @SerializedName("durationSeconds") val durationSeconds: Int? = null
+)
+
+data class RecordingRegisterResponse(
+    @SerializedName("recordingId") val recordingId: String? = null,
+    @SerializedName("storage") val storage: String? = null
+)
+
 /** Slim snapshot of a call used by the kiosk progress screen. */
 data class CallStatusSnapshot(
     @SerializedName("callId") val callId: String? = null,

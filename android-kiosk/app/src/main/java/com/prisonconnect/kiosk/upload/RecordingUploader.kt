@@ -11,6 +11,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileInputStream
+import java.io.InputStream
 import java.io.RandomAccessFile
 import java.security.MessageDigest
 import javax.inject.Inject
@@ -27,15 +28,16 @@ import javax.inject.Singleton
  *    server's 10 MB limit);
  *  - each step retries a few times with backoff, then gives the attempt back
  *    to WorkManager, which retries the whole job with a longer backoff.
- *  - the local file is deleted only after the server acknowledges the
- *    completed upload with a recordingId.
+ *  - the local file is NEVER deleted here: on the retrieval path it is either
+ *    the kiosk's master copy (must survive) or a temp decrypt target the
+ *    worker owns. File lifecycle belongs to the caller.
  */
 @Singleton
 class RecordingUploader @Inject constructor(
     private val apiService: TrustApiService
 ) {
 
-    /** @return true when the file is fully uploaded (and deleted locally). */
+    /** @return true when the file is fully uploaded. */
     suspend fun upload(file: File, callId: String): Boolean = withContext(Dispatchers.IO) {
         try {
             if (!file.exists()) return@withContext true
@@ -119,8 +121,7 @@ class RecordingUploader @Inject constructor(
                 return@withContext false
             }
 
-            val deleted = file.delete()
-            Logger.i("Uploader: done recordingId=${completed.recordingId} localDeleted=$deleted")
+            Logger.i("Uploader: done recordingId=${completed.recordingId} file=${file.name}")
             true
         } catch (c: CancellationException) {
             throw c
@@ -150,27 +151,30 @@ class RecordingUploader @Inject constructor(
         throw last ?: IllegalStateException("$what failed")
     }
 
-    private fun sha256Of(file: File): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        val buffer = ByteArray(256 * 1024)
-        FileInputStream(file).use { input ->
-            while (true) {
-                val read = input.read(buffer)
-                if (read < 0) break
-                digest.update(buffer, 0, read)
-            }
-        }
-        return digest.digest().joinToString("") { "%02x".format(it) }
-    }
+    private fun sha256Of(file: File): String = sha256OfStream(FileInputStream(file))
 
     companion object {
         /** Raw bytes per request (base64 => ~6.7 MB on the wire, < 10 MB cap). */
         const val CHUNK_BYTES = 5 * 1024 * 1024
 
         /** Below this a file is a discarded fragment, not a recording. */
-        private const val MIN_USEFUL_BYTES = 1024L
+        const val MIN_USEFUL_BYTES = 1024L
 
         private const val RETRY_ATTEMPTS = 4
         private const val RETRY_BASE_DELAY_MS = 1_000L
+
+        /** SHA-256 of a whole stream, hex-encoded lowercase (register + upload must agree). */
+        fun sha256OfStream(input: InputStream): String {
+            val digest = MessageDigest.getInstance("SHA-256")
+            val buffer = ByteArray(256 * 1024)
+            input.use {
+                while (true) {
+                    val read = it.read(buffer)
+                    if (read < 0) break
+                    digest.update(buffer, 0, read)
+                }
+            }
+            return digest.digest().joinToString("") { "%02x".format(it) }
+        }
     }
 }

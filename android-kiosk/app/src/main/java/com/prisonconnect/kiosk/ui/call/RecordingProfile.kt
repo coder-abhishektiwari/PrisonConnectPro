@@ -17,13 +17,14 @@ data class RecordingProfile(
 ) {
     companion object {
         /** ~14 MB per 5 minutes. */
-        val LIGHT = RecordingProfile("light", 540, 960, 12, 350_000, 64_000)
+        val LIGHT = RecordingProfile("light", 540, 960, 12, 450_000, 64_000)
 
-        /** ~24 MB per 5 minutes — default. */
-        val BALANCED = RecordingProfile("balanced", 720, 1280, 15, 600_000, 64_000)
+        /** ~45 MB per 5 minutes — default. Bitrate sized so the hardware
+         *  encoder does not drop frames to hold the rate at 720p15. */
+        val BALANCED = RecordingProfile("balanced", 720, 1280, 15, 1_200_000, 64_000)
 
-        /** ~39 MB per 5 minutes. */
-        val HIGH = RecordingProfile("high", 720, 1280, 30, 1_000_000, 64_000)
+        /** ~94 MB per 5 minutes. */
+        val HIGH = RecordingProfile("high", 720, 1280, 30, 2_500_000, 64_000)
 
         /** Profile applied to the next recording; refreshed from settings. */
         @Volatile

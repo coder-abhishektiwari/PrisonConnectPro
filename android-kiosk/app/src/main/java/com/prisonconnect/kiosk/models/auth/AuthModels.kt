@@ -45,7 +45,9 @@ data class KioskVerifyRequest(
 data class KioskVerifyResponse(
     @SerializedName("success") val success: Boolean,
     @SerializedName("authorized") val authorized: Boolean,
-    @SerializedName("kiosk") val kiosk: KioskInfo?
+    @SerializedName("kiosk") val kiosk: KioskInfo?,
+    /** Long-lived device credential for background workers (recording register/retrieve). */
+    @SerializedName("deviceToken") val deviceToken: String? = null
 )
 
 data class KioskInfo(
@@ -118,5 +120,14 @@ data class KioskHeartbeatResponse(
     @SerializedName("ok") val ok: Boolean = false,
     @SerializedName("kioskId") val kioskId: String? = null,
     @SerializedName("status") val status: String? = null,
-    @SerializedName("lastSeen") val lastSeen: String? = null
+    @SerializedName("lastSeen") val lastSeen: String? = null,
+    /** Recordings a warden asked this device to push to the backend. */
+    @SerializedName("pendingRetrievals") val pendingRetrievals: List<PendingRetrieval>? = null
+)
+
+/** One on-demand retrieval request delivered over the heartbeat. */
+data class PendingRetrieval(
+    @SerializedName("recordingId") val recordingId: String,
+    @SerializedName("callId") val callId: String,
+    @SerializedName("fileName") val fileName: String? = null
 )

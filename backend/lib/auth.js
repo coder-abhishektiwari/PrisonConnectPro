@@ -10,8 +10,8 @@ if (!JWT_SECRET) {
 const ACCESS_TOKEN_TTL = process.env.ACCESS_TOKEN_TTL || '1h';
 const REFRESH_TOKEN_TTL = process.env.REFRESH_TOKEN_TTL || '7d';
 
-function signAccessToken(payload) {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: ACCESS_TOKEN_TTL });
+function signAccessToken(payload, expiresIn = ACCESS_TOKEN_TTL) {
+  return jwt.sign(payload, JWT_SECRET, { expiresIn });
 }
 
 function signRefreshToken(payload) {

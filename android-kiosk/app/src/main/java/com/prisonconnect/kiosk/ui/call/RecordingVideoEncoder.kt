@@ -38,6 +38,7 @@ class RecordingVideoEncoder(
     private var inputSurface: Surface? = null
     private var trackIndex = -1
     private var encodedFrames = 0L
+    private var writtenSamples = 0L
 
     val isRunning: Boolean get() = running.get()
     val frameCount: Long get() = encodedFrames
@@ -187,6 +188,10 @@ class RecordingVideoEncoder(
                 if (buffer != null) {
                     buffer.position(info.offset)
                     buffer.limit(info.offset + info.size)
+                    writtenSamples++
+                    if (writtenSamples == 1L || writtenSamples % 300L == 0L) {
+                        Logger.d("VideoEncoder out#$writtenSamples ptsUs=${info.presentationTimeUs} size=${info.size}")
+                    }
                     muxer.write(trackIndex, buffer, info)
                 }
             }

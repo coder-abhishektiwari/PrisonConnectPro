@@ -51,6 +51,24 @@ export function useWardenSocket(
         invalidatePrefix('recordings');
         onRecordingUpdate?.(data);
       },
+      // Kiosk registered a recording's metadata (file stays on the device).
+      'recording-registered': (data) => {
+        console.log('[Socket] Recording registered:', data);
+        invalidatePrefix('recordings');
+        onRecordingUpdate?.(data);
+      },
+      // Retrieval accepted / bytes moving — row shows "Retrieving file…".
+      'recording-retrieving': (data) => {
+        console.log('[Socket] Recording retrieving:', data);
+        invalidatePrefix('recordings');
+        onRecordingUpdate?.(data);
+      },
+      // Status flips (ready / expired) outside of this tab's own poll.
+      'recording-updated': (data) => {
+        console.log('[Socket] Recording updated:', data);
+        invalidatePrefix('recordings');
+        onRecordingUpdate?.(data);
+      },
       'settings-updated': (data) => {
         console.log('[Socket] Settings updated:', data);
         invalidatePrefix('settings', 'wallets', 'wallets:all');

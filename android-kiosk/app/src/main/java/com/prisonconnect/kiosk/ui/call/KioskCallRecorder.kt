@@ -20,6 +20,7 @@ import java.io.File
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.locks.LockSupport
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -53,6 +54,8 @@ class KioskCallRecorder @Inject constructor(
     @Volatile private var stitcher: StereoStitcher? = null
     @Volatile private var pcmQueue: ArrayBlockingQueue<ByteArray>? = null
     @Volatile private var worker: Thread? = null
+    @Volatile private var pacer: Thread? = null
+    @Volatile private var sessionStartNs = 0L
 
     // Video side: encoder + composition thread.
     @Volatile private var encoder: RecordingVideoEncoder? = null
@@ -97,9 +100,7 @@ class KioskCallRecorder @Inject constructor(
 
     /** Kiosk microphone chunk. */
     override fun onWebRtcAudioRecordSamplesReady(samples: JavaAudioDeviceModule.AudioSamples) {
-        val st = stitcher ?: return
-        st.pushMic(samples)
-        pump()
+        stitcher?.pushMic(samples)
     }
 
     /** Family-side playout chunk — this is the other half of the recording. */
@@ -107,12 +108,26 @@ class KioskCallRecorder @Inject constructor(
         stitcher?.pushPlayback(samples)
     }
 
-    private fun pump() {
-        val queue = pcmQueue ?: return
-        val st = stitcher ?: return
-        while (true) {
-            val frame = st.poll() ?: return
-            queue.offer(frame)
+    /**
+     * Wall-clock emission of 10 ms stereo frames. Driving the queue from a
+     * timer instead of the microphone keeps the file's timeline honest:
+     * while the mic tap is dead (pre-connect, or the user mutes mid-call)
+     * the stitcher still yields frames of silence, so audio never loses
+     * time against the video track. A backlog above [CATCHUP_BACKLOG_MS]
+     * skips the sleep so queued input drains at real-time speed.
+     */
+    private fun audioPacer(st: StereoStitcher, queue: ArrayBlockingQueue<ByteArray>) {
+        var next = System.nanoTime()
+        while (running.get()) {
+            queue.offer(st.poll())
+            next += PACER_INTERVAL_NS
+            val now = System.nanoTime()
+            val backlog = st.backlogMs()
+            when {
+                backlog > CATCHUP_BACKLOG_MS -> next = now
+                next > now -> LockSupport.parkNanos(next - now)
+                now - next > PACER_INTERVAL_NS -> next = now
+            }
         }
     }
 
@@ -152,6 +167,8 @@ class KioskCallRecorder @Inject constructor(
 
         val st = StereoStitcher().also { it.reset() }
         stitcher = st
+        val startNs = System.nanoTime()
+        sessionStartNs = startNs
 
         val dir = appContext.getExternalFilesDir("Recordings")
             ?: File(appContext.filesDir, "Recordings")
@@ -164,7 +181,7 @@ class KioskCallRecorder @Inject constructor(
 
         val wantVideo = recordVideo && eglContext != null
         val location = lastKnownLocation()
-        val newMuxer = RecordingMuxer(file, if (wantVideo) 2 else 1, location)
+        val newMuxer = RecordingMuxer(file, if (wantVideo) 2 else 1, location, startNs)
         muxer = newMuxer
 
         // Audio first: its format is fixed (48 kHz stereo AAC), so it can start
@@ -175,6 +192,10 @@ class KioskCallRecorder @Inject constructor(
             { audioLoop(queue, newMuxer) },
             "kiosk-call-recorder"
         ).apply { start() }
+        pacer = Thread({ audioPacer(st, queue) }, "kiosk-rec-audio-pacer").apply {
+            isDaemon = true
+            start()
+        }
 
         if (wantVideo) {
             val enc = RecordingVideoEncoder(
@@ -187,7 +208,7 @@ class KioskCallRecorder @Inject constructor(
             )
             if (enc.start()) {
                 encoder = enc
-                val comp = VideoComposer(enc, profile)
+                val comp = VideoComposer(enc, profile, startNs)
                 if (comp.start()) {
                     composer = comp
                 } else {
@@ -222,6 +243,11 @@ class KioskCallRecorder @Inject constructor(
         encoder = null
 
         try {
+            pacer?.join(2_000)
+        } catch (_: InterruptedException) {}
+        pacer = null
+
+        try {
             worker?.join(10_000)
         } catch (_: InterruptedException) {}
         worker = null
@@ -236,9 +262,13 @@ class KioskCallRecorder @Inject constructor(
         val size = file?.length() ?: 0L
         Logger.i("Recording finalized size=$size path=$path")
         if (file != null && size > 0) {
-            // WorkManager takes over: retries with backoff across restarts and
-            // only deletes the local file once the server has acknowledged it.
-            RecordingUploadWorker.enqueue(appContext, file, currentCallId)
+            // WorkManager takes over: registers the metadata with the backend
+            // (dashboard row appears) and then encrypts the master in place.
+            // The file itself stays on the device until a warden retrieves it.
+            val durationSeconds = if (sessionStartNs > 0) {
+                ((System.nanoTime() - sessionStartNs) / 1_000_000_000L).toInt().coerceAtLeast(1)
+            } else null
+            RecordingUploadWorker.enqueueRegister(appContext, file, currentCallId, durationSeconds)
         }
     }
 
@@ -380,5 +410,11 @@ class KioskCallRecorder @Inject constructor(
     companion object {
         /** ~4 s of stitched stereo PCM held before frames start being dropped. */
         private const val AUDIO_QUEUE_FRAMES = 400
+
+        /** One stitched frame = 10 ms of audio. */
+        private const val PACER_INTERVAL_NS = 10_000_000L
+
+        /** Input backlog above which the pacer skips its sleep and drains. */
+        private const val CATCHUP_BACKLOG_MS = 50
     }
 }

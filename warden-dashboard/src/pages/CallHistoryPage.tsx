@@ -15,6 +15,8 @@ import ExcelJS from 'exceljs';
 import type { CallHistoryItem, Recording, Inmate, CallHistoryParams, PaginatedCallsResponse, PaginatedResponse, KioskItem, ListParams, Pricing } from '@/services/api/wardenApi';
 
 const PAGE_SIZE = 20;
+const RETRIEVAL_POLL_MS = 2_000;
+const RETRIEVAL_TIMEOUT_MS = 10 * 60 * 1000;
 
 export function CallHistoryPage() {
   const [search, setSearch] = useState('');
@@ -26,6 +28,9 @@ export function CallHistoryPage() {
   const [playing, setPlaying] = useState<Recording | null>(null);
   const [detailUrl, setDetailUrl] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  // On-demand retrieval: which recording this tab is pulling, with progress.
+  const [retrieval, setRetrieval] = useState<{ recordingId: string; receivedBytes?: number; size?: number } | null>(null);
+  const [retrievalError, setRetrievalError] = useState<string | null>(null);
 
   const [typeFilter, setTypeFilter] = useState<ColumnFilter>({ value: 'all', open: false });
   const [statusFilter, setStatusFilter] = useState<ColumnFilter>({ value: 'all', open: false });
@@ -110,6 +115,85 @@ export function CallHistoryPage() {
       setPlaying({ ...rec, url: null });
     }
   };
+
+  // "Retrieve" — the master copy lives encrypted on the kiosk; this asks it
+  // (over its heartbeat) to push a temporary copy to the backend, which the
+  // TTL sweep deletes later. Idempotent server-side, so a double click is safe.
+  const startRetrieve = async (rec: Recording) => {
+    setRetrievalError(null);
+    setRetrieval({ recordingId: rec.recordingId });
+    try {
+      const result = await wardenApi.retrieveRecording(rec.recordingId);
+      if (result?.status === 'ready' || result?.available) {
+        setRetrieval(null);
+        refreshRecordings();
+      }
+    } catch (e: any) {
+      const code = e?.response?.data?.error?.code;
+      setRetrieval(null);
+      setRetrievalError(
+        code === 'KIOSK_OFFLINE'
+          ? 'Kiosk is offline — retrieval will work once it reconnects.'
+          : code === 'UNAVAILABLE'
+            ? 'No recording file is available for this call.'
+            : 'Could not start retrieval. Please try again.',
+      );
+    }
+  };
+
+  // Poll while a retrieval is in flight: requested -> transferring -> ready.
+  const retrievalId = retrieval?.recordingId;
+  useEffect(() => {
+    if (!retrievalId) return;
+    let done = false;
+    const startedAt = Date.now();
+    const tick = async () => {
+      if (done) return;
+      try {
+        const s = await wardenApi.getRecordingStatus(retrievalId);
+        if (done || !s) return;
+        if (s.status === 'ready' || s.available) {
+          done = true;
+          setRetrieval(null);
+          refreshRecordings();
+          return;
+        }
+        if (s.status === 'kiosk_offline') {
+          done = true;
+          setRetrieval(null);
+          setRetrievalError('Kiosk went offline during retrieval.');
+          return;
+        }
+        if (s.status === 'unavailable') {
+          done = true;
+          setRetrieval(null);
+          setRetrievalError('Recording file is unavailable.');
+          return;
+        }
+        setRetrieval({ recordingId: retrievalId, receivedBytes: s.receivedBytes, size: s.size });
+        if (Date.now() - startedAt > RETRIEVAL_TIMEOUT_MS) {
+          done = true;
+          setRetrieval(null);
+          setRetrievalError('Retrieval timed out — the kiosk may have lost its connection.');
+        }
+      } catch {
+        // transient network error: keep polling
+      }
+    };
+    void tick();
+    const iv = setInterval(tick, RETRIEVAL_POLL_MS);
+    return () => {
+      done = true;
+      clearInterval(iv);
+    };
+  }, [retrievalId, refreshRecordings]);
+
+  const drawerRec = selected ? recordings[selected.callId] : undefined;
+  const drawerRetrieving = !!drawerRec && (
+    retrieval?.recordingId === drawerRec.recordingId ||
+    drawerRec.retrieval?.status === 'requested' ||
+    drawerRec.retrieval?.status === 'transferring'
+  );
 
   const inmateParams = useMemo<ListParams>(() => ({ limit: 1000, offset: 0 }), []);
   const { data: inmatesData } = useCachedResource<PaginatedResponse<Inmate>>(
@@ -393,6 +477,25 @@ export function CallHistoryPage() {
                           <button onClick={() => void playRecording(rec)} className="w-9 h-9 bg-neutral-900 text-white rounded-full flex items-center justify-center hover:bg-black transition-colors shadow-sm" title="Play recording">
                             <svg className="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
                           </button>
+                        ) : rec && rec.storage === 'kiosk' ? (
+                          retrieval?.recordingId === rec.recordingId || rec.retrieval?.status === 'requested' || rec.retrieval?.status === 'transferring' ? (
+                            <span className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-bold border bg-info-100 text-info border-info/20" title="Kiosk is pushing the file to the server">
+                              <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none">
+                                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
+                                <path d="M4 12a8 8 0 0 1 8-8" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+                              </svg>
+                              Retrieving file…{retrieval?.size ? ` ${Math.min(100, Math.round(((retrieval.receivedBytes || 0) / retrieval.size) * 100))}%` : ''}
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => void startRetrieve(rec)}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border bg-primary-600 text-white border-primary-600 hover:bg-primary-700 transition-colors shadow-sm"
+                              title="The recording is stored on the kiosk — pull it to the server to watch"
+                            >
+                              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2M12 4v12m0 0l-4-4m4 4l4-4" /></svg>
+                              Retrieve
+                            </button>
+                          )
                         ) : (
                           <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border bg-neutral-100 text-neutral-500 border-neutral-200">Not Available</span>
                         )}
@@ -526,8 +629,37 @@ export function CallHistoryPage() {
                     <a href={detailUrl} download className="mt-2 inline-block px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-bold hover:bg-primary-700">⬇ Download</a>
                   </div>
                 )}
+
+                {!detailUrl && drawerRec?.storage === 'kiosk' && (
+                  <div className="mt-6">
+                    <p className="text-sm font-semibold text-neutral-900 mb-2">Recording</p>
+                    <p className="text-sm text-neutral-600 mb-3">This recording is stored on the kiosk. Retrieve it to watch or download.</p>
+                    {drawerRetrieving ? (
+                      <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold border bg-info-100 text-info border-info/20">
+                        <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none">
+                          <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
+                          <path d="M4 12a8 8 0 0 1 8-8" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+                        </svg>
+                        Retrieving file…
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => void startRetrieve(drawerRec)}
+                        className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-bold hover:bg-primary-700"
+                      >
+                        ⬇ Retrieve from kiosk
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
+          </div>
+        )}
+        {retrievalError && (
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[1000] flex items-center gap-3 px-4 py-3 bg-error text-white rounded-xl shadow-2xl text-sm font-semibold max-w-md">
+            <span>{retrievalError}</span>
+            <button onClick={() => setRetrievalError(null)} className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-xs shrink-0">✕</button>
           </div>
         )}
       </>, document.body)}

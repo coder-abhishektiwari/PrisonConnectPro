@@ -195,6 +195,28 @@ export interface Recording {
   encryption?: string;
   retentionDays?: number;
   status: string;
+  /** Where the master copy lives: 'kiosk' (retrieval needed) or 'backend'. */
+  storage?: 'kiosk' | 'backend';
+  /** On-demand retrieval lifecycle of the backend's temp copy. */
+  retrieval?: {
+    status?: 'requested' | 'transferring' | 'ready' | 'expired';
+    requestedAt?: string | null;
+    startedAt?: string | null;
+    completedAt?: string | null;
+    expiresAt?: string | null;
+    expiredAt?: string | null;
+  } | null;
+}
+
+/** Snapshot of one recording's retrieval/upload state (GET /recordings/:id/status). */
+export interface RecordingStatus {
+  status: 'ready' | 'transferring' | 'requested' | 'stored' | 'kiosk_offline' | 'unavailable';
+  available: boolean;
+  storage?: 'kiosk' | 'backend';
+  receivedBytes?: number;
+  size?: number;
+  expiresAt?: string | null;
+  requestedAt?: string | null;
 }
 
 export interface Alert {
@@ -588,6 +610,23 @@ export const wardenApi = {
       invalidatePrefix('recordings');
       return r.data?.data;
     }),
+
+  /**
+   * Ask the kiosk holding this recording's master copy to push it to the
+   * backend (temporary copy, TTL-swept later). 409 KIOSK_OFFLINE when the
+   * device has not heartbeated recently.
+   */
+  retrieveRecording: (recordingId: string) =>
+    apiClient
+      .post<ApiResponse<{ status: string; available?: boolean }>>(`/recordings/${recordingId}/retrieve`)
+      .then((r) => {
+        invalidatePrefix('recordings');
+        return r.data?.data;
+      }),
+
+  /** Poll point for the "Retrieving file…" overlay. */
+  getRecordingStatus: (recordingId: string) =>
+    apiClient.get<ApiResponse<RecordingStatus>>(`/recordings/${recordingId}/status`).then((r) => r.data?.data),
 
   // Alerts
   getAlerts: () =>

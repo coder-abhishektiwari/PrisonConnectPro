@@ -26,7 +26,8 @@ import java.util.concurrent.locks.LockSupport
  */
 internal class VideoComposer(
     private val encoder: RecordingVideoEncoder,
-    private val profile: RecordingProfile
+    private val profile: RecordingProfile,
+    private val sessionStartNs: Long = System.nanoTime()
 ) {
     private val running = AtomicBoolean(false)
     private var thread: Thread? = null
@@ -133,7 +134,11 @@ internal class VideoComposer(
             val waitNs = targetNs - System.nanoTime()
             if (waitNs > PARK_THRESHOLD_NS) LockSupport.parkNanos(waitNs)
 
-            renderOnce(index * intervalNs)
+            // Presentation times ride the session's absolute nanoTime clock
+            // (RecordingMuxer subtracts the base back off). HALs re-stamp
+            // zero-based input timestamps with their own frame clock, which
+            // compresses the whole recording; absolute stamps pass through.
+            renderOnce(sessionStartNs + index * intervalNs)
 
             // If rendering fell behind, jump the clock forward instead of
             // bursting frames: the file stays in sync with the wall clock and

@@ -29,6 +29,11 @@ class AuthInterceptor @Inject constructor(
     @Volatile
     private var cachedToken: String? = null
 
+    // Device credential from /kiosks/verify — used whenever no user session
+    // exists so background workers (recording register/retrieve) stay authenticated.
+    @Volatile
+    private var cachedDeviceToken: String? = null
+
     private val refreshMutex = Mutex()
 
     /**
@@ -36,6 +41,13 @@ class AuthInterceptor @Inject constructor(
      */
     fun setToken(token: String?) {
         cachedToken = token
+    }
+
+    /**
+     * Set the device token (called after kiosk verify).
+     */
+    fun setDeviceToken(token: String?) {
+        cachedDeviceToken = token
     }
 
     /**
@@ -48,6 +60,15 @@ class AuthInterceptor @Inject constructor(
      */
     fun loadTokenFromStorage() {
         cachedToken = runBlocking { sessionManager.getAccessToken() }
+    }
+
+    /**
+     * Load the device token from persistent storage.
+     */
+    fun loadDeviceTokenFromStorage() {
+        if (cachedDeviceToken == null) {
+            cachedDeviceToken = runBlocking { sessionManager.getDeviceToken() }
+        }
     }
 
     /**
@@ -65,7 +86,12 @@ class AuthInterceptor @Inject constructor(
             loadTokenFromStorage()
         }
 
-        val token = cachedToken
+        // User session first; fall back to the device token when nobody is
+        // logged in (idle kiosk, app just restarted).
+        val token = cachedToken ?: run {
+            loadDeviceTokenFromStorage()
+            cachedDeviceToken
+        }
         val requestBuilder = originalRequest.newBuilder()
 
         // Add Authorization header if token exists
@@ -92,6 +118,18 @@ class AuthInterceptor @Inject constructor(
                     retryBuilder.header("X-Admin-ID", retryAdminId)
                 }
                 response = chain.proceed(retryBuilder.build())
+            } else {
+                // No refresh token (idle kiosk / wiped session): retry once
+                // with the device credential so background work still lands.
+                loadDeviceTokenFromStorage()
+                val device = cachedDeviceToken
+                if (!device.isNullOrBlank() && device != token) {
+                    response = chain.proceed(
+                        originalRequest.newBuilder()
+                            .header("Authorization", "Bearer $device")
+                            .build()
+                    )
+                }
             }
         }
 

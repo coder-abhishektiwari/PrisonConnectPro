@@ -8,10 +8,11 @@ import org.webrtc.audio.JavaAudioDeviceModule
  * left = kiosk, right = family.
  *
  * The two taps run on different WebRTC audio threads with independent clocks,
- * so each side is resampled to [TARGET_RATE], held in a bounded FIFO and
- * emitted in lock-step with the microphone: a slightly late family side is
- * padded with silence, a runaway one is trimmed. Both callbacks are non-
- * blocking (offer-only) so nothing here can ever stall the live call.
+ * so each side is resampled to [TARGET_RATE] and held in a bounded FIFO. A
+ * wall-clock pacer pops 10 ms stereo frames: a side that is behind (mic
+ * muted, pre-connect, playout gap) contributes silence, a runaway one is
+ * trimmed. Both callbacks are non-blocking (offer-only) so nothing here can
+ * ever stall the live call.
  */
 internal class StereoStitcher {
 
@@ -37,12 +38,12 @@ internal class StereoStitcher {
     }
 
     /**
-     * Pops one 10 ms stereo frame, or null when the mic side has not caught up.
-     * Call repeatedly until it returns null (drive side: microphone).
+     * Pops one 10 ms stereo frame. Always returns a frame: empty sides emit
+     * silence, so a wall-clock pacer can drive the recording's timeline
+     * through microphone mute and the pre-connect gap without compressing
+     * the A/V timeline (the mic tap stops entirely while muted).
      */
-    fun poll(): ByteArray? = synchronized(this) {
-        if (mic.out.size < FRAME_SAMPLES) return null
-
+    fun poll(): ByteArray = synchronized(this) {
         // Bound both sides so a stalled partner can never grow without limit.
         if (mic.out.size > MAX_DEPTH) mic.out.dropOldest(mic.out.size - MAX_DEPTH)
         if (remote.out.size > MAX_DEPTH) remote.out.dropOldest(remote.out.size - MAX_DEPTH)
@@ -59,6 +60,11 @@ internal class StereoStitcher {
             o += 4
         }
         bytes
+    }
+
+    /** Backlog of the fuller input side, in milliseconds. */
+    fun backlogMs(): Int = synchronized(this) {
+        maxOf(mic.out.size, remote.out.size) * 1000 / TARGET_RATE
     }
 
     /** One input side: resamples to [TARGET_RATE] and buffers in [out]. */

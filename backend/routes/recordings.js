@@ -25,6 +25,65 @@ const chunkLocks = new Map();
 // kiosk operator/admin session is equally valid for the same device.
 const KIOSK_UPLOAD_ROLES = ['admin', 'warden', 'kiosk', 'kiosk_admin', 'inmate'];
 
+// ============ on-demand retrieval: kiosk master -> backend temp copy ============
+// The kiosk keeps the encrypted master copy; a warden's Play click pulls a
+// temporary copy into the backend, which is TTL-deleted afterwards so Render's
+// disk never accumulates recordings (the master stays on the device).
+const KIOSK_COPY_TTL_MS = (Number(process.env.RECORDING_TEMP_TTL_HOURS) > 0
+  ? Number(process.env.RECORDING_TEMP_TTL_HOURS)
+  : 24) * 60 * 60 * 1000;
+// Same grace the devices page uses: 4 missed 30s heartbeats = offline.
+const KIOSK_ONLINE_GRACE_MS = 4 * 30 * 1000;
+// A retrieve request the kiosk never acted on stops counting as in-flight.
+const RETRIEVE_REQUEST_TTL_MS = 30 * 60 * 1000;
+
+async function findKioskOnline(kioskId) {
+  if (!kioskId) return false;
+  const kiosks = await readDb('kiosks.json');
+  const kiosk = kiosks.find((k) => k.kioskId === kioskId);
+  const beat = kiosk && kiosk.lastHeartbeatAt ? Date.parse(kiosk.lastHeartbeatAt) : NaN;
+  return Number.isFinite(beat) && Date.now() - beat <= KIOSK_ONLINE_GRACE_MS;
+}
+
+function kioskCopyExpired(rec) {
+  const exp = rec && rec.retrieval && rec.retrieval.expiresAt
+    ? Date.parse(rec.retrieval.expiresAt)
+    : NaN;
+  return Number.isFinite(exp) && Date.now() > exp;
+}
+
+/** Flip a requested retrieval to 'transferring' once bytes start landing. */
+async function markRetrievalTransferring(callId) {
+  await updateDb('recordings.json', (all) => {
+    const idx = all.findIndex((r) => r.callId === callId && r.storage === 'kiosk');
+    if (idx === -1 || !all[idx].retrieval || all[idx].retrieval.status !== 'requested') {
+      return { data: all, result: null };
+    }
+    all[idx] = {
+      ...all[idx],
+      retrieval: { ...all[idx].retrieval, status: 'transferring', startedAt: new Date().toISOString() }
+    };
+    return { data: all, result: all[idx] };
+  });
+}
+
+/** Best-effort progress of an in-flight chunked upload for a call. */
+async function findUploadMetaForCall(callId) {
+  try {
+    const entries = await fs.promises.readdir(UPLOADS_DIR);
+    for (const id of entries) {
+      const meta = await readUploadMeta(id);
+      if (meta && meta.callId === callId) {
+        const st = await fs.promises.stat(uploadPartPath(id)).catch(() => null);
+        return { ...meta, receivedBytes: st ? st.size : 0 };
+      }
+    }
+  } catch (err) {
+    // No upload sessions yet.
+  }
+  return null;
+}
+
 function uploadDir(uploadId) {
   return path.join(UPLOADS_DIR, uploadId);
 }
@@ -103,14 +162,36 @@ async function findCall(callId) {
 
 /** Shared tail for every accepted upload: DB record + call status + event. */
 async function persistUpload(broadcastEvent, callId, rec) {
+  let prevFilePath = null;
   await updateDb('recordings.json', (all) => {
     const existingIdx = all.findIndex((r) => r.callId === callId || r.recordingId === rec.recordingId);
     if (existingIdx !== -1) {
-      all[existingIdx] = { ...all[existingIdx], ...rec };
+      prevFilePath = all[existingIdx].filePath || null;
+      let merged = { ...all[existingIdx], ...rec };
+      // A master held on the kiosk just landed a fresh backend copy: that copy
+      // is temporary, so stamp the TTL the sweep will act on.
+      if (all[existingIdx].storage === 'kiosk') {
+        merged = {
+          ...merged,
+          storage: 'kiosk',
+          retrieval: {
+            ...(all[existingIdx].retrieval || {}),
+            status: 'ready',
+            completedAt: new Date().toISOString(),
+            expiresAt: new Date(Date.now() + KIOSK_COPY_TTL_MS).toISOString()
+          }
+        };
+      }
+      all[existingIdx] = merged;
       return { data: all, result: all[existingIdx] };
     }
     return { data: [...all, rec], result: rec };
   });
+
+  // Re-retrieval replaced an older temp copy - drop it so it cannot linger.
+  if (prevFilePath && rec.filePath && prevFilePath !== rec.filePath) {
+    fs.promises.unlink(prevFilePath).catch(() => {});
+  }
 
   await updateDb('calls.json', (calls) => {
     const c = calls.find((x) => x.callId === callId || x.roomId === callId);
@@ -149,15 +230,101 @@ function safeEqual(a, b) {
   return crypto.timingSafeEqual(ha, hb);
 }
 
-/** Recording as exposed to dashboards: playable flag, never server paths. */
+/**
+ * Recording as exposed to dashboards: playable flag, never server paths.
+ * `storage: 'kiosk'` means the master copy lives on the device and any
+ * backend file is a temporary copy whose TTL may already have passed.
+ */
 function publicRecording(rec) {
   const { filePath, ...rest } = rec || {};
-  return { ...rest, url: null, available: !!recordingFileOf(rec) };
+  const expired = kioskCopyExpired(rec);
+  const available = !!recordingFileOf(rec) && !expired;
+  return {
+    ...rest,
+    url: null,
+    available,
+    storage: (rec && rec.storage) || 'backend',
+    retrieval: (rec && rec.retrieval) || null
+  };
 }
 
 function createRecordingsRouter(broadcastEvent) {
   router.get('/', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) =>
     sendSuccess(res, (await scopeList(req, await readDb('recordings.json'))).map(publicRecording))));
+
+  // ---- metadata-only registration: the file stays encrypted on the kiosk ----
+  router.post('/register', requireAuth, requireRole(...KIOSK_UPLOAD_ROLES), asyncRoute(async (req, res) => {
+    const { callId, fileName, size, sha256, durationSeconds } = req.body || {};
+    if (!callId || !fileName || !Number.isFinite(size) || size <= 0) {
+      return sendError(res, 'INVALID_REQUEST', 'callId, fileName and size are required', 400);
+    }
+
+    const call = await findCall(callId);
+    if (!call || !(await inUploadScope(req, call))) {
+      return sendError(res, 'CALL_NOT_FOUND', 'No call matches the given callId', 404);
+    }
+
+    let created;
+    await updateDb('recordings.json', (all) => {
+      const idx = all.findIndex((r) => r.callId === call.callId || r.recordingId === `REC-${call.callId}`);
+      if (idx !== -1) {
+        const prev = all[idx];
+        // A row that already holds a backend file (old auto-upload flow) keeps
+        // it untouched; otherwise this is the master's metadata.
+        const hasBackendFile = !!prev.filePath;
+        all[idx] = {
+          ...prev,
+          fileName: hasBackendFile ? prev.fileName : fileName,
+          // The name the file has ON THE KIOSK. persistUpload may later
+          // overwrite `fileName` with the backend's REC-*.mp4 name — this
+          // field is what the heartbeat must serve so the device can find
+          // its own copy when the warden hits Retrieve.
+          localFileName: hasBackendFile ? prev.localFileName || null : fileName,
+          fileSize: hasBackendFile ? prev.fileSize : size,
+          localSha256: sha256 || prev.localSha256 || null,
+          duration: durationSeconds != null ? durationSeconds : (prev.duration || 0),
+          storage: hasBackendFile ? prev.storage || 'backend' : 'kiosk',
+          status: 'completed',
+          registeredAt: prev.registeredAt || new Date().toISOString()
+        };
+        created = all[idx];
+        return { data: all, result: all[idx] };
+      }
+
+      const rec = {
+        recordingId: `REC-${call.callId}`,
+        callId: call.callId,
+        kioskId: call.kioskId || kioskScopeOf(req) || null,
+        inmateId: call.inmateId || null,
+        contactId: call.contactId || null,
+        fileName,
+        localFileName: fileName,
+        fileSize: size,
+        mimeType: 'video/mp4',
+        localSha256: sha256 || null,
+        duration: durationSeconds || 0,
+        storage: 'kiosk',
+        status: 'completed',
+        registeredAt: new Date().toISOString(),
+        createdAt: new Date().toISOString()
+      };
+      all.push(rec);
+      created = rec;
+      return { data: all, result: rec };
+    });
+
+    await updateDb('calls.json', (calls) => {
+      const c = calls.find((x) => x.callId === call.callId || x.roomId === call.callId);
+      if (c) {
+        c.recordingStatus = 'completed';
+        c.recordingId = created.recordingId;
+      }
+      return { data: calls, result: c };
+    });
+
+    broadcastEvent('recording-registered', created);
+    return sendSuccess(res, { recordingId: created.recordingId, storage: created.storage }, 201);
+  }));
 
   // ---- chunked upload: init (also the resume point) ----
   router.post('/upload/init', requireAuth, requireRole(...KIOSK_UPLOAD_ROLES), asyncRoute(async (req, res) => {
@@ -177,6 +344,9 @@ function createRecordingsRouter(broadcastEvent) {
     // rec-<roomId>-...), but recordings.call_id is a foreign key to calls.id.
     // Store the canonical callId so the final INSERT cannot violate it.
     const canonicalCallId = call.callId;
+
+    // First bytes of a retrieval upload: the request is now in flight.
+    await markRetrievalTransferring(canonicalCallId);
 
     await fs.promises.mkdir(UPLOADS_DIR, { recursive: true });
 
@@ -310,6 +480,93 @@ function createRecordingsRouter(broadcastEvent) {
       await persistUpload(broadcastEvent, call.callId, rec);
       return sendSuccess(res, rec, 200);
     })));
+
+  // ---- on-demand retrieval: ask the kiosk to push its master copy ----
+  router.post('/:recordingId/retrieve', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
+    const recordings = await readDb('recordings.json');
+    const recording = recordings.find((r) => r.recordingId === req.params.recordingId);
+    if (!recording || !(await inScopeOf(req, recording))) {
+      return sendError(res, 'NOT_FOUND', 'Recording not found', 404);
+    }
+
+    // A fresh temp copy is already here - nothing to do.
+    if (recordingFileOf(recording) && !kioskCopyExpired(recording)) {
+      return sendSuccess(res, { status: 'ready', available: true });
+    }
+    if ((recording.storage || 'backend') !== 'kiosk') {
+      return sendError(res, 'UNAVAILABLE', 'No recording file is available for this recording', 404);
+    }
+    if (!(await findKioskOnline(recording.kioskId))) {
+      return sendError(res, 'KIOSK_OFFLINE', 'The kiosk holding this recording is currently offline', 409);
+    }
+
+    const now = Date.now();
+    const updated = await updateDb('recordings.json', (all) => {
+      const idx = all.findIndex((r) => r.recordingId === recording.recordingId);
+      if (idx === -1) return { data: all, result: null };
+      const prev = all[idx].retrieval || {};
+      const prevAt = prev.requestedAt ? Date.parse(prev.requestedAt) : 0;
+      if ((prev.status === 'requested' || prev.status === 'transferring') && now - prevAt < RETRIEVE_REQUEST_TTL_MS) {
+        return { data: all, result: all[idx] }; // already in flight
+      }
+      all[idx] = {
+        ...all[idx],
+        retrieval: {
+          ...prev,
+          status: 'requested',
+          requestedAt: new Date(now).toISOString(),
+          requestedBy: (req.auth && req.auth.sub) || null,
+          startedAt: null,
+          completedAt: null,
+          expiresAt: null
+        }
+      };
+      return { data: all, result: all[idx] };
+    });
+    if (!updated) return sendError(res, 'NOT_FOUND', 'Recording not found', 404);
+
+    broadcastEvent('recording-retrieving', updated);
+    return sendSuccess(res, { status: updated.retrieval.status });
+  }));
+
+  // ---- polling point for the dashboard's "Retrieving file..." overlay ----
+  router.get('/:recordingId/status', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
+    const recordings = await readDb('recordings.json');
+    const recording = recordings.find((r) => r.recordingId === req.params.recordingId);
+    if (!recording || !(await inScopeOf(req, recording))) {
+      return sendError(res, 'NOT_FOUND', 'Recording not found', 404);
+    }
+
+    const storage = recording.storage || 'backend';
+    const file = recordingFileOf(recording);
+    if (file && !kioskCopyExpired(recording)) {
+      return sendSuccess(res, {
+        status: 'ready',
+        available: true,
+        storage,
+        expiresAt: (recording.retrieval && recording.retrieval.expiresAt) || null
+      });
+    }
+
+    if (storage !== 'kiosk') {
+      return sendSuccess(res, { status: file ? 'ready' : 'unavailable', available: !!file, storage });
+    }
+    if (!(await findKioskOnline(recording.kioskId))) {
+      return sendSuccess(res, { status: 'kiosk_offline', available: false, storage });
+    }
+
+    const st = recording.retrieval && recording.retrieval.status;
+    const meta = await findUploadMetaForCall(recording.callId);
+    const progress = {
+      receivedBytes: meta ? meta.receivedBytes : 0,
+      size: (meta && meta.size) || recording.fileSize || 0,
+      requestedAt: (recording.retrieval && recording.retrieval.requestedAt) || null
+    };
+    if (st === 'transferring' || st === 'requested') {
+      return sendSuccess(res, { status: st, available: false, storage, ...progress });
+    }
+    return sendSuccess(res, { status: 'stored', available: false, storage, ...progress });
+  }));
 
   // ---- signed playback link (authenticated, in-scope callers only) ----
   router.get('/:recordingId/url', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
@@ -482,4 +739,43 @@ function createRecordingsRouter(broadcastEvent) {
   return router;
 }
 
+/**
+ * Deletes backend temp copies whose TTL has passed. Only rows whose master
+ * lives on the kiosk (`storage: 'kiosk'`) are touched — files uploaded by the
+ * old auto-upload flow are the only copy and must never be swept. The row
+ * survives, so the warden can simply retrieve it again.
+ */
+async function sweepKioskCopyTTL(broadcastEvent) {
+  try {
+    const all = await readDb('recordings.json');
+    for (const rec of all) {
+      if ((rec.storage || 'backend') !== 'kiosk' || !rec.filePath || !kioskCopyExpired(rec)) continue;
+      const file = recordingFileOf(rec);
+      if (file) await fs.promises.unlink(file).catch(() => {});
+      const updated = await updateDb('recordings.json', (rows) => {
+        const idx = rows.findIndex((r) => r.recordingId === rec.recordingId);
+        if (idx === -1) return { data: rows, result: null };
+        rows[idx] = {
+          ...rows[idx],
+          filePath: null,
+          fileSize: null,
+          retrieval: {
+            ...(rows[idx].retrieval || {}),
+            status: 'expired',
+            expiredAt: new Date().toISOString()
+          }
+        };
+        return { data: rows, result: rows[idx] };
+      });
+      if (updated) {
+        console.log(`[recordings] TTL sweep removed temp copy of ${rec.recordingId}`);
+        broadcastEvent('recording-updated', publicRecording(updated));
+      }
+    }
+  } catch (err) {
+    console.warn('[recordings] kiosk-copy TTL sweep failed:', err.message);
+  }
+}
+
 module.exports = createRecordingsRouter;
+module.exports.sweepKioskCopyTTL = sweepKioskCopyTTL;

@@ -235,6 +235,8 @@ class AuthRepositoryImpl @Inject constructor(
             if (response.success && response.data != null) {
                 if (response.data.authorized && response.data.kiosk != null) {
                     verifiedKiosk = response.data.kiosk.also { sessionManager.saveKioskInfo(it) }
+                    // Device credential for background workers (register/retrieve).
+                    response.data.deviceToken?.let { sessionManager.saveDeviceToken(it) }
                 } else {
                     verifiedKiosk = null
                     // Explicitly save unauthorized state to session manager

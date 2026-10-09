@@ -1061,6 +1061,11 @@ function startServer() {
   // Periodic sweep: finalize orphaned active calls every 2 minutes
   setInterval(() => sweepStaleCalls(broadcastEvent), 2 * 60 * 1000);
 
+  // On-demand retrieval temp copies are TTL-deleted (default 24h) so the
+  // server's disk only ever holds recordings someone is actually watching.
+  const { sweepKioskCopyTTL } = createRecordingsRouter;
+  setInterval(() => sweepKioskCopyTTL(broadcastEvent), 10 * 60 * 1000);
+
 // Razorpay reconciliation: catch payments the gateway captured while this
 // server could not process the webhook (downtime, restart). 15-min interval
 // plus one catch-up run a minute after boot.
