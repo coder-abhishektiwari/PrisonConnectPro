@@ -21,6 +21,14 @@ interface AuthRepository {
     fun identifyPrisoner(id: String): Flow<NetworkResult<InmateProfile>>
     fun verifyPin(inmateId: String, pin: String): Flow<NetworkResult<AuthToken>>
     fun verifyKiosk(request: KioskVerifyRequest): Flow<NetworkResult<KioskVerifyResponse>>
+
+    /**
+     * Fetch this kiosk's registered identity (serial, prison id/name) by the
+     * stable KIOSK_ID and persist it — side-effect free on failure (never
+     * touches the login session). Needed because the device-authorization
+     * gate can be off, in which case the normal verify path never runs.
+     */
+    fun hydrateKioskInfo(): Flow<NetworkResult<KioskInfo>>
     fun getVerifiedKiosk(): KioskInfo?
     suspend fun getInmateId(): String?
     suspend fun hasValidSession(): Boolean

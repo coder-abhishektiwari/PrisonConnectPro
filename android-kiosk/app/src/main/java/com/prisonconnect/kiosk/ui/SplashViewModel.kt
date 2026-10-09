@@ -58,6 +58,18 @@ class SplashViewModel @Inject constructor(
         // If Device Authorization is disabled in AppConfig, bypass registration/authorization flow
         if (!AppConfig.deviceAuthorizationEnabled) {
             Logger.i("SplashViewModel: Device Authorization DISABLED in AppConfig. Bypassing gate.")
+            // Still fetch the registered kiosk identity (serial, prison id/name)
+            // in the background — the Device Info screen reads it from
+            // SessionManager, which would otherwise stay empty forever.
+            launch {
+                authRepository.hydrateKioskInfo().collect { result ->
+                    when (result) {
+                        is NetworkResult.Success -> Logger.i("SplashViewModel: Kiosk info hydrated (${result.data.kioskId})")
+                        is NetworkResult.Failure -> Logger.w("SplashViewModel: Kiosk info hydration failed: ${result.error.message}")
+                        else -> {}
+                    }
+                }
+            }
             checkSessionAndNavigate()
             return
         }
@@ -72,8 +84,15 @@ class SplashViewModel @Inject constructor(
             return
         }
 
-        val deviceSerial = deviceInfoProvider.getRegistrationDeviceId()
-        Logger.d("SplashViewModel: Registration Device Identity: $deviceSerial")
+        // Prefer the stable KIOSK_ID: /kiosks/verify matches it directly, and
+        // the hardware-serial fallback is identical ("KIOSK-DEV-unknown") on
+        // every non-Device-Owner phone — so it was a lottery whether the
+        // backend found this kiosk at all. Falls back to the registration id
+        // only if KIOSK_ID was never configured.
+        val deviceSerial = com.prisonconnect.kiosk.core.Constants.KIOSK_ID
+            .takeIf { it.isNotBlank() }
+            ?: deviceInfoProvider.getRegistrationDeviceId()
+        Logger.d("SplashViewModel: Kiosk verify identity: $deviceSerial")
 
         if (deviceSerial.isNullOrBlank()) {
             Logger.e("SplashViewModel: Device Identity UNAVAILABLE.")

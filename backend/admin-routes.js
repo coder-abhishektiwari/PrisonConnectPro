@@ -392,7 +392,14 @@ router.get('/prisoners/:prisonerId/biometrics', requireRole(...ALL_ROLES), async
     biometricData.fingerprintRegistered ? { biometricId: `BIO-${prisonerId}-FGP`, prisonerId, type: 'fingerprint', status: 'registered', registeredAt: biometricData.lastBiometricUpdate } : null,
     biometricData.rfidRegistered ? { biometricId: `BIO-${prisonerId}-RFID`, prisonerId, type: 'rfid', status: 'registered', registeredAt: biometricData.lastBiometricUpdate } : null,
   ].filter(Boolean);
-  return res.json({ success: true, data: result });
+  // Display copy of the RFID card number for the warden's inmate details page.
+  // Plain value sits next to the hash at registration; legacy rows keep the
+  // raw token; hashed-only rows have no displayable number (null).
+  const cardNumber = rfidCardNumberFor(inmate);
+  const out = result.map((b) =>
+    b.type === 'rfid' && cardNumber ? { ...b, cardNumber } : b
+  );
+  return res.json({ success: true, data: out });
 });
 
 router.post('/prisoners/:prisonerId/biometrics', requireRole(...ALL_ROLES), async (req, res) => {

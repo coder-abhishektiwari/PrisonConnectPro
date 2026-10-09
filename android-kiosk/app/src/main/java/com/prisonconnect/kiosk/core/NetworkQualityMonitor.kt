@@ -50,7 +50,7 @@ object NetworkQualityMonitor {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var started = false
     private const val PROBE_INTERVAL_MS = 5_000L
-    private const val PROBE_TIMEOUT_MS = 2_500
+    private const val PROBE_TIMEOUT_MS = 4_000
 
     /** Idempotent — safe to call from Application.onCreate. */
     @Synchronized
@@ -66,6 +66,22 @@ object NetworkQualityMonitor {
     }
 
     private fun probe(): Quality {
+        // One immediate retry: Render dynos cold-start after idle and the
+        // first request can time out while the server wakes — a single blip
+        // must not flash the header red on a perfectly healthy link.
+        var attempt = doProbe()
+        if (!attempt.ok) attempt = doProbe()
+        val level = if (!attempt.ok) 0 else when {
+            attempt.latencyMs < 120 -> 4
+            attempt.latencyMs < 250 -> 3
+            attempt.latencyMs < 500 -> 2
+            attempt.latencyMs < 1200 -> 1
+            else -> 0
+        }
+        return Quality(online = attempt.ok, level = level, latencyMs = if (attempt.ok) attempt.latencyMs else null)
+    }
+
+    private fun doProbe(): ProbeResult {
         val start = SystemClock.elapsedRealtime()
         val ok = try {
             val url = URL(AppConfig.baseUrl.trimEnd('/') + "/health")
@@ -81,14 +97,8 @@ object NetworkQualityMonitor {
         } catch (t: Throwable) {
             false
         }
-        val latency = SystemClock.elapsedRealtime() - start
-        val level = if (!ok) 0 else when {
-            latency < 120 -> 4
-            latency < 250 -> 3
-            latency < 500 -> 2
-            latency < 1200 -> 1
-            else -> 0
-        }
-        return Quality(online = ok, level = level, latencyMs = if (ok) latency else null)
+        return ProbeResult(ok, SystemClock.elapsedRealtime() - start)
     }
+
+    private data class ProbeResult(val ok: Boolean, val latencyMs: Long)
 }

@@ -782,6 +782,9 @@ export function InmateDetailPage() {
                               {isRegistered ? 'Registered' : 'Not registered'}
                               {bio?.registeredAt && ` • ${new Date(bio.registeredAt).toLocaleDateString()}`}
                             </p>
+                            {type === 'rfid' && isRegistered && bio?.cardNumber && (
+                              <p className="text-[11px] font-mono text-neutral-600 mt-0.5">Card No: {bio.cardNumber}</p>
+                            )}
                           </div>
                         </div>
                         <div className="flex items-center gap-2">

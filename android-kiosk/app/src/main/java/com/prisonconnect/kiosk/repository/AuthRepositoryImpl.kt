@@ -270,6 +270,24 @@ class AuthRepositoryImpl @Inject constructor(
         }
     }
 
+    override fun hydrateKioskInfo(): Flow<NetworkResult<com.prisonconnect.kiosk.models.auth.KioskInfo>> = flow {
+        try {
+            val kioskId = com.prisonconnect.kiosk.core.Constants.KIOSK_ID
+            val response = dataSource.verifyKiosk(KioskVerifyRequest(deviceSerialNumber = kioskId))
+            val kiosk = response.data?.kiosk
+            if (response.success && response.data?.authorized == true && kiosk != null) {
+                sessionManager.saveKioskInfo(kiosk)
+                response.data.deviceToken?.let { sessionManager.saveDeviceToken(it) }
+                emit(NetworkResult.Success(kiosk))
+            } else {
+                emit(NetworkResult.Failure(ApiError("KIOSK_NOT_AUTHORIZED", "Kiosk not authorized for '$kioskId'")))
+            }
+        } catch (e: Exception) {
+            Logger.w("AuthRepository: hydrateKioskInfo failed: ${e.message}")
+            emit(NetworkResult.Failure(ApiError("EXCEPTION", e.message ?: "Could not load kiosk info")))
+        }
+    }
+
     override fun adminLogin(request: LoginRequest): Flow<NetworkResult<AdminProfile>> = flow {
         emit(NetworkResult.Loading)
         try {

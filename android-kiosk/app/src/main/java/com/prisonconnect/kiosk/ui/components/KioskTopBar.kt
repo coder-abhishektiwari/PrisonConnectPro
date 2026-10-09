@@ -26,22 +26,22 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 /**
- * Wi-Fi strength colours mapped to the 0–4 level. Full strength stays green,
- * weak signal drops to amber, and near-no-signal is red — so the header
- * reflects the real link quality at a glance.
+ * Per-bar strength colours: the bottom bar is red and the top bar green, so
+ * the stack literally shifts red as quality decays and greens up when the
+ * link recovers — full strength shows the classic red→green gradient.
  */
-private fun wifiStrengthColor(level: Int): Color = when (level) {
-    4 -> Color(0xFF4CAF50)
-    3 -> Color(0xFF8BC34A)
-    2 -> Color(0xFFFFC107)
-    1 -> Color(0xFFFF9800)
-    else -> Color(0xFFF44336)
-}
+private val BAR_COLORS = listOf(
+    Color(0xFFF44336), // bar 1 — red (weakest)
+    Color(0xFFFF9800), // bar 2 — orange
+    Color(0xFFFFC107), // bar 3 — amber
+    Color(0xFF4CAF50)  // bar 4 — green (full)
+)
 
 /**
- * Four ascending signal bars. Bars at or below the current level light up in
- * the strength colour; the remaining bars stay dim — so the icon literally
- * loses bars as the signal decays. Offline shows all bars red at zero.
+ * Four ascending signal bars. Bars at or below the current level light up
+ * in their strength colour; the remaining bars stay dim — the icon loses
+ * bars (and red-wards its colour) as the signal decays. Offline shows all
+ * bars lit red.
  */
 @Composable
 private fun WifiStrengthBars(
@@ -50,7 +50,6 @@ private fun WifiStrengthBars(
     modifier: Modifier = Modifier,
     barCount: Int = 4
 ) {
-    val activeColor = if (online) wifiStrengthColor(level) else Color(0xFFF44336)
     val inactiveColor = Color.White.copy(alpha = 0.35f)
     Canvas(modifier = modifier) {
         val barWidthPx = size.width / (barCount * 2f)
@@ -62,7 +61,7 @@ private fun WifiStrengthBars(
             val x = i * (barWidthPx + gapPx)
             val lit = !online || i < level
             drawRoundRect(
-                color = if (lit) activeColor else inactiveColor,
+                color = if (lit) BAR_COLORS.getOrElse(i) { BAR_COLORS.last() } else inactiveColor,
                 topLeft = androidx.compose.ui.geometry.Offset(x, size.height - barHeight),
                 size = Size(barWidthPx, barHeight),
                 cornerRadius = CornerRadius(cornerPx, cornerPx)
