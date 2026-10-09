@@ -173,6 +173,10 @@ function createRecordingsRouter(broadcastEvent) {
     if (!call || !(await inUploadScope(req, call))) {
       return sendError(res, 'CALL_NOT_FOUND', 'No call matches the given callId', 404);
     }
+    // The kiosk identifies calls by roomId (its recording files are named
+    // rec-<roomId>-...), but recordings.call_id is a foreign key to calls.id.
+    // Store the canonical callId so the final INSERT cannot violate it.
+    const canonicalCallId = call.callId;
 
     await fs.promises.mkdir(UPLOADS_DIR, { recursive: true });
 
@@ -181,13 +185,14 @@ function createRecordingsRouter(broadcastEvent) {
     const entries = await fs.promises.readdir(UPLOADS_DIR);
     for (const id of entries) {
       const meta = await readUploadMeta(id);
-      if (!meta || meta.callId !== callId || meta.sha256 !== sha256 || meta.size !== size) continue;
+      if (!meta || (meta.callId !== canonicalCallId && meta.callId !== callId) || meta.sha256 !== sha256 || meta.size !== size) continue;
       const st = await fs.promises.stat(uploadPartPath(id)).catch(() => null);
       if (!st) continue;
       if (st.size > size) {
         await fs.promises.rm(uploadDir(id), { recursive: true, force: true }).catch(() => {});
         continue;
       }
+      meta.callId = canonicalCallId;
       meta.receivedBytes = st.size;
       await writeUploadMeta(meta);
       return sendSuccess(res, { uploadId: id, receivedBytes: st.size, chunkSize: meta.chunkSize });
@@ -197,7 +202,7 @@ function createRecordingsRouter(broadcastEvent) {
     await fs.promises.mkdir(uploadDir(uploadId), { recursive: true });
     const meta = {
       uploadId,
-      callId,
+      callId: canonicalCallId,
       fileName,
       mimeType: 'video/mp4',
       size,
@@ -288,7 +293,7 @@ function createRecordingsRouter(broadcastEvent) {
       let rec;
       try {
         rec = await saveUploadedRecordingFromPath({
-          callId: meta.callId,
+          callId: call.callId,
           kioskId: call.kioskId || null,
           inmateId: call.inmateId || null,
           contactId: call.contactId || null,
@@ -302,7 +307,7 @@ function createRecordingsRouter(broadcastEvent) {
       }
 
       await fs.promises.rm(uploadDir(uploadId), { recursive: true, force: true });
-      await persistUpload(broadcastEvent, meta.callId, rec);
+      await persistUpload(broadcastEvent, call.callId, rec);
       return sendSuccess(res, rec, 200);
     })));
 
@@ -421,12 +426,12 @@ function createRecordingsRouter(broadcastEvent) {
     let rec;
     try {
       rec = await saveUploadedRecording({
-        callId,
+        callId: call.callId,
         kioskId: call.kioskId || null,
         inmateId: req.body?.inmateId || call.inmateId || null,
         contactId: req.body?.contactId || call.contactId || null,
         fileBuffer,
-        fileName: fileName || `kiosk-rec-${callId}.mp4`,
+        fileName: fileName || `kiosk-rec-${call.callId}.mp4`,
         mimeType: mimeType || 'video/mp4'
       });
     } catch (err) {
@@ -434,7 +439,7 @@ function createRecordingsRouter(broadcastEvent) {
       return sendError(res, 'STORAGE_ERROR', 'Failed to store uploaded recording', 500);
     }
 
-    await persistUpload(broadcastEvent, callId, rec);
+    await persistUpload(broadcastEvent, call.callId, rec);
     return sendSuccess(res, rec, 200);
   }));
 
