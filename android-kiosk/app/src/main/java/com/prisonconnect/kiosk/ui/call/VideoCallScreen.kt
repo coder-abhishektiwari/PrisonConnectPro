@@ -96,17 +96,33 @@ fun WebRtcSurfaceView(
             if (!rendererInit.value && eglContext != null) {
                 view.init(eglContext, null)
                 rendererInit.value = true
+                com.prisonconnect.kiosk.core.Logger.d(
+                    "WebRtcSurfaceView: renderer init view=${System.identityHashCode(view)}"
+                )
             }
             val previous = attachedTrack.value
             if (previous !== videoTrack) {
-                previous?.removeSink(view)
-                videoTrack?.addSink(view)
+                if (previous != null) {
+                    previous.removeSink(view)
+                    com.prisonconnect.kiosk.core.Logger.d(
+                        "WebRtcSurfaceView: removeSink track=${System.identityHashCode(previous)} view=${System.identityHashCode(view)}"
+                    )
+                }
+                if (videoTrack != null) {
+                    videoTrack.addSink(view)
+                    com.prisonconnect.kiosk.core.Logger.d(
+                        "WebRtcSurfaceView: addSink track=${System.identityHashCode(videoTrack)} view=${System.identityHashCode(view)} init=$rendererInit"
+                    )
+                }
                 attachedTrack.value = videoTrack
             }
             view.setMirror(mirror)
         },
         onRelease = { view ->
             attachedTrack.value?.removeSink(view)
+            com.prisonconnect.kiosk.core.Logger.d(
+                "WebRtcSurfaceView: released view=${System.identityHashCode(view)} hadTrack=${attachedTrack.value != null}"
+            )
             view.clearImage()
             view.release()
             attachedTrack.value = null

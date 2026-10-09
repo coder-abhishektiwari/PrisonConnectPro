@@ -359,7 +359,7 @@ class WebRtcManager @Inject constructor(
                 override fun onTrack(transceiver: org.webrtc.RtpTransceiver) {
                     val track = transceiver.receiver.track() ?: return
                     if (track is VideoTrack) {
-                        Logger.d("Remote video track received")
+                        Logger.d("Remote video track received id=${System.identityHashCode(track)}")
                         _remoteVideoTrack.value = track
                         callRecorder.setRemoteVideoTrack(track)
                     } else if (track is AudioTrack) {

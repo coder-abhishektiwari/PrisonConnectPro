@@ -33,6 +33,8 @@ internal class VideoComposer(
 
     private val localSlot = FrameSlot()
     private val remoteSlot = FrameSlot()
+    private val localCount = java.util.concurrent.atomic.AtomicLong()
+    private val remoteCount = java.util.concurrent.atomic.AtomicLong()
 
     private var drawer: GlRectDrawer? = null
     private var frameDrawer: VideoFrameDrawer? = null
@@ -43,11 +45,17 @@ internal class VideoComposer(
     val frameCount: Long get() = framesRendered
 
     fun onLocalFrame(frame: VideoFrame) {
+        val n = localCount.incrementAndGet()
+        if (n <= 3 || n % 100 == 0L) Logger.d("Composer: local frame#$n enter")
         if (running.get()) localSlot.set(frame)
+        if (n <= 3) Logger.d("Composer: local frame#$n done")
     }
 
     fun onRemoteFrame(frame: VideoFrame) {
+        val n = remoteCount.incrementAndGet()
+        if (n <= 3 || n % 100 == 0L) Logger.d("Composer: remote frame#$n enter")
         if (running.get()) remoteSlot.set(frame)
+        if (n <= 3) Logger.d("Composer: remote frame#$n done")
     }
 
     /** Spawns the render thread; returns false when the GL side failed. */
@@ -147,6 +155,15 @@ internal class VideoComposer(
         } finally {
             local?.release()
             remote?.release()
+            // Release the stored frames after EVERY tick. This WebRTC build
+            // stops delivering the next frame to any sink (recorder, UI,
+            // sender encoder, camera statistics) while the previously
+            // delivered frame is still retained. Holding a frame until its
+            // replacement arrives therefore deadlocks the whole video
+            // pipeline after the very first frame; holding it for at most
+            // one tick keeps every sink fed at the profile's frame rate.
+            localSlot.clear()
+            remoteSlot.clear()
         }
     }
 
@@ -198,15 +215,30 @@ internal class VideoComposer(
         fun set(new: VideoFrame) {
             val old: VideoFrame?
             synchronized(this) {
+                val tRetain = System.nanoTime()
                 new.retain()
+                val retainMs = (System.nanoTime() - tRetain) / 1_000_000
+                if (retainMs > 100) Logger.w("FrameSlot: new.retain took ${retainMs}ms")
                 old = frame
                 frame = new
             }
-            old?.release()
+            if (old != null) {
+                val t0 = System.nanoTime()
+                old.release()
+                val ms = (System.nanoTime() - t0) / 1_000_000
+                if (ms > 100) Logger.w("FrameSlot: old.release took ${ms}ms")
+            }
         }
 
         fun take(): VideoFrame? = synchronized(this) {
-            frame?.also { it.retain() }
+            val f = frame
+            if (f != null) {
+                val t0 = System.nanoTime()
+                f.retain()
+                val ms = (System.nanoTime() - t0) / 1_000_000
+                if (ms > 100) Logger.w("FrameSlot: take retain took ${ms}ms")
+            }
+            f
         }
 
         fun clear() {
@@ -215,7 +247,12 @@ internal class VideoComposer(
                 old = frame
                 frame = null
             }
-            old?.release()
+            if (old != null) {
+                val t0 = System.nanoTime()
+                old.release()
+                val ms = (System.nanoTime() - t0) / 1_000_000
+                if (ms > 100) Logger.w("FrameSlot: clear release took ${ms}ms")
+            }
         }
     }
 

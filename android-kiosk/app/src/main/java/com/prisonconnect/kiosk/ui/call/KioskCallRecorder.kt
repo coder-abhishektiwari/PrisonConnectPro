@@ -126,6 +126,7 @@ class KioskCallRecorder @Inject constructor(
         try { track?.addSink(localSink) } catch (e: Throwable) {
             Logger.w("Recorder: local video sink attach failed: ${e.message}")
         }
+        Logger.d("Recorder: local sink track=${track?.let { System.identityHashCode(it) }}")
     }
 
     @Synchronized
@@ -136,6 +137,7 @@ class KioskCallRecorder @Inject constructor(
         try { track?.addSink(remoteSink) } catch (e: Throwable) {
             Logger.w("Recorder: remote video sink attach failed: ${e.message}")
         }
+        Logger.d("Recorder: remote sink track=${track?.let { System.identityHashCode(it) }}")
     }
 
     // ---- session lifecycle ----
