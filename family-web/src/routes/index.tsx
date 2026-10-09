@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate, useSearchParams } from 'react-router-dom';
 import { CallLayout } from '@/layouts/CallLayout';
 import { LinkVerificationPage } from '@/pages/LinkVerificationPage';
+import { WalletLinkPage } from '@/pages/WalletLinkPage';
 import { DeviceVerificationPage } from '@/pages/DeviceVerificationPage';
 import { OtpVerificationPage } from '@/pages/OtpVerificationPage';
 import { LobbyPage } from '@/pages/LobbyPage';
@@ -10,6 +11,7 @@ import { SessionProvider } from '@/context/SessionContext';
 
 export const RoutePaths = {
   linkVerification: '/c/:linkToken',
+  walletLink: '/w',
   deviceVerification: '/c/:linkToken/device',
   otpVerification: '/c/:linkToken/otp',
   lobby: '/c/:linkToken/lobby',
@@ -46,6 +48,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <Home /> },
       { path: 'c', element: <QueryLinkRedirect /> },
+      { path: RoutePaths.walletLink, element: <WalletLinkPage /> },
       { path: RoutePaths.linkVerification, element: <LinkVerificationPage /> },
       {
         path: RoutePaths.deviceVerification,

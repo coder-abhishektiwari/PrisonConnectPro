@@ -56,6 +56,21 @@ class ApiCache @Inject constructor() {
     }
 
     /**
+     * Stale-while-revalidate read: returns ANY cached value up to [maxAgeMs]
+     * old, without evicting it, so a screen can paint instantly and refresh
+     * in the background. Freshness is still enforced by [get]/[getOrFetch].
+     */
+    @Suppress("UNCHECKED_CAST")
+    fun <T> getStale(key: String, maxAgeMs: Long = STALE_TTL): T? {
+        val entry = cache[key] ?: return null
+        if (System.currentTimeMillis() - entry.timestamp > maxAgeMs) {
+            cache.remove(key)
+            return null
+        }
+        return entry.data as? T
+    }
+
+    /**
      * Invalidate specific cache entries.
      */
     fun invalidate(vararg keys: String) {
@@ -79,5 +94,6 @@ class ApiCache @Inject constructor() {
 
     companion object {
         const val DEFAULT_TTL = 30_000L // 30 seconds
+        const val STALE_TTL = 30 * 60_000L // 30 minutes (SWR paint window)
     }
 }

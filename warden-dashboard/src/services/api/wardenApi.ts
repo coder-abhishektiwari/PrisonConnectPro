@@ -363,6 +363,13 @@ export interface Transaction {
   timestamp: string;
   callId?: string;
   performedBy?: string;
+  // Razorpay deposit: amount = net credited, grossAmount/fee/tax explain the
+  // gateway charge (absent on manual/legacy rows).
+  grossAmount?: number;
+  fee?: number;
+  tax?: number;
+  gateway?: string;
+  orderId?: string;
 }
 
 export interface Schedule {
@@ -664,6 +671,10 @@ export const wardenApi = {
 
   deleteContactApi: (contactId: string) =>
     apiClient.delete<ApiResponse<void>>(`/admin/contacts/${contactId}`).then((r) => { invalidatePrefix('contacts'); return r.data; }),
+
+  // Rotate the family wallet link and SMS it again (old token is revoked).
+  resendWalletLink: (contactId: string) =>
+    apiClient.post<ApiResponse<{ linkId: string; phone: string; sentAt: string }>>(`/admin/contacts/${contactId}/wallet-link/resend`).then((r) => r.data?.data),
 
   // Registered family devices (fingerprint registry)
   removeContactDevice: (contactId: string, fingerprintId: string) =>

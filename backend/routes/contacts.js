@@ -5,6 +5,7 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 const { sendSuccess, sendError, asyncRoute } = require('../lib/response');
 const { jailScopeOf, inJailScope, adminScopeFilter, inScopeOf, scopeList, inAdminScope, kioskScopeOf } = require('../lib/scoping');
 const { normalizePhone } = require('../lib/familySecurity');
+const { issueAndSendWalletSms, revokeLinksForContact } = require('../lib/wallet-links');
 const { paginate } = require('../lib/paginate');
 
 function normalizeContact(c) {
@@ -177,6 +178,9 @@ function createContactsRouter(broadcastEvent) {
     };
 
     await updateDb('contacts.json', (contacts) => ({ data: [...contacts, newContact], result: newContact }));
+    // New family contact = wallet link automatically SMS'd (fire-and-forget:
+    // the contact row is already committed, a slow SMS must not fail it).
+    issueAndSendWalletSms(newContact, inmate).catch((err) => console.warn(`[wallet-link] auto-send failed for ${newContact.contactId}: ${err.message}`));
     return sendSuccess(res, normalizeContact(newContact), 201);
   }));
 
@@ -198,6 +202,7 @@ function createContactsRouter(broadcastEvent) {
       return sendError(res, 'FORBIDDEN', 'Contact not in your kiosk scope', 403);
     }
 
+    let phoneChanged = false;
     const updated = await updateDb('contacts.json', (all) => {
       const idx = all.findIndex((c) => c.contactId === contactId);
       if (idx === -1) return { data: all, result: null };
@@ -208,7 +213,7 @@ function createContactsRouter(broadcastEvent) {
       // resurrect a device the warden already removed (or wipe new ones).
       const prevPhone = all[idx].mobileNumber || all[idx].phoneNumber || all[idx].phone;
       const nextPhone = updates.mobileNumber || updates.phoneNumber || updates.phone || prevPhone;
-      const phoneChanged = !!(prevPhone && nextPhone && normalizePhone(prevPhone) !== normalizePhone(nextPhone));
+      phoneChanged = !!(prevPhone && nextPhone && normalizePhone(prevPhone) !== normalizePhone(nextPhone));
       if (phoneChanged) {
         // The single registered device is bound to the number the call link is
         // SMS'd to — once that number changes the old phone can never answer
@@ -230,6 +235,11 @@ function createContactsRouter(broadcastEvent) {
     });
 
     if (!updated) return sendError(res, 'NOT_FOUND', 'Contact not found', 404);
+    if (phoneChanged) {
+      // The old number holds a working balance-view link: rotation revokes it
+      // and the fresh link goes to the new number.
+      issueAndSendWalletSms(updated, owner).catch((err) => console.warn(`[wallet-link] re-send after phone change failed for ${updated.contactId}: ${err.message}`));
+    }
     return sendSuccess(res, updated);
   }));
 
@@ -289,6 +299,8 @@ function createContactsRouter(broadcastEvent) {
       const filtered = all.filter((c) => c.contactId !== contactId);
       return { data: filtered, result: { deleted: true, contactId } };
     });
+    // A deleted contact must not keep a working balance-view link.
+    revokeLinksForContact(contactId).catch((err) => console.warn(`[wallet-link] revoke on delete failed for ${contactId}: ${err.message}`));
     return sendSuccess(res, deleted);
   }));
 

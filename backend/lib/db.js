@@ -73,6 +73,8 @@ const REGISTRY = {
   'wallets.json':      { table: 'wallets',                 idKey: 'walletId', cols: { inmateId: 'inmate_id' } },
   'transactions.json': { table: 'transactions',            idKey: 'transactionId', cols: { walletId: 'wallet_id', inmateId: 'inmate_id', callId: 'call_id' } },
   'wallet-requests.json': { table: 'wallet_requests',     idKey: 'requestId', cols: { inmateId: 'inmate_id' } },
+  'wallet-links.json': { table: 'wallet_links',            idKey: 'linkId', cols: { contactId: 'contact_id', inmateId: 'inmate_id' } },
+  'wallet-payments.json': { table: 'wallet_payments',      idKey: 'paymentId', cols: { orderId: 'order_id', contactId: 'contact_id', inmateId: 'inmate_id', walletId: 'wallet_id' } },
   'alerts.json':       { table: 'alerts',                  idKey: 'alertId', cols: { prisonId: 'prison_id', kioskId: 'kiosk_id', callId: 'call_id' } },
   'incidents.json':    { table: 'incidents',               idKey: 'incidentId', cols: { prisonId: 'prison_id', inmateId: 'inmate_id', kioskId: 'kiosk_id', callId: 'call_id', wardenId: 'warden_id' } },
   'devices.json':      { table: 'devices',                 idKey: 'deviceId', cols: { kioskId: 'kiosk_id', prisonId: 'prison_id' } },

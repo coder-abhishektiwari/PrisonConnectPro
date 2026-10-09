@@ -70,6 +70,7 @@ fun DashboardScreen(
     onContactClick: (contactId: String, name: String, type: String) -> Unit,
     onScheduledCallClick: (ScheduledCall) -> Unit,
     onWalletClick: () -> Unit,
+    onProfileClick: () -> Unit,
     onLogoutClick: () -> Unit,
     onScheduleCall: (contactId: String, contactName: String) -> Unit,
     onStartCall: (contactId: String, contactName: String, roomId: String, isVideo: Boolean) -> Unit,
@@ -137,7 +138,8 @@ fun DashboardScreen(
                                 lobbyCallType = type
                                 showLobbyDialog = true
                             },
-                            onWalletClick = onWalletClick
+                            onWalletClick = onWalletClick,
+                            onProfileClick = onProfileClick
                         )
                         1 -> ScheduleTabContent(
                             scheduledCalls = state.data.scheduledCalls,
@@ -418,7 +420,8 @@ fun DashboardContent(
     windowWidthSizeClass: WindowWidthSizeClass,
     data: DashboardViewModel.DashboardData,
     onContactClick: (contactId: String, name: String, type: String) -> Unit,
-    onWalletClick: () -> Unit
+    onWalletClick: () -> Unit,
+    onProfileClick: () -> Unit
 ) {
     LazyColumn(
         modifier = Modifier
@@ -427,9 +430,9 @@ fun DashboardContent(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp)
     ) {
-        // 1. Profile Card (non-clickable — no profile screen)
+        // 1. Profile Card (tap to open full inmate details)
         item {
-            InmateProfileCard(inmateProfile = data.profile)
+            InmateProfileCard(inmateProfile = data.profile, onClick = onProfileClick)
         }
 
         // 2. Wallet Card (tap to open wallet screen)
@@ -504,144 +507,59 @@ fun WalletDetailCard(balance: InmateBalance?, onClick: () -> Unit) {
 
 @Composable
 private fun InmateProfileCard(
-    inmateProfile: InmateProfile
+    inmateProfile: InmateProfile,
+    onClick: () -> Unit
 ) {
-    val rfidValue = inmateProfile.rfidCardNumber
-        ?: if (inmateProfile.rfidRegistered) "Registered" else "Not registered"
-
     Card(
+        onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                AsyncImage(
-                    model = inmateProfile.photoUrl,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0xFFF1F5F9)),
-                    contentScale = ContentScale.Crop,
-                    placeholder = rememberVectorPainter(Icons.Default.Person),
-                    error = rememberVectorPainter(Icons.Default.Person)
+            AsyncImage(
+                model = inmateProfile.photoUrl,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFFF1F5F9)),
+                contentScale = ContentScale.Crop,
+                placeholder = rememberVectorPainter(Icons.Default.Person),
+                error = rememberVectorPainter(Icons.Default.Person)
+            )
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = inmateProfile.displayName,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = PrimaryDarkNavy,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = inmateProfile.displayName,
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = PrimaryDarkNavy,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = inmateProfile.facility,
-                        fontSize = 12.sp,
-                        color = TextGray,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Inmate No: ${inmateProfile.inmateId}",
+                    fontSize = 12.sp,
+                    color = TextGray,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
-            HorizontalDivider(color = Color(0xFFE8EDF3), thickness = 1.dp)
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Details — plain label/value pairs, neutral colours only.
-            ProfileDetailRow(
-                "Gender", titleCase(inmateProfile.gender),
-                "Age", inmateProfile.age
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            ProfileDetailRow(
-                "District", titleCase(inmateProfile.district),
-                "State", titleCase(inmateProfile.state)
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            ProfileDetailRow(
-                "Religion", titleCase(inmateProfile.religion),
-                "Nationality", titleCase(inmateProfile.nationality)
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            ProfileDetail("RFID Card", rfidValue, modifier = Modifier.fillMaxWidth())
-            Spacer(modifier = Modifier.height(12.dp))
-            ProfileDetail(
-                "Date of Admission", formatAdmissionDate(inmateProfile.dateOfAdmission),
-                modifier = Modifier.fillMaxWidth()
-            )
+            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Open details", tint = PrimaryNavy)
         }
     }
 }
-
-private fun titleCase(value: String?): String? =
-    value?.takeIf { it.isNotBlank() }?.replaceFirstChar { c ->
-        if (c.isLowerCase()) c.titlecase() else c.toString()
-    }
-
-private fun formatAdmissionDate(raw: String?): String? {
-    if (raw.isNullOrBlank()) return null
-    return try {
-        if (Regex("""\d{4}-\d{2}-\d{2}""").matches(raw)) {
-            val parsed = java.text.SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).parse(raw)
-            if (parsed != null) {
-                java.text.SimpleDateFormat("d MMM yyyy", Locale.getDefault()).format(parsed)
-            } else raw
-        } else raw
-    } catch (_: Exception) {
-        raw
-    }
-}
-
-@Composable
-private fun ProfileDetailRow(
-    labelA: String, valueA: String?,
-    labelB: String, valueB: String?
-) {
-    Row(modifier = Modifier.fillMaxWidth()) {
-        ProfileDetail(labelA, valueA, modifier = Modifier.weight(1f))
-        Spacer(modifier = Modifier.width(16.dp))
-        ProfileDetail(labelB, valueB, modifier = Modifier.weight(1f))
-    }
-}
-
-@Composable
-private fun ProfileDetail(
-    label: String,
-    value: String?,
-    modifier: Modifier = Modifier
-) {
-    Column(modifier = modifier) {
-        Text(
-            text = label,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Medium,
-            color = TextGray,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        Spacer(modifier = Modifier.height(3.dp))
-        Text(
-            text = value?.takeIf { it.isNotBlank() } ?: "—",
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = TextDark,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-}
-
 
 @Composable
 private fun ContactCardItem(
@@ -981,7 +899,8 @@ fun PreviewDashboardMobile() {
                     callHistory = emptyList()
                 ),
                 onContactClick = { _, _, _ -> },
-                onWalletClick = {}
+                onWalletClick = {},
+                onProfileClick = {}
             )
         }
     }

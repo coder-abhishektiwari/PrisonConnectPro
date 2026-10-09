@@ -2,6 +2,7 @@ import axios from 'axios';
 import { env } from '@/config/env';
 import type { ApiResponse, ApiError } from '@/types/api';
 import type { CallSession, CallTimerStatus, DeviceInfo, DeviceVerificationResult, FamilyLocation, SendOtpResult, OtpVerificationResult, JoinRoomResult, LeaveRoomResult, CallSummary } from '@/types/call';
+import type { WalletLinkInfo, WalletOrder, WalletVerifyResult } from '@/types/wallet';
 
 export const api = axios.create({
   baseURL: env.apiGatewayUrl,
@@ -51,4 +52,19 @@ export const callApi = {
 
   endCall: (callId: string) =>
     api.post<ApiResponse<CallSummary>>(`/calls/${callId}/end`).then((r) => r.data.data),
+};
+
+/**
+ * Family wallet: three bearer-token calls, no login/OTP. The token lives only
+ * in the URL the family opened (stripped from the address bar on load).
+ */
+export const walletApi = {
+  getInfo: (token: string) =>
+    api.get<ApiResponse<WalletLinkInfo>>(`/family/wallet-link/${encodeURIComponent(token)}/info`).then((r) => r.data.data),
+
+  createOrder: (token: string, amount: number) =>
+    api.post<ApiResponse<WalletOrder>>(`/family/wallet-link/${encodeURIComponent(token)}/order`, { amount }).then((r) => r.data.data),
+
+  verify: (token: string, payload: { razorpayOrderId: string; razorpayPaymentId: string; razorpaySignature: string }) =>
+    api.post<ApiResponse<WalletVerifyResult>>(`/family/wallet-link/${encodeURIComponent(token)}/verify`, payload).then((r) => r.data.data),
 };

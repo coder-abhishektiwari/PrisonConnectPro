@@ -15,6 +15,8 @@ const { jailScopeOf, inAdminScope, inScopeOf, scopeList, kioskScopeOf } = requir
 const { paginate } = require('./lib/paginate');
 const { buildInmateIndex } = require('./lib/kioskView');
 const { rfidCardNumberFor } = require('./lib/biometrics');
+const { verifyWebhookSignature } = require('./lib/razorpay');
+const { creditFromRazorpay, markPaymentFailed, sweepWalletPayments } = require('./lib/wallet-credit');
 
 /** Kiosk-admin username: what the operator types on the terminal to sign in. */
 const EMPLOYEE_ID_RE = /^[A-Za-z0-9._-]{3,40}$/;
@@ -27,6 +29,7 @@ const authRoutesRouter = require('./routes/auth');
 const createCallsRouter = require('./routes/calls');
 const { sweepStaleCalls } = require('./routes/calls');
 const familyRouter = require('./routes/family');
+const walletLinkRouter = require('./routes/wallet-link');
 const inmatesRouter = require('./routes/inmates');
 const createContactsRouter = require('./routes/contacts');
 const createRoomsRouter = require('./routes/rooms');
@@ -51,7 +54,12 @@ const io = new Server(server, {
 });
 
 app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
-app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '10mb' }));
+// verify keeps the original bytes so the Razorpay webhook can HMAC its raw
+// body (the parsed req.body would fail signature verification).
+app.use(express.json({
+  limit: process.env.JSON_BODY_LIMIT || '10mb',
+  verify: (req, res, buf) => { if (buf && buf.length) req.rawBody = buf; },
+}));
 
 app.use((err, req, res, next) => {
   if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
@@ -124,6 +132,7 @@ app.use('/kiosks', kiosksRouter);
 app.use('/auth', authRoutesRouter);
 app.use('/calls', createCallsRouter(broadcastEvent, signaling));
 app.use('/family', familyRouter);
+app.use('/family', walletLinkRouter);
 app.use('/inmates', inmatesRouter);
 app.use('/contacts', createContactsRouter(broadcastEvent));
 app.use('/rooms', createRoomsRouter(broadcastEvent));
@@ -140,6 +149,46 @@ app.use('/wallets', walletsRouter);
 app.use('/cells', createCellsRouter());
 app.use('/blocks', createBlocksRouter());
 app.use('/mis', misRouter);
+
+// ==================== RAZORPAY WEBHOOK ====================
+// Signature is HMAC over the raw body; crediting uses the same idempotent
+// helper as the family verify endpoint, so retries/double-delivery can never
+// double-credit (orderId is the key, checked inside the transactions mutex).
+app.post('/api/webhooks/razorpay', asyncRoute(async (req, res) => {
+  if (!process.env.RAZORPAY_WEBHOOK_SECRET) {
+    return sendError(res, 'WEBHOOK_NOT_CONFIGURED', 'Webhook secret not configured', 503);
+  }
+  const signature = req.headers['x-razorpay-signature'];
+  if (!req.rawBody || !verifyWebhookSignature(req.rawBody, signature)) {
+    return sendError(res, 'SIGNATURE_INVALID', 'Invalid webhook signature', 400);
+  }
+  let event;
+  try {
+    event = JSON.parse(req.rawBody.toString('utf8'));
+  } catch (e) {
+    return sendError(res, 'BAD_REQUEST', 'Invalid webhook payload', 400);
+  }
+
+  const payment = event && event.payload && event.payload.payment && event.payload.payment.entity;
+  if ((event.event === 'payment.captured' || event.event === 'order.paid') && payment && payment.order_id) {
+    const out = await creditFromRazorpay({ orderId: payment.order_id, paymentId: payment.id, entity: payment });
+    if (!out.ok) {
+      // unknown_order = not ours (test mode noise); anything else is logged
+      // for the sweep/ops - never 5xx, Razorpay would only retry uselessly.
+      console.warn(`[razorpay-webhook] ${event.event} for ${payment.order_id} not credited: ${out.reason}`);
+    } else if (out.alreadyCredited) {
+      console.log(`[razorpay-webhook] duplicate delivery for ${payment.order_id} ignored`);
+    } else {
+      console.log(`[razorpay-webhook] credited ${out.netPaise} paise (net) for ${payment.order_id}`);
+    }
+  } else if (event.event === 'payment.failed' && payment && payment.order_id) {
+    await markPaymentFailed(payment.order_id, payment.error_description || 'payment_failed');
+  }
+
+  // 2xx once the signature is valid so Razorpay stops retrying; genuinely
+  // lost credits are recovered by sweepWalletPayments().
+  return sendSuccess(res, { received: true });
+}));
 
 // Alias routes — dashboard expects these at root, not under /settings
 app.get('/pricing', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'vendor', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => sendSuccess(res, await readDb('pricing.json'))));
@@ -851,6 +900,60 @@ app.get('/inmate/wallet/:inmateId', requireAuth, asyncRoute(async (req, res) => 
   return sendSuccess(res, statement);
 }));
 
+// ==================== INMATE: REQUEST BALANCE (kiosk) ====================
+// The inmate asks the family to send money from the kiosk keypad. The request
+// surfaces as `requestedAmount` on the family wallet link page and as a
+// pending row in the existing warden approve/reject inbox. Shape matches the
+// admin-created requests so the approve/reject flow needs no changes.
+app.post('/inmate/wallet-requests', requireAuth, requireRole('inmate'), asyncRoute(async (req, res) => {
+  const inmateId = req.auth?.inmateId || req.auth?.sub;
+  const amount = req.body && req.body.amount;
+  const minRupees = Math.max(1, Number(process.env.WALLET_MIN_RUPEES) || 10);
+  const maxRupees = Math.max(minRupees, Number(process.env.WALLET_MAX_RUPEES) || 2000);
+  if (!Number.isInteger(amount) || amount < minRupees || amount > maxRupees) {
+    return sendError(res, 'INVALID_AMOUNT', `Amount must be a whole number between Rs.${minRupees} and Rs.${maxRupees}`, 400);
+  }
+
+  const inmates = await readDb('inmates.json');
+  const inmate = inmates.find((i) => i.inmateId === inmateId);
+  if (!inmate || (inmate.status && inmate.status !== 'active')) {
+    return sendError(res, 'NOT_FOUND', 'Record not found', 404);
+  }
+
+  const mine = (await readDb('wallet-requests.json'))
+    .filter((r) => r.inmateId === inmateId || r.inmateId === `INM-${inmateId}`);
+  if (mine.some((r) => String(r.status || '').toLowerCase() === 'pending')) {
+    return sendError(res, 'PENDING_EXISTS', 'You already have a request waiting for approval', 409);
+  }
+  const dayStart = new Date();
+  dayStart.setUTCHours(0, 0, 0, 0);
+  const todayCount = mine.filter((r) => new Date(r.requestedAt || 0).getTime() >= dayStart.getTime()).length;
+  if (todayCount >= 3) {
+    return sendError(res, 'DAILY_LIMIT', 'You have sent the maximum of 3 requests today. Try again tomorrow.', 429);
+  }
+
+  const now = new Date().toISOString();
+  const request = {
+    requestId: `WR-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+    inmateId,
+    amount,
+    reason: typeof (req.body && req.body.note) === 'string' ? req.body.note.slice(0, 140) : '',
+    status: 'pending',
+    source: 'inmate',
+    requestedBy: inmateId,
+    requestedAt: now,
+    reviewedBy: null,
+    reviewedAt: null
+  };
+
+  await updateDb('wallet-requests.json', (all) => {
+    all.push(request);
+    return { data: all, result: request };
+  });
+
+  return sendSuccess(res, request, 201);
+}));
+
 // Admin router mounted AFTER explicit /admin routes
 app.use('/admin', requireAuth, adminRouter);
 
@@ -957,4 +1060,11 @@ function startServer() {
 
   // Periodic sweep: finalize orphaned active calls every 2 minutes
   setInterval(() => sweepStaleCalls(broadcastEvent), 2 * 60 * 1000);
+
+// Razorpay reconciliation: catch payments the gateway captured while this
+// server could not process the webhook (downtime, restart). 15-min interval
+// plus one catch-up run a minute after boot.
+const sweepWallet = () => sweepWalletPayments().catch((err) => console.warn(`[wallet-sweep] ${err.message}`));
+setInterval(sweepWallet, 15 * 60 * 1000);
+setTimeout(sweepWallet, 60 * 1000);
 }

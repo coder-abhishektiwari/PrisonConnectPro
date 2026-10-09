@@ -3,6 +3,8 @@ package com.prisonconnect.kiosk.repository
 import com.prisonconnect.kiosk.datasource.InmateDataSource
 import com.prisonconnect.kiosk.models.inmate.InmateBalance
 import com.prisonconnect.kiosk.models.inmate.InmateProfile
+import com.prisonconnect.kiosk.models.wallet.WalletRequest
+import com.prisonconnect.kiosk.models.wallet.WalletRequestPayload
 import com.prisonconnect.kiosk.models.wallet.WalletStatement
 import com.prisonconnect.kiosk.network.NetworkResult
 import com.prisonconnect.kiosk.models.common.ApiError
@@ -48,6 +50,23 @@ class InmateRepositoryImpl @Inject constructor(
         emit(NetworkResult.Loading)
         try {
             val response = dataSource.getWalletStatement(id)
+            if (response.success && response.data != null) {
+                emit(NetworkResult.Success(response.data))
+            } else {
+                emit(NetworkResult.Failure(response.error ?: ApiError("UNKNOWN", "Unknown error")))
+            }
+        } catch (e: Exception) {
+            emit(NetworkResult.Failure(ApiError("EXCEPTION", e.message ?: "Network exception")))
+        }
+    }
+
+    override fun peekWalletStatement(id: String): WalletStatement? =
+        dataSource.peekWalletStatement(id)
+
+    override fun requestBalance(amount: Int, note: String?): Flow<NetworkResult<WalletRequest>> = flow {
+        emit(NetworkResult.Loading)
+        try {
+            val response = dataSource.requestWalletBalance(WalletRequestPayload(amount = amount, note = note))
             if (response.success && response.data != null) {
                 emit(NetworkResult.Success(response.data))
             } else {

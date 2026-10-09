@@ -22,6 +22,8 @@ import com.prisonconnect.kiosk.models.call.CallStatsReport
 import com.prisonconnect.kiosk.models.schedule.SlotsResponse
 import com.prisonconnect.kiosk.models.schedule.ScheduleRequest
 import com.prisonconnect.kiosk.models.wallet.WalletStatement
+import com.prisonconnect.kiosk.models.wallet.WalletRequest
+import com.prisonconnect.kiosk.models.wallet.WalletRequestPayload
 import retrofit2.http.*
 
 /**
@@ -92,6 +94,10 @@ interface TrustApiService {
 
     @GET("inmate/wallet/{id}")
     suspend fun getWalletStatement(@Path("id") id: String): ApiResponse<WalletStatement>
+
+    /** Ask the family to send money: creates a pending request for the warden inbox. */
+    @POST("inmate/wallet-requests")
+    suspend fun requestWalletBalance(@Body request: WalletRequestPayload): ApiResponse<WalletRequest>
 
     @GET("contacts/{id}")
     suspend fun getContacts(@Path("id") id: String): ApiResponse<List<Contact>>

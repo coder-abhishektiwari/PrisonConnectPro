@@ -14,7 +14,7 @@ const navItems: NavItem[] = [
   { to: '/inmates-family', label: 'Inmates & Family', icon: 'family_restroom' },
   { to: '/kiosk-registrations', label: 'Kiosk Registration Requests', icon: 'security' },
   { to: '/users', label: 'Admin Management', icon: 'people' },
-  { to: '/call-configuration', label: 'Call Configuration', icon: 'tune' },
+  { to: '/call-configuration', label: 'Configurations', icon: 'tune' },
 ];
 
 export function Sidebar() {

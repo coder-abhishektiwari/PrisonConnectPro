@@ -8,6 +8,8 @@ const { inAdminScope, adminScopeFilter, jailScopeOf, kioskScopeOf } = require('.
 const { paginate } = require('./lib/paginate');
 const { inmateDeleteHandler, validateInmateRefs, stripRemovedInmateFields, hashBiometricData } = require('./routes/inmates');
 const { isValidRfidNumber, rfidCardNumberFor, biometricValidationError } = require('./lib/biometrics');
+const { issueAndSendWalletSms, revokeLinksForContact } = require('./lib/wallet-links');
+const { maskedPhone, normalizePhone } = require('./lib/familySecurity');
 
 const ALL_ROLES = ['admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'];
 const ADMIN_ROLES = ['admin', 'warden', 'super-admin', 'super_admin'];
@@ -214,6 +216,9 @@ router.post('/prisoners/:prisonerId/contacts', requireRole(...ALL_ROLES), async 
     return res.status(409).json({ success: false, error: { code: 'DUPLICATE', message: 'A contact with this ID already exists' } });
   }
   const updated = await updateDb('contacts.json', (contacts) => ({ data: [...contacts, newContact], result: newContact }));
+  // New family contact = wallet link automatically SMS'd (fire-and-forget:
+  // the contact row is already committed, a slow SMS must not fail it).
+  issueAndSendWalletSms(newContact, owner).catch((err) => console.warn(`[wallet-link] auto-send failed for ${newContact.contactId}: ${err.message}`));
   return res.status(201).json({ success: true, data: normalizeContact(updated) });
 });
 
@@ -252,7 +257,42 @@ router.put('/contacts/:contactId', requireRole(...ALL_ROLES), async (req, res) =
     return { data: ct, result: ct[idx] };
   });
   if (!updated) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Contact not found' } });
+  // A number change means the old phone holds a working balance-view link:
+  // rotation revokes it and the fresh link goes to the new number.
+  const prevPhone = contact && (contact.phoneNumber || contact.phone || contact.mobileNumber);
+  const nextPhone = updated.phoneNumber || updated.phone || updated.mobileNumber;
+  if (prevPhone && nextPhone && normalizePhone(prevPhone) !== normalizePhone(nextPhone)) {
+    issueAndSendWalletSms(updated, owner).catch((err) => console.warn(`[wallet-link] re-send after phone change failed for ${contactId}: ${err.message}`));
+  }
   return res.json({ success: true, data: normalizeContact(updated) });
+});
+
+// Warden contact card: rotate the family wallet link and SMS it again.
+// Rotation revokes any previously issued token (old links answer 410).
+router.post('/contacts/:contactId/wallet-link/resend', requireRole(...ALL_ROLES), async (req, res) => {
+  const { contactId } = req.params;
+  const [contacts, inmates] = await Promise.all([readDb('contacts.json'), readDb('inmates.json')]);
+  const contact = contacts.find((c) => c.contactId === contactId);
+  if (!contact) {
+    return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Contact not found' } });
+  }
+  const owner = inmates.find((i) => i.inmateId === contact.inmateId) ||
+    inmates.find((i) => `INM-${i.inmateId}` === contact.inmateId);
+  if (owner && !inAdminScope(req, owner)) {
+    return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Contact not found' } });
+  }
+  const out = await issueAndSendWalletSms(contact, owner);
+  if (!out.sent) {
+    const code = out.reason === 'NO_PHONE' ? 'NO_PHONE' : 'SEND_FAILED';
+    const message = code === 'NO_PHONE'
+      ? 'This contact has no phone number - add one first'
+      : 'Could not send the wallet link SMS - try again later';
+    return res.status(400).json({ success: false, error: { code, message } });
+  }
+  return res.json({
+    success: true,
+    data: { linkId: out.linkId, phone: maskedPhone(out.phone), sentAt: new Date().toISOString() },
+  });
 });
 
 router.patch('/contacts/:contactId/status', requireRole(...ALL_ROLES), async (req, res) => {
@@ -311,6 +351,8 @@ router.delete('/contacts/:contactId', requireRole(...ALL_ROLES), async (req, res
     return { data: ct, result: removed };
   });
   if (!deleted) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Contact not found' } });
+  // A deleted contact must not keep a working balance-view link.
+  revokeLinksForContact(contactId).catch((err) => console.warn(`[wallet-link] revoke on delete failed for ${contactId}: ${err.message}`));
   return res.json({ success: true, data: { message: 'Contact deleted', contactId } });
 });
 

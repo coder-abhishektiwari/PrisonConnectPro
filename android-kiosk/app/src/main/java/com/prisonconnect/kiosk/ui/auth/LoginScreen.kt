@@ -573,13 +573,14 @@ fun WelcomeSelectionLayout(
                 onClick = onRfidClick,
                 modifier = Modifier.weight(1f)
             )
-            PremiumAuthCard(
-                title = "Prisoner ID",
-                icon = Icons.Default.Badge,
-                description = "Enter ID",
-                onClick = onPrisonerIdClick,
-                modifier = Modifier.weight(1f)
-            )
+            // Prisoner ID login disabled - kiosk only allows fingerprint + RFID.
+            // PremiumAuthCard(
+            //     title = "Prisoner ID",
+            //     icon = Icons.Default.Badge,
+            //     description = "Enter ID",
+            //     onClick = onPrisonerIdClick,
+            //     modifier = Modifier.weight(1f)
+            // )
         }
 
         Spacer(modifier = Modifier.height(48.dp))

@@ -48,6 +48,7 @@ object KioskRoutes {
     const val ADMIN_MIS_REPORT = "admin_mis_report"
     const val ADMIN_KIOSK_ADMINS = "admin_kiosk_admins"
     const val WALLET = "wallet"
+    const val INMATE_DETAILS = "inmate_details"
     const val SETUP_PERMISSIONS = "setup_permissions"
     const val SCHEDULE = "schedule/{contactId}/{contactName}/{callType}"
     const val VIDEO_CALL = "video_call/{contactName}/{roomId}"
@@ -157,6 +158,9 @@ fun KioskNavHost(
                 onScheduledCallClick = { _: ScheduledCall -> },
                 onWalletClick = {
                     navController.navigate(KioskRoutes.WALLET)
+                },
+                onProfileClick = {
+                    navController.navigate(KioskRoutes.INMATE_DETAILS)
                 },
                 onLogoutClick = {
                     navController.navigate(KioskRoutes.LOGIN) {
@@ -290,6 +294,11 @@ fun KioskNavHost(
         composable(KioskRoutes.WALLET) {
             com.prisonconnect.kiosk.ui.wallet.WalletScreen(
                 windowSizeClass = windowSizeClass,
+                onBackClick = { navController.popBackStack() }
+            )
+        }
+        composable(KioskRoutes.INMATE_DETAILS) {
+            com.prisonconnect.kiosk.ui.dashboard.InmateProfileDetailsScreen(
                 onBackClick = { navController.popBackStack() }
             )
         }

@@ -20,8 +20,12 @@ import androidx.compose.material3.*
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -35,6 +39,7 @@ import com.prisonconnect.kiosk.core.UiState
 import com.prisonconnect.kiosk.models.wallet.WalletTransaction
 import com.prisonconnect.kiosk.ui.components.KioskErrorState
 import com.prisonconnect.kiosk.ui.components.KioskLoadingState
+import com.prisonconnect.kiosk.ui.auth.IPhoneKeypad
 import com.prisonconnect.kiosk.ui.theme.LightBg
 import com.prisonconnect.kiosk.ui.theme.MoneyGreen
 import com.prisonconnect.kiosk.ui.theme.MoneyGreenBg
@@ -44,7 +49,6 @@ import com.prisonconnect.kiosk.ui.theme.PrimaryDarkNavy
 import com.prisonconnect.kiosk.ui.theme.PrimaryNavy
 import com.prisonconnect.kiosk.ui.theme.TextDark
 import com.prisonconnect.kiosk.ui.theme.TextGray
-import com.prisonconnect.kiosk.ui.theme.DividerColor
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -57,9 +61,23 @@ fun WalletScreen(
     viewModel: WalletViewModel = hiltViewModel()
 ) {
     val state by viewModel.walletState.collectAsState()
+    val requestState by viewModel.requestState.collectAsState()
     val isExpanded = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Expanded
+    val snackbarHostState = remember { SnackbarHostState() }
+    var showRequestDialog by remember { mutableStateOf(false) }
+
+    // Success: close the dialog, toast, refresh. (Errors stay inside the dialog.)
+    val requestSuccess = requestState.successMessage
+    LaunchedEffect(requestSuccess) {
+        if (requestSuccess != null) {
+            showRequestDialog = false
+            snackbarHostState.showSnackbar(requestSuccess)
+            viewModel.clearRequestEvent()
+        }
+    }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -118,6 +136,7 @@ fun WalletScreen(
                         ) {
                             WalletSummaryCard(
                                 data = s.data,
+                                onRequestClick = { showRequestDialog = true },
                                 modifier = Modifier.weight(0.8f)
                             )
                             WalletTransactionsCard(
@@ -131,7 +150,10 @@ fun WalletScreen(
                                 .fillMaxSize()
                                 .padding(16.dp)
                         ) {
-                            WalletSummaryCard(data = s.data)
+                            WalletSummaryCard(
+                                data = s.data,
+                                onRequestClick = { showRequestDialog = true }
+                            )
                             Spacer(modifier = Modifier.height(16.dp))
                             WalletTransactionsCard(
                                 data = s.data,
@@ -144,25 +166,121 @@ fun WalletScreen(
             }
         }
     }
+
+    if (showRequestDialog) {
+        RequestBalanceDialog(
+            state = requestState,
+            onConfirm = { rupees -> viewModel.requestBalance(rupees) },
+            onDismiss = {
+                viewModel.clearRequestEvent()
+                showRequestDialog = false
+            }
+        )
+    }
 }
 
-/** Balance + Total Spent — ek hi card me side by side. */
+/**
+ * Amount keypad dialog: family ko paisa bhejne ka request.
+ * AlertDialog must always carry confirmButton (material3 crashes without it).
+ */
 @Composable
-private fun WalletSummaryCard(data: WalletViewModel.WalletUiData, modifier: Modifier = Modifier) {
+private fun RequestBalanceDialog(
+    state: WalletViewModel.RequestState,
+    onConfirm: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var amountInput by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = { if (!state.submitting) onDismiss() },
+        title = {
+            Text(
+                text = "Request Balance",
+                fontWeight = FontWeight.Bold,
+                color = PrimaryDarkNavy,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "How much should your family send?",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextGray
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = if (amountInput.isEmpty()) "\u20B90" else "\u20B9$amountInput",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = PrimaryDarkNavy
+                )
+                state.error?.let { err ->
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = err,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        textAlign = TextAlign.Center
+                    )
+                }
+                Spacer(modifier = Modifier.height(14.dp))
+                IPhoneKeypad(
+                    onNumberClick = { digit -> if (amountInput.length < 6) amountInput += digit },
+                    onDeleteClick = { amountInput = amountInput.dropLast(1) }
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { amountInput.toIntOrNull()?.let(onConfirm) },
+                enabled = !state.submitting && (amountInput.toIntOrNull() ?: 0) in 10..2000
+            ) {
+                if (state.submitting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = PrimaryNavy
+                    )
+                } else {
+                    Text("Send Request", color = PrimaryNavy, fontWeight = FontWeight.Bold)
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { if (!state.submitting) onDismiss() }) {
+                Text("Cancel", color = TextGray)
+            }
+        }
+    )
+}
+
+/** Balance + Request Balance button — ek hi card me. */
+@Composable
+private fun WalletSummaryCard(
+    data: WalletViewModel.WalletUiData,
+    onRequestClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC))
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 20.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Balance (left)
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 20.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+            // Balance (centered — Total Spent removed by request)
             Column(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Icon(
@@ -185,37 +303,15 @@ private fun WalletSummaryCard(data: WalletViewModel.WalletUiData, modifier: Modi
                     color = PrimaryDarkNavy
                 )
             }
-            // Divider
-            Box(
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            OutlinedButton(
+                onClick = onRequestClick,
                 modifier = Modifier
-                    .width(1.dp)
-                    .height(48.dp)
-                    .background(DividerColor)
-            )
-            // Total Spent (right)
-            Column(
-                modifier = Modifier.weight(1f),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.RemoveCircle,
-                    contentDescription = null,
-                    tint = MoneyRed,
-                    modifier = Modifier.size(22.dp)
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    "Total Spent",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = TextGray
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "₹${String.format("%.2f", data.totalDeducted)}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MoneyRed
-                )
+                Text("Request Balance from Family", fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -302,6 +398,13 @@ private fun TransactionRow(tx: WalletTransaction) {
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                tx.chargesSubLine?.let { sub ->
+                    Text(
+                        text = sub,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextGray
+                    )
+                }
             }
             Text(
                 text = amountText,

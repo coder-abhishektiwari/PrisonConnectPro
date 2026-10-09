@@ -281,6 +281,15 @@ export function InmateDetailPage() {
     } catch { }
   };
 
+  const resendWalletLink = async (contactId: string) => {
+    try {
+      const out = await wardenApi.resendWalletLink(contactId);
+      alert(out?.phone ? `Wallet link sent by SMS to ${out.phone}` : 'Wallet link sent by SMS');
+    } catch (e: unknown) {
+      alert(errorMessage(e, 'Failed to send the wallet link. Please try again.'));
+    }
+  };
+
   const removeDevice = async (contactId: string, fingerprintId: string) => {
     if (removingDevice) return;
     setDeviceError('');
@@ -800,6 +809,13 @@ export function InmateDetailPage() {
                     <p className="text-xs text-neutral-500">{c.relationship} • {c.phoneNumber}</p>
                   </div>
                   <button
+                    onClick={e => { e.stopPropagation(); resendWalletLink(c.contactId); }}
+                    className="shrink-0 text-neutral-400 hover:text-primary-600 transition"
+                    title="Resend wallet link (SMS)"
+                  >
+                    <span className="material-icons text-xl">sms</span>
+                  </button>
+                  <button
                     onClick={e => { e.stopPropagation(); toggleContact(c.contactId); }}
                     className={`shrink-0 transition hover:opacity-80 ${c.active !== false ? 'text-success' : 'text-neutral-400'}`}
                     title={c.active !== false ? 'Deactivate' : 'Activate'}
@@ -826,6 +842,11 @@ export function InmateDetailPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => resendWalletLink(selectedContact.contactId)}
+                    className="w-8 h-8 flex items-center justify-center bg-white border border-neutral-200 text-neutral-600 rounded-lg hover:bg-blue-50 hover:text-blue-600 transition"
+                    title="Resend wallet link (SMS)"
+                  ><span className="material-icons text-base">sms</span></button>
                   <button
                     onClick={() => toggleContact(selectedContact.contactId)}
                     className={`transition hover:opacity-80 ${selectedContact.active !== false ? 'text-success' : 'text-neutral-400'}`}

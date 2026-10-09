@@ -357,6 +357,12 @@ export function InmateFamilyPage() {
                           <div>
                             <p className="text-xs font-semibold text-slate-800">{tx.description || tx.reason || type}</p>
                             <p className="text-[10px] text-slate-400 font-mono mt-0.5">{date.toLocaleDateString('en-IN')} • {date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</p>
+                            {tx.grossAmount != null && Number(tx.grossAmount) > Number(tx.amount) && (
+                              <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+                                Paid ₹{Number(tx.grossAmount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {' · '}charges ₹{(Number(tx.grossAmount) - Number(tx.amount)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </p>
+                            )}
                           </div>
                         </div>
                         <div className="text-right">
