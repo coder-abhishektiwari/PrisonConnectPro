@@ -247,17 +247,18 @@ fun RfidScanningLayout(
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "RFID card reader not detected",
-                            fontWeight = FontWeight.Medium,
-                            textAlign = TextAlign.Center,
-                            color = PremiumNavy
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        LinearProgressIndicator(
-                            modifier = Modifier.fillMaxWidth(),
-                            color = PremiumBlue,
-                            trackColor = Color.LightGray
-                        )
+                                text = "RFID card reader not detected",
+                                fontWeight = FontWeight.Medium,
+                                textAlign = TextAlign.Center,
+                                color = PremiumNavy
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "RFID scanner hardware is not detected by kiosk please contact the admin.",
+                                textAlign = TextAlign.Center,
+                                color = Color.Gray,
+                                fontSize = 13.sp
+                            )
                     }
                 }
             }
@@ -266,7 +267,7 @@ fun RfidScanningLayout(
         Spacer(modifier = Modifier.height(24.dp))
 
         TextButton(onClick = { manualDigits = ""; showManualDialog = true }) {
-            Text("Enter card number instead", color = AccentBlue, fontWeight = FontWeight.Bold)
+            Text("Enter card number instead", color = PremiumBlue, fontWeight = FontWeight.Medium)
         }
 
         TextButton(onClick = onCancel) {
@@ -481,7 +482,7 @@ fun FingerprintScanningLayout(
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "Connect the USB fingerprint scanner to the kiosk, then place the finger.",
+                                text = "Fingerprint scanner hardware is not detected by kiosk please contact the admin.",
                                 textAlign = TextAlign.Center,
                                 color = Color.Gray,
                                 fontSize = 13.sp

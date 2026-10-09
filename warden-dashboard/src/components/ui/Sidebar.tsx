@@ -38,7 +38,8 @@ export function Sidebar() {
           <img src="/ic_icon.webp" alt="Warden Panel" className="w-8 h-8 object-contain" />
         </div>
         <div className="opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300 overflow-hidden whitespace-nowrap">
-          <h1 className="text-lg font-bold text-white">Warden Pannel</h1>
+          <h1 className="text-lg font-bold text-white">Jail Admin Pannel</h1>
+          <p className="text-[12px] text-white">PRISON-001</p>
         </div>
       </div>
 

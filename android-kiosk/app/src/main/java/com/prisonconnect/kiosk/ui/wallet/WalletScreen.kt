@@ -304,15 +304,15 @@ private fun WalletSummaryCard(
                 )
             }
             }
-            Spacer(modifier = Modifier.height(4.dp))
-            OutlinedButton(
-                onClick = onRequestClick,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
-            ) {
-                Text("Request Balance from Family", fontWeight = FontWeight.SemiBold)
-            }
+            //Spacer(modifier = Modifier.height(4.dp))
+            //OutlinedButton(
+            //    onClick = onRequestClick,
+            //    modifier = Modifier
+            //        .fillMaxWidth()
+            //        .padding(horizontal = 16.dp, vertical = 12.dp)
+            //) {
+            //    Text("Request Balance from Family", fontWeight = FontWeight.SemiBold)
+            //}
         }
     }
 }
