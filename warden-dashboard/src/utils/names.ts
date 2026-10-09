@@ -12,10 +12,10 @@
 const clean = (value?: string | null): string => (value ?? '').trim();
 
 export function inmateLabel(
-  call: { inmateName?: string; inmateId?: string } | null | undefined,
+  call: { inmateName?: string; inmateId?: string; inmateNumber?: string } | null | undefined,
   inmate?: { name?: string } | null
 ): string {
-  return clean(inmate?.name) || clean(call?.inmateName) || clean(call?.inmateId) || '-';
+  return clean(inmate?.name) || clean(call?.inmateName) || clean(call?.inmateNumber) || clean(call?.inmateId) || '-';
 }
 
 export function contactLabel(

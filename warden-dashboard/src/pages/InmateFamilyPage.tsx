@@ -205,7 +205,7 @@ export function InmateFamilyPage() {
                         </div>
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-neutral-900 truncate">{i.name}</p>
-                          <p className="text-xs text-neutral-500 font-mono truncate">{i.inmateId}</p>
+                          <p className="text-xs text-neutral-500 font-mono truncate">{i.prisonerNumber || i.inmateId}</p>
                         </div>
                       </div>
                     </td>

@@ -548,7 +548,7 @@ private fun InmateProfileCard(
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "Inmate No: ${inmateProfile.inmateId}",
+                    text = "Inmate No: ${inmateProfile.displayNumber}",
                     fontSize = 12.sp,
                     color = TextGray,
                     maxLines = 1,

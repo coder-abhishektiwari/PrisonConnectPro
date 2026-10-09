@@ -226,10 +226,7 @@ private fun InmateDetailsContent(
                 )
 
                 Text(
-                    text = listOfNotNull(
-                        prisoner.inmateId,
-                        prisoner.prisonerNumber
-                    ).joinToString("  •  "),
+                    text = prisoner.prisonerNumber ?: prisoner.inmateId,
                     fontSize = 13.sp,
                     color = Color(0xFF687A8F)
                 )

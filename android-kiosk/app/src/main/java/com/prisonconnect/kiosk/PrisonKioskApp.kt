@@ -26,6 +26,9 @@ class PrisonKioskApp : Application(), Configuration.Provider {
 
     @Inject lateinit var trustApiService: TrustApiService
     @Inject lateinit var deviceInfoProvider: DeviceInfoProvider
+    /** Injected so the connectivity callback registers at process start and
+     *  survives navigation across every screen. */
+    @Inject lateinit var networkMonitor: com.prisonconnect.kiosk.core.NetworkMonitor
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 

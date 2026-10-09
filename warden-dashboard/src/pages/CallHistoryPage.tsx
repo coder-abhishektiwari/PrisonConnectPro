@@ -431,7 +431,7 @@ export function CallHistoryPage() {
                           <span className="text-xs text-neutral-400">⇄</span>
                           <span className="text-sm font-medium text-neutral-700 truncate">{familyName}</span>
                         </div>
-                        <p className="text-xs text-neutral-500 mt-0.5">{call.inmateId}</p>
+                        <p className="text-xs text-neutral-500 mt-0.5">{inmate?.prisonerNumber || call.inmateNumber || call.inmateId}</p>
                       </td>
                       <td className="py-3 px-4 text-sm text-neutral-900">{call.kioskId}</td>
                       {/* stopPropagation: opening the map must not open the row drawer */}
@@ -564,7 +564,7 @@ export function CallHistoryPage() {
                     <p className="text-[11px] font-bold text-primary-600 uppercase tracking-wide mb-2">Participants</p>
                     <div className="space-y-2">
                       <div className="flex justify-between"><span className="text-sm text-neutral-600">Inmate</span><span className="text-sm font-semibold text-neutral-900">{inmateLabel(selected, inmates[selected.inmateId])}</span></div>
-                      <div className="flex justify-between"><span className="text-sm text-neutral-600">Inmate ID</span><span className="text-sm font-mono text-neutral-900">{selected.inmateId}</span></div>
+                      <div className="flex justify-between"><span className="text-sm text-neutral-600">Inmate No</span><span className="text-sm font-mono text-neutral-900">{inmates[selected.inmateId]?.prisonerNumber || selected.inmateNumber || selected.inmateId}</span></div>
                       <div className="flex justify-between"><span className="text-sm text-neutral-600">Family Member</span><span className="text-sm font-semibold text-neutral-900">{contactLabel(selected)}</span></div>
                       <div className="flex justify-between"><span className="text-sm text-neutral-600">Contact ID</span><span className="text-sm font-mono text-neutral-900">{selected.contactId}</span></div>
                     </div>

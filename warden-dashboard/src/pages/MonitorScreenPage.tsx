@@ -211,7 +211,7 @@ export function MonitorScreenPage() {
                 </div>
                 <div>
                   <p className="font-semibold text-neutral-900">{inmateLabel(call, inmate)}</p>
-                  <p className="text-sm text-neutral-600">{inmate?.inmateId || call.inmateId}</p>
+                  <p className="text-sm text-neutral-600">{inmate?.prisonerNumber || call.inmateNumber || inmate?.inmateId || call.inmateId}</p>
                 </div>
               </div>
               <div className="space-y-1 text-sm">

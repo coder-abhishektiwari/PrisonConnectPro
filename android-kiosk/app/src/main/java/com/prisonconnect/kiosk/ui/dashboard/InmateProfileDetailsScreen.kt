@@ -173,7 +173,7 @@ private fun InmateDetailsContent(profile: InmateProfile) {
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Inmate No: ${profile.inmateId}",
+                    text = "Inmate No: ${profile.displayNumber}",
                     fontSize = 13.sp,
                     color = TextGray
                 )

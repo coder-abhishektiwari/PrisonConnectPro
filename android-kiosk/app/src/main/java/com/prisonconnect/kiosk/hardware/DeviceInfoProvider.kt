@@ -115,4 +115,50 @@ class DeviceInfoProvider @Inject constructor(
             rawFingerprint.replace(" ", "_")
         }
     }
+
+    // ---- local hardware facts for the Device Information screen ----
+    // The admin devices API is not reachable with a kiosk token, so the screen
+    // reads everything it can straight off the device itself.
+
+    fun hasCamera(): Boolean = try {
+        context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_CAMERA_ANY)
+    } catch (e: Exception) {
+        false
+    }
+
+    fun hasMicrophone(): Boolean = try {
+        context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_MICROPHONE)
+    } catch (e: Exception) {
+        false
+    }
+
+    fun getCpuDescription(): String = try {
+        "${Runtime.getRuntime().availableProcessors()}-core"
+    } catch (e: Exception) {
+        "Unknown"
+    }
+
+    fun getRamDescription(): String = try {
+        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        val info = android.app.ActivityManager.MemoryInfo()
+        am.getMemoryInfo(info)
+        String.format(java.util.Locale.US, "%.1f GB", info.totalMem / (1024.0 * 1024 * 1024))
+    } catch (e: Exception) {
+        "Unknown"
+    }
+
+    fun getStorageDescription(): String = try {
+        val stat = android.os.StatFs(context.filesDir.absolutePath)
+        val totalGb = stat.blockCountLong * stat.blockSizeLong / (1024.0 * 1024 * 1024)
+        String.format(java.util.Locale.US, "%.0f GB", totalGb)
+    } catch (e: Exception) {
+        "Unknown"
+    }
+
+    fun getScreenResolution(): String = try {
+        val dm = context.resources.displayMetrics
+        "${dm.widthPixels} × ${dm.heightPixels}"
+    } catch (e: Exception) {
+        "Unknown"
+    }
 }

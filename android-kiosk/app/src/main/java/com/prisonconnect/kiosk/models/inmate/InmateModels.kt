@@ -4,6 +4,7 @@ import com.google.gson.annotations.SerializedName
 
 data class InmateProfile(
     @SerializedName("inmateId") val inmateId: String,
+    @SerializedName("prisonerNumber") val prisonerNumber: String? = null,
     @SerializedName("name") val name: String = "",
     @SerializedName("firstName") val firstName: String = "",
     @SerializedName("lastName") val lastName: String = "",
@@ -23,6 +24,9 @@ data class InmateProfile(
 ) {
     val displayName: String
         get() = name.ifEmpty { "$firstName $lastName".trim() }.ifEmpty { "Unknown" }
+    /** What to SHOW the user: the human prisoner number when it exists. */
+    val displayNumber: String
+        get() = prisonerNumber?.takeIf { it.isNotBlank() } ?: inmateId
     val isActive: Boolean
         get() = status == InmateStatus.ACTIVE
 }

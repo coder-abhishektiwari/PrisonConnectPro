@@ -4,10 +4,12 @@ import android.os.Bundle
 import android.view.MotionEvent
 import androidx.activity.compose.setContent
 import androidx.fragment.app.FragmentActivity
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -22,6 +24,7 @@ import com.prisonconnect.kiosk.BuildConfig
 import com.prisonconnect.kiosk.core.KioskPermissions
 import com.prisonconnect.kiosk.core.SessionManager
 import com.prisonconnect.kiosk.navigation.KioskNavHost
+import com.prisonconnect.kiosk.ui.auth.NoInternetScreen
 import com.prisonconnect.kiosk.ui.setup.SetupPermissionsScreen
 import com.prisonconnect.kiosk.ui.theme.PrisonKioskTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -37,6 +40,7 @@ import javax.inject.Inject
 class MainActivity : FragmentActivity() {
 
     @Inject lateinit var sessionManager: SessionManager
+    @Inject lateinit var networkMonitor: com.prisonconnect.kiosk.core.NetworkMonitor
 
     private var inactivityJob: Job? = null
     private val AUTO_LOGOUT_TIMEOUT_MS = BuildConfig.AUTO_LOGOUT_TIMEOUT_MS
@@ -57,20 +61,30 @@ class MainActivity : FragmentActivity() {
         setContent {
             PrisonKioskTheme {
                 val windowSizeClass = calculateWindowSizeClass(this)
+                val isOnline by networkMonitor.isOnline.collectAsState()
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    // One-time setup gate: nothing runs until every runtime
-                    // permission the kiosk needs has been collected.
-                    var setupComplete by remember {
-                        mutableStateOf(KioskPermissions.missing(this).isEmpty())
-                    }
-                    if (setupComplete) {
-                        val navController = rememberNavController()
-                        KioskNavHost(
-                            navController = navController,
-                            windowSizeClass = windowSizeClass
-                        )
-                    } else {
-                        SetupPermissionsScreen(onGranted = { setupComplete = true })
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        // One-time setup gate: nothing runs until every runtime
+                        // permission the kiosk needs has been collected.
+                        var setupComplete by remember {
+                            mutableStateOf(KioskPermissions.missing(this@MainActivity).isEmpty())
+                        }
+                        if (setupComplete) {
+                            val navController = rememberNavController()
+                            KioskNavHost(
+                                navController = navController,
+                                windowSizeClass = windowSizeClass
+                            )
+                        } else {
+                            SetupPermissionsScreen(onGranted = { setupComplete = true })
+                        }
+
+                        // Global no-internet gate: paints over WHATEVER screen is
+                        // showing the instant connectivity drops, and retires the
+                        // instant it returns (driven by NetworkMonitor's callback).
+                        if (!isOnline) {
+                            NoInternetScreen(onRetry = { networkMonitor.refresh() })
+                        }
                     }
                 }
             }

@@ -61,14 +61,14 @@ fun DeviceInfoContent(
         containerColor = Color(0xFFF5F7FA)
     ) { paddingValues ->
         val items = listOf(
-            DeviceInfoItem("Device Serial", deviceInfo?.serialNumber ?: "Can't fetch"),
-            DeviceInfoItem("Kiosk ID", deviceInfo?.kioskId ?: "Can't fetch"),
-            DeviceInfoItem("Prison ID", deviceInfo?.prisonId ?: "Can't fetch"),
-            DeviceInfoItem("IP Address", deviceInfo?.ipAddress ?: "Can't fetch"),
-            DeviceInfoItem("Location", deviceInfo?.location ?: "Can't fetch"),
-            DeviceInfoItem("Firmware Version", deviceInfo?.firmwareVersion ?: "Can't fetch"),
-            DeviceInfoItem("App Version", deviceInfo?.appVersion ?: "Can't fetch"),
-            DeviceInfoItem("Last Seen", deviceInfo?.lastSeen ?: "Can't fetch")
+            DeviceInfoItem("Device Serial", deviceInfo?.serialNumber ?: "—"),
+            DeviceInfoItem("Kiosk ID", deviceInfo?.kioskId ?: "—"),
+            DeviceInfoItem("Prison ID", deviceInfo?.prisonId ?: "—"),
+            DeviceInfoItem("IP Address", deviceInfo?.ipAddress ?: "—"),
+            DeviceInfoItem("Location", deviceInfo?.location ?: "—"),
+            DeviceInfoItem("Firmware Version", deviceInfo?.firmwareVersion ?: "—"),
+            DeviceInfoItem("App Version", deviceInfo?.appVersion ?: "—"),
+            DeviceInfoItem("Last Seen", deviceInfo?.lastSeen ?: "—")
         )
 
         LazyColumn(
@@ -112,37 +112,6 @@ fun DeviceInfoContent(
             }
 
             item {
-                Box(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (deviceInfo?.isOnline == true) Color(0xFFE8F5E9) else Color(0xFFFFEBEE)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (deviceInfo?.isOnline == true) Icons.Default.CheckCircle else Icons.Default.Error,
-                                contentDescription = null,
-                                tint = if (deviceInfo?.isOnline == true) Color(0xFF4CAF50) else Color(0xFFD32F2F),
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Text(
-                                text = if (deviceInfo?.isOnline == true) "Online" else "Offline",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
-                                color = if (deviceInfo?.isOnline == true) Color(0xFF2E7D32) else Color(0xFFD32F2F)
-                            )
-                        }
-                    }
-                }
-            }
-
-            item {
                 val localItems = localDeviceInfo.map { DeviceInfoItem(it.key, it.value) }
                 InfoCard("Local Hardware Identity", localItems)
             }
@@ -153,21 +122,21 @@ fun DeviceInfoContent(
 
             item {
                 val hardwareItems = listOf(
-                    DeviceInfoItem("Manufacturer", deviceInfo?.manufacturer ?: "Can't fetch"),
-                    DeviceInfoItem("Model", deviceInfo?.model ?: "Can't fetch"),
-                    DeviceInfoItem("Camera Status", deviceInfo?.camera?.status ?: "Can't fetch"),
-                    DeviceInfoItem("Mic Status", deviceInfo?.microphone?.status ?: "Can't fetch"),
-                    DeviceInfoItem("Network Status", deviceInfo?.network?.status ?: "Can't fetch")
+                    DeviceInfoItem("Manufacturer", deviceInfo?.manufacturer ?: "—"),
+                    DeviceInfoItem("Model", deviceInfo?.model ?: "—"),
+                    DeviceInfoItem("Camera Status", deviceInfo?.camera?.status ?: "—"),
+                    DeviceInfoItem("Mic Status", deviceInfo?.microphone?.status ?: "—"),
+                    DeviceInfoItem("Network Status", deviceInfo?.network?.status ?: "—")
                 )
                 InfoCard("Hardware Information", hardwareItems)
             }
 
             item {
                 val performanceItems = listOf(
-                    DeviceInfoItem("CPU", deviceInfo?.hardware?.processor ?: "Can't fetch"),
-                    DeviceInfoItem("RAM", deviceInfo?.hardware?.ram ?: "Can't fetch"),
-                    DeviceInfoItem("Storage", deviceInfo?.hardware?.storage ?: "Can't fetch"),
-                    DeviceInfoItem("Resolution", deviceInfo?.camera?.resolution ?: "Can't fetch")
+                    DeviceInfoItem("CPU", deviceInfo?.hardware?.processor ?: "—"),
+                    DeviceInfoItem("RAM", deviceInfo?.hardware?.ram ?: "—"),
+                    DeviceInfoItem("Storage", deviceInfo?.hardware?.storage ?: "—"),
+                    DeviceInfoItem("Resolution", deviceInfo?.hardware?.screenSize ?: "—")
                 )
                 InfoCard("Storage & Performance", performanceItems)
             }

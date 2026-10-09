@@ -385,7 +385,7 @@ export function InmateDetailPage() {
   const headerIcon = useMemo(() => <span className="material-icons text-primary-600 text-xl">{isNew ? 'person_add' : 'person'}</span>, [isNew]);
   usePageHeader({
     title: isNew ? 'Add New Inmate' : (inmate?.name || 'Inmate Details'),
-    subtitle: isNew ? 'Fill in inmate details' : (inmate ? `${inmate.inmateId}${inmate.prisonerNumber ? ` • ${inmate.prisonerNumber}` : ''}` : ''),
+    subtitle: isNew ? 'Fill in inmate details' : (inmate ? (inmate.prisonerNumber || inmate.inmateId) : ''),
     icon: headerIcon,
     actions: useMemo(() => (
       <button onClick={() => navigate('/inmates-family')} className="inline-flex items-center gap-1.5 px-4 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-lg text-sm font-medium transition">
@@ -672,7 +672,7 @@ export function InmateDetailPage() {
               </div>
               <div>
                 <p className="font-bold text-lg text-neutral-900">{inmate.name}</p>
-                <p className="text-sm text-neutral-500 font-mono">{inmate.inmateId}</p>
+                <p className="text-sm text-neutral-500 font-mono">{inmate.prisonerNumber || inmate.inmateId}</p>
               </div>
             </div>
           )}
@@ -687,20 +687,6 @@ export function InmateDetailPage() {
           )}
           {isNew && <div className="mb-4" />}
           {fieldRow('Full Name', 'name', 'person')}
-          {isNew ? (
-            <div className="py-3 border-b border-neutral-100 last:border-0 flex items-center gap-3">
-              <span className="material-icons text-neutral-400 text-lg">badge</span>
-              <div>
-                <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">Inmate ID</p>
-                {nextId ? (
-                  <p className="text-sm text-neutral-900 font-mono font-bold">{nextId}</p>
-                ) : (
-                  <div className="h-4 w-20 bg-neutral-200 rounded animate-pulse" />
-                )}
-              </div>
-              <span className="ml-auto px-2 py-0.5 bg-primary-50 text-primary-700 text-[10px] font-bold rounded-full uppercase">Auto-generated</span>
-            </div>
-          ) : fieldRow('Inmate ID', 'inmateId', 'badge', { readOnly: true })}
           {fieldRow('Inmate Number', 'prisonerNumber', 'tag')}
           {fieldRow('Gender', 'gender', 'wc', { radio: ['male', 'female', 'other'] })}
           {fieldRow('Age', 'age', 'cake', { type: 'number', min: 1, max: 120, placeholder: 'Years' })}

@@ -850,6 +850,7 @@ app.get('/inmate/profile/:inmateId', requireAuth, asyncRoute(async (req, res) =>
   if (inmate.status && inmate.status !== 'active') return sendError(res, 'NOT_FOUND', 'Record not found', 404);
   return sendSuccess(res, {
     inmateId: inmate.inmateId,
+    prisonerNumber: inmate.prisonerNumber || null,
     name: inmate.name || inmate.fullName || [inmate.firstName, inmate.lastName].filter(Boolean).join(' ').trim() || 'Unknown',
     prisonId: inmate.prisonId,
     facility: inmate.facility || inmate.prisonId,
