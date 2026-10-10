@@ -45,7 +45,7 @@ router.post('/', requireAuth, requireRole('admin'), asyncRoute(async (req, res) 
   }
 }));
 
-router.patch('/:prisonId', requireAuth, requireRole('admin'), asyncRoute(async (req, res) => {
+router.patch('/:prisonId', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
   const existing = (await readDb('prisons.json')).find((p) => p.prisonId === req.params.prisonId);
   if (!existing || !(await inScopeOf(req, existing))) {
     return sendError(res, 'NOT_FOUND', 'Prison not found', 404);
@@ -53,6 +53,14 @@ router.patch('/:prisonId', requireAuth, requireRole('admin'), asyncRoute(async (
   const IMMUTABLE_FIELDS = ['prisonId', 'setupPin', 'wardenId', 'createdAt'];
   const patch = { ...req.body };
   IMMUTABLE_FIELDS.forEach((f) => delete patch[f]);
+  // A warden administers one jail (inScopeOf already pinned the record to
+  // their prison): only the facility's public profile. Status, counts, rosters
+  // and the setup PIN stay admin territory.
+  const role = String(req.auth?.role || '').toLowerCase().replace(/[-_]/g, '');
+  if (role === 'warden') {
+    const WARDEN_FIELDS = ['name', 'code', 'state', 'district', 'address', 'capacity'];
+    Object.keys(patch).forEach((f) => { if (!WARDEN_FIELDS.includes(f)) delete patch[f]; });
+  }
   const updated = await updateDb('prisons.json', (prisons) => {
     const idx = prisons.findIndex((p) => p.prisonId === req.params.prisonId);
     if (idx === -1) return { data: prisons, result: null };

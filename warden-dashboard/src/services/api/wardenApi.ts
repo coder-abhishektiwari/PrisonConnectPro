@@ -540,6 +540,7 @@ export const cacheKeys = {
   incidents: () => 'incidents',
   reports: () => 'reports',
   prisons: () => 'prisons',
+  prison: (prisonId: string) => `prisons:${prisonId}`,
 };
 
 export const wardenApi = {
@@ -1031,7 +1032,14 @@ export const wardenApi = {
     cachedGet('prisons', () => apiClient.get<ApiResponse<any[]>>('/prisons').then((r) => r.data?.data ?? [])),
 
   getPrison: (prisonId: string) =>
-    cachedGet(`prisons:${prisonId}`, () => apiClient.get<ApiResponse<any>>(`/prisons/${prisonId}`).then((r) => r.data?.data)),
+    cachedGet(`prisons:${prisonId}`, () => apiClient.get<ApiResponse<PrisonInfo>>(`/prisons/${encodeURIComponent(prisonId)}`).then((r) => r.data?.data)),
+
+  /** Facility profile edits (warden: name/code/state/district/address/capacity only — server-enforced). */
+  updatePrison: (prisonId: string, patch: Partial<PrisonInfo>) =>
+    apiClient.patch<ApiResponse<PrisonInfo>>(`/prisons/${encodeURIComponent(prisonId)}`, patch).then((r) => {
+      invalidatePrefix('prisons');
+      return r.data?.data;
+    }),
 
   // Subscriptions
   getSubscriptions: () =>
@@ -1165,4 +1173,20 @@ export interface SetupPinData {
   prisonId: string;
   pinSet: boolean;
   updatedAt?: string | null;
+}
+
+/** Facility profile as returned by GET /prisons/:prisonId. */
+export interface PrisonInfo {
+  prisonId: string;
+  name: string;
+  code?: string;
+  state?: string;
+  district?: string;
+  address?: string;
+  status?: string;
+  capacity?: number | null;
+  currentInmateCount?: number;
+  wardenIds?: string[];
+  kioskIds?: string[];
+  createdAt?: string;
 }
