@@ -64,6 +64,7 @@ class BiometricRegistrationViewModel @Inject constructor(
     }
 
     fun registerFingerprint(prisonerId: String, template: String) {
+        if (_registerState.value is NetworkResult.Loading) return
         _registerState.value = NetworkResult.Loading
         viewModelScope.launch {
             val result = adminRepository.registerBiometric(
@@ -76,6 +77,7 @@ class BiometricRegistrationViewModel @Inject constructor(
     }
 
     fun registerRfid(prisonerId: String, token: String) {
+        if (_registerState.value is NetworkResult.Loading) return
         _registerState.value = NetworkResult.Loading
         viewModelScope.launch {
             val result = adminRepository.registerBiometric(
@@ -87,10 +89,20 @@ class BiometricRegistrationViewModel @Inject constructor(
         }
     }
 
+    /**
+     * The HID wedge reader typed a card number + Enter into the hidden text
+     * field of the RFID dialog. Route it through the hardware manager so the
+     * screen's CardRead handler (detect → auto-register) does the rest.
+     */
+    fun onRfidCardTapped(token: String) {
+        if (_registerState.value is NetworkResult.Loading) return
+        rfidReaderManager.onCardRead(token)
+    }
+
     fun deleteBiometric(biometricId: String, prisonerId: String) {
         _deleteState.value = NetworkResult.Loading
         viewModelScope.launch {
-            adminRepository.deleteBiometric(biometricId).collect { result ->
+            adminRepository.deleteBiometric(biometricId, prisonerId).collect { result ->
                 _deleteState.value = result
                 if (result is NetworkResult.Success) loadBiometrics(prisonerId)
             }

@@ -2,7 +2,6 @@ package com.prisonconnect.kiosk.ui.call
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.prisonconnect.kiosk.core.Constants
 import com.prisonconnect.kiosk.core.UiState
 import com.prisonconnect.kiosk.models.schedule.BookedSlot
 import com.prisonconnect.kiosk.models.schedule.ScheduleRequest
@@ -30,10 +29,16 @@ class ScheduleViewModel @Inject constructor(
     private val _scheduleState = MutableStateFlow<UiState<Unit>>(UiState.Idle)
     val scheduleState = _scheduleState.asStateFlow()
 
-    private val kioskId: String
-        get() = authRepository.getVerifiedKiosk()?.kioskId ?: Constants.KIOSK_ID
+    /** Server-issued id of the verified kiosk — null until /kiosks/verify succeeds. */
+    private val kioskId: String?
+        get() = authRepository.getVerifiedKiosk()?.kioskId?.takeIf { it.isNotBlank() }
 
     fun loadBookedSlots(date: String) {
+        val kioskId = kioskId
+        if (kioskId == null) {
+            _slotsState.value = UiState.Error("Kiosk device is not verified. Please contact administration.")
+            return
+        }
         _slotsState.value = UiState.Loading
         viewModelScope.launch {
             repository.getBookedSlots(kioskId, date).collect { result ->
@@ -48,9 +53,16 @@ class ScheduleViewModel @Inject constructor(
     }
 
     fun scheduleCall(contactId: String, date: String, timeSlot: String, callType: String) {
-        _scheduleState.value = UiState.Loading
         viewModelScope.launch {
-            val inmateId = authRepository.getInmateId() ?: Constants.KIOSK_ID
+            // Hard-fail before booking: getInmateId suspends (DataStore read),
+            // so the guard must live inside the coroutine.
+            val kioskId = kioskId
+            val inmateId = authRepository.getInmateId()
+            if (kioskId == null || inmateId.isNullOrBlank()) {
+                _scheduleState.value = UiState.Error("Kiosk not verified or session expired. Please login again.")
+                return@launch
+            }
+            _scheduleState.value = UiState.Loading
             repository.bookCall(
                 ScheduleRequest(
                     inmateId = inmateId,

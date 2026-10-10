@@ -62,6 +62,22 @@ class SplashViewModel @Inject constructor(
             // app scope in PrisonKioskApp — NOT here: this ViewModel is
             // cleared the moment splash pops and viewModelScope cancels the
             // in-flight verify, so nothing ever persisted from this screen.
+            //
+            // Strict: a bypass must NEVER hand an unverified device a login
+            // screen. Hydrate the persisted/server identity first; still
+            // unverified → registration (the only valid destination).
+            if (authRepository.getVerifiedKiosk() == null) {
+                authRepository.hydrateKioskInfo().collect { result ->
+                    if (result is NetworkResult.Failure) {
+                        Logger.w("SplashViewModel: bypass-mode hydrate failed: ${result.error.message}")
+                    }
+                }
+            }
+            if (authRepository.getVerifiedKiosk() == null) {
+                Logger.w("SplashViewModel: bypass mode but kiosk still UNVERIFIED → Registration.")
+                _navigationEvent.emit(SplashNavigation.NavigateToRegistration)
+                return
+            }
             checkSessionAndNavigate()
             return
         }

@@ -22,7 +22,9 @@ import com.prisonconnect.kiosk.hardware.FingerprintCaptureState
 import com.prisonconnect.kiosk.hardware.RfidReaderState
 import com.prisonconnect.kiosk.models.admin.BiometricRegistration
 import com.prisonconnect.kiosk.network.NetworkResult
+import com.prisonconnect.kiosk.ui.auth.HiddenRfidTapInput
 import com.prisonconnect.kiosk.ui.auth.RfidKeypadEntry
+import com.prisonconnect.kiosk.ui.auth.RfidTapAnimation
 import com.prisonconnect.kiosk.ui.components.KioskLoadingState
 import com.prisonconnect.kiosk.ui.components.KioskTopBar
 import java.io.ByteArrayOutputStream
@@ -102,7 +104,11 @@ fun BiometricRegistrationScreen(
     LaunchedEffect(deleteResult) {
         when (deleteResult) {
             is NetworkResult.Success -> { snackbarMessage = "Biometric removed"; viewModel.resetDeleteState() }
-            is NetworkResult.Failure -> { snackbarMessage = "Failed to remove"; viewModel.resetDeleteState() }
+            is NetworkResult.Failure -> {
+                val failure = deleteResult as? NetworkResult.Failure
+                snackbarMessage = failure?.error?.message ?: "Failed to remove"
+                viewModel.resetDeleteState()
+            }
             else -> {}
         }
     }
@@ -274,6 +280,8 @@ fun BiometricRegistrationScreen(
             },
             registerError = registerError,
             onManualConfirm = { viewModel.registerRfid(prisonerId, it) },
+            onCardTap = { viewModel.onRfidCardTapped(it) },
+            animation = { RfidTapAnimation(modifier = Modifier.size(130.dp)) },
             onDismiss = {
                 showRfidDialog = false
                 viewModel.stopCapture()
@@ -334,7 +342,9 @@ fun BiometricCard(
 /**
  * Small capture dialog: instruction card with live hardware status on top.
  * [showManualEntry] adds the manual number fallback (RFID only): a link to an
- * on-screen 12-dot keypad that auto-registers when the number is complete.
+ * on-screen 10-dot keypad that auto-registers when the number is complete.
+ * [onCardTap] wires the invisible HID wedge input (USB readers type the card
+ * number + Enter), and [animation] renders the Lottie tap animation.
  */
 @Composable
 private fun BiometricCaptureDialog(
@@ -346,7 +356,9 @@ private fun BiometricCaptureDialog(
     status: BiometricCaptureStatus,
     registerError: String?,
     onManualConfirm: (String) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onCardTap: ((String) -> Unit)? = null,
+    animation: (@Composable () -> Unit)? = null
 ) {
     var showKeypad by remember { mutableStateOf(false) }
     var digits by remember { mutableStateOf("") }
@@ -366,6 +378,13 @@ private fun BiometricCaptureDialog(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // Invisible HID input — the USB reader types the card number
+                // straight into this auto-focused field, then Enter registers.
+                if (onCardTap != null) {
+                    HiddenRfidTapInput(onCardDetected = onCardTap)
+                }
+
+                if (animation != null) animation()
                 // Instruction card — what to do + live reader status.
                 Surface(
                     color = Color(0xFFF5F7FA),
@@ -411,7 +430,7 @@ private fun BiometricCaptureDialog(
                         digits = digits,
                         onDigitsChange = { new ->
                             digits = new
-                            if (new.length == 12) onManualConfirm(new)
+                            if (new.length == 10) onManualConfirm(new)
                         }
                     )
                 } else {

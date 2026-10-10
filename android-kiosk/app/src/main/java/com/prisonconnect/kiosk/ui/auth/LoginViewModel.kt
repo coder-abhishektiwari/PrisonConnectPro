@@ -7,7 +7,6 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import androidx.lifecycle.viewModelScope
 import com.prisonconnect.kiosk.core.BaseViewModel
-import com.prisonconnect.kiosk.core.Constants
 import com.prisonconnect.kiosk.core.Logger
 import com.prisonconnect.kiosk.core.UiState
 import com.prisonconnect.kiosk.hardware.FingerprintCaptureState
@@ -115,6 +114,22 @@ class LoginViewModel @Inject constructor(
         }
     }
 
+    /** Kiosk is not verified — leave login for the registration/lock gate. */
+    private fun redirectUnverified() {
+        Logger.w("LoginViewModel: kiosk not verified — leaving login for the registration gate")
+        launch { _navigationEvent.emit(LoginNavigation.KioskNotVerified) }
+    }
+
+    /** Repo hard-fail (DEVICE_NOT_REGISTERED) inside a collect → redirect, not an error toast. */
+    private suspend fun redirectIfDeviceUnverified(result: NetworkResult.Failure): Boolean {
+        if (result.error.code == "DEVICE_NOT_REGISTERED") {
+            Logger.w("LoginViewModel: repo reports kiosk unverified — leaving login for the registration gate")
+            _navigationEvent.emit(LoginNavigation.KioskNotVerified)
+            return true
+        }
+        return false
+    }
+
     fun startFingerprintAuth() {
         _loginStage.value = LoginStage.FINGERPRINT_SCANNING
         fingerprintHardwareManager.startCapture()
@@ -152,6 +167,7 @@ class LoginViewModel @Inject constructor(
                         cancelBiometricSessions()
                     }
                     is NetworkResult.Failure -> {
+                        if (redirectIfDeviceUnverified(result)) return@collect
                         val errorMessage = getFriendlyErrorMessage(
                             statusCode = result.statusCode,
                             defaultMessage = "Fingerprint not recognized. Please try again."
@@ -190,6 +206,7 @@ class LoginViewModel @Inject constructor(
                         _navigationEvent.emit(LoginNavigation.NavigateToDashboard)
                     }
                     is NetworkResult.Failure -> {
+                        if (redirectIfDeviceUnverified(result)) return@collect
                         val errorMessage = getFriendlyErrorMessage(
                             statusCode = result.statusCode,
                             defaultMessage = "Incorrect PIN. Please try again."
@@ -206,8 +223,13 @@ class LoginViewModel @Inject constructor(
 
     fun onAdminPasswordSubmit(password: String) {
         val adminId = _identifiedAdmin.value?.adminId
-        val kioskId = authRepository.getVerifiedKiosk()?.kioskId ?: Constants.KIOSK_ID
         if (uiState.value is UiState.Loading) return
+
+        val kioskId = authRepository.getVerifiedKiosk()?.kioskId
+        if (kioskId.isNullOrBlank()) {
+            redirectUnverified()
+            return
+        }
 
         Logger.d("LoginViewModel: Admin password submission started for adminId: $adminId, kioskId: $kioskId")
 
@@ -256,9 +278,14 @@ class LoginViewModel @Inject constructor(
         if (uiState.value is UiState.Loading) return
 
         Logger.d("LoginViewModel: Admin username submitted: $username")
+
+        val kioskId = authRepository.getVerifiedKiosk()?.kioskId
+        if (kioskId.isNullOrBlank()) {
+            redirectUnverified()
+            return
+        }
         setLoading()
 
-        val kioskId = authRepository.getVerifiedKiosk()?.kioskId ?: Constants.KIOSK_ID
         val request = LoginRequest(kioskId, null, null, null, username)
 
         launch {
@@ -308,14 +335,29 @@ class LoginViewModel @Inject constructor(
         }
     }
 
+    /**
+     * The HID wedge reader typed a card number + Enter into the hidden
+     * text field on the login screen. Feed it through the same hardware
+     * path as a driver read so the existing session collector handles
+     * identify + the "Card detected" UI state.
+     */
+    fun onRfidCardTapped(token: String) {
+        if (uiState.value is UiState.Loading) return
+        rfidReaderManager.onCardRead(token)
+    }
+
     fun onRfidScanned(rfidToken: String) {
         if (uiState.value is UiState.Loading) return
 
+        val kioskId = authRepository.getVerifiedKiosk()?.kioskId
+        if (kioskId.isNullOrBlank()) {
+            redirectUnverified()
+            return
+        }
+        val request = LoginRequest(kioskId, null, rfidToken, null)
+
         launch {
             setLoading()
-
-            val kioskId = authRepository.getVerifiedKiosk()?.kioskId ?: Constants.KIOSK_ID
-            val request = LoginRequest(kioskId, null, rfidToken, null)
 
             authRepository.identifyRfid(request).collect { result ->
                 when (result) {
@@ -326,6 +368,7 @@ class LoginViewModel @Inject constructor(
                         cancelBiometricSessions()
                     }
                     is NetworkResult.Failure -> {
+                        if (redirectIfDeviceUnverified(result)) return@collect
                         val errorMessage = getFriendlyErrorMessage(
                             statusCode = result.statusCode,
                             defaultMessage = "RFID card not recognized. Please try again."
@@ -358,6 +401,7 @@ class LoginViewModel @Inject constructor(
                         setSuccess()
                     }
                     is NetworkResult.Failure -> {
+                        if (redirectIfDeviceUnverified(result)) return@collect
                         val errorMessage = getFriendlyErrorMessage(
                             statusCode = result.statusCode,
                             defaultMessage = "Prisoner ID not recognized. Please try again."
@@ -393,5 +437,7 @@ class LoginViewModel @Inject constructor(
     sealed class LoginNavigation {
         data object NavigateToDashboard : LoginNavigation()
         data object NavigateToAdminDashboard : LoginNavigation()
+        /** Kiosk device is not verified — NavHost routes to registration/lock. */
+        data object KioskNotVerified : LoginNavigation()
     }
 }

@@ -11,7 +11,7 @@ on:
   workflow_dispatch: {} # allow manual trigger
 
 env:
-  BACKEND: https://prisonconnect-backend.onrender.com
+  BACKEND: https://prisonconnect-backend-q71g.onrender.com
   SIGNALING: https://prisonconnect-signaling.onrender.com
   FAMILY_WEB: https://prisonconnect-familyweb.onrender.com
   SUPERADMIN: https://prisonconnect-superadmin.onrender.com

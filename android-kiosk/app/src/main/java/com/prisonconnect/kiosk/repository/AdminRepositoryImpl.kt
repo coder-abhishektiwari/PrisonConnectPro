@@ -196,10 +196,10 @@ class AdminRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun deleteBiometric(biometricId: String): Flow<NetworkResult<Unit>> = flow {
+    override fun deleteBiometric(biometricId: String, prisonerId: String): Flow<NetworkResult<Unit>> = flow {
         emit(NetworkResult.Loading)
         try {
-            val response = dataSource.deleteBiometric(biometricId)
+            val response = dataSource.deleteBiometric(biometricId, prisonerId)
             if (response.success) {
                 emit(NetworkResult.Success(Unit))
             } else {

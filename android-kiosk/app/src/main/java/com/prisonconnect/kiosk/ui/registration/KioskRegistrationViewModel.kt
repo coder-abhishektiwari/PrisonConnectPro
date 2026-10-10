@@ -262,11 +262,16 @@ class KioskRegistrationViewModel @Inject constructor(
         pollingJob?.cancel()
         pollingJob = viewModelScope.launch {
             val id = _uiState.value.kioskId.ifBlank { _uiState.value.deviceSerial }
+            // A single 404 must not throw the operator back to step 1 — a
+            // cold-starting proxy or a briefly-empty read can miss once. Only
+            // several 404s in a row mean the record is genuinely gone.
+            var consecutive404s = 0
             while (true) {
                 var shouldStop = false
                 authRepository.getRegistrationStatus(id).collect { result ->
                     when (result) {
                         is NetworkResult.Success -> {
+                            consecutive404s = 0
                             val status = result.data.status
                             if (status == "approved") {
                                 _uiState.update {
@@ -300,10 +305,13 @@ class KioskRegistrationViewModel @Inject constructor(
                         }
                         is NetworkResult.Failure -> {
                             if (result.statusCode == 404) {
-                                resetForReRegistration(
-                                    "Registration record not found on server. Please register this kiosk again."
-                                )
-                                shouldStop = true
+                                consecutive404s++
+                                if (consecutive404s >= 3) {
+                                    resetForReRegistration(
+                                        "Registration record not found on server. Please register this kiosk again."
+                                    )
+                                    shouldStop = true
+                                }
                             }
                         }
                         else -> { /* Loading / Idle: keep polling */ }

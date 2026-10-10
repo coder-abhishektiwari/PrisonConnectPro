@@ -2,7 +2,6 @@ package com.prisonconnect.kiosk.ui.receipt
 
 import androidx.lifecycle.viewModelScope
 import com.prisonconnect.kiosk.core.BaseViewModel
-import com.prisonconnect.kiosk.core.Constants
 import com.prisonconnect.kiosk.core.Logger
 import com.prisonconnect.kiosk.models.inmate.InmateBalance
 import com.prisonconnect.kiosk.models.inmate.InmateProfile
@@ -34,7 +33,8 @@ class SummaryViewModel @Inject constructor(
 
     private fun loadProfile() {
         viewModelScope.launch {
-            val inmateId = authRepository.getInmateId() ?: Constants.KIOSK_ID
+            val inmateId = authRepository.getInmateId()
+            if (inmateId.isNullOrBlank()) return@launch
             inmateRepository.getProfile(inmateId).collect { result ->
                 if (result is NetworkResult.Success) {
                     _inmateProfile.value = result.data
@@ -45,7 +45,8 @@ class SummaryViewModel @Inject constructor(
 
     private fun loadBalance() {
         viewModelScope.launch {
-            val inmateId = authRepository.getInmateId() ?: Constants.KIOSK_ID
+            val inmateId = authRepository.getInmateId()
+            if (inmateId.isNullOrBlank()) return@launch
             inmateRepository.getBalance(inmateId).collect { result ->
                 if (result is NetworkResult.Success) {
                     _balance.value = result.data.credits

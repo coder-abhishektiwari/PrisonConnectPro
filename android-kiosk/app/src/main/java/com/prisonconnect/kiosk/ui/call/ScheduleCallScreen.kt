@@ -550,10 +550,19 @@ fun ScheduleDetailDialog(
         append("${seconds}s")
     }
 
+    var roomError by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(createRoomState) {
         val s = createRoomState
-        if (s is UiState.Success) {
-            onStartCall("", s.data.sessionId, isVideo)
+        when (s) {
+            is UiState.Success -> {
+                onStartCall("", s.data.sessionId, isVideo)
+            }
+            is UiState.Loading -> roomError = null
+            is UiState.Error -> {
+                roomError = s.message
+                viewModel.consumeCreateRoomNavigation()
+            }
+            else -> {}
         }
     }
 
@@ -601,6 +610,16 @@ fun ScheduleDetailDialog(
                 }
 
                 val isCreatingRoom = createRoomState is UiState.Loading
+
+                roomError?.let { msg ->
+                    Text(
+                        text = msg,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFFC62828),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
 
                 Button(
                     onClick = { viewModel.createRoom(contactId, callType) },

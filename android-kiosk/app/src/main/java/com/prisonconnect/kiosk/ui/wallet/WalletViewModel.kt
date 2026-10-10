@@ -2,7 +2,6 @@ package com.prisonconnect.kiosk.ui.wallet
 
 import androidx.lifecycle.viewModelScope
 import com.prisonconnect.kiosk.core.BaseViewModel
-import com.prisonconnect.kiosk.core.Constants
 import com.prisonconnect.kiosk.core.JailBalanceSync
 import com.prisonconnect.kiosk.core.UiState
 import com.prisonconnect.kiosk.models.wallet.WalletStatement
@@ -67,8 +66,8 @@ class WalletViewModel @Inject constructor(
 
     fun loadWallet() {
         viewModelScope.launch {
-            val inmateId = authRepository.getInmateId() ?: Constants.KIOSK_ID
-            if (inmateId.isNullOrBlank() || inmateId == Constants.KIOSK_ID) {
+            val inmateId = authRepository.getInmateId()
+            if (inmateId.isNullOrBlank()) {
                 _walletState.value = UiState.Error("No active session found. Please login again.")
                 return@launch
             }

@@ -1,14 +1,14 @@
 package com.prisonconnect.kiosk.core
 
-import com.prisonconnect.kiosk.BuildConfig
-
 /**
  * Centralized application constants.
+ *
+ * NOTE: there is deliberately NO build-time kiosk id constant anymore — every
+ * kiosk identity is server-issued (via /kiosks/verify after registration).
+ * Code that needs a kiosk id must read it from AuthRepository.getVerifiedKiosk()
+ * / SessionManager.getKioskInfo() and hard-fail when it is missing.
  */
 object Constants {
-    /** Unique identifier of this kiosk device (from local.properties). */
-    val KIOSK_ID: String = if (BuildConfig.KIOSK_ID == "null") "KIOSK-UNSET" else BuildConfig.KIOSK_ID
-
     /** Base URL of the Node.js signaling server (WebRTC signaling). */
     const val SIGNALING_SERVER_URL: String = "http://10.15.246.69:3002"
 

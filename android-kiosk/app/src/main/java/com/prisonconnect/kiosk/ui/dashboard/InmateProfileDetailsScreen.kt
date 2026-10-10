@@ -25,7 +25,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
 import com.prisonconnect.kiosk.core.BaseViewModel
-import com.prisonconnect.kiosk.core.Constants
 import com.prisonconnect.kiosk.core.UiState
 import com.prisonconnect.kiosk.models.inmate.InmateProfile
 import com.prisonconnect.kiosk.network.NetworkResult
@@ -60,8 +59,8 @@ class InmateProfileDetailsViewModel @Inject constructor(
     fun load() {
         viewModelScope.launch {
             _state.value = UiState.Loading
-            val inmateId = authRepository.getInmateId() ?: Constants.KIOSK_ID
-            if (inmateId.isNullOrBlank() || inmateId == Constants.KIOSK_ID) {
+            val inmateId = authRepository.getInmateId()
+            if (inmateId.isNullOrBlank()) {
                 _state.value = UiState.Error("No active session found. Please login again.")
                 return@launch
             }

@@ -1,4 +1,5 @@
 # Example local configuration for PrisonConnect Kiosk
 sdk.dir=/path/to/android/sdk
-KIOSK_ID=KIOSK-JAIL-001
+# NOTE: no KIOSK_ID here anymore — kiosk identity is issued by the backend
+# during device registration (/kiosks/verify).
 KIOSK_TRUST_API_HOST=https://trust-api.prisonconnect.internal

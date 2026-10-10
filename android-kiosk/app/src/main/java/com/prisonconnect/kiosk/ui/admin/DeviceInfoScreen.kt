@@ -19,7 +19,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.prisonconnect.kiosk.core.Constants
 import com.prisonconnect.kiosk.models.admin.KioskDevice
 import com.prisonconnect.kiosk.ui.components.KioskTopBar
 import com.prisonconnect.kiosk.ui.theme.PrisonKioskTheme
@@ -34,7 +33,7 @@ fun DeviceInfoScreen(
     val localDeviceInfo by viewModel.localDeviceInfo.collectAsState()
 
     LaunchedEffect(Unit) {
-        viewModel.loadDeviceInfo(Constants.KIOSK_ID)
+        viewModel.loadDeviceInfo()
     }
 
     DeviceInfoContent(
@@ -247,7 +246,7 @@ fun PreviewDeviceInfoMobile() {
     PrisonKioskTheme {
         DeviceInfoContent(
             deviceInfo = KioskDevice(
-                kioskId = "KIOSK-001",
+                kioskId = "KIOSK-DEMO-01",
                 serialNumber = "SN-9876543210",
                 prisonId = "PRISON-07",
                 status = "online",
@@ -283,7 +282,7 @@ fun PreviewDeviceInfoTablet() {
     PrisonKioskTheme {
         DeviceInfoContent(
             deviceInfo = KioskDevice(
-                kioskId = "KIOSK-001",
+                kioskId = "KIOSK-DEMO-01",
                 serialNumber = "SN-9876543210",
                 prisonId = "PRISON-07",
                 status = "online",

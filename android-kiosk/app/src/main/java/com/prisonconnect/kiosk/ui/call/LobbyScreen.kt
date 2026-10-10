@@ -47,18 +47,27 @@ fun CallLobbyDialog(
     val isVideo = callType.equals("Video", ignoreCase = true)
     val ratePerMin = if (isVideo) 2 else 1
     val isSufficient = balance >= ratePerMin
+    var roomError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(contactId) {
         viewModel.loadBalance()
         viewModel.loadMaxDuration()
         viewModel.consumeCreateRoomNavigation()
+        roomError = null
     }
 
     LaunchedEffect(createRoomState) {
         val s = createRoomState
-        if (s is UiState.Success) {
-            val session = s.data
-            onStartCall(contactId, contactName, session.sessionId, isVideo)
+        when (s) {
+            is UiState.Success -> {
+                onStartCall(contactId, contactName, s.data.sessionId, isVideo)
+            }
+            is UiState.Loading -> roomError = null
+            is UiState.Error -> {
+                roomError = s.message
+                viewModel.consumeCreateRoomNavigation()
+            }
+            else -> {}
         }
     }
 
@@ -113,6 +122,15 @@ fun CallLobbyDialog(
                 HorizontalDivider(color = BorderColor)
 
                 val isCreatingRoom = createRoomState is UiState.Loading
+
+                roomError?.let { msg ->
+                    Text(
+                        text = msg,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFFC62828)
+                    )
+                }
 
                 Button(
                     onClick = { onSchedule(contactId, contactName) },

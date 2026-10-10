@@ -229,7 +229,10 @@ interface TrustApiService {
     ): ApiResponse<BiometricRegistration>
 
     @DELETE("admin/biometrics/{biometricId}")
-    suspend fun deleteBiometric(@Path("biometricId") biometricId: String): ApiResponse<Unit>
+    suspend fun deleteBiometric(
+        @Path("biometricId") biometricId: String,
+        @Query("prisonerId") prisonerId: String
+    ): ApiResponse<Unit>
 
     // Devices
     @GET("admin/devices")

@@ -76,11 +76,24 @@ fun KioskNavHost(
         )
     }
 
-    LaunchedEffect(isDeviceAuthorized) {
-        if (!isDeviceAuthorized && currentRoute != KioskRoutes.UNAUTHORIZED && currentRoute != KioskRoutes.SPLASH && currentRoute != KioskRoutes.REGISTRATION) {
+    // One entry point for every "kiosk is not verified" redirect. Registration
+    // is the destination; if it somehow cannot be displayed, the device lands
+    // on the lock screen — an unverified kiosk must never reach login.
+    fun navigateUnverified(dest: String) {
+        runCatching {
+            navController.navigate(dest) {
+                popUpTo(0) { inclusive = true }
+            }
+        }.onFailure {
             navController.navigate(KioskRoutes.UNAUTHORIZED) {
                 popUpTo(0) { inclusive = true }
             }
+        }
+    }
+
+    LaunchedEffect(isDeviceAuthorized) {
+        if (!isDeviceAuthorized && currentRoute != KioskRoutes.UNAUTHORIZED && currentRoute != KioskRoutes.SPLASH && currentRoute != KioskRoutes.REGISTRATION) {
+            navigateUnverified(viewModel.unverifiedDestination())
         }
     }
 
@@ -122,19 +135,9 @@ fun KioskNavHost(
         }
 
         composable(KioskRoutes.UNAUTHORIZED) {
-            LoginScreen(
-                windowSizeClass = windowSizeClass,
-                onLoginSuccess = {
-                    navController.navigate(KioskRoutes.DASHBOARD) {
-                        popUpTo(KioskRoutes.UNAUTHORIZED) { inclusive = true }
-                    }
-                },
-                onAdminLoginSuccess = {
-                    navController.navigate(KioskRoutes.ADMIN_DASHBOARD) {
-                        popUpTo(KioskRoutes.UNAUTHORIZED) { inclusive = true }
-                    }
-                }
-            )
+            // The lock screen — NOT a login. An unauthorized/unverified
+            // device must never be handed a login page it cannot use.
+            com.prisonconnect.kiosk.ui.UnauthorizedDeviceScreen()
         }
         composable(KioskRoutes.LOGIN) {
             LoginScreen(
@@ -147,6 +150,13 @@ fun KioskNavHost(
                 onAdminLoginSuccess = {
                     navController.navigate(KioskRoutes.ADMIN_DASHBOARD) {
                         popUpTo(KioskRoutes.LOGIN) { inclusive = true }
+                    }
+                },
+                onKioskNotVerified = {
+                    // Strict gate: unverified kiosk leaves login immediately —
+                    // registration first, lock screen if registration cannot show.
+                    viewModel.resolveUnverifiedDestination { dest ->
+                        navigateUnverified(dest)
                     }
                 }
             )

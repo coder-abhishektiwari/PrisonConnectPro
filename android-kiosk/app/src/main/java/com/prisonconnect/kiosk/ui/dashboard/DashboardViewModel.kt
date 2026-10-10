@@ -2,7 +2,6 @@ package com.prisonconnect.kiosk.ui.dashboard
 
 import androidx.lifecycle.viewModelScope
 import com.prisonconnect.kiosk.core.BaseViewModel
-import com.prisonconnect.kiosk.core.Constants
 import com.prisonconnect.kiosk.core.JailBalanceSync
 import com.prisonconnect.kiosk.core.UiState
 import com.prisonconnect.kiosk.models.contacts.Contact

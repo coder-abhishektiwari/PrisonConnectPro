@@ -1,6 +1,5 @@
 package com.prisonconnect.kiosk.repository
 
-import com.prisonconnect.kiosk.core.Constants
 import com.prisonconnect.kiosk.core.Logger
 import com.prisonconnect.kiosk.core.SessionManager
 import com.prisonconnect.kiosk.datasource.AuthDataSource
@@ -113,9 +112,13 @@ class AuthRepositoryImpl @Inject constructor(
                 }
             }
 
-            sessionManager.clearSession()
+            // Logout ends the USER session only. The device's kiosk
+            // verification (persisted registration + in-memory verifiedKiosk)
+            // must survive it — a full prefs wipe here made the very next
+            // login hard-fail with "kiosk is not verified" on a device that
+            // WAS registered, and destroyed the authorized flag.
+            sessionManager.clearAuthOnly()
             authInterceptor.clearToken()
-            verifiedKiosk = null
             currentAdmin = null
 
             emit(NetworkResult.Success(Unit))
@@ -127,7 +130,11 @@ class AuthRepositoryImpl @Inject constructor(
     override fun identifyFingerprint(capture: ByteArray): Flow<NetworkResult<InmateProfile>> = flow {
         emit(NetworkResult.Loading)
         try {
-            val kioskId = verifiedKiosk?.kioskId ?: Constants.KIOSK_ID
+            val kioskId = verifiedKiosk?.kioskId
+            if (kioskId.isNullOrBlank()) {
+                emit(NetworkResult.Failure(ApiError("DEVICE_NOT_REGISTERED", "Kiosk device is not verified. Please complete device registration.")))
+                return@flow
+            }
             val response = dataSource.identifyFingerprint(kioskId, capture)
             if (response.success && response.data != null) {
                 sessionManager.saveInmateProfile(response.data)
@@ -152,7 +159,11 @@ class AuthRepositoryImpl @Inject constructor(
     override fun identifyRfid(request: LoginRequest): Flow<NetworkResult<InmateProfile>> = flow {
         emit(NetworkResult.Loading)
         try {
-            val kioskId = verifiedKiosk?.kioskId ?: Constants.KIOSK_ID
+            val kioskId = verifiedKiosk?.kioskId
+            if (kioskId.isNullOrBlank()) {
+                emit(NetworkResult.Failure(ApiError("DEVICE_NOT_REGISTERED", "Kiosk device is not verified. Please complete device registration.")))
+                return@flow
+            }
             val rfidRequest = request.copy(kioskId = kioskId)
             val response = dataSource.identifyRfid(rfidRequest)
             if (response.success && response.data != null) {
@@ -178,7 +189,11 @@ class AuthRepositoryImpl @Inject constructor(
     override fun identifyPrisoner(id: String): Flow<NetworkResult<InmateProfile>> = flow {
         emit(NetworkResult.Loading)
         try {
-            val kioskId = verifiedKiosk?.kioskId ?: Constants.KIOSK_ID
+            val kioskId = verifiedKiosk?.kioskId
+            if (kioskId.isNullOrBlank()) {
+                emit(NetworkResult.Failure(ApiError("DEVICE_NOT_REGISTERED", "Kiosk device is not verified. Please complete device registration.")))
+                return@flow
+            }
             val response = dataSource.identifyPrisoner(kioskId, id)
             if (response.success && response.data != null) {
                 sessionManager.saveInmateProfile(response.data)
@@ -203,7 +218,11 @@ class AuthRepositoryImpl @Inject constructor(
     override fun verifyPin(inmateId: String, pin: String): Flow<NetworkResult<AuthToken>> = flow {
         emit(NetworkResult.Loading)
         try {
-            val kioskId = verifiedKiosk?.kioskId ?: Constants.KIOSK_ID
+            val kioskId = verifiedKiosk?.kioskId
+            if (kioskId.isNullOrBlank()) {
+                emit(NetworkResult.Failure(ApiError("DEVICE_NOT_REGISTERED", "Kiosk device is not verified. Please complete device registration.")))
+                return@flow
+            }
             val request = PinVerifyRequest(inmateId, pin, kioskId)
             val response = dataSource.verifyPin(request)
             if (response.success && response.data != null) {
@@ -235,7 +254,10 @@ class AuthRepositoryImpl @Inject constructor(
             val response = dataSource.verifyKiosk(request)
             if (response.success && response.data != null) {
                 if (response.data.authorized && response.data.kiosk != null) {
-                    verifiedKiosk = response.data.kiosk.also { sessionManager.saveKioskInfo(it) }
+                    // Persist the AUTHORITATIVE top-level authorized flag, not a
+                    // possibly-missing kiosk.authorized — a stored false would
+                    // make the NavHost gate bounce a verified device.
+                    verifiedKiosk = response.data.kiosk.also { sessionManager.saveKioskInfo(it.copy(authorized = true)) }
                     // Device credential for background workers (register/retrieve).
                     response.data.deviceToken?.let { sessionManager.saveDeviceToken(it) }
                 } else {
@@ -284,7 +306,10 @@ class AuthRepositoryImpl @Inject constructor(
             val response = dataSource.verifyKiosk(KioskVerifyRequest(deviceSerialNumber = identity))
             val kiosk = response.data?.kiosk
             if (response.success && response.data?.authorized == true && kiosk != null) {
-                sessionManager.saveKioskInfo(kiosk)
+                sessionManager.saveKioskInfo(kiosk.copy(authorized = true))
+                // Keep the in-memory identity in sync with the persisted one —
+                // every hard-fail guard below reads verifiedKiosk.
+                verifiedKiosk = kiosk
                 response.data.deviceToken?.let { sessionManager.saveDeviceToken(it) }
                 emit(NetworkResult.Success(kiosk))
             } else {

@@ -41,7 +41,13 @@ class DeviceInfoViewModel @Inject constructor(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
-    fun loadDeviceInfo(deviceId: String) {
+    /**
+     * Loads device info for the SERVER-issued kiosk id saved at
+     * registration/verify. Without one (device not registered yet) only the
+     * local hardware panel is populated — no remote call is made with a fake
+     * build-time id.
+     */
+    fun loadDeviceInfo() {
         viewModelScope.launch {
             val kioskInfo = runCatching { sessionManager.getKioskInfo() }.getOrNull()
             val registeredSerial = kioskInfo?.deviceSerialNumber?.takeIf { it.isNotBlank() }
@@ -62,7 +68,15 @@ class DeviceInfoViewModel @Inject constructor(
             val local = buildLocalDevice(kioskInfo?.kioskId, prisonId, kioskInfo?.prisonName, registeredSerial)
             _deviceInfo.value = local
 
-            adminRepository.getDevice(deviceId).collect { result ->
+            val kioskId = kioskInfo?.kioskId?.takeIf { it.isNotBlank() }
+            if (kioskId == null) {
+                // Hard-fail: never query the server with a placeholder id.
+                _error.value = "Kiosk device is not verified. Please contact administration."
+                _isLoading.value = false
+                return@launch
+            }
+
+            adminRepository.getDevice(kioskId).collect { result ->
                 when (result) {
                     is NetworkResult.Success -> {
                         _deviceInfo.value = mergeRemote(local, result.data)

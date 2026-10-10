@@ -428,7 +428,7 @@ router.post('/prisoners/:prisonerId/biometrics', requireRole(...ALL_ROLES), asyn
   } else if (type === 'rfid') {
     if (!rfidToken) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'rfidToken is required for RFID' } });
     if (!isValidRfidNumber(rfidToken)) {
-      return res.status(400).json({ success: false, error: { code: 'INVALID_RFID', message: 'RFID card number must be exactly 12 digits' } });
+      return res.status(400).json({ success: false, error: { code: 'INVALID_RFID', message: 'RFID card number must be exactly 10 digits' } });
     }
     updateFields = {
       biometricData: { ...inmates[inmateIdx].biometricData, rfidRegistered: true, rfidToken: await hashSecret(String(rfidToken)), rfidCardNumber: String(rfidToken), lastBiometricUpdate: new Date().toISOString() }

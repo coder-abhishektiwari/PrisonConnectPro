@@ -170,8 +170,11 @@ class AuthInterceptor @Inject constructor(
 
         val errorCode = response?.error?.code
         if (errorCode == "UNAUTHORIZED" || errorCode == "INVALID_REFRESH_TOKEN" || errorCode == "INVALID_TOKEN") {
-            Logger.w("AuthInterceptor: Refresh token rejected ($errorCode) - clearing session")
-            sessionManager.clearSession()
+            Logger.w("AuthInterceptor: Refresh token rejected ($errorCode) - clearing user session")
+            // User session only — a full prefs wipe here also destroyed the
+            // kiosk registration + authorized flag, which dumped registered
+            // devices onto the unauthorized/login screen on the next start.
+            sessionManager.clearAuthOnly()
             clearToken()
         }
 

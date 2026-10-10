@@ -1,14 +1,14 @@
 /**
  * Shared RFID card-number rules — every write path enforces the same
- * strict 12-digit format from registration through storage.
+ * strict 10-digit format from registration through storage.
  */
 
 const BCRYPT_RE = /^\$2[aby]\$/;
-const RFID_12_DIGITS = /^\d{12}$/;
+const RFID_10_DIGITS = /^\d{10}$/;
 
-/** Strict format check: exactly 12 digits, nothing else. */
+/** Strict format check: exactly 10 digits, nothing else. */
 function isValidRfidNumber(value) {
-  return RFID_12_DIGITS.test(value == null ? '' : String(value));
+  return RFID_10_DIGITS.test(value == null ? '' : String(value));
 }
 
 /**
@@ -35,7 +35,7 @@ function biometricValidationError(biometricData) {
   const token = biometricData && biometricData.rfidToken;
   if (!token) return null;
   if (BCRYPT_RE.test(String(token))) return null;
-  if (!isValidRfidNumber(token)) return 'RFID card number must be exactly 12 digits';
+  if (!isValidRfidNumber(token)) return 'RFID card number must be exactly 10 digits';
   return null;
 }
 

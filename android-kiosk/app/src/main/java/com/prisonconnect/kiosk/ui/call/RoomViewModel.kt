@@ -2,7 +2,6 @@ package com.prisonconnect.kiosk.ui.call
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.prisonconnect.kiosk.core.Constants
 import com.prisonconnect.kiosk.config.AppConfig
 import com.prisonconnect.kiosk.core.Logger
 import com.prisonconnect.kiosk.core.UiState
@@ -98,7 +97,8 @@ class RoomViewModel @Inject constructor(
 
     fun loadBalance() {
         viewModelScope.launch {
-            val inmateId = authRepository.getInmateId() ?: Constants.KIOSK_ID
+            val inmateId = authRepository.getInmateId()
+            if (inmateId.isNullOrBlank()) return@launch
             inmateRepository.getBalance(inmateId).collect { result ->
                 if (result is NetworkResult.Success) {
                     _balance.value = result.data.credits
@@ -133,26 +133,36 @@ class RoomViewModel @Inject constructor(
     }
 
     fun createRoom(contactId: String, callType: String, scheduleId: String? = null) {
-        _createRoomState.value = UiState.Loading
-        // Drop any stale runtime signaling URL/token from a previous call; a
-        // fresh one arrives with the background POST below.
-        AppConfig.signalingUrlOverride = null
-        AppConfig.signalingToken = null
-
-        // OPTIMISTIC NAVIGATION: mint both ids client-side — the backend
-        // accepts caller-supplied callId/roomId — so the UI moves to the
-        // progress screen INSTANTLY while POST /calls runs in the background.
-        val callId = "CALL-" + java.util.UUID.randomUUID().toString().replace("-", "").take(8).uppercase()
-        val roomId = "ROOM-" + java.util.UUID.randomUUID().toString().replace("-", "").take(8).uppercase()
-        AppConfigBridge.lastCallId = callId
-
-        _createRoomState.value = UiState.Success(
-            CallSession(sessionId = roomId, callId = callId, contactId = contactId)
-        )
-
         viewModelScope.launch {
-            val inmateId = authRepository.getInmateId() ?: Constants.KIOSK_ID
-            val kioskId = authRepository.getVerifiedKiosk()?.kioskId ?: Constants.KIOSK_ID
+            // Hard-fail before the optimistic navigation: a call must never be
+            // minted with a fake kiosk/inmate id when the device was never
+            // verified or the inmate session is gone. (getInmateId suspends —
+            // DataStore read — so the guard must live inside the coroutine.)
+            val inmateId = authRepository.getInmateId()
+            val kioskId = authRepository.getVerifiedKiosk()?.kioskId
+            if (inmateId.isNullOrBlank() || kioskId.isNullOrBlank()) {
+                Logger.w("RoomViewModel: createRoom aborted — no inmate session or kiosk not verified")
+                _createRoomState.value = UiState.Error("Kiosk not verified or session expired. Please login again.")
+                return@launch
+            }
+
+            _createRoomState.value = UiState.Loading
+            // Drop any stale runtime signaling URL/token from a previous call; a
+            // fresh one arrives with the background POST below.
+            AppConfig.signalingUrlOverride = null
+            AppConfig.signalingToken = null
+
+            // OPTIMISTIC NAVIGATION: mint both ids client-side — the backend
+            // accepts caller-supplied callId/roomId — so the UI moves to the
+            // progress screen INSTANTLY while POST /calls runs in the background.
+            val callId = "CALL-" + java.util.UUID.randomUUID().toString().replace("-", "").take(8).uppercase()
+            val roomId = "ROOM-" + java.util.UUID.randomUUID().toString().replace("-", "").take(8).uppercase()
+            AppConfigBridge.lastCallId = callId
+
+            _createRoomState.value = UiState.Success(
+                CallSession(sessionId = roomId, callId = callId, contactId = contactId)
+            )
+
             callRepository.createRoom(inmateId, contactId, kioskId, callType, callId, roomId, scheduleId).collect { result ->
                 when (result) {
                     is NetworkResult.Success -> {

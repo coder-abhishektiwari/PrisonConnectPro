@@ -41,6 +41,7 @@ fun LoginScreen(
     @Suppress("UNUSED_PARAMETER") windowSizeClass: WindowSizeClass,
     onLoginSuccess: () -> Unit,
     onAdminLoginSuccess: () -> Unit,
+    onKioskNotVerified: () -> Unit = {},
     viewModel: LoginViewModel = hiltViewModel()
 ) {
     val stage by viewModel.loginStage.collectAsState()
@@ -67,6 +68,7 @@ fun LoginScreen(
             when (event) {
                 is LoginViewModel.LoginNavigation.NavigateToDashboard -> onLoginSuccess()
                 is LoginViewModel.LoginNavigation.NavigateToAdminDashboard -> onAdminLoginSuccess()
+                is LoginViewModel.LoginNavigation.KioskNotVerified -> onKioskNotVerified()
             }
         }
     }
@@ -107,6 +109,7 @@ fun LoginScreen(
                     )
                     LoginStage.RFID_SCANNING -> RfidScanningLayout(
                         state = rfidState,
+                        onCardTap = { viewModel.onRfidCardTapped(it) },
                         onManualSubmit = { viewModel.onRfidScanned(it) },
                         onCancel = { viewModel.resetToSelection() }
                     )
@@ -154,6 +157,7 @@ fun LoginScreen(
 @Composable
 fun RfidScanningLayout(
     state: RfidReaderState,
+    onCardTap: (String) -> Unit,
     onManualSubmit: (String) -> Unit,
     onCancel: () -> Unit
 ) {
@@ -167,16 +171,19 @@ fun RfidScanningLayout(
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Icon(
-            imageVector = Icons.Default.CreditCard,
-            contentDescription = null,
-            tint = PremiumBlue,
-            modifier = Modifier.size(88.dp)
+        // Invisible keyboard-wedge input: the USB reader types the card
+        // number + Enter straight into this auto-focused, hidden field.
+        // Declared first and pushed back in z-order so it never shows.
+        HiddenRfidTapInput(
+            enabled = !showManualDialog,
+            onCardDetected = onCardTap
         )
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(8.dp))
+
+        RfidTapAnimation(modifier = Modifier.size(170.dp))
+
+        Spacer(modifier = Modifier.height(8.dp))
 
         Text(
             text = "RFID Card Authentication",
@@ -247,18 +254,18 @@ fun RfidScanningLayout(
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                                text = "RFID card reader not detected",
-                                fontWeight = FontWeight.Medium,
-                                textAlign = TextAlign.Center,
-                                color = PremiumNavy
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = "RFID scanner hardware is not detected by kiosk please contact the admin.",
-                                textAlign = TextAlign.Center,
-                                color = Color.Gray,
-                                fontSize = 13.sp
-                            )
+                            text = "Hold your RFID card on the reader",
+                            fontWeight = FontWeight.Medium,
+                            textAlign = TextAlign.Center,
+                            color = PremiumNavy
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "The card number is entered automatically and login continues on its own.",
+                            textAlign = TextAlign.Center,
+                            color = Color.Gray,
+                            fontSize = 13.sp
+                        )
                     }
                 }
             }
@@ -286,7 +293,7 @@ fun RfidScanningLayout(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        text = "Enter the 12-digit RFID card number.",
+                        text = "Enter the 10-digit RFID card number.",
                         fontSize = 14.sp,
                         color = Color(0xFF687A8F),
                         textAlign = TextAlign.Center
@@ -295,7 +302,7 @@ fun RfidScanningLayout(
                         digits = manualDigits,
                         onDigitsChange = { new ->
                             manualDigits = new
-                            if (new.length == 12) {
+                            if (new.length == 10) {
                                 onManualSubmit(new)
                                 manualDigits = ""
                                 showManualDialog = false

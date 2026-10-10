@@ -6,7 +6,6 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import com.prisonconnect.kiosk.R
-import com.prisonconnect.kiosk.core.Constants
 import com.prisonconnect.kiosk.core.Logger
 import com.prisonconnect.kiosk.models.call.CallStatusSnapshot
 import com.prisonconnect.kiosk.models.call.EndCallRequest
@@ -350,13 +349,15 @@ class CallEngine @Inject constructor(
 
     private fun loadProfiles() {
         scope.launch {
-            val inmateId = authRepository.getInmateId() ?: Constants.KIOSK_ID
+            val inmateId = authRepository.getInmateId()
+            if (inmateId.isNullOrBlank()) return@launch
             inmateRepository.getProfile(inmateId).collect { result ->
                 if (result is NetworkResult.Success) _inmateProfile.value = result.data
             }
         }
         scope.launch {
-            val inmateId = authRepository.getInmateId() ?: Constants.KIOSK_ID
+            val inmateId = authRepository.getInmateId()
+            if (inmateId.isNullOrBlank()) return@launch
             contactRepository.getContacts(inmateId).collect { result ->
                 if (result is NetworkResult.Success) _contactProfile.value = result.data.firstOrNull()
             }

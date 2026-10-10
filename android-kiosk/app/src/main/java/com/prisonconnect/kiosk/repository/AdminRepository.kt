@@ -27,7 +27,7 @@ interface AdminRepository {
     // Biometrics
     fun getPrisonerBiometrics(prisonerId: String): Flow<NetworkResult<List<BiometricRegistration>>>
     suspend fun registerBiometric(prisonerId: String, request: RegisterBiometricRequest): NetworkResult<BiometricRegistration>
-    fun deleteBiometric(biometricId: String): Flow<NetworkResult<Unit>>
+    fun deleteBiometric(biometricId: String, prisonerId: String): Flow<NetworkResult<Unit>>
 
     // PIN Reset
     suspend fun resetPrisonerPin(prisonerId: String, pin: String): NetworkResult<String>

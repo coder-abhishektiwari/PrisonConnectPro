@@ -32,15 +32,16 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // Kiosk identity & backend endpoint.
+        // Backend endpoint & call-service config.
         // Priority: gradle -P flag > local.properties > default below.
         // NOTE: SIGNALING_URL is only a FALLBACK - at runtime the backend
         // delivers the fresh public signaling URL inside every create-call
         // response, so tunnel changes never require a rebuild.
         // Defaults point at the real deployed services (Render).
-        val kioskId = appProp("KIOSK_ID", "KIOSK-001")
-        val trustApiHost = appProp("KIOSK_TRUST_API_HOST", "https://prisonconnect-backend.onrender.com")
-        val apiBaseUrl = appProp("API_BASE_URL", "https://prisonconnect-backend.onrender.com")
+        // NOTE: there is NO build-time KIOSK_ID anymore — kiosk identity is
+        // server-issued via /kiosks/verify after device registration.
+        val trustApiHost = appProp("KIOSK_TRUST_API_HOST", "https://prisonconnect-backend-q71g.onrender.com")
+        val apiBaseUrl = appProp("API_BASE_URL", "https://prisonconnect-backend-q71g.onrender.com")
         val signalingUrl = appProp("SIGNALING_URL", "https://prisonconnect-signaling.onrender.com")
         val turnServerUrl = appProp("TURN_SERVER_URL", "turn:tissues-cafeteria.tun.ply.gg:3478")
         val turnTlsUrl = appProp("TURN_TLS_URL", "turns:tissues-cafeteria.tun.ply.gg:5349")
@@ -48,7 +49,6 @@ android {
         val turnCredential = appProp("TURN_CREDENTIAL", "turnpass")
         val autoLogoutMs = appProp("AUTO_LOGOUT_TIMEOUT_MS", "120000")
 
-        buildConfigField("String", "KIOSK_ID", "\"$kioskId\"")
         buildConfigField("String", "TRUST_API_HOST", "\"$trustApiHost\"")
         buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
         buildConfigField("String", "SIGNALING_URL", "\"$signalingUrl\"")
@@ -133,6 +133,9 @@ dependencies {
 
     // Coil (image loading)
     implementation(libs.coil.compose)
+
+    // Lottie (RFID tap animation)
+    implementation(libs.lottie.compose)
 
     // DataStore (secure token persistence)
     implementation(libs.androidx.datastore.preferences)
