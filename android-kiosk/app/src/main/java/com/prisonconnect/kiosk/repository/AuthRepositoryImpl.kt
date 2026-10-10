@@ -5,6 +5,7 @@ import com.prisonconnect.kiosk.core.SessionManager
 import com.prisonconnect.kiosk.datasource.AuthDataSource
 import com.prisonconnect.kiosk.models.auth.*
 import com.prisonconnect.kiosk.models.common.ApiError
+import com.prisonconnect.kiosk.models.common.ApiResponse
 import com.prisonconnect.kiosk.models.inmate.InmateProfile
 import com.prisonconnect.kiosk.network.NetworkResult
 import com.prisonconnect.kiosk.network.interceptors.AuthInterceptor
@@ -248,10 +249,36 @@ class AuthRepositoryImpl @Inject constructor(
         }
     }
 
+    /**
+     * /kiosks/verify matches serial OR fingerprint inside the same
+     * deviceSerialNumber field. A unit whose hardware serial is unreadable
+     * (no Device Owner) leads with its ANDROID_ID fallback, but rows it
+     * registered under deviceFingerprint come back not_found on that
+     * identity — so bounce once with the fingerprint before failing, else
+     * splash sends an authorized device to Registration and wipes its state.
+     */
+    private suspend fun verifyWithFallback(request: KioskVerifyRequest): ApiResponse<KioskVerifyResponse> {
+        var response = dataSource.verifyKiosk(request)
+        val data = response.data
+        if (response.success && data != null && !data.authorized && data.reason == "not_found") {
+            val fingerprint = deviceInfoProvider.getDeviceFingerprint()
+            if (fingerprint.isNotBlank() && fingerprint != request.deviceSerialNumber.trim()) {
+                Logger.i("AuthRepository: verify not_found for '${request.deviceSerialNumber}', retrying with device fingerprint")
+                try {
+                    val retry = dataSource.verifyKiosk(KioskVerifyRequest(deviceSerialNumber = fingerprint))
+                    if (retry.success && retry.data != null && retry.data.authorized) response = retry
+                } catch (e: Exception) {
+                    Logger.w("AuthRepository: fingerprint verify retry failed: ${e.message}")
+                }
+            }
+        }
+        return response
+    }
+
     override fun verifyKiosk(request: KioskVerifyRequest): Flow<NetworkResult<KioskVerifyResponse>> = flow {
         emit(NetworkResult.Loading)
         try {
-            val response = dataSource.verifyKiosk(request)
+            val response = verifyWithFallback(request)
             if (response.success && response.data != null) {
                 if (response.data.authorized && response.data.kiosk != null) {
                     // Persist the AUTHORITATIVE top-level authorized flag, not a
@@ -303,7 +330,7 @@ class AuthRepositoryImpl @Inject constructor(
             val identity = sessionManager.getKioskInfo()?.deviceSerialNumber
                 ?.takeIf { it.isNotBlank() }
                 ?: deviceInfoProvider.getRegistrationDeviceId()
-            val response = dataSource.verifyKiosk(KioskVerifyRequest(deviceSerialNumber = identity))
+            val response = verifyWithFallback(KioskVerifyRequest(deviceSerialNumber = identity))
             val kiosk = response.data?.kiosk
             if (response.success && response.data?.authorized == true && kiosk != null) {
                 sessionManager.saveKioskInfo(kiosk.copy(authorized = true))
