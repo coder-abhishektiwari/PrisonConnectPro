@@ -42,13 +42,15 @@ data class KioskVerifyRequest(
     @SerializedName("deviceSerialNumber") val deviceSerialNumber: String
 )
 
-data class KioskVerifyResponse(
+    data class KioskVerifyResponse(
     @SerializedName("success") val success: Boolean,
     @SerializedName("authorized") val authorized: Boolean,
     @SerializedName("kiosk") val kiosk: KioskInfo?,
+    /** Why the device was not authorized: 'not_found' (needs registration) or 'unauthorized' (rejected/disabled). */
+    @SerializedName("reason") val reason: String? = null,
     /** Long-lived device credential for background workers (recording register/retrieve). */
     @SerializedName("deviceToken") val deviceToken: String? = null
-)
+    )
 
 data class KioskInfo(
     @SerializedName("kioskId") val kioskId: String,
@@ -74,11 +76,13 @@ data class ValidateSetupPinRequest(
     @SerializedName("pin") val pin: String
 )
 
-data class ValidateSetupPinResponse(
+    data class ValidateSetupPinResponse(
     @SerializedName("valid") val valid: Boolean,
     @SerializedName("prisonId") val prisonId: String,
-    @SerializedName("prisonName") val prisonName: String?
-)
+    @SerializedName("prisonName") val prisonName: String?,
+    /** Short-lived proof (10 min) that this device knows the setup PIN; POST /kiosks/register requires it. */
+    @SerializedName("setupToken") val setupToken: String? = null
+    )
 
 data class KioskRegistrationRequest(
     @SerializedName("prisonId") val prisonId: String,
@@ -89,8 +93,10 @@ data class KioskRegistrationRequest(
     @SerializedName("location") val location: String,
     @SerializedName("androidVersion") val androidVersion: String,
     @SerializedName("appVersion") val appVersion: String,
-    @SerializedName("deviceFingerprint") val deviceFingerprint: String
-)
+    @SerializedName("deviceFingerprint") val deviceFingerprint: String,
+    /** From /validate-setup-pin — required by the backend before a kiosk can be registered. */
+    @SerializedName("setupToken") val setupToken: String? = null
+    )
 
 data class KioskRegistrationResponse(
     @SerializedName("success") val success: Boolean = false,

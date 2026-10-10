@@ -51,28 +51,28 @@ export function RegisterPage() {
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-xl shadow-neutral-200/50 p-8 sm:p-10">
+    <div className="bg-white rounded-[28px] border border-black/[0.06] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_24px_64px_-24px_rgba(0,0,0,0.14)] p-7 sm:p-8">
       {/* Mobile Logo (hidden on desktop) */}
-      <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
-        <div className="w-12 h-12 bg-primary-600 rounded-xl flex items-center justify-center shadow-lg shadow-primary-600/30">
-          <img src="/ic_icon.webp" alt="PrisonConnect" className="w-8 h-8 object-contain" />
+      <div className="lg:hidden flex items-center justify-center gap-3 mb-6">
+        <div className="w-10 h-10 rounded-xl bg-neutral-900 flex items-center justify-center">
+          <img src="/ic_icon.webp" alt="PrisonConnect" className="w-6 h-6 object-contain" />
         </div>
-        <div>
-          <h1 className="text-xl font-bold text-neutral-900 tracking-tight">PrisonConnect</h1>
-          <p className="text-xs text-neutral-500 uppercase tracking-widest">Jail Admin Console</p>
+        <div className="text-left">
+          <h1 className="text-[15px] font-semibold text-neutral-900 tracking-[-0.01em]">PrisonConnect</h1>
+          <p className="text-[10px] text-neutral-400 uppercase tracking-[0.22em]">Jail Admin Console</p>
         </div>
       </div>
 
       {/* Header */}
-      <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold text-neutral-900 tracking-tight">Create Account</h2>
-        <p className="text-neutral-500 mt-2">Register to access the monitoring dashboard</p>
+      <div className="mb-6">
+        <h2 className="text-[26px] font-semibold text-neutral-900 tracking-[-0.02em]">Create account</h2>
+        <p className="text-[14px] text-neutral-500 mt-1">Register to access the monitoring dashboard</p>
       </div>
 
       {/* Form Error Banner */}
       {formError && (
         <div
-          className="mb-6 p-3.5 bg-error-50 border border-error-200 text-error-700 rounded-xl text-sm flex items-start gap-3"
+          className="mb-4 p-3 bg-error-50/70 border border-error-100 text-error-700 rounded-2xl text-[13px] flex items-start gap-2.5"
           role="alert"
         >
           <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -83,7 +83,7 @@ export function RegisterPage() {
       )}
 
       {/* Register Form */}
-      <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
         <AuthInput
           label="Full Name"
           type="text"
@@ -171,24 +171,21 @@ export function RegisterPage() {
         />
 
         {/* Password Requirements */}
-        <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-4">
-          <p className="text-xs font-semibold text-neutral-700 uppercase tracking-wider mb-2">
-            Password Requirements
-          </p>
-          <ul className="space-y-1.5 text-xs text-neutral-600">
-            <li className="flex items-center gap-2">
+        <div className="bg-[#fbfbfd] border border-black/[0.06] rounded-2xl px-4 py-3">
+          <ul className="grid grid-cols-2 gap-x-3 gap-y-1 text-[12px] text-neutral-500">
+            <li className="flex items-center gap-1.5">
               <span className={`w-1.5 h-1.5 rounded-full ${password.length >= 8 ? 'bg-success-500' : 'bg-neutral-300'}`} />
-              At least 8 characters
+              8+ characters
             </li>
-            <li className="flex items-center gap-2">
+            <li className="flex items-center gap-1.5">
               <span className={`w-1.5 h-1.5 rounded-full ${/[A-Z]/.test(password) ? 'bg-success-500' : 'bg-neutral-300'}`} />
-              One uppercase letter
+              Uppercase
             </li>
-            <li className="flex items-center gap-2">
+            <li className="flex items-center gap-1.5">
               <span className={`w-1.5 h-1.5 rounded-full ${/[a-z]/.test(password) ? 'bg-success-500' : 'bg-neutral-300'}`} />
-              One lowercase letter
+              Lowercase
             </li>
-            <li className="flex items-center gap-2">
+            <li className="flex items-center gap-1.5">
               <span className={`w-1.5 h-1.5 rounded-full ${/[0-9]/.test(password) ? 'bg-success-500' : 'bg-neutral-300'}`} />
               One number
             </li>
@@ -198,7 +195,7 @@ export function RegisterPage() {
         <LoadingButton
           type="submit"
           size="lg"
-          className="w-full"
+          className="w-full h-12 rounded-full"
           isLoading={isLoading}
           loadingText="Creating Account..."
         >
@@ -207,12 +204,12 @@ export function RegisterPage() {
       </form>
 
       {/* Login Link */}
-      <div className="mt-6 text-center">
-        <p className="text-sm text-neutral-600">
+      <div className="mt-5 text-center">
+        <p className="text-[13px] text-neutral-500">
           Already have an account?{' '}
           <Link
             to="/login"
-            className="font-semibold text-primary-600 hover:text-primary-700 transition-colors"
+            className="font-medium text-primary-600 hover:text-primary-700 transition-colors"
           >
             Sign in
           </Link>
@@ -220,12 +217,9 @@ export function RegisterPage() {
       </div>
 
       {/* Security Notice */}
-      <div className="mt-8 pt-6 border-t border-neutral-100">
-        <p className="text-xs text-neutral-400 text-center flex items-center justify-center gap-1.5">
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-          </svg>
-          Authorized personnel only. All activities are monitored.
+      <div className="mt-4 pt-4 border-t border-neutral-100">
+        <p className="text-[11px] text-neutral-400 text-center leading-relaxed">
+          Authorized personnel only · All activities are monitored
         </p>
       </div>
     </div>

@@ -70,6 +70,9 @@ class KioskRegistrationViewModel @Inject constructor(
 
     private var pollingJob: Job? = null
 
+    /** Short-lived proof from /validate-setup-pin; the backend requires it on /register. */
+    private var setupToken: String? = null
+
     init {
         collectDeviceInfo()
         checkExistingRegistrationState()
@@ -93,13 +96,10 @@ class KioskRegistrationViewModel @Inject constructor(
     }
 
     private fun collectDeviceInfo() {
-        val rawSerial = deviceInfoProvider.getDeviceSerialNumber()
-        val fallbackSerial = try {
-            "KIOSK-DEV-${Build.SERIAL?.take(8) ?: "UNKNOWN"}"
-        } catch (e: Exception) {
-            "KIOSK-DEV-UNKNOWN"
-        }
-        val serial = if (rawSerial.isNullOrBlank()) fallbackSerial else rawSerial
+        // Unique per device even without Device Owner: hardware serial when
+        // readable, else ANDROID_ID-derived fallback. One shared identity
+        // across registration, polling and splash verification.
+        val serial = deviceInfoProvider.getRegistrationDeviceId()
         val ip = deviceInfoProvider.getIpAddress() ?: "0.0.0.0"
         val fingerprint = deviceInfoProvider.getDeviceFingerprint() ?: "no-fingerprint"
         val model = Build.MODEL ?: "Unknown Model"
@@ -155,6 +155,7 @@ class KioskRegistrationViewModel @Inject constructor(
                     is NetworkResult.Idle -> {}
                     is NetworkResult.Loading -> _uiState.update { it.copy(isLoading = true) }
                     is NetworkResult.Success -> {
+                        setupToken = result.data.setupToken
                         _uiState.update {
                             it.copy(
                                 isLoading = false,
@@ -199,7 +200,8 @@ class KioskRegistrationViewModel @Inject constructor(
             location = currentState.locationInput.sanitize(),
             androidVersion = currentState.androidVersion.sanitize(),
             appVersion = currentState.appVersion.sanitize(),
-            deviceFingerprint = currentState.deviceFingerprint.sanitize()
+            deviceFingerprint = currentState.deviceFingerprint.sanitize(),
+            setupToken = setupToken
         )
 
         viewModelScope.launch {
@@ -229,12 +231,26 @@ class KioskRegistrationViewModel @Inject constructor(
                         startPollingStatus()
                     }
                     is NetworkResult.Failure -> {
-                        val errorMsg = result.error?.message.orEmpty().ifEmpty { "Failed to submit registration request" }
-                        _uiState.update {
-                            it.copy(
-                                isLoading = false,
-                                errorMessage = errorMsg
-                            )
+                        if (result.error?.code == "SETUP_TOKEN_REQUIRED") {
+                            // The 10-minute setup token expired or is missing —
+                            // send the operator back to the PIN step for a new one.
+                            setupToken = null
+                            _uiState.update {
+                                it.copy(
+                                    isLoading = false,
+                                    currentStep = RegistrationStep.ENTER_PIN,
+                                    setupPin = "",
+                                    errorMessage = "Setup PIN session expired. Please enter the PIN again."
+                                )
+                            }
+                        } else {
+                            val errorMsg = result.error?.message.orEmpty().ifEmpty { "Failed to submit registration request" }
+                            _uiState.update {
+                                it.copy(
+                                    isLoading = false,
+                                    errorMessage = errorMsg
+                                )
+                            }
                         }
                     }
                 }
@@ -376,17 +392,22 @@ class KioskRegistrationViewModel @Inject constructor(
 
     fun reRegister() {
         pollingJob?.cancel()
+        setupToken = null
         viewModelScope.launch {
             sessionManager.clearRegistrationState()
         }
+        // Always re-enter the PIN step: the backend requires a fresh setup
+        // token (10-min proof of the prison PIN) before it accepts /register.
         _uiState.update {
             it.copy(
+                currentStep = RegistrationStep.ENTER_PIN,
+                setupPin = "",
                 approvalStatus = "pending",
                 isApproved = false,
-                errorMessage = null
+                errorMessage = null,
+                isLoading = false
             )
         }
-        submitRegistration()
     }
 
     fun goToEditData() {

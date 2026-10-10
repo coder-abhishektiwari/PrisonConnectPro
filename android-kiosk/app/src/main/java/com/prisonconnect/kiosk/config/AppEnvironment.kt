@@ -8,5 +8,5 @@ object AppConfig {
     var signalingUrlOverride: String? = null
     const val NETWORK_TIMEOUT = 30L // Seconds
     var signalingToken: String? = null
-    var deviceAuthorizationEnabled: Boolean = false
+    var deviceAuthorizationEnabled: Boolean = true
 }

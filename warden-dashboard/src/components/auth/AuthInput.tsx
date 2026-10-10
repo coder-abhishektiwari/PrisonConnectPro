@@ -45,15 +45,15 @@ export function AuthInput({
           onChange={(e) => onChange(e.target.value)}
           placeholder=" "
           className={`
-            w-full rounded-xl border-2 bg-white px-4 pt-5 pb-2 text-neutral-900
+            w-full rounded-2xl border bg-[#fbfbfd] px-4 pt-5 pb-2 text-[15px] text-neutral-900
             transition-all duration-200 outline-none
             peer
             ${icon ? 'pl-11' : ''}
             ${isPassword ? 'pr-12' : ''}
             ${
               error
-                ? 'border-error-300 focus:border-error-500 focus:ring-4 focus:ring-error-500/10'
-                : 'border-neutral-200 focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 hover:border-neutral-300'
+                ? 'border-error-300 focus:border-error-500 focus:bg-white focus:ring-4 focus:ring-error-500/10'
+                : 'border-black/[0.08] focus:border-neutral-400 focus:bg-white focus:ring-4 focus:ring-black/[0.04] hover:border-black/[0.15]'
             }
           `}
           {...rest}
@@ -67,10 +67,10 @@ export function AuthInput({
             ${icon ? 'left-11' : 'left-4'}
             ${
               hasValue
-                ? 'top-1.5 text-[11px] font-semibold text-primary-600 uppercase tracking-wider'
-                : 'top-1/2 -translate-y-1/2 text-neutral-500 text-sm'
+                ? 'top-1.5 text-[11px] font-medium text-neutral-500 tracking-wide'
+                : 'top-1/2 -translate-y-1/2 text-neutral-400 text-[15px]'
             }
-            peer-focus:top-1.5 peer-focus:text-[11px] peer-focus:font-semibold peer-focus:text-primary-600 peer-focus:uppercase peer-focus:tracking-wider
+            peer-focus:top-1.5 peer-focus:text-[11px] peer-focus:font-medium peer-focus:text-neutral-500 peer-focus:tracking-wide
             peer-focus:-translate-y-0
             ${error && !hasValue ? 'peer-focus:text-error-500' : ''}
           `}

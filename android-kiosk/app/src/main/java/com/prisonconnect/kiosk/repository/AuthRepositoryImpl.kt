@@ -19,8 +19,9 @@ import javax.inject.Singleton
 class AuthRepositoryImpl @Inject constructor(
     private val dataSource: AuthDataSource,
     private val authInterceptor: AuthInterceptor,
-    private val sessionManager: SessionManager
-) : AuthRepository {
+    private val sessionManager: SessionManager,
+    private val deviceInfoProvider: com.prisonconnect.kiosk.hardware.DeviceInfoProvider
+    ) : AuthRepository {
 
     private var verifiedKiosk: KioskInfo? = null
     private var currentAdmin: AdminProfile? = null
@@ -272,15 +273,22 @@ class AuthRepositoryImpl @Inject constructor(
 
     override fun hydrateKioskInfo(): Flow<NetworkResult<com.prisonconnect.kiosk.models.auth.KioskInfo>> = flow {
         try {
-            val kioskId = com.prisonconnect.kiosk.core.Constants.KIOSK_ID
-            val response = dataSource.verifyKiosk(KioskVerifyRequest(deviceSerialNumber = kioskId))
+            // Identity comes from the device itself, never a shared build
+            // constant: the serial saved by the last successful verify (for a
+            // properly registered device that IS its own registration
+            // identity), else this unit's own hardware-serial/ANDROID_ID
+            // fallback. /kiosks/verify matches serial or fingerprint only.
+            val identity = sessionManager.getKioskInfo()?.deviceSerialNumber
+                ?.takeIf { it.isNotBlank() }
+                ?: deviceInfoProvider.getRegistrationDeviceId()
+            val response = dataSource.verifyKiosk(KioskVerifyRequest(deviceSerialNumber = identity))
             val kiosk = response.data?.kiosk
             if (response.success && response.data?.authorized == true && kiosk != null) {
                 sessionManager.saveKioskInfo(kiosk)
                 response.data.deviceToken?.let { sessionManager.saveDeviceToken(it) }
                 emit(NetworkResult.Success(kiosk))
             } else {
-                emit(NetworkResult.Failure(ApiError("KIOSK_NOT_AUTHORIZED", "Kiosk not authorized for '$kioskId'")))
+                emit(NetworkResult.Failure(ApiError("KIOSK_NOT_AUTHORIZED", "Kiosk not authorized for '$identity'")))
             }
         } catch (e: Exception) {
             Logger.w("AuthRepository: hydrateKioskInfo failed: ${e.message}")
@@ -393,10 +401,18 @@ class AuthRepositoryImpl @Inject constructor(
                 emit(NetworkResult.Success(response.data))
             } else {
                 val msg = response.error?.message ?: "Kiosk registration failed"
-                emit(NetworkResult.Failure(ApiError("REGISTRATION_FAILED", msg)))
+                val code = response.error?.code ?: "REGISTRATION_FAILED"
+                emit(NetworkResult.Failure(ApiError(code, msg)))
             }
         } catch (e: Exception) {
-            emit(NetworkResult.Failure(ApiError("EXCEPTION", e.message ?: "Network error submitting registration")))
+            val statusCode = if (e is HttpException) e.code() else null
+            val error = when (statusCode) {
+                // Backend refuses /register without a valid (10-min) setup token.
+                401 -> ApiError("SETUP_TOKEN_REQUIRED", "Setup PIN session expired. Please enter the PIN again.")
+                429 -> ApiError("RATE_LIMITED", "Too many attempts. Please wait a minute and try again.")
+                else -> ApiError("EXCEPTION", e.message ?: "Network error submitting registration")
+            }
+            emit(NetworkResult.Failure(error, statusCode = statusCode))
         }
     }
 

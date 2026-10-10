@@ -72,19 +72,20 @@ class DeviceInfoProvider @Inject constructor(
 
     /**
      * Returns a stable registration identity for the device: the strict hardware
-     * serial when available, otherwise the same "KIOSK-DEV-*" fallback derived
-     * during kiosk registration. This keeps every flow (registration, status
-     * polling, splash verification) using one consistent device identity, even
-     * when the app is not Device Owner and Build.getSerial() is restricted.
+     * serial when available (Device Owner), otherwise a fallback derived from
+     * ANDROID_ID. ANDROID_ID is unique per device, so every unit keeps its own
+     * identity even without Device Owner — Build.SERIAL is the literal
+     * "unknown" on all non-DO devices and would collide.
      */
     fun getRegistrationDeviceId(): String {
         val strict = getDeviceSerialNumber()
         if (!strict.isNullOrBlank()) return strict
-        val fallback = try {
-            "KIOSK-DEV-${Build.SERIAL?.take(8) ?: "UNKNOWN"}"
+        val androidId = try {
+            Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) ?: "NO_ID"
         } catch (e: Exception) {
-            "KIOSK-DEV-UNKNOWN"
+            "NO_ID"
         }
+        val fallback = "KIOSK-DEV-${androidId.takeLast(8).uppercase()}"
         Logger.w("Registration Device ID fallback: $fallback (app not Device Owner)")
         return fallback
     }

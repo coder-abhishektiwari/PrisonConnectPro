@@ -76,13 +76,12 @@ class SplashViewModel @Inject constructor(
             return
         }
 
-        // Prefer the stable KIOSK_ID: /kiosks/verify matches it directly, and
-        // the hardware-serial fallback is identical ("KIOSK-DEV-unknown") on
-        // every non-Device-Owner phone — so it was a lottery whether the
-        // backend found this kiosk at all. Falls back to the registration id
-        // only if KIOSK_ID was never configured.
-        val deviceSerial = com.prisonconnect.kiosk.core.Constants.KIOSK_ID
-            .takeIf { it.isNotBlank() }
+        // Own device identity only — never a shared build constant (KIOSK_ID
+        // made every installed APK claim the same kiosk). Chain: serial saved
+        // by the last successful verify (for a registered device that IS its
+        // own identity), else this unit's hardware-serial/ANDROID_ID fallback.
+        val deviceSerial = sessionManager.getKioskInfo()?.deviceSerialNumber
+            ?.takeIf { it.isNotBlank() }
             ?: deviceInfoProvider.getRegistrationDeviceId()
         Logger.d("SplashViewModel: Kiosk verify identity: $deviceSerial")
 
@@ -96,16 +95,16 @@ class SplashViewModel @Inject constructor(
         val request = KioskVerifyRequest(deviceSerialNumber = deviceSerial.trim())
         authRepository.verifyKiosk(request).collect { response ->
             when (response) {
-                is NetworkResult.Loading -> {
-                    _verificationState.value = KioskVerificationState.CheckingDevice
-                }
                 is NetworkResult.Success -> {
                     if (response.data.authorized && response.data.kiosk != null) {
                         _verificationState.value = KioskVerificationState.Authorized
                         checkSessionAndNavigate()
                     } else {
-                        _verificationState.value = KioskVerificationState.Unauthorized
-                        _navigationEvent.emit(SplashNavigation.NavigateToUnauthorized)
+                        // Koi bhi non-authorized device (not_found ya rejected) —
+                        // registration flow. Re-register ke liye setup PIN chahiye.
+                        Logger.i("SplashViewModel: Kiosk is NOT authorized. Sending to Registration.")
+                        sessionManager.clearRegistrationState()
+                        _navigationEvent.emit(SplashNavigation.NavigateToRegistration)
                     }
                 }
                 is NetworkResult.Failure -> {
@@ -115,7 +114,7 @@ class SplashViewModel @Inject constructor(
                         isTransient = true
                     )
                 }
-                is NetworkResult.Idle -> { /* no-op */ }
+                else -> {}
             }
         }
     }

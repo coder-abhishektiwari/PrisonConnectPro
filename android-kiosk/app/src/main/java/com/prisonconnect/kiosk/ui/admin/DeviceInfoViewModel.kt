@@ -4,7 +4,6 @@ import android.os.Build
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.prisonconnect.kiosk.BuildConfig
-import com.prisonconnect.kiosk.core.Constants
 import com.prisonconnect.kiosk.core.SessionManager
 import com.prisonconnect.kiosk.models.admin.HardwareStatus
 import com.prisonconnect.kiosk.models.admin.KioskDevice
@@ -60,7 +59,7 @@ class DeviceInfoViewModel @Inject constructor(
 
             val prisonId = kioskInfo?.prisonId?.takeIf { it.isNotBlank() }
                 ?: runCatching { sessionManager.getRegisteredPrisonId() }.getOrNull()
-            val local = buildLocalDevice(prisonId, kioskInfo?.prisonName, registeredSerial)
+            val local = buildLocalDevice(kioskInfo?.kioskId, prisonId, kioskInfo?.prisonName, registeredSerial)
             _deviceInfo.value = local
 
             adminRepository.getDevice(deviceId).collect { result ->
@@ -82,6 +81,7 @@ class DeviceInfoViewModel @Inject constructor(
 
     /** Everything the device can answer about itself, offline-first. */
     private fun buildLocalDevice(
+        kioskId: String?,
         prisonId: String?,
         prisonName: String?,
         serialOverride: String?
@@ -91,7 +91,9 @@ class DeviceInfoViewModel @Inject constructor(
             ?: deviceInfoProvider.getRegistrationDeviceId()
         val ip = deviceInfoProvider.getIpAddress()
         return KioskDevice(
-            kioskId = Constants.KIOSK_ID,
+            // Only the SERVER-issued id after a successful verify; never a
+            // build-time constant (every install used to display "KIOSK-001").
+            kioskId = kioskId?.takeIf { it.isNotBlank() } ?: "Not registered yet",
             deviceId = serial,
             serialNumber = serial,
             prisonId = prisonId,

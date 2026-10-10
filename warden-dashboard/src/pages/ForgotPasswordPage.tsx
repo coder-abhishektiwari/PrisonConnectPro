@@ -41,27 +41,27 @@ export function ForgotPasswordPage() {
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-xl shadow-neutral-200/50 p-8 sm:p-10">
+    <div className="bg-white rounded-[28px] border border-black/[0.06] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_24px_64px_-24px_rgba(0,0,0,0.14)] p-7 sm:p-8">
       {/* Mobile Logo (hidden on desktop) */}
-      <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
-        <div className="w-12 h-12 bg-primary-600 rounded-xl flex items-center justify-center shadow-lg shadow-primary-600/30">
-          <img src="/ic_icon.webp" alt="PrisonConnect" className="w-8 h-8 object-contain" />
+      <div className="lg:hidden flex items-center justify-center gap-3 mb-6">
+        <div className="w-10 h-10 rounded-xl bg-neutral-900 flex items-center justify-center">
+          <img src="/ic_icon.webp" alt="PrisonConnect" className="w-6 h-6 object-contain" />
         </div>
-        <div>
-          <h1 className="text-xl font-bold text-neutral-900 tracking-tight">PrisonConnect</h1>
-          <p className="text-xs text-neutral-500 uppercase tracking-widest">Jail Admin Console</p>
+        <div className="text-left">
+          <h1 className="text-[15px] font-semibold text-neutral-900 tracking-[-0.01em]">PrisonConnect</h1>
+          <p className="text-[10px] text-neutral-400 uppercase tracking-[0.22em]">Jail Admin Console</p>
         </div>
       </div>
 
       {/* Header */}
-      <div className="text-center mb-8">
-        <div className="w-16 h-16 bg-primary-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-          <svg className="w-8 h-8 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+      <div className="mb-6">
+        <div className="w-11 h-11 bg-neutral-100 rounded-xl flex items-center justify-center mb-3.5">
+          <svg className="w-5 h-5 text-neutral-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
           </svg>
         </div>
-        <h2 className="text-2xl font-bold text-neutral-900 tracking-tight">Forgot Password?</h2>
-        <p className="text-neutral-500 mt-2">
+        <h2 className="text-[26px] font-semibold text-neutral-900 tracking-[-0.02em]">Forgot password?</h2>
+        <p className="text-[14px] text-neutral-500 mt-1">
           Enter your email and we'll send you a reset link
         </p>
       </div>
@@ -69,7 +69,7 @@ export function ForgotPasswordPage() {
       {/* Form Error Banner */}
       {formError && (
         <div
-          className="mb-6 p-3.5 bg-error-50 border border-error-200 text-error-700 rounded-xl text-sm flex items-start gap-3"
+          className="mb-4 p-3 bg-error-50/70 border border-error-100 text-error-700 rounded-2xl text-[13px] flex items-start gap-2.5"
           role="alert"
         >
           <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -82,7 +82,7 @@ export function ForgotPasswordPage() {
       {/* Success Message */}
       {successMessage && (
         <div
-          className="mb-6 p-3.5 bg-success-50 border border-success-200 text-success-700 rounded-xl text-sm flex items-start gap-3"
+          className="mb-4 p-3 bg-success-50/70 border border-success-100 text-success-700 rounded-2xl text-[13px] flex items-start gap-2.5"
           role="status"
         >
           <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -110,7 +110,7 @@ export function ForgotPasswordPage() {
 
       {/* Forgot Password Form */}
       {!successMessage && (
-        <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
           <AuthInput
             label="Email Address"
             type="email"
@@ -132,7 +132,7 @@ export function ForgotPasswordPage() {
           <LoadingButton
             type="submit"
             size="lg"
-            className="w-full"
+            className="w-full h-12 rounded-full"
             isLoading={isLoading}
             loadingText="Sending..."
           >
@@ -142,10 +142,10 @@ export function ForgotPasswordPage() {
       )}
 
       {/* Back to Login */}
-      <div className="mt-6 text-center">
+      <div className="mt-5 text-center">
         <Link
           to="/login"
-          className="text-sm font-medium text-primary-600 hover:text-primary-700 transition-colors inline-flex items-center gap-1.5"
+          className="text-[13px] font-medium text-neutral-500 hover:text-neutral-900 transition-colors inline-flex items-center gap-1.5"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />

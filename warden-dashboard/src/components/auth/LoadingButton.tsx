@@ -22,15 +22,15 @@ export function LoadingButton({
   ...rest
 }: LoadingButtonProps) {
   const baseStyles =
-    'inline-flex items-center justify-center font-semibold rounded-xl transition-all duration-200 focus:outline-none focus:ring-4 disabled:opacity-60 disabled:cursor-not-allowed active:scale-[0.98] select-none';
+    'inline-flex items-center justify-center font-medium rounded-xl transition-all duration-200 focus:outline-none focus:ring-4 disabled:opacity-60 disabled:cursor-not-allowed active:scale-[0.98] select-none';
 
   const variants = {
     primary:
-      'bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500/20 shadow-lg shadow-primary-600/20',
+      'bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500/20 shadow-[0_1px_2px_rgba(0,0,0,0.08)]',
     secondary:
       'bg-neutral-100 text-neutral-900 hover:bg-neutral-200 focus:ring-neutral-500/20',
     outline:
-      'border-2 border-primary-600 text-primary-600 hover:bg-primary-50 focus:ring-primary-500/20',
+      'border border-primary-600 text-primary-600 hover:bg-primary-50 focus:ring-primary-500/20',
   };
 
   const sizes = {
