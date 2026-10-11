@@ -947,6 +947,15 @@ export const wardenApi = {
       return r.data?.data ?? { success: false };
     }),
 
+  // Warden-facing activate/deactivate. 'active' enables the device again
+  // (heartbeat decides online/offline); 'disabled' deactivates it — the
+  // backend refuses device logins while a kiosk's stored status is 'disabled'.
+  setKioskStatus: (kioskId: string, status: 'active' | 'disabled') =>
+    apiClient.patch<ApiResponse<KioskItem>>(`/kiosks/${encodeURIComponent(kioskId)}`, { status }).then((r) => {
+      invalidatePrefix('kiosks:list');
+      return r.data?.data ?? null;
+    }),
+
   getKioskStats: (kioskId: string) =>
     apiClient.get<ApiResponse<KioskStats>>(`/kiosks/${encodeURIComponent(kioskId)}/stats`).then((r) => r.data?.data),
 

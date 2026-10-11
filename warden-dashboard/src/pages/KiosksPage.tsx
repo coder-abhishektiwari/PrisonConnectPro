@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Card } from '@/components/Card';
 import { SkeletonRows, SkeletonText } from '@/components/Skeleton';
 import { ToastContainer } from '@/components/ToastContainer';
@@ -8,8 +8,13 @@ import { usePageHeader } from '@/context/PageHeaderContext';
 import { useCachedResource } from '@/hooks/useCachedResource';
 import { wardenApi, cacheKeys, KioskItem } from '@/services/api/wardenApi';
 
-// 'online'/'offline' come from the device heartbeat; the rest are the states
-// a warden sets (or that registration leaves behind).
+// Kiosk status is two-level: an admin-level Active/Deactivated (the stored
+// flag a warden flips), and under Active a heartbeat-driven Online/Offline.
+// `disabled` on the wire is the Deactivated state; 'active' is a legacy
+// heartbeat-less online alias kept for old rows.
+const isDeactivated = (status?: string) => status === 'disabled';
+const isDeviceActive = (status?: string) => status === 'online' || status === 'active' || status === 'offline' || status === 'maintenance';
+
 const STATUS_STYLES: Record<string, string> = {
   online: 'bg-success/10 text-success border border-success/20',
   active: 'bg-success/10 text-success border border-success/20',
@@ -19,7 +24,14 @@ const STATUS_STYLES: Record<string, string> = {
   pending: 'bg-warning/10 text-warning border border-warning/20',
 };
 
+const STATUS_LABELS: Record<string, string> = {
+  disabled: 'Deactivated',
+};
+
+const statusLabel = (status?: string) => STATUS_LABELS[status || ''] || status || 'pending';
 const statusStyle = (status?: string) => STATUS_STYLES[status || ''] || STATUS_STYLES.pending;
+
+type StatusFilter = 'all' | 'active' | 'deactivated';
 
 // A live kiosk has just reported in, so the timestamp is noise; anything else
 // needs to say when the device was last heard from.
@@ -27,7 +39,19 @@ const isLive = (status?: string) => status === 'online' || status === 'active';
 
 export function KiosksPage() {
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [showStatusFilter, setShowStatusFilter] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const statusFilterRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showStatusFilter) return;
+    const onDown = (e: MouseEvent) => {
+      if (!statusFilterRef.current?.contains(e.target as Node)) setShowStatusFilter(false);
+    };
+    window.addEventListener('mousedown', onDown);
+    return () => window.removeEventListener('mousedown', onDown);
+  }, [showStatusFilter]);
   const [selected, setSelected] = useState<KioskItem | null>(null);
   const { toasts, removeToast } = useToast();
 
@@ -45,16 +69,24 @@ export function KiosksPage() {
   }, [refresh]);
 
   const filtered = useMemo(() => {
-    if (!searchQuery.trim()) return kiosks;
-    const q = searchQuery.toLowerCase();
-    return kiosks.filter((k) =>
-      (k.kioskId || '').toLowerCase().includes(q) ||
-      (k.location || '').toLowerCase().includes(q) ||
-      (k.ipAddress || '').toLowerCase().includes(q) ||
-      (k.deviceSerialNumber || '').toLowerCase().includes(q) ||
-      (k.prisonName || k.prisonId || '').toLowerCase().includes(q)
-    );
-  }, [kiosks, searchQuery]);
+    const list = (() => {
+      let rows = kiosks;
+      if (statusFilter === 'active') rows = rows.filter((k) => isDeviceActive(k.status));
+      else if (statusFilter === 'deactivated') rows = rows.filter((k) => isDeactivated(k.status));
+      if (!searchQuery.trim()) return rows;
+      const q = searchQuery.toLowerCase();
+      return rows.filter((k) =>
+        (k.kioskId || '').toLowerCase().includes(q) ||
+        (k.location || '').toLowerCase().includes(q) ||
+        (k.ipAddress || '').toLowerCase().includes(q) ||
+        (k.deviceSerialNumber || '').toLowerCase().includes(q) ||
+        (k.prisonName || k.prisonId || '').toLowerCase().includes(q)
+      );
+    })();
+    // Live devices (online/active) pin to the top; the rest keep their
+    // original order below. Array.sort is stable, so ties don't shuffle.
+    return [...list].sort((a, b) => Number(isLive(b.status)) - Number(isLive(a.status)));
+  }, [kiosks, searchQuery, statusFilter]);
 
   const headerIcon = useMemo(() => <span className="material-icons text-primary-600 text-xl">devices_other</span>, []);
 
@@ -85,7 +117,16 @@ export function KiosksPage() {
   return (
     <div className="space-y-6">
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
-      {selected && <KioskReportPanel kiosk={selected} onClose={() => setSelected(null)} />}
+      {selected && (
+        <KioskReportPanel
+          kiosk={selected}
+          onClose={() => setSelected(null)}
+          onStatusChanged={(updated) => {
+            setSelected(updated);
+            handleRefresh();
+          }}
+        />
+      )}
 
       {/* Search */}
       <Card>
@@ -114,7 +155,34 @@ export function KiosksPage() {
                   <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Location</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">IP Address</th>
                   <th className="text-right py-3 px-4 text-sm font-semibold text-neutral-900">Inmates</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">Status</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">
+                    <div ref={statusFilterRef} className="relative inline-block">
+                      <button
+                        onClick={() => setShowStatusFilter((v) => !v)}
+                        className="flex items-center gap-1 hover:text-primary-600"
+                      >
+                        Status
+                        <span className="material-icons text-sm">arrow_drop_down</span>
+                      </button>
+                      {showStatusFilter && (
+                        <div className="absolute left-0 top-full z-20 mt-1 w-40 rounded-lg border border-neutral-200 bg-white py-1 shadow-lg">
+                          {([
+                            ['all', 'All'],
+                            ['active', 'Active'],
+                            ['deactivated', 'Deactivated'],
+                          ] as const).map(([value, label]) => (
+                            <button
+                              key={value}
+                              onClick={() => { setStatusFilter(value); setShowStatusFilter(false); }}
+                              className={`block w-full px-3 py-1.5 text-left text-sm hover:bg-neutral-50 ${statusFilter === value ? 'font-bold text-primary-600' : 'text-neutral-700'}`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -139,7 +207,7 @@ export function KiosksPage() {
                       </span>
                     </td>
                     <td className="py-3 px-4">
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-bold capitalize ${statusStyle(k.status)}`}>{k.status || 'pending'}</span>
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-bold capitalize ${statusStyle(k.status)}`}>{statusLabel(k.status)}</span>
                       {!isLive(k.status) && (
                         <p className="mt-1 text-xs text-neutral-500">
                           {k.lastSeen ? `Last seen at ${new Date(k.lastSeen).toLocaleString('en-IN')}` : 'Last seen at —'}

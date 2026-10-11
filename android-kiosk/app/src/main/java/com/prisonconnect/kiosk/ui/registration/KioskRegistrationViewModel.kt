@@ -29,8 +29,31 @@ enum class RegistrationStep {
     PENDING_APPROVAL
 }
 
+/**
+ * Pre-registration gate: the screen checks the server BEFORE showing any
+ * steps, so a device that is already approved never walks the form again
+ * (its /register submit would only discover "already verified" at the end).
+ */
+enum class DeviceGateStatus {
+    /** Status check in flight. */
+    CHECKING,
+
+    /** Never registered — Next starts Step 1. */
+    NEW_DEVICE,
+
+    /** Already registered & approved — Next goes straight to login. */
+    ALREADY_VERIFIED
+}
+
 data class RegistrationUiState(
     val currentStep: RegistrationStep = RegistrationStep.SELECT_JAIL,
+    /**
+     * Pre-step device check. Shown while [currentStep] is SELECT_JAIL;
+     * set to null once the operator taps Next on the gate (dismissed).
+     * A locally-pending request skips straight to PENDING_APPROVAL, so the
+     * gate never shows there.
+     */
+    val deviceGate: DeviceGateStatus? = DeviceGateStatus.CHECKING,
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
 
@@ -82,17 +105,85 @@ class KioskRegistrationViewModel @Inject constructor(
         viewModelScope.launch {
             val status = sessionManager.getRegistrationStatus()
             val reqId = sessionManager.getRegistrationRequestId()
-            if (reqId.isNullOrEmpty() || status == "approved") return@launch
-            _uiState.update {
-                it.copy(
-                    currentStep = RegistrationStep.PENDING_APPROVAL,
-                    requestId = reqId,
-                    kioskId = reqId,
-                    approvalStatus = if (status == "rejected") "rejected" else "pending"
-                )
+            if (!reqId.isNullOrEmpty() && status != "approved") {
+                // A request is already in flight locally — skip the device
+                // gate entirely and resume the approval wait.
+                _uiState.update {
+                    it.copy(
+                        currentStep = RegistrationStep.PENDING_APPROVAL,
+                        deviceGate = null,
+                        requestId = reqId,
+                        kioskId = reqId,
+                        approvalStatus = if (status == "rejected") "rejected" else "pending"
+                    )
+                }
+                startPollingStatus()
+                return@launch
             }
-            startPollingStatus()
+            // Fresh install / reset: ask the server whether this hardware is
+            // already approved BEFORE showing any registration steps.
+            checkDeviceGate()
         }
+    }
+
+    /**
+     * Gate check: same status endpoint the post-submit poll uses. An
+     * already-approved serial/fingerprint must route the operator straight
+     * to login instead of making them re-fill Steps 1–3.
+     */
+    private fun checkDeviceGate() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(deviceGate = DeviceGateStatus.CHECKING, isLoading = true) }
+            val serial = _uiState.value.deviceSerial
+            authRepository.getRegistrationStatus(serial).collect { result ->
+                when (result) {
+                    is NetworkResult.Success -> {
+                        val approved = result.data.status == "approved"
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                deviceGate = if (approved) {
+                                    DeviceGateStatus.ALREADY_VERIFIED
+                                } else {
+                                    DeviceGateStatus.NEW_DEVICE
+                                }
+                            )
+                        }
+                    }
+                    is NetworkResult.Failure -> {
+                        // 404 = never registered → new device. A network blip
+                        // also lands here: letting the operator register is
+                        // safe — the submit-time status check catches any
+                        // already-approved device anyway.
+                        _uiState.update {
+                            it.copy(isLoading = false, deviceGate = DeviceGateStatus.NEW_DEVICE)
+                        }
+                    }
+                    else -> {}
+                }
+            }
+        }
+    }
+
+    /** Gate → Step 1: dismiss the gate and show the Jail ID form. */
+    fun beginRegistration() {
+        _uiState.update {
+            it.copy(deviceGate = null, currentStep = RegistrationStep.SELECT_JAIL, errorMessage = null)
+        }
+    }
+
+    /** Gate → login: device is already approved; mirror the poll's success path. */
+    fun goToLoginFromGate() {
+        val kioskId = _uiState.value.deviceSerial
+        viewModelScope.launch {
+            sessionManager.saveRegistrationState("approved", requestId = kioskId)
+        }
+        _uiState.update { it.copy(isApproved = true, isLoading = false) }
+    }
+
+    /** Retry the gate check (e.g. after a network error). */
+    fun recheckDeviceGate() {
+        checkDeviceGate()
     }
 
     private fun collectDeviceInfo() {

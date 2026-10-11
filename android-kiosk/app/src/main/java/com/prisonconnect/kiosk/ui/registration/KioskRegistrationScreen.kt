@@ -61,7 +61,14 @@ fun KioskRegistrationScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Header / Logo Section (Responsive Row / Column)
-            HeaderSection(currentStep = uiState.currentStep)
+            // Step dots hidden while the pre-registration gate is showing.
+            HeaderSection(
+                currentStep = if (uiState.deviceGate != null && uiState.currentStep == RegistrationStep.SELECT_JAIL) {
+                    null
+                } else {
+                    uiState.currentStep
+                }
+            )
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -98,62 +105,90 @@ fun KioskRegistrationScreen(
                 }
             }
 
-            // Main Dynamic Form Card (Scrollable Body)
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = Color(0xFF1E293B).copy(alpha = 0.85f)
-                ),
-                border = BorderStroke(1.dp, Color(0xFF334155))
-            ) {
-                Box(
+            // Pre-registration device gate: check status BEFORE any steps.
+            val gateStatus = uiState.deviceGate
+            if (gateStatus != null && uiState.currentStep == RegistrationStep.SELECT_JAIL) {
+                Card(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(20.dp),
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth()
+                        .weight(1f),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color(0xFF1E293B).copy(alpha = 0.85f)
+                    ),
+                    border = BorderStroke(1.dp, Color(0xFF334155))
                 ) {
-                    val scrollState = rememberScrollState()
-
-                    Column(
+                    Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .verticalScroll(scrollState),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
+                            .padding(20.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        when (uiState.currentStep) {
-                            RegistrationStep.SELECT_JAIL -> StepSelectJail(
-                                prisonId = uiState.prisonIdInput,
-                                isLoading = uiState.isLoading,
-                                onPrisonIdChange = { viewModel.onPrisonIdChange(it) },
-                                onNext = { viewModel.goToPinStep() }
-                            )
+                        DeviceGateCard(
+                            status = gateStatus,
+                            onBegin = { viewModel.beginRegistration() },
+                            onGoToLogin = { viewModel.goToLoginFromGate() }
+                        )
+                    }
+                }
+            } else {
+                // Main Dynamic Form Card (Scrollable Body)
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color(0xFF1E293B).copy(alpha = 0.85f)
+                    ),
+                    border = BorderStroke(1.dp, Color(0xFF334155))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(20.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        val scrollState = rememberScrollState()
 
-                            RegistrationStep.ENTER_PIN -> StepEnterPin(
-                                prisonId = uiState.prisonIdInput,
-                                pin = uiState.setupPin,
-                                isLoading = uiState.isLoading,
-                                onPinChange = { viewModel.onPinChange(it) },
-                                onBack = { viewModel.backToPreviousStep() },
-                                onNext = { viewModel.validatePinAndProceed() }
-                            )
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(scrollState),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            when (uiState.currentStep) {
+                                RegistrationStep.SELECT_JAIL -> StepSelectJail(
+                                    prisonId = uiState.prisonIdInput,
+                                    isLoading = uiState.isLoading,
+                                    onPrisonIdChange = { viewModel.onPrisonIdChange(it) },
+                                    onNext = { viewModel.goToPinStep() }
+                                )
 
-                            RegistrationStep.SUBMIT_DEVICE_INFO -> StepSubmitDeviceInfo(
-                                uiState = uiState,
-                                onLocationChange = { viewModel.onLocationChange(it) },
-                                onBack = { viewModel.backToPreviousStep() },
-                                onSubmit = { viewModel.submitRegistration() }
-                            )
+                                RegistrationStep.ENTER_PIN -> StepEnterPin(
+                                    prisonId = uiState.prisonIdInput,
+                                    pin = uiState.setupPin,
+                                    isLoading = uiState.isLoading,
+                                    onPinChange = { viewModel.onPinChange(it) },
+                                    onBack = { viewModel.backToPreviousStep() },
+                                    onNext = { viewModel.validatePinAndProceed() }
+                                )
 
-                            RegistrationStep.PENDING_APPROVAL -> StepPendingApproval(
-                                uiState = uiState,
-                                onCheckStatus = { viewModel.checkStatusManually() },
-                                onReRegister = { viewModel.reRegister() },
-                                onChangeData = { viewModel.goToEditData() }
-                            )
+                                RegistrationStep.SUBMIT_DEVICE_INFO -> StepSubmitDeviceInfo(
+                                    uiState = uiState,
+                                    onLocationChange = { viewModel.onLocationChange(it) },
+                                    onBack = { viewModel.backToPreviousStep() },
+                                    onSubmit = { viewModel.submitRegistration() }
+                                )
+
+                                RegistrationStep.PENDING_APPROVAL -> StepPendingApproval(
+                                    uiState = uiState,
+                                    onCheckStatus = { viewModel.checkStatusManually() },
+                                    onReRegister = { viewModel.reRegister() },
+                                    onChangeData = { viewModel.goToEditData() }
+                                )
+                            }
                         }
                     }
                 }
@@ -163,7 +198,7 @@ fun KioskRegistrationScreen(
 }
 
 @Composable
-private fun HeaderSection(currentStep: RegistrationStep) {
+private fun HeaderSection(currentStep: RegistrationStep?) {
     val configuration = LocalConfiguration.current
     val isCompactScreen = configuration.screenWidthDp < 600
 
@@ -174,7 +209,7 @@ private fun HeaderSection(currentStep: RegistrationStep) {
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             HeaderLogo()
-            StepIndicators(currentStep = currentStep)
+            if (currentStep != null) StepIndicators(currentStep = currentStep)
         }
     } else {
         Row(
@@ -183,7 +218,143 @@ private fun HeaderSection(currentStep: RegistrationStep) {
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             HeaderLogo()
-            StepIndicators(currentStep = currentStep)
+            if (currentStep != null) StepIndicators(currentStep = currentStep)
+        }
+    }
+}
+
+/**
+ * Pre-registration gate shown before any steps. Asks the server whether this
+ * hardware is already approved:
+ *  - NEW_DEVICE       → "New Device Detected" — Next starts Step 1.
+ *  - ALREADY_VERIFIED → "Kiosk is Already Verified" — Next jumps to login.
+ *  - CHECKING         → spinner while the status call is in flight.
+ */
+@Composable
+private fun DeviceGateCard(
+    status: DeviceGateStatus,
+    onBegin: () -> Unit,
+    onGoToLogin: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .widthIn(max = 500.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        when (status) {
+            DeviceGateStatus.CHECKING -> {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(52.dp),
+                    color = Color(0xFF3B82F6),
+                    strokeWidth = 3.5.dp
+                )
+                Spacer(modifier = Modifier.height(20.dp))
+                Text(
+                    text = "Checking Device Status",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = "Verifying whether this kiosk hardware is already registered…",
+                    fontSize = 13.sp,
+                    color = Color(0xFF94A3B8),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 6.dp)
+                )
+            }
+
+            DeviceGateStatus.NEW_DEVICE -> {
+                Surface(
+                    modifier = Modifier.size(72.dp),
+                    shape = RoundedCornerShape(18.dp),
+                    color = Color(0xFF2563EB).copy(alpha = 0.15f),
+                    border = BorderStroke(1.dp, Color(0xFF3B82F6))
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.PhonelinkSetup,
+                            contentDescription = null,
+                            tint = Color(0xFF60A5FA),
+                            modifier = Modifier.size(36.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "New Device Detected",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = "This kiosk hardware is not registered yet.\nClick Next to start the registration.",
+                    fontSize = 13.sp,
+                    color = Color(0xFF94A3B8),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 28.dp)
+                )
+                Button(
+                    onClick = onBegin,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
+                ) {
+                    Text("Next", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(imageVector = Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
+                }
+            }
+
+            DeviceGateStatus.ALREADY_VERIFIED -> {
+                Surface(
+                    modifier = Modifier.size(72.dp),
+                    shape = RoundedCornerShape(18.dp),
+                    color = Color(0xFF10B981).copy(alpha = 0.15f),
+                    border = BorderStroke(1.dp, Color(0xFF10B981))
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = Color(0xFF34D399),
+                            modifier = Modifier.size(36.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Kiosk is Already Verified",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = "This device is already registered and approved.\nClick Next to go to the login page.",
+                    fontSize = 13.sp,
+                    color = Color(0xFF94A3B8),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 28.dp)
+                )
+                Button(
+                    onClick = onGoToLogin,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
+                ) {
+                    Text("Next — Go to Login", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(imageVector = Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
+                }
+            }
         }
     }
 }

@@ -5,6 +5,8 @@ import { StatCard } from '@/components/ui/StatCard';
 interface KioskReportPanelProps {
   kiosk: KioskItem;
   onClose: () => void;
+  /** Called after a successful activate/deactivate so the list can refresh. */
+  onStatusChanged?: (updated: KioskItem) => void;
 }
 
 const PHONE_PATH = 'M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z';
@@ -34,10 +36,34 @@ function split(p?: { audio?: number; video?: number }) {
   return p ? `${p.audio ?? 0} audio · ${p.video ?? 0} video` : '';
 }
 
-export function KioskReportPanel({ kiosk, onClose }: KioskReportPanelProps) {
+export function KioskReportPanel({ kiosk, onClose, onStatusChanged }: KioskReportPanelProps) {
   const [stats, setStats] = useState<KioskStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Local mirror of the admin status so the toggle flips instantly; refreshed
+  // from props when the parent list reloads with a newer row.
+  const [adminStatus, setAdminStatus] = useState<string | undefined>(kiosk.status);
+  const [isToggling, setIsToggling] = useState(false);
+
+  useEffect(() => { setAdminStatus(kiosk.status); }, [kiosk.status]);
+
+  const isDeactivated = adminStatus === 'disabled';
+  const canToggle = adminStatus !== 'pending';
+
+  const toggleStatus = async () => {
+    if (isToggling || !canToggle) return;
+    setIsToggling(true);
+    try {
+      const next = isDeactivated ? 'active' : 'disabled';
+      const updated = await wardenApi.setKioskStatus(kiosk.kioskId, next);
+      setAdminStatus(next);
+      onStatusChanged?.({ ...kiosk, ...updated, status: updated?.status ?? next });
+    } catch (err) {
+      console.error('Failed to toggle kiosk status:', err);
+    } finally {
+      setIsToggling(false);
+    }
+  };
 
   const fetchStats = useCallback(async (signal?: AbortSignal) => {
     setLoadError(null);
@@ -95,21 +121,38 @@ export function KioskReportPanel({ kiosk, onClose }: KioskReportPanelProps) {
               <span className="material-icons text-primary-600">monitor_heart</span>
               <h2 className="text-lg font-semibold text-neutral-900">Kiosk Report</h2>
               <span className="font-mono text-xs font-bold text-primary-700 bg-primary-50 px-2 py-0.5 rounded">{kiosk.kioskId}</span>
-              <span className={`px-2.5 py-1 rounded-full text-xs font-bold capitalize ${statusClasses(stats?.status ?? kiosk.status)}`}>
-                {stats?.status ?? kiosk.status ?? 'pending'}
+              <span className={`px-2.5 py-1 rounded-full text-xs font-bold capitalize ${statusClasses(adminStatus ?? stats?.status ?? kiosk.status)}`}>
+                {(adminStatus === 'disabled' ? 'Deactivated' : adminStatus ?? stats?.status ?? kiosk.status ?? 'pending')}
               </span>
             </div>
             <p className="mt-1 text-sm text-neutral-500 truncate">
               {stats?.location ?? kiosk.location ?? 'No location set'} · {stats?.prisonName ?? kiosk.prisonName ?? '—'}
             </p>
           </div>
-          <button
-            onClick={onClose}
-            aria-label="Close report"
-            className="shrink-0 rounded-lg p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800"
-          >
-            <span className="material-icons text-xl">close</span>
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            {canToggle && (
+              <button
+                onClick={toggleStatus}
+                disabled={isToggling}
+                aria-label={isDeactivated ? 'Activate kiosk' : 'Deactivate kiosk'}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition disabled:opacity-50 ${
+                  isDeactivated
+                    ? 'bg-success/10 text-success border border-success/30 hover:bg-success/20'
+                    : 'bg-error/10 text-error border border-error/30 hover:bg-error/20'
+                }`}
+              >
+                <span className="material-icons text-sm">power_settings_new</span>
+                {isToggling ? 'Saving…' : isDeactivated ? 'Activate' : 'Deactivate'}
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              aria-label="Close report"
+              className="rounded-lg p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800"
+            >
+              <span className="material-icons text-xl">close</span>
+            </button>
+          </div>
         </div>
 
         <div className="space-y-6 px-6 py-5">
