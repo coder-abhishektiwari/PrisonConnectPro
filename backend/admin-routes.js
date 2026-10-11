@@ -67,6 +67,30 @@ router.get('/prisoners/:prisonerId', requireRole(...ALL_ROLES), async (req, res)
 
 router.post('/prisoners', requireRole(...ALL_ROLES), async (req, res) => {
   const inmateData = stripRemovedInmateFields(req.body);
+  // Kiosk "Add Prisoner" sends the captured biometrics at the TOP level of
+  // the payload. Fold them into biometricData — the shape the identify
+  // endpoints (routes/auth.js) and the Biometrics screen actually read — and
+  // drop the strays so a raw template never persists on the inmate record.
+  // Same fold as routes/inmates.js inmateCreateHandler; this route is the one
+  // mounted at POST /admin/prisoners that the kiosk actually hits.
+  if (inmateData.fingerprintTemplate && !inmateData.biometricData?.fingerprintRegistered) {
+    inmateData.biometricData = {
+      ...(inmateData.biometricData || {}),
+      fingerprintRegistered: true,
+      fingerprintTemplate: String(inmateData.fingerprintTemplate),
+      lastBiometricUpdate: new Date().toISOString()
+    };
+  }
+  if (inmateData.rfidTag) {
+    inmateData.biometricData = {
+      ...(inmateData.biometricData || {}),
+      rfidRegistered: true,
+      rfidToken: String(inmateData.rfidTag).trim(),
+      lastBiometricUpdate: new Date().toISOString()
+    };
+  }
+  delete inmateData.fingerprintTemplate;
+  delete inmateData.rfidTag;
   const jailId = jailScopeOf(req);
   const kioskId = kioskScopeOf(req);
   if (jailId && inmateData.prisonId && inmateData.prisonId !== jailId) {
@@ -86,9 +110,22 @@ router.post('/prisoners', requireRole(...ALL_ROLES), async (req, res) => {
   if (bioError) {
     return res.status(422).json({ success: false, error: { code: 'INVALID_BIOMETRIC', message: bioError } });
   }
+  const inmateId = inmateData.inmateId || `INM-${uuidv4().substring(0, 8).toUpperCase()}`;
+  // One biometrics[] record per registered type — the same ids/shape the
+  // POST /prisoners/:id/biometrics route writes, so the Biometrics screen
+  // lists captures made during inmate creation too.
+  const registeredAt = inmateData.biometricData?.lastBiometricUpdate || new Date().toISOString();
+  const biometrics = [
+    inmateData.biometricData?.fingerprintRegistered
+      ? { biometricId: `BIO-${inmateId}-FGP`, prisonerId: inmateId, type: 'fingerprint', status: 'registered', registeredAt }
+      : null,
+    inmateData.biometricData?.rfidRegistered
+      ? { biometricId: `BIO-${inmateId}-RFID`, prisonerId: inmateId, type: 'rfid', status: 'registered', registeredAt }
+      : null
+  ].filter(Boolean);
   const record = {
     ...inmateData,
-    inmateId: inmateData.inmateId || `INM-${uuidv4().substring(0, 8).toUpperCase()}`,
+    inmateId,
     prisonId: jailId || inmateData.prisonId,
     facility: jailId || inmateData.facility,
     assignedKioskId: kioskId || inmateData.assignedKioskId,
@@ -97,6 +134,7 @@ router.post('/prisoners', requireRole(...ALL_ROLES), async (req, res) => {
     biometricData: await hashBiometricData(inmateData.biometricData || {
       fingerprintRegistered: false, rfidRegistered: false, lastBiometricUpdate: null
     }),
+    ...(biometrics.length ? { biometrics } : {}),
     createdAt: new Date().toISOString()
   };
   if (record.pin && !/^\$2[aby]\$/.test(record.pin)) {

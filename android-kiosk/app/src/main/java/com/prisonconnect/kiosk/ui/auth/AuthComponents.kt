@@ -11,7 +11,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -286,11 +285,13 @@ fun RfidTapAnimation(modifier: Modifier = Modifier) {
 }
 
 /**
- * Invisible keyboard-wedge input for USB RFID readers (HID mode).
+ * Invisible RFID card-number capture field for USB HID readers (HID mode).
  *
- * The reader types the card number and then sends Enter. This field is kept
- * auto-focused and pinned to the back of the z-order (1dp, transparent text),
- * so every keystroke lands here without the user seeing anything.
+ * The reader types the card number and then sends Enter (trailing `\n`).
+ * The field is [readOnly] — CRITICAL: suppresses the Android virtual
+ * on-screen soft keyboard while still accepting physical HID keystrokes —
+ * auto-focused on mount via [FocusRequester], and pinned1dp transparent
+ * at the back of the z-order so nothing is visible.
  * [onCardDetected] fires as soon as Enter arrives (or automatically once
  * [cardLength] digits are collected) and the buffer resets for the next tap.
  *
@@ -316,22 +317,18 @@ fun HiddenRfidTapInput(
         if (card.isNotEmpty()) onCardDetected(card)
     }
 
+    // Auto-focus the field the instant the screen mounts (or re-enable).
     LaunchedEffect(enabled, refocusTick) {
         if (!enabled) return@LaunchedEffect
         runCatching { focusRequester.requestFocus() }
-        // Focusing a text field must never pop the soft keyboard on a kiosk.
         keyboardController?.hide()
     }
 
-    // STRICT soft-keyboard suppression (the RFID reader is a physical USB
-    // HID keyboard — the virtual on-screen keyboard must NEVER appear):
-    //  1. The IME is banned at the WINDOW level while this field is
-    //     enabled/focused — SOFT_INPUT_STATE_ALWAYS_HIDDEN wins even over
-    //     IMEs that ignore SoftwareKeyboardController.hide().
-    //  2. hide() fires the instant focus lands (not just on the refocus
-    //     loop) as a second net.
-    // The flag is scoped to this composable's lifetime (the RFID dialog),
-    // so PIN fields on the underlying screen are unaffected.
+    // STRICT soft-keyboard suppression net (OEM IMEs sometimes ignore
+    // readOnly alone): the IME is banned at the WINDOW level while this
+    // field is enabled — SOFT_INPUT_STATE_ALWAYS_HIDDEN wins even over
+    // IMEs that ignore SoftwareKeyboardController.hide(). Scoped to this
+    // composable's lifetime, so fields on the underlying screen are safe.
     val view = LocalView.current
     DisposableEffect(enabled, view) {
         val activityWindow = if (enabled) {
@@ -347,18 +344,22 @@ fun HiddenRfidTapInput(
         }
     }
 
-    BasicTextField(
+    TextField(
         value = digits,
         onValueChange = { raw ->
-            if (!enabled) return@BasicTextField
-            // Some readers deliver Enter as a newline instead of a key event.
-            if (raw.contains('\n')) {
+            if (!enabled) return@TextField
+            // Intercept the trailing Carriage Return (\n) sent by the physical
+            // RFID reader — trigger the callback and reset for the next scan.
+            if (raw.endsWith('\n')) {
                 submit(raw)
-                return@BasicTextField
+                return@TextField
             }
             digits = raw.filter { it.isDigit() }.take(cardLength)
             if (digits.length == cardLength) submit()
         },
+        readOnly = true, // CRITICAL: HID keystrokes only — soft keyboard NEVER opens
+        enabled = enabled,
+        singleLine = true,
         modifier = Modifier
             .size(1.dp)
             .zIndex(-1f)
@@ -380,14 +381,16 @@ fun HiddenRfidTapInput(
                     false
                 }
             },
-        enabled = enabled,
-        singleLine = true,
         textStyle = TextStyle(color = Color.Transparent),
-        cursorBrush = SolidColor(Color.Transparent),
-        keyboardOptions = KeyboardOptions(
-            keyboardType = KeyboardType.NumberPassword,
-            imeAction = ImeAction.Done
+        colors = TextFieldDefaults.colors(
+            focusedContainerColor = Color.Transparent,
+            unfocusedContainerColor = Color.Transparent,
+            disabledContainerColor = Color.Transparent,
+            focusedIndicatorColor = Color.Transparent,
+            unfocusedIndicatorColor = Color.Transparent,
+            disabledIndicatorColor = Color.Transparent,
         ),
-        keyboardActions = KeyboardActions(onDone = { submit() })
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { if (enabled) submit() })
     )
 }
