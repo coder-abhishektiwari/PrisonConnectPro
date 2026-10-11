@@ -174,6 +174,7 @@ data class CreatePrisonerRequest(
     @SerializedName("prisonId") val prisonId: String? = null,
     @SerializedName("pin") val pin: String? = null,
     @SerializedName("assignedDeviceId") val assignedDeviceId: String? = null,
+    @SerializedName("assignedKioskId") val assignedKioskId: String? = null,
     @SerializedName("fingerprintTemplate") val fingerprintTemplate: String? = null,
     @SerializedName("rfidTag") val rfidTag: String? = null
 )
@@ -216,7 +217,8 @@ data class PrisonerFormValues(
     val state: String?,
     val district: String?,
     val address: String?,
-    val prisonerNumber: String
+    val prisonerNumber: String,
+    val assignedKioskId: String? = null
 )
 
 data class UpdatePrisonerStatusRequest(

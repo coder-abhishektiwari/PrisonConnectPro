@@ -237,6 +237,20 @@ class AdminRepositoryImpl @Inject constructor(
         }
     }
 
+    override fun getKiosks(): Flow<NetworkResult<List<KioskDevice>>> = flow {
+        emit(NetworkResult.Loading)
+        try {
+            val response = dataSource.getKiosks()
+            if (response.success && response.data != null) {
+                emit(NetworkResult.Success(response.data))
+            } else {
+                emit(NetworkResult.Failure(response.error ?: ApiError("UNKNOWN", "Unknown error")))
+            }
+        } catch (e: Exception) {
+            emit(NetworkResult.Failure(ApiError("EXCEPTION", e.message ?: "Network exception")))
+        }
+    }
+
     override fun getDevice(deviceId: String): Flow<NetworkResult<KioskDevice>> = flow {
         emit(NetworkResult.Loading)
         try {

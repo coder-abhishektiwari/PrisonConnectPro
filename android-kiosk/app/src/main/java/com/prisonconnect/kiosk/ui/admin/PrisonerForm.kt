@@ -34,6 +34,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.prisonconnect.kiosk.models.admin.KioskDevice
 import com.prisonconnect.kiosk.models.admin.Prisoner
 import com.prisonconnect.kiosk.models.admin.PrisonerFormValues
 import com.prisonconnect.kiosk.ui.components.KioskDateField
@@ -88,7 +89,8 @@ class PrisonerFormState(initial: Prisoner?) {
         state = state.ifBlank { null },
         district = district.trim().ifBlank { null },
         address = address.trim().ifBlank { null },
-        prisonerNumber = prisonerNumber.trim()
+        prisonerNumber = prisonerNumber.trim(),
+        assignedKioskId = assignedKioskId.trim().ifBlank { null }
     )
 
     /** Returns an error message for the personal step, or "" when it is valid. */
@@ -213,7 +215,10 @@ fun PersonalDetailsCard(state: PrisonerFormState) {
 }
 
 @Composable
-fun IdentityAdmissionCard(state: PrisonerFormState) {
+fun IdentityAdmissionCard(
+    state: PrisonerFormState,
+    kioskOptions: List<KioskDevice> = emptyList()
+) {
     FormCard("Identity & Admission") {
         KioskSelectField(
             value = state.idProof,
@@ -244,6 +249,20 @@ fun IdentityAdmissionCard(state: PrisonerFormState) {
             label = { Text("Inmate Number") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
+        )
+
+        KioskSelectField(
+            value = state.assignedKioskId,
+            onValueChange = { state.assignedKioskId = it },
+            label = "Assigned Kiosk",
+            options = listOf("") + kioskOptions.map { it.kioskId },
+            display = { id ->
+                if (id.isBlank()) "None"
+                else kioskOptions.find { it.kioskId == id }
+                    ?.location?.takeIf { it.isNotBlank() }
+                    ?.let { "$id · $it" } ?: id
+            },
+            modifier = Modifier.fillMaxWidth()
         )
     }
 }

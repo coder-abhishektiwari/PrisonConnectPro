@@ -38,4 +38,5 @@ interface AdminRepository {
     // Devices
     fun getDevices(): Flow<NetworkResult<List<KioskDevice>>>
     fun getDevice(deviceId: String): Flow<NetworkResult<KioskDevice>>
+    fun getKiosks(): Flow<NetworkResult<List<KioskDevice>>>
 }

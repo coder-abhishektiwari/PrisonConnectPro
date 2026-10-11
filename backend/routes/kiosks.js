@@ -601,13 +601,32 @@ router.patch('/registration/:requestId/reject', requireAuth, requireRole('admin'
 
 // ==================== KIOSK ROUTES (CRUD added — was read-only) ====================
 
-router.get('/', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+router.get('/', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const [kiosks, inmates] = await Promise.all([
     readDb('kiosks.json'),
     readDb('inmates.json'),
   ]);
   const inScope = adminScopeFilter(req);
   const index = buildInmateIndex({ inmates, inScope });
+
+  // A kiosk-admin token may list sibling kiosks (so the on-device inmate form
+  // can offer the assignment dropdown), but only as a minimal projection of
+  // its own prison — never serials, IPs, fingerprints or hardware detail.
+  const role = String(req.auth?.role || '').toLowerCase().replace(/[-_]/g, '');
+  const kioskAdminJail = role === 'kioskadmin' ? (req.auth?.prisonId || req.auth?.jailId || null) : null;
+
+  if (role === 'kioskadmin') {
+    if (!kioskAdminJail) return sendSuccess(res, []);
+    const data = kiosks
+      .filter((k) => k.prisonId === kioskAdminJail)
+      .map((k) => ({
+        kioskId: k.kioskId,
+        prisonId: k.prisonId,
+        location: k.location || null,
+        status: kioskDisplayStatus(k),
+      }));
+    return sendSuccess(res, data);
+  }
 
   const data = kiosks
     .filter((k) => inScope(k))

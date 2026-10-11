@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.prisonconnect.kiosk.hardware.FingerprintCaptureState
 import com.prisonconnect.kiosk.hardware.RfidReaderState
+import com.prisonconnect.kiosk.models.admin.KioskDevice
 import com.prisonconnect.kiosk.models.admin.PrisonerFormValues
 import com.prisonconnect.kiosk.ui.auth.HiddenRfidTapInput
 import com.prisonconnect.kiosk.ui.auth.RfidKeypadEntry
@@ -41,6 +42,7 @@ fun AddPrisonerScreen(
     val registrationState by viewModel.registrationState.collectAsState()
     val fingerprintState by viewModel.fingerprintState.collectAsState()
     val rfidState by viewModel.rfidState.collectAsState()
+    val kioskOptions by viewModel.kioskOptions.collectAsState()
 
     // Screen left mid-capture — no hardware session may keep running.
     DisposableEffect(Unit) {
@@ -57,6 +59,7 @@ fun AddPrisonerScreen(
         registrationState = registrationState,
         fingerprintState = fingerprintState,
         rfidState = rfidState,
+        kioskOptions = kioskOptions,
         onStartCapture = viewModel::startCapture,
         onStopCapture = viewModel::stopCapture,
         onAcknowledgeCapture = viewModel::acknowledgeCapture,
@@ -73,6 +76,7 @@ fun AddPrisonerContent(
     registrationState: AddPrisonerViewModel.RegistrationState = AddPrisonerViewModel.RegistrationState.Idle,
     fingerprintState: FingerprintCaptureState = FingerprintCaptureState.Idle,
     rfidState: RfidReaderState = RfidReaderState.Idle,
+    kioskOptions: List<KioskDevice> = emptyList(),
     onStartCapture: (String) -> Unit = {},
     onStopCapture: () -> Unit = {},
     onAcknowledgeCapture: (String) -> Unit = {},
@@ -164,9 +168,9 @@ fun AddPrisonerContent(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     when (step) {
-                        0 -> PersonalDetailsCard(formState)
-                        1 -> IdentityAdmissionCard(formState)
-                        2 -> AddressCard(formState)
+    0 -> PersonalDetailsCard(formState)
+    1 -> IdentityAdmissionCard(formState, kioskOptions)
+    2 -> AddressCard(formState)
                         else -> BiometricDataStep(
                             pin = pin,
                             confirmPin = confirmPin,

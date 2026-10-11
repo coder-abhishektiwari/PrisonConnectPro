@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.prisonconnect.kiosk.models.admin.EditPrisonerRequest
+import com.prisonconnect.kiosk.models.admin.KioskDevice
 import com.prisonconnect.kiosk.models.admin.Prisoner
 import com.prisonconnect.kiosk.network.NetworkResult
 import com.prisonconnect.kiosk.ui.components.KioskLoadingState
@@ -34,6 +35,7 @@ fun EditPrisonerScreen(
     val prisonerResult by viewModel.prisoner.collectAsState()
     val updateResult by viewModel.updateState.collectAsState()
     val resetPinResult by viewModel.resetPinState.collectAsState()
+    val kioskOptions by viewModel.kioskOptions.collectAsState()
 
     LaunchedEffect(prisonerId) {
         viewModel.loadPrisoner(prisonerId)
@@ -57,6 +59,7 @@ fun EditPrisonerScreen(
                 is NetworkResult.Success -> {
                     EditPrisonerForm(
                         prisoner = result.data,
+                        kioskOptions = kioskOptions,
                         onUpdate = { request -> viewModel.updatePrisoner(prisonerId, request) },
                         onResetPin = { pin -> viewModel.resetPin(prisonerId, pin) },
                         onResetPinDismissed = { viewModel.resetResetPinState() },
@@ -89,6 +92,7 @@ fun EditPrisonerScreen(
 @Composable
 fun EditPrisonerForm(
     prisoner: Prisoner,
+    kioskOptions: List<KioskDevice> = emptyList(),
     onUpdate: (EditPrisonerRequest) -> Unit,
     onResetPin: (String) -> Unit,
     onResetPinDismissed: () -> Unit,
@@ -268,7 +272,7 @@ fun EditPrisonerForm(
 
             when (step) {
                 0 -> PersonalDetailsCard(formState)
-                1 -> IdentityAdmissionCard(formState)
+                1 -> IdentityAdmissionCard(formState, kioskOptions)
                 2 -> AddressCard(formState)
                 else -> {
                     Card(
@@ -282,14 +286,6 @@ fun EditPrisonerForm(
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
                             Text("Access", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-
-                            OutlinedTextField(
-                                value = formState.assignedKioskId,
-                                onValueChange = { formState.assignedKioskId = it; saveError = "" },
-                                label = { Text("Assigned Kiosk ID") },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true
-                            )
 
                             OutlinedButton(
                                 onClick = {

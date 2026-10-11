@@ -66,6 +66,9 @@ class RemoteAdminDataSource @Inject constructor(
     override suspend fun getDevices(): ApiResponse<List<KioskDevice>> =
         cache.getOrFetch("admin:devices") { apiService.getAdminDevices() }
 
+    override suspend fun getKiosks(): ApiResponse<List<KioskDevice>> =
+        cache.getOrFetch("admin:kiosk-fleet") { apiService.listKiosks() }
+
     override suspend fun getDevice(deviceId: String): ApiResponse<KioskDevice> =
         cache.getOrFetch("admin:device:$deviceId") { apiService.getAdminDevice(deviceId) }
 

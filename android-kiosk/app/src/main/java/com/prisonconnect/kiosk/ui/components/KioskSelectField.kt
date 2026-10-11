@@ -22,7 +22,8 @@ fun KioskSelectField(
     label: String,
     options: List<String>,
     modifier: Modifier = Modifier,
-    required: Boolean = false
+    required: Boolean = false,
+    display: (String) -> String = { it }
 ) {
     var expanded by remember { mutableStateOf(false) }
 
@@ -48,7 +49,7 @@ fun KioskSelectField(
         ) {
             options.forEach { option ->
                 DropdownMenuItem(
-                    text = { Text(option) },
+                    text = { Text(display(option)) },
                     onClick = {
                         onValueChange(option)
                         expanded = false

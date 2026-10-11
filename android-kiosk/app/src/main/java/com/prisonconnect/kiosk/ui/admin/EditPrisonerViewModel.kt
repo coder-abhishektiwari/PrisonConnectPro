@@ -3,6 +3,7 @@ package com.prisonconnect.kiosk.ui.admin
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.prisonconnect.kiosk.models.admin.EditPrisonerRequest
+import com.prisonconnect.kiosk.models.admin.KioskDevice
 import com.prisonconnect.kiosk.models.admin.Prisoner
 import com.prisonconnect.kiosk.network.NetworkResult
 import com.prisonconnect.kiosk.repository.AdminRepository
@@ -26,6 +27,17 @@ class EditPrisonerViewModel @Inject constructor(
 
     private val _resetPinState = MutableStateFlow<NetworkResult<String>>(NetworkResult.Idle)
     val resetPinState: StateFlow<NetworkResult<String>> = _resetPinState.asStateFlow()
+
+    private val _kioskOptions = MutableStateFlow<List<KioskDevice>>(emptyList())
+    val kioskOptions: StateFlow<List<KioskDevice>> = _kioskOptions.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            adminRepository.getKiosks().collect { result ->
+                if (result is NetworkResult.Success) _kioskOptions.value = result.data
+            }
+        }
+    }
 
     fun loadPrisoner(prisonerId: String) {
         viewModelScope.launch {

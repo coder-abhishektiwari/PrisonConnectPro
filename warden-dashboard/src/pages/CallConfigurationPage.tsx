@@ -6,6 +6,7 @@ import { getStoredUser } from '@/services/auth/tokenStorage';
 import { useToast } from '@/hooks/useToast';
 import { ToastContainer } from '@/components/ToastContainer';
 import { usePageHeader } from '@/context/PageHeaderContext';
+import { Skeleton } from '@/components/Skeleton';
 
 export function CallConfigurationPage() {
   const { data: settings, error, refresh } = useCachedResource<Settings>(
@@ -195,7 +196,31 @@ export function CallConfigurationPage() {
               <button onClick={refreshPrison} className="mt-3 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700">Retry</button>
             </div>
           ) : !prison ? (
-            <p className="text-sm text-neutral-500 py-4">Loading jail information…</p>
+            <div className="space-y-6">
+              <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3">
+                <div className="space-y-2.5">
+                  <Skeleton className="h-3.5 w-20 blur-[1px] opacity-80" />
+                  <Skeleton className="h-5 w-36 rounded-md blur-[1px] opacity-80" />
+                </div>
+                <div className="flex items-center gap-4">
+                  <Skeleton className="h-7 w-20 rounded-full blur-[1px] opacity-80" />
+                  <Skeleton className="h-4 w-20 rounded-md blur-[1px] opacity-80" />
+                  <Skeleton className="h-4 w-16 rounded-md blur-[1px] opacity-80" />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="space-y-2">
+                    <Skeleton className="h-3.5 w-24 blur-[1px] opacity-80" />
+                    <Skeleton className="h-10 w-full rounded-lg blur-[1px] opacity-80" />
+                  </div>
+                ))}
+                <div className="md:col-span-2 space-y-2">
+                  <Skeleton className="h-3.5 w-20 blur-[1px] opacity-80" />
+                  <Skeleton className="h-16 w-full rounded-lg blur-[1px] opacity-80" />
+                </div>
+              </div>
+            </div>
           ) : (
             <>
               <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3">
@@ -263,50 +288,58 @@ export function CallConfigurationPage() {
             </div>
           </div>
 
-          <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-6 max-w-md">
-            <label className="block text-xs font-semibold text-neutral-700 uppercase tracking-wide mb-2">
-              6-Digit PIN <span className="text-error">*</span>
-            </label>
-            <div className="relative">
-              <input
-                type="text"
-                inputMode="numeric"
-                maxLength={6}
-                disabled={!inputEnabled || savingPin}
-                value={inputEnabled ? pinInput : '••••••'}
-                placeholder="••••••"
-                onChange={(e) => setPinInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                className="w-full px-4 py-3 pr-24 border-2 border-neutral-300 rounded-lg font-mono font-bold text-center tracking-[0.5em] text-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white disabled:bg-neutral-100 disabled:text-neutral-500 disabled:cursor-not-allowed"
-              />
-              {inputEnabled ? (
-                pinInput.length === 6 && (
-                  <button
-                    onClick={savePin}
-                    disabled={savingPin}
-                    title="Save PIN"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center bg-success text-white rounded-lg hover:opacity-90 transition disabled:opacity-50"
-                  >
-                    <span className="material-icons text-lg">{savingPin ? 'hourglass_top' : 'check'}</span>
-                  </button>
-                )
-              ) : (
-                <button
-                  onClick={() => { setEditing(true); setPinInput(''); }}
-                  title="Edit PIN"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center bg-white border-2 border-neutral-300 text-neutral-600 rounded-lg hover:border-primary-400 hover:text-primary-400 transition"
-                >
-                  <span className="material-icons text-lg">edit</span>
-                </button>
-              )}
+          {pinData === undefined ? (
+            <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-6 max-w-md space-y-3">
+              <Skeleton className="h-3.5 w-24 blur-[1px] opacity-80" />
+              <Skeleton className="h-14 w-full rounded-lg blur-[1px] opacity-80" />
+              <Skeleton className="h-3.5 w-3/4 blur-[1px] opacity-80" />
             </div>
-            <p className="text-xs text-neutral-500 mt-3">
-              {!pinSet
-                ? 'Enter all 6 digits, then tap the green tick to save.'
-                : inputEnabled
-                  ? `Current PIN is set. Enter a new 6-digit PIN, then tap the green tick.`
-                  : 'PIN is set. Tap the pencil to rotate it.'}
-            </p>
-          </div>
+          ) : (
+            <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-6 max-w-md">
+              <label className="block text-xs font-semibold text-neutral-700 uppercase tracking-wide mb-2">
+                6-Digit PIN <span className="text-error">*</span>
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  disabled={!inputEnabled || savingPin}
+                  value={inputEnabled ? pinInput : '••••••'}
+                  placeholder="••••••"
+                  onChange={(e) => setPinInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  className="w-full px-4 py-3 pr-24 border-2 border-neutral-300 rounded-lg font-mono font-bold text-center tracking-[0.5em] text-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white disabled:bg-neutral-100 disabled:text-neutral-500 disabled:cursor-not-allowed"
+                />
+                {inputEnabled ? (
+                  pinInput.length === 6 && (
+                    <button
+                      onClick={savePin}
+                      disabled={savingPin}
+                      title="Save PIN"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center bg-success text-white rounded-lg hover:opacity-90 transition disabled:opacity-50"
+                    >
+                      <span className="material-icons text-lg">{savingPin ? 'hourglass_top' : 'check'}</span>
+                    </button>
+                  )
+                ) : (
+                  <button
+                    onClick={() => { setEditing(true); setPinInput(''); }}
+                    title="Edit PIN"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center bg-white border-2 border-neutral-300 text-neutral-600 rounded-lg hover:border-primary-400 hover:text-primary-400 transition"
+                  >
+                    <span className="material-icons text-lg">edit</span>
+                  </button>
+                )}
+              </div>
+              <p className="text-xs text-neutral-500 mt-3">
+                {!pinSet
+                  ? 'Enter all 6 digits, then tap the green tick to save.'
+                  : inputEnabled
+                    ? `Current PIN is set. Enter a new 6-digit PIN, then tap the green tick.`
+                    : 'PIN is set. Tap the pencil to rotate it.'}
+              </p>
+            </div>
+          )}
 
           <div className="text-xs text-neutral-600 bg-white border border-neutral-200 rounded-lg p-4 max-w-md">
             <p className="font-semibold text-neutral-900 mb-1">Security note</p>

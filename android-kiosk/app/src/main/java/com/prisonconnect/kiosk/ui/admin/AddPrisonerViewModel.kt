@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.prisonconnect.kiosk.hardware.FingerprintHardwareManager
 import com.prisonconnect.kiosk.hardware.RfidReaderManager
 import com.prisonconnect.kiosk.models.admin.CreatePrisonerRequest
+import com.prisonconnect.kiosk.models.admin.KioskDevice
 import com.prisonconnect.kiosk.network.NetworkResult
 import com.prisonconnect.kiosk.repository.AdminRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -23,6 +24,17 @@ class AddPrisonerViewModel @Inject constructor(
 
     private val _registrationState = MutableStateFlow<RegistrationState>(RegistrationState.Idle)
     val registrationState: StateFlow<RegistrationState> = _registrationState.asStateFlow()
+
+    private val _kioskOptions = MutableStateFlow<List<KioskDevice>>(emptyList())
+    val kioskOptions: StateFlow<List<KioskDevice>> = _kioskOptions.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            adminRepository.getKiosks().collect { result ->
+                if (result is NetworkResult.Success) _kioskOptions.value = result.data
+            }
+        }
+    }
 
     /** Live hardware sessions consumed by the Security step's capture dialogs. */
     val rfidState = rfidReaderManager.state
@@ -80,6 +92,7 @@ class AddPrisonerViewModel @Inject constructor(
             district = values.district,
             address = values.address,
             pin = pin.ifBlank { null },
+            assignedKioskId = values.assignedKioskId,
             fingerprintTemplate = fingerprintTemplate?.ifBlank { null },
             rfidTag = rfidTag?.ifBlank { null }
         )

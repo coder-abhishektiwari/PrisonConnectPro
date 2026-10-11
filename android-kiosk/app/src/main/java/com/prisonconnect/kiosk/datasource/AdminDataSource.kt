@@ -38,4 +38,5 @@ interface AdminDataSource {
     // Devices
     suspend fun getDevices(): ApiResponse<List<KioskDevice>>
     suspend fun getDevice(deviceId: String): ApiResponse<KioskDevice>
+    suspend fun getKiosks(): ApiResponse<List<KioskDevice>>
 }
