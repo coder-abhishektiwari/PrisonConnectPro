@@ -167,7 +167,6 @@ router.post('/register', authLimiter, asyncRoute(async (req, res) => {
     district: null,
     address: null,
     status: 'active',
-    capacity: 500,
     currentInmateCount: 0,
     wardenIds: [wardenId],
     kioskIds: [],

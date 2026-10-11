@@ -1043,7 +1043,7 @@ export const wardenApi = {
   getPrison: (prisonId: string) =>
     cachedGet(`prisons:${prisonId}`, () => apiClient.get<ApiResponse<PrisonInfo>>(`/prisons/${encodeURIComponent(prisonId)}`).then((r) => r.data?.data)),
 
-  /** Facility profile edits (warden: name/code/state/district/address/capacity only — server-enforced). */
+  /** Facility profile edits (warden: name/code/state/district/address only — server-enforced). */
   updatePrison: (prisonId: string, patch: Partial<PrisonInfo>) =>
     apiClient.patch<ApiResponse<PrisonInfo>>(`/prisons/${encodeURIComponent(prisonId)}`, patch).then((r) => {
       invalidatePrefix('prisons');
@@ -1193,7 +1193,6 @@ export interface PrisonInfo {
   district?: string;
   address?: string;
   status?: string;
-  capacity?: number | null;
   currentInmateCount?: number;
   wardenIds?: string[];
   kioskIds?: string[];

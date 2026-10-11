@@ -58,7 +58,7 @@ router.patch('/:prisonId', requireAuth, requireRole('admin', 'warden'), asyncRou
   // and the setup PIN stay admin territory.
   const role = String(req.auth?.role || '').toLowerCase().replace(/[-_]/g, '');
   if (role === 'warden') {
-    const WARDEN_FIELDS = ['name', 'code', 'state', 'district', 'address', 'capacity'];
+    const WARDEN_FIELDS = ['name', 'code', 'state', 'district', 'address'];
     Object.keys(patch).forEach((f) => { if (!WARDEN_FIELDS.includes(f)) delete patch[f]; });
   }
   const updated = await updateDb('prisons.json', (prisons) => {

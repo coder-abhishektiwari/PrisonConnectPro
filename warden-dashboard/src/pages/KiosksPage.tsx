@@ -1,8 +1,10 @@
-import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Card } from '@/components/Card';
 import { SkeletonRows, SkeletonText } from '@/components/Skeleton';
 import { ToastContainer } from '@/components/ToastContainer';
 import { KioskReportPanel } from '@/components/KioskReportPanel';
+import { FilterDropdown } from '@/components/FilterDropdown';
+import type { ColumnFilter } from '@/components/FilterDropdown';
 import { useToast } from '@/hooks/useToast';
 import { usePageHeader } from '@/context/PageHeaderContext';
 import { useCachedResource } from '@/hooks/useCachedResource';
@@ -31,27 +33,15 @@ const STATUS_LABELS: Record<string, string> = {
 const statusLabel = (status?: string) => STATUS_LABELS[status || ''] || status || 'pending';
 const statusStyle = (status?: string) => STATUS_STYLES[status || ''] || STATUS_STYLES.pending;
 
-type StatusFilter = 'all' | 'active' | 'deactivated';
-
 // A live kiosk has just reported in, so the timestamp is noise; anything else
 // needs to say when the device was last heard from.
 const isLive = (status?: string) => status === 'online' || status === 'active';
-
 export function KiosksPage() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [showStatusFilter, setShowStatusFilter] = useState(false);
+  // Default view: admin-enabled (Active) kiosks; All/Deactivated via the
+  // Status column filter.
+  const [statusFilter, setStatusFilter] = useState<ColumnFilter>({ value: 'active', open: false });
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const statusFilterRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!showStatusFilter) return;
-    const onDown = (e: MouseEvent) => {
-      if (!statusFilterRef.current?.contains(e.target as Node)) setShowStatusFilter(false);
-    };
-    window.addEventListener('mousedown', onDown);
-    return () => window.removeEventListener('mousedown', onDown);
-  }, [showStatusFilter]);
   const [selected, setSelected] = useState<KioskItem | null>(null);
   const { toasts, removeToast } = useToast();
 
@@ -71,8 +61,8 @@ export function KiosksPage() {
   const filtered = useMemo(() => {
     const list = (() => {
       let rows = kiosks;
-      if (statusFilter === 'active') rows = rows.filter((k) => isDeviceActive(k.status));
-      else if (statusFilter === 'deactivated') rows = rows.filter((k) => isDeactivated(k.status));
+      if (statusFilter.value === 'active') rows = rows.filter((k) => isDeviceActive(k.status));
+      else if (statusFilter.value === 'deactivated') rows = rows.filter((k) => isDeactivated(k.status));
       if (!searchQuery.trim()) return rows;
       const q = searchQuery.toLowerCase();
       return rows.filter((k) =>
@@ -156,32 +146,12 @@ export function KiosksPage() {
                   <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">IP Address</th>
                   <th className="text-right py-3 px-4 text-sm font-semibold text-neutral-900">Inmates</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-900">
-                    <div ref={statusFilterRef} className="relative inline-block">
-                      <button
-                        onClick={() => setShowStatusFilter((v) => !v)}
-                        className="flex items-center gap-1 hover:text-primary-600"
-                      >
-                        Status
-                        <span className="material-icons text-sm">arrow_drop_down</span>
-                      </button>
-                      {showStatusFilter && (
-                        <div className="absolute left-0 top-full z-20 mt-1 w-40 rounded-lg border border-neutral-200 bg-white py-1 shadow-lg">
-                          {([
-                            ['all', 'All'],
-                            ['active', 'Active'],
-                            ['deactivated', 'Deactivated'],
-                          ] as const).map(([value, label]) => (
-                            <button
-                              key={value}
-                              onClick={() => { setStatusFilter(value); setShowStatusFilter(false); }}
-                              className={`block w-full px-3 py-1.5 text-left text-sm hover:bg-neutral-50 ${statusFilter === value ? 'font-bold text-primary-600' : 'text-neutral-700'}`}
-                            >
-                              {label}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+                    <FilterDropdown
+                      label="Status"
+                      options={[{ value: 'active', label: 'Active' }, { value: 'deactivated', label: 'Deactivated' }]}
+                      filter={statusFilter}
+                      setFilter={setStatusFilter}
+                    />
                   </th>
                 </tr>
               </thead>

@@ -180,20 +180,21 @@ export function InmateFamilyPage() {
             <thead className="sticky top-0 z-10">
               <tr className="border-b bg-neutral-50">
                 <th className="text-left py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Inmate</th>
-                <th className="text-center py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Inmate Number</th>
                 <th className="text-center py-3 px-4"><FilterDropdown label="Gender" options={genderOptions} filter={filterGender} setFilter={setFilterGender} /></th>
+                <th className="text-center py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">City, State</th>
                 <th className="text-center py-3 px-4"><FilterDropdown label="Kiosk" options={kioskOptions} filter={filterKiosk} setFilter={setFilterKiosk} /></th>
                 <th className="text-center py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Wallet</th>
+                <th className="text-center py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Date of Admission</th>
                 <th className="text-center py-3 px-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Status</th>
               </tr>
             </thead>
             <tbody>
               {isLoading && pageInmates.length === 0 ? (
-                <SkeletonRows rows={8} cols={6} />
+                <SkeletonRows rows={8} cols={7} />
               ) : error && pageInmates.length === 0 ? (
-                <tr><td colSpan={6} className="py-16 text-center"><p className="text-error mb-4">{error}</p><button onClick={() => refresh()} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm">Retry</button></td></tr>
+                <tr><td colSpan={7} className="py-16 text-center"><p className="text-error mb-4">{error}</p><button onClick={() => refresh()} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm">Retry</button></td></tr>
               ) : pageInmates.length === 0 ? (
-                <tr><td colSpan={6} className="py-16 text-center"><div className="w-12 h-12 bg-neutral-100 rounded-xl flex items-center justify-center mx-auto mb-3"><span className="material-icons text-neutral-400 text-2xl">person_off</span></div><p className="text-sm font-semibold text-neutral-900">No Inmates</p><p className="text-xs text-neutral-500">{prisonerTotal === 0 ? 'No inmates registered' : searchPrisoner ? `No match for "${searchPrisoner}"` : 'No inmates match current filters'}</p></td></tr>
+                <tr><td colSpan={7} className="py-16 text-center"><div className="w-12 h-12 bg-neutral-100 rounded-xl flex items-center justify-center mx-auto mb-3"><span className="material-icons text-neutral-400 text-2xl">person_off</span></div><p className="text-sm font-semibold text-neutral-900">No Inmates</p><p className="text-xs text-neutral-500">{prisonerTotal === 0 ? 'No inmates registered' : searchPrisoner ? `No match for "${searchPrisoner}"` : 'No inmates match current filters'}</p></td></tr>
               ) : pageInmates.map(i => {
                 const disabled = i.status !== 'active';
                 return (
@@ -209,8 +210,10 @@ export function InmateFamilyPage() {
                         </div>
                       </div>
                     </td>
-                    <td className="py-2.5 px-3 text-center text-sm text-neutral-600">{i.prisonerNumber || '—'}</td>
                     <td className="py-2.5 px-3 text-center text-sm text-neutral-600">{i.gender || '—'}</td>
+                    <td className="py-2.5 px-3 text-center text-sm text-neutral-600">
+                      {[i.district, i.state].filter(Boolean).join(', ') || '—'}
+                    </td>
                     <td className="py-2.5 px-3 text-center text-sm">
                       <span className={`text-sm  ${i.assignedKioskId ? 'text-neutral-600 ' : ' text-neutral-300 '}`}>{i.assignedKioskId || 'Unassigned'}</span>
                     </td>
@@ -238,6 +241,9 @@ export function InmateFamilyPage() {
                           </button>
                         );
                       })()}
+                    </td>
+                    <td className="py-2.5 px-3 text-center text-sm text-neutral-600">
+                      {i.dateOfAdmission ? new Date(i.dateOfAdmission).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
                     </td>
                     <td className="py-2.5 px-3 text-center">
                       <button

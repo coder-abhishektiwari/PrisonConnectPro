@@ -35,7 +35,7 @@ export function CallConfigurationPage() {
 
   const [prisonEditing, setPrisonEditing] = useState(false);
   const [savingPrison, setSavingPrison] = useState(false);
-  const [prisonForm, setPrisonForm] = useState({ name: '', code: '', state: '', district: '', capacity: '', address: '' });
+  const [prisonForm, setPrisonForm] = useState({ name: '', code: '', state: '', district: '', address: '' });
 
   const pinSet = !!pinData?.pinSet;
   const inputEnabled = !pinSet || editing;
@@ -51,7 +51,6 @@ export function CallConfigurationPage() {
       code: prison?.code ?? '',
       state: prison?.state ?? '',
       district: prison?.district ?? '',
-      capacity: prison?.capacity != null ? String(prison.capacity) : '',
       address: prison?.address ?? '',
     });
     setPrisonEditing(true);
@@ -64,12 +63,6 @@ export function CallConfigurationPage() {
       toastError('Jail name is required.');
       return;
     }
-    const capacityRaw = prisonForm.capacity.trim();
-    const capacity = capacityRaw === '' ? null : Number(capacityRaw);
-    if (capacityRaw !== '' && (!Number.isInteger(capacity) || capacity < 0)) {
-      toastError('Capacity must be a whole number.');
-      return;
-    }
     setSavingPrison(true);
     try {
       await wardenApi.updatePrison(prisonId, {
@@ -78,7 +71,6 @@ export function CallConfigurationPage() {
         state: prisonForm.state.trim(),
         district: prisonForm.district.trim(),
         address: prisonForm.address.trim(),
-        capacity,
       });
       toastSuccess('Jail information updated.');
       setPrisonEditing(false);
@@ -230,8 +222,6 @@ export function CallConfigurationPage() {
                     {editField('Code', prisonForm.code, (v) => setPrisonForm({ ...prisonForm, code: v }))}
                     {editField('State', prisonForm.state, (v) => setPrisonForm({ ...prisonForm, state: v }))}
                     {editField('District', prisonForm.district, (v) => setPrisonForm({ ...prisonForm, district: v }))}
-                    {editField('Capacity', prisonForm.capacity, (v) => setPrisonForm({ ...prisonForm, capacity: v.replace(/\D/g, '').slice(0, 7) }), { inputMode: 'numeric' })}
-                    <div className="hidden md:block" />
                     <div className="md:col-span-2">
                       <label className="block text-xs font-semibold text-neutral-700 uppercase tracking-wide mb-1">Address</label>
                       <textarea
@@ -249,7 +239,6 @@ export function CallConfigurationPage() {
                     {viewField('Code', prison.code)}
                     {viewField('State', prison.state)}
                     {viewField('District', prison.district)}
-                    {viewField('Capacity', prison.capacity != null ? String(prison.capacity) : '')}
                     <div className="hidden md:block" />
                     <div className="md:col-span-2">{viewField('Address', prison.address)}</div>
                   </>

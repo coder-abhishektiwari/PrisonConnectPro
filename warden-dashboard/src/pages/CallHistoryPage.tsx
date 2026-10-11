@@ -237,6 +237,7 @@ export function CallHistoryPage() {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
   const fmtDate = (iso: string) => { if (!iso) return '—'; const d = new Date(iso); return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }); };
+  const fmtTime = (iso: string) => { if (!iso) return '—'; const d = new Date(iso); return isNaN(d.getTime()) ? '—' : d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }); };
   const fmtDateTime = (iso: string) => { if (!iso) return '—'; const d = new Date(iso); return isNaN(d.getTime()) ? '—' : d.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' }); };
 
   const getFailReason = (c: CallHistoryItem) => {
@@ -309,7 +310,10 @@ export function CallHistoryPage() {
                       <td className="py-3 px-4">
                         <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${call.type === 'video' ? 'bg-primary-600 text-white border-primary-600' : 'bg-info text-white border-info'}`}>{call.type === 'video' ? '▶ Video' : '● Audio'}</span>
                       </td>
-                      <td className="py-3 px-4 text-sm text-neutral-900">{fmtDate(call.startTime)}</td>
+                      <td className="py-3 px-4 text-sm text-neutral-900">
+                        {fmtDate(call.startTime)}
+                        <p className="text-xs text-neutral-500 mt-0.5">{fmtTime(call.startTime)}</p>
+                      </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-1.5">
                           <span className="text-sm font-semibold text-neutral-900 truncate">{isInmateName}</span>
