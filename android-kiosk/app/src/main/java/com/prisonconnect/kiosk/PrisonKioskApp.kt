@@ -48,9 +48,9 @@ class PrisonKioskApp : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
 
-        // Latency-based internet quality probe for the header signal bars.
-        // Transport-agnostic (WiFi/Ethernet/mobile) — one loop for the app.
-        com.prisonconnect.kiosk.core.NetworkQualityMonitor.start()
+        // Two-layer network quality for the header signal bars: local-link
+        // (ConnectivityManager — instant on/off) + latency probe (quality).
+        com.prisonconnect.kiosk.core.NetworkQualityMonitor.start(this)
 
         // Fetch this kiosk's registered identity (serial, prison id/name) from
         // the public /kiosks/verify by KIOSK_ID and persist it in SessionManager.

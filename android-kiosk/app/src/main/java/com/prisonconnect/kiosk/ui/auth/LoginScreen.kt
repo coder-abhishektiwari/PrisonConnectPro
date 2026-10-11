@@ -79,7 +79,7 @@ fun LoginScreen(
         })
     } else {
         Scaffold(
-            topBar = { KioskTopBar(title = "PRISON KIOSK LOGIN", isOnline = true) },
+            topBar = { KioskTopBar(title = "PRISON KIOSK LOGIN") },
             snackbarHost = { SnackbarHost(snackbarHostState) },
             containerColor = AppleGray
         ) { padding ->

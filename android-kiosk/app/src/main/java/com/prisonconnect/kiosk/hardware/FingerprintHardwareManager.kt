@@ -56,6 +56,15 @@ class FingerprintHardwareManager @Inject constructor(
     private val _captureState = MutableStateFlow<FingerprintCaptureState>(FingerprintCaptureState.Idle)
     val captureState = _captureState.asStateFlow()
 
+    /**
+     * Tag of the screen that currently owns the scanner ("Login",
+     * "AddPrisoner", "InmateBiometrics"). A screen can only stop the
+     * session it owns — a late dispose from a screen that already lost the
+     * session can never kill the next screen's live capture.
+     */
+    @Volatile
+    private var sessionOwner: String? = null
+
     private val usbReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (ACTION_USB_PERMISSION == intent.action) {
@@ -138,20 +147,42 @@ class FingerprintHardwareManager @Inject constructor(
     }
 
     /**
-     * Begin (or resume) a capture session: re-scan for the USB scanner and
-     * start listening for a finger. Safe to call repeatedly.
+     * Begin (or resume) a capture session owned by [owner] (a stable screen
+     * tag). If another screen still owns the scanner — or a stale session
+     * was left running — the old driver is force-stopped and the USB/serial
+     * port is closed FIRST, then a clean, fresh session starts for [owner].
+     * Safe to call repeatedly from the same screen.
      */
-    fun startCapture() {
-        if (_captureState.value is FingerprintCaptureState.Searching) return
+    fun startCapture(owner: String) {
+        val previousOwner = sessionOwner
+        if (previousOwner != null && previousOwner != owner) {
+            Logger.i("FingerprintHardwareManager: taking over from '$previousOwner' for '$owner' — releasing stale session")
+            stopCaptureDriver()
+            _captureState.value = FingerprintCaptureState.Idle
+        } else if (_captureState.value is FingerprintCaptureState.Searching) {
+            return
+        }
+        sessionOwner = owner
         _captureState.value = FingerprintCaptureState.Searching
-        Logger.i("FingerprintHardwareManager: capture session started")
+        Logger.i("FingerprintHardwareManager: capture session started (owner=$owner)")
         scanForDevices()
         startCaptureDriver()
     }
 
-    /** End the capture session (screen closed, auth finished, user backed out). */
-    fun stopCapture() {
+    /**
+     * End the capture session. Only stops if [owner] still owns it — a
+     * delayed [stopCapture] from a screen that already yielded the scanner
+     * (e.g. its ViewModel's onCleared firing after the next screen mounted)
+     * becomes a no-op and cannot wedge the new screen's session.
+     */
+    fun stopCapture(owner: String? = null) {
+        val currentOwner = sessionOwner
+        if (owner != null && currentOwner != null && currentOwner != owner) {
+            Logger.d("FingerprintHardwareManager: stopCapture('$owner') ignored — session owned by '$currentOwner'")
+            return
+        }
         stopCaptureDriver()
+        sessionOwner = null
         _captureState.value = FingerprintCaptureState.Idle
     }
 
@@ -190,6 +221,14 @@ class FingerprintHardwareManager @Inject constructor(
     // HARDWARE DRIVER HOOK — the ONLY place to change when the external
     // scanner model is final. Until then the session stays in Searching
     // and the UI offers manual fingerprint-ID entry.
+    //
+    // LIFECYCLE CONTRACT (strict): the R307 Serial/USB port may be opened
+    // ONLY inside startCaptureDriver and MUST be fully released inside
+    // stopCaptureDriver — usbSerialPort.close(), UsbDeviceConnection.close(),
+    // and any read-listener/thread torn down. stopCaptureDriver is invoked
+    // on every takeover (startCapture from a new screen force-closes the
+    // previous session first) and on every screen exit, so a port left open
+    // here will deadlock every later registration screen.
     // ================================================================
 
     private fun startCaptureDriver() {
@@ -200,6 +239,8 @@ class FingerprintHardwareManager @Inject constructor(
     }
 
     private fun stopCaptureDriver() {
-        // TODO(hardware): close the scanner connection here.
+        // TODO(hardware): usbSerialPort?.close(); connection?.close();
+        // stop any reader thread / unbind listeners here. Must be safe to
+        // call even when nothing is open.
     }
 }

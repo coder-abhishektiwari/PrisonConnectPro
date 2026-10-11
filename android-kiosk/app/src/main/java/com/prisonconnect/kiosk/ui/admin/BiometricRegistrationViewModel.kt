@@ -40,13 +40,14 @@ class BiometricRegistrationViewModel @Inject constructor(
      * ("fingerprint" | "rfid") while its registration dialog is open.
      */
     fun startCapture(type: String) {
-        if (type == "rfid") rfidReaderManager.startSession() else fingerprintHardwareManager.startCapture()
+        if (type == "rfid") rfidReaderManager.startSession(HARDWARE_OWNER)
+        else fingerprintHardwareManager.startCapture(HARDWARE_OWNER)
     }
 
     /** Close both capture sessions (dialog dismissed, screen left). */
     fun stopCapture() {
-        rfidReaderManager.stopSession()
-        fingerprintHardwareManager.stopCapture()
+        rfidReaderManager.stopSession(HARDWARE_OWNER)
+        fingerprintHardwareManager.stopCapture(HARDWARE_OWNER)
     }
 
     /** Consume a hardware read so the session keeps emitting for the next one. */
@@ -111,4 +112,9 @@ class BiometricRegistrationViewModel @Inject constructor(
 
     fun resetRegisterState() { _registerState.value = NetworkResult.Idle }
     fun resetDeleteState() { _deleteState.value = NetworkResult.Idle }
+
+    companion object {
+        /** Owns the shared R307/RFID sessions while the Inmate Card biometrics screen is up. */
+        private const val HARDWARE_OWNER = "InmateBiometrics"
+    }
 }

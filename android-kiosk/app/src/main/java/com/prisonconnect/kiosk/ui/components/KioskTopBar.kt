@@ -43,6 +43,13 @@ private val BAR_COLORS = listOf(
  * bars (and red-wards its colour) as the signal decays. Offline shows every
  * bar lit RED (a full-colour stack used to read as "excellent", which made
  * a dead link look like the strongest signal on the bar).
+ *
+ * Mapping (deliberately NOT inverted — verified end to end):
+ *   online=false          → all bars red (network off / link down)
+ *   online=true, level 4  → full stack, green top (excellent)
+ *   online=true, level 1  → one short red bar (weak / backend degraded)
+ * A live link always keeps at least the first bar lit — "online" can never
+ * render as an empty (no-signal) icon.
  */
 @Composable
 private fun WifiStrengthBars(
@@ -52,6 +59,9 @@ private fun WifiStrengthBars(
     barCount: Int = 4
 ) {
     val inactiveColor = Color.White.copy(alpha = 0.35f)
+    // At least one bar while online: an unknown/slow probe must never draw
+    // the empty "no signal" stack on a link that is actually up.
+    val litBars = if (online) maxOf(level, 1) else 0
     Canvas(modifier = modifier) {
         val barWidthPx = size.width / (barCount * 2f)
         val gapPx = barWidthPx
@@ -60,10 +70,9 @@ private fun WifiStrengthBars(
         repeat(barCount) { i ->
             val barHeight = maxWidthPx * (i + 1) / barCount
             val x = i * (barWidthPx + gapPx)
-            val lit = !online || i < level
             val barColor = when {
                 !online -> Color(0xFFF44336) // offline: all bars red — clearly the worst state
-                lit -> BAR_COLORS.getOrElse(i) { BAR_COLORS.last() }
+                i < litBars -> BAR_COLORS.getOrElse(i) { BAR_COLORS.last() }
                 else -> inactiveColor
             }
             drawRoundRect(
@@ -82,7 +91,6 @@ fun KioskTopBar(
     showBackButton: Boolean = false,
     onBackClick: () -> Unit = {},
     title: String? = null,
-    isOnline: Boolean = true,
     /** Optional actions rendered before the signal bars (e.g. refresh). */
     leadingActions: (@Composable () -> Unit)? = null,
     /** Optional actions rendered after the date-time (e.g. wallet, logout). */

@@ -1,5 +1,9 @@
 package com.prisonconnect.kiosk.ui.auth
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.view.WindowManager
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -32,6 +36,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -318,6 +323,30 @@ fun HiddenRfidTapInput(
         keyboardController?.hide()
     }
 
+    // STRICT soft-keyboard suppression (the RFID reader is a physical USB
+    // HID keyboard — the virtual on-screen keyboard must NEVER appear):
+    //  1. The IME is banned at the WINDOW level while this field is
+    //     enabled/focused — SOFT_INPUT_STATE_ALWAYS_HIDDEN wins even over
+    //     IMEs that ignore SoftwareKeyboardController.hide().
+    //  2. hide() fires the instant focus lands (not just on the refocus
+    //     loop) as a second net.
+    // The flag is scoped to this composable's lifetime (the RFID dialog),
+    // so PIN fields on the underlying screen are unaffected.
+    val view = LocalView.current
+    DisposableEffect(enabled, view) {
+        val activityWindow = if (enabled) {
+            var ctx: Context? = view.context
+            while (ctx is ContextWrapper && ctx !is Activity) ctx = ctx.baseContext
+            (ctx as? Activity)?.window
+        } else {
+            null
+        }
+        activityWindow?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
+        onDispose {
+            activityWindow?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_UNSPECIFIED)
+        }
+    }
+
     BasicTextField(
         value = digits,
         onValueChange = { raw ->
@@ -334,7 +363,12 @@ fun HiddenRfidTapInput(
             .size(1.dp)
             .zIndex(-1f)
             .focusRequester(focusRequester)
-            .onFocusChanged { if (enabled && !it.isFocused) refocusTick++ }
+            .onFocusChanged {
+                if (enabled) {
+                    if (it.isFocused) keyboardController?.hide()
+                    else refocusTick++
+                }
+            }
             .onKeyEvent { event ->
                 if (enabled &&
                     event.type == KeyEventType.KeyDown &&

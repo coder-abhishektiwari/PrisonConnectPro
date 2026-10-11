@@ -37,17 +37,50 @@ class RfidReaderManager @Inject constructor() {
     private val _state = MutableStateFlow<RfidReaderState>(RfidReaderState.Idle)
     val state = _state.asStateFlow()
 
-    /** Begin (or resume) a reading session. Safe to call repeatedly. */
-    fun startSession() {
-        if (_state.value is RfidReaderState.Searching) return
+    /**
+     * Tag of the screen that currently owns the reader ("Login",
+     * "AddPrisoner", "InmateBiometrics"). A screen can only stop the
+     * session it owns — a late dispose from a screen that already lost the
+     * session can never kill the next screen's live read.
+     */
+    @Volatile
+    private var sessionOwner: String? = null
+
+    /**
+     * Begin (or resume) a reading session owned by [owner] (a stable screen
+     * tag). If another screen still owns the reader — or a stale session
+     * was left running — the old driver is force-stopped and the port is
+     * closed FIRST, then a clean, fresh session starts for [owner]. Safe to
+     * call repeatedly from the same screen.
+     */
+    fun startSession(owner: String) {
+        val previousOwner = sessionOwner
+        if (previousOwner != null && previousOwner != owner) {
+            Logger.i("RfidReaderManager: taking over from '$previousOwner' for '$owner' — releasing stale session")
+            stopDriver()
+            _state.value = RfidReaderState.Idle
+        } else if (_state.value is RfidReaderState.Searching) {
+            return
+        }
+        sessionOwner = owner
         _state.value = RfidReaderState.Searching
-        Logger.i("RfidReaderManager: session started, waiting for card")
+        Logger.i("RfidReaderManager: session started (owner=$owner), waiting for card")
         startDriver()
     }
 
-    /** End the session (screen closed, auth finished, user backed out). */
-    fun stopSession() {
+    /**
+     * End the session. Only stops if [owner] still owns it — a delayed
+     * [stopSession] from a screen that already yielded the reader becomes a
+     * no-op and cannot wedge the new screen's session.
+     */
+    fun stopSession(owner: String? = null) {
+        val currentOwner = sessionOwner
+        if (owner != null && currentOwner != null && currentOwner != owner) {
+            Logger.d("RfidReaderManager: stopSession('$owner') ignored — session owned by '$currentOwner'")
+            return
+        }
         stopDriver()
+        sessionOwner = null
         _state.value = RfidReaderState.Idle
     }
 
@@ -79,6 +112,12 @@ class RfidReaderManager @Inject constructor() {
     // HARDWARE DRIVER HOOK — the ONLY place to change when the external
     // RFID reader model/chip is final. Until then the session stays in
     // Searching and the UI offers manual card-number entry.
+    //
+    // LIFECYCLE CONTRACT (strict): the reader port may be opened ONLY
+    // inside startDriver and MUST be fully released inside stopDriver —
+    // close the USB/serial/HID connection and unbind listeners. stopDriver
+    // is invoked on every takeover (startSession from a new screen
+    // force-closes the previous session first) and on every screen exit.
     // ================================================================
 
     private fun startDriver() {
@@ -89,6 +128,7 @@ class RfidReaderManager @Inject constructor() {
     }
 
     private fun stopDriver() {
-        // TODO(hardware): close the reader connection here.
+        // TODO(hardware): close the reader connection / unbind listeners
+        // here. Must be safe to call even when nothing is open.
     }
 }

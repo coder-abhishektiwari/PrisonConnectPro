@@ -29,12 +29,13 @@ class AddPrisonerViewModel @Inject constructor(
     val fingerprintState = fingerprintHardwareManager.captureState
 
     fun startCapture(type: String) {
-        if (type == "rfid") rfidReaderManager.startSession() else fingerprintHardwareManager.startCapture()
+        if (type == "rfid") rfidReaderManager.startSession(HARDWARE_OWNER)
+        else fingerprintHardwareManager.startCapture(HARDWARE_OWNER)
     }
 
     fun stopCapture() {
-        rfidReaderManager.stopSession()
-        fingerprintHardwareManager.stopCapture()
+        rfidReaderManager.stopSession(HARDWARE_OWNER)
+        fingerprintHardwareManager.stopCapture(HARDWARE_OWNER)
     }
 
     fun acknowledgeCapture(type: String) {
@@ -112,5 +113,15 @@ class AddPrisonerViewModel @Inject constructor(
         object Loading : RegistrationState()
         data class Success(val prisonerId: String, val message: String) : RegistrationState()
         data class Error(val message: String) : RegistrationState()
+    }
+
+    companion object {
+        /**
+         * Owns the shared R307/RFID sessions while the registration form is
+         * up. A startCapture from here force-releases anything the Login or
+         * Inmate-Card screens left open, so embedded biometric capture always
+         * gets a clean, fresh connection.
+         */
+        private const val HARDWARE_OWNER = "AddPrisoner"
     }
 }

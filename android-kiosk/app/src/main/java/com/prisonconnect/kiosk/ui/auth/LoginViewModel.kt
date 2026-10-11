@@ -102,8 +102,10 @@ class LoginViewModel @Inject constructor(
         super.onCleared()
         connectivityManager.unregisterNetworkCallback(networkCallback)
         // viewModelScope jobs die with the VM — close any open hardware driver.
-        rfidReaderManager.stopSession()
-        fingerprintHardwareManager.stopCapture()
+        // Owner-gated: if the admin already moved on to another screen (e.g.
+        // Add Prisoner took the scanner), this late stop is a no-op there.
+        rfidReaderManager.stopSession(HARDWARE_OWNER)
+        fingerprintHardwareManager.stopCapture(HARDWARE_OWNER)
     }
 
     private fun getFriendlyErrorMessage(statusCode: Int?, defaultMessage: String): String {
@@ -132,7 +134,7 @@ class LoginViewModel @Inject constructor(
 
     fun startFingerprintAuth() {
         _loginStage.value = LoginStage.FINGERPRINT_SCANNING
-        fingerprintHardwareManager.startCapture()
+        fingerprintHardwareManager.startCapture(HARDWARE_OWNER)
         startFingerprintSession()
     }
 
@@ -176,7 +178,7 @@ class LoginViewModel @Inject constructor(
                         delay(2000.milliseconds)
                         setIdle()
                         // Resume scanning so the user can simply try again.
-                        fingerprintHardwareManager.startCapture()
+                        fingerprintHardwareManager.startCapture(HARDWARE_OWNER)
                     }
                     else -> {}
                 }
@@ -315,7 +317,7 @@ class LoginViewModel @Inject constructor(
 
     fun startRfidAuth() {
         _loginStage.value = LoginStage.RFID_SCANNING
-        rfidReaderManager.startSession()
+        rfidReaderManager.startSession(HARDWARE_OWNER)
         startRfidSession()
     }
 
@@ -430,8 +432,13 @@ class LoginViewModel @Inject constructor(
         fingerprintSessionJob = null
         rfidSessionJob?.cancel()
         rfidSessionJob = null
-        fingerprintHardwareManager.stopCapture()
-        rfidReaderManager.stopSession()
+        fingerprintHardwareManager.stopCapture(HARDWARE_OWNER)
+        rfidReaderManager.stopSession(HARDWARE_OWNER)
+    }
+
+    companion object {
+        /** Owns the shared R307/RFID sessions while the login screen is up. */
+        private const val HARDWARE_OWNER = "Login"
     }
 
     sealed class LoginNavigation {
