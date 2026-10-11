@@ -20,7 +20,12 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.prisonconnect.kiosk.hardware.FingerprintCaptureState
+import com.prisonconnect.kiosk.hardware.RfidReaderState
 import com.prisonconnect.kiosk.models.admin.PrisonerFormValues
+import com.prisonconnect.kiosk.ui.auth.HiddenRfidTapInput
+import com.prisonconnect.kiosk.ui.auth.RfidKeypadEntry
+import com.prisonconnect.kiosk.ui.auth.RfidTapAnimation
 import com.prisonconnect.kiosk.ui.components.KioskTopBar
 import com.prisonconnect.kiosk.ui.theme.PrisonKioskTheme
 
@@ -34,6 +39,13 @@ fun AddPrisonerScreen(
     viewModel: AddPrisonerViewModel = hiltViewModel()
 ) {
     val registrationState by viewModel.registrationState.collectAsState()
+    val fingerprintState by viewModel.fingerprintState.collectAsState()
+    val rfidState by viewModel.rfidState.collectAsState()
+
+    // Screen left mid-capture — no hardware session may keep running.
+    DisposableEffect(Unit) {
+        onDispose { viewModel.stopCapture() }
+    }
 
     AddPrisonerContent(
         windowWidthSizeClass = windowSizeClass.widthSizeClass,
@@ -42,7 +54,13 @@ fun AddPrisonerScreen(
         onRegister = { values, pin, finger, rfid ->
             viewModel.registerPrisoner(values, pin, finger, rfid)
         },
-        registrationState = registrationState
+        registrationState = registrationState,
+        fingerprintState = fingerprintState,
+        rfidState = rfidState,
+        onStartCapture = viewModel::startCapture,
+        onStopCapture = viewModel::stopCapture,
+        onAcknowledgeCapture = viewModel::acknowledgeCapture,
+        onRfidCardTapped = viewModel::onRfidCardTapped
     )
 }
 
@@ -52,7 +70,13 @@ fun AddPrisonerContent(
     onBackClick: () -> Unit,
     onComplete: () -> Unit,
     onRegister: (PrisonerFormValues, String, String?, String?) -> Unit,
-    registrationState: AddPrisonerViewModel.RegistrationState = AddPrisonerViewModel.RegistrationState.Idle
+    registrationState: AddPrisonerViewModel.RegistrationState = AddPrisonerViewModel.RegistrationState.Idle,
+    fingerprintState: FingerprintCaptureState = FingerprintCaptureState.Idle,
+    rfidState: RfidReaderState = RfidReaderState.Idle,
+    onStartCapture: (String) -> Unit = {},
+    onStopCapture: () -> Unit = {},
+    onAcknowledgeCapture: (String) -> Unit = {},
+    onRfidCardTapped: (String) -> Unit = {}
 ) {
     val formState = remember { PrisonerFormState(null) }
     var step by remember { mutableStateOf(0) }
@@ -61,6 +85,29 @@ fun AddPrisonerContent(
     var fingerprintTemplate by remember { mutableStateOf("") }
     var rfidTag by remember { mutableStateOf("") }
     var formError by remember { mutableStateOf("") }
+    var showFingerprintDialog by remember { mutableStateOf(false) }
+    var showRfidDialog by remember { mutableStateOf(false) }
+
+    // Hardware read while its dialog is open → keep the capture locally.
+    // The actual template/tag is sent with the prisoner at Register time.
+    LaunchedEffect(fingerprintState, showFingerprintDialog) {
+        val state = fingerprintState
+        if (showFingerprintDialog && state is FingerprintCaptureState.Captured) {
+            onAcknowledgeCapture("fingerprint")
+            fingerprintTemplate = state.template
+            showFingerprintDialog = false
+            onStopCapture()
+        }
+    }
+    LaunchedEffect(rfidState, showRfidDialog) {
+        val state = rfidState
+        if (showRfidDialog && state is RfidReaderState.CardRead) {
+            onAcknowledgeCapture("rfid")
+            rfidTag = state.token
+            showRfidDialog = false
+            onStopCapture()
+        }
+    }
 
     var completed by remember { mutableStateOf(false) }
     LaunchedEffect(registrationState) {
@@ -127,8 +174,16 @@ fun AddPrisonerContent(
                             rfidTag = rfidTag,
                             onPinChange = { pin = it; formError = "" },
                             onConfirmPinChange = { confirmPin = it; formError = "" },
-                            onFingerprintTemplateChange = { fingerprintTemplate = it },
-                            onRfidTagChange = { rfidTag = it }
+                            onRegisterFingerprint = {
+                                showFingerprintDialog = true
+                                onStartCapture("fingerprint")
+                            },
+                            onClearFingerprint = { fingerprintTemplate = "" },
+                            onRegisterRfid = {
+                                showRfidDialog = true
+                                onStartCapture("rfid")
+                            },
+                            onClearRfid = { rfidTag = "" }
                         )
                     }
 
@@ -230,6 +285,54 @@ fun AddPrisonerContent(
             }
         }
     }
+
+    // Capture dialogs — same hardware flow as the Biometrics screen.
+    if (showFingerprintDialog) {
+        BiometricCaptureDialog(
+            title = "Fingerprint",
+            icon = Icons.Default.Fingerprint,
+            instruction = "Place the finger on the USB fingerprint scanner",
+            hint = "Connect the scanner to the kiosk, then hold the finger still until it is detected.",
+            showManualEntry = false,
+            status = when (val s = fingerprintState) {
+                is FingerprintCaptureState.Captured -> BiometricCaptureStatus.Detected
+                is FingerprintCaptureState.Failed -> BiometricCaptureStatus.Error(s.message)
+                else -> BiometricCaptureStatus.Waiting
+            },
+            registerError = null,
+            onManualConfirm = {},
+            onDismiss = {
+                showFingerprintDialog = false
+                onStopCapture()
+            }
+        )
+    }
+    if (showRfidDialog) {
+        BiometricCaptureDialog(
+            title = "RFID Card",
+            icon = Icons.Default.CreditCard,
+            instruction = "Tap the RFID card on the reader",
+            hint = "Hold the card on the reader until its number is detected.",
+            showManualEntry = true,
+            status = when (val s = rfidState) {
+                is RfidReaderState.CardRead -> BiometricCaptureStatus.Detected
+                is RfidReaderState.Failed -> BiometricCaptureStatus.Error(s.message)
+                else -> BiometricCaptureStatus.Waiting
+            },
+            registerError = null,
+            onManualConfirm = {
+                rfidTag = it
+                showRfidDialog = false
+                onStopCapture()
+            },
+            onCardTap = onRfidCardTapped,
+            animation = { RfidTapAnimation(modifier = Modifier.size(130.dp)) },
+            onDismiss = {
+                showRfidDialog = false
+                onStopCapture()
+            }
+        )
+    }
 }
 
 @Composable
@@ -267,8 +370,10 @@ private fun BiometricDataStep(
     rfidTag: String,
     onPinChange: (String) -> Unit,
     onConfirmPinChange: (String) -> Unit,
-    onFingerprintTemplateChange: (String) -> Unit,
-    onRfidTagChange: (String) -> Unit
+    onRegisterFingerprint: () -> Unit,
+    onClearFingerprint: () -> Unit,
+    onRegisterRfid: () -> Unit,
+    onClearRfid: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -351,22 +456,22 @@ private fun BiometricDataStep(
                 color = Color(0xFF0B2240)
             )
 
-            OutlinedTextField(
-                value = fingerprintTemplate,
-                onValueChange = onFingerprintTemplateChange,
-                label = { Text("Fingerprint Template") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                leadingIcon = { Icon(Icons.Default.Fingerprint, contentDescription = null) }
+            BiometricCard(
+                title = "Fingerprint",
+                icon = Icons.Default.Fingerprint,
+                isRegistered = fingerprintTemplate.isNotBlank(),
+                hint = "Place the finger on the scanner — no typing needed",
+                onRegister = onRegisterFingerprint,
+                onDelete = onClearFingerprint
             )
 
-            OutlinedTextField(
-                value = rfidTag,
-                onValueChange = onRfidTagChange,
-                label = { Text("RFID Tag / ID") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                leadingIcon = { Icon(Icons.Default.CreditCard, contentDescription = null) }
+            BiometricCard(
+                title = "RFID Card",
+                icon = Icons.Default.CreditCard,
+                isRegistered = rfidTag.isNotBlank(),
+                hint = "Tap the card on the reader",
+                onRegister = onRegisterRfid,
+                onDelete = onClearRfid
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -395,7 +500,7 @@ private fun BiometricDataStep(
                             color = Color(0xFF003366)
                         )
                         Text(
-                            text = "Fingerprint and RFID data can be entered if available. These are not required.",
+                            text = "Capture the fingerprint or tap the RFID card — both are optional. Data can also be added later from the Biometrics screen.",
                             fontSize = 12.sp,
                             color = Color(0xFF003366)
                         )

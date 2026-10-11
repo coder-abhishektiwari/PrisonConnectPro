@@ -34,6 +34,7 @@ fun AdminDashboardScreen(
     onDeviceInfoClick: () -> Unit,
     onMisReportClick: () -> Unit,
     onKioskAdminsClick: () -> Unit,
+    onCallHistoryClick: () -> Unit,
     onLogoutClick: () -> Unit,
     viewModel: AdminDashboardViewModel = hiltViewModel()
 ) {
@@ -46,6 +47,7 @@ fun AdminDashboardScreen(
         onDeviceInfoClick = onDeviceInfoClick,
         onMisReportClick = onMisReportClick,
         onKioskAdminsClick = onKioskAdminsClick,
+        onCallHistoryClick = onCallHistoryClick,
         onLogoutClick = onLogoutClick
     )
 }
@@ -58,6 +60,7 @@ fun AdminDashboardContent(
     onDeviceInfoClick: () -> Unit,
     onMisReportClick: () -> Unit,
     onKioskAdminsClick: () -> Unit,
+    onCallHistoryClick: () -> Unit,
     onLogoutClick: () -> Unit
 ) {
     Scaffold(
@@ -208,6 +211,17 @@ fun AdminDashboardContent(
                 )
             }
 
+            // Call History Card
+            item {
+                AdminActionCard(
+                    title = "Call History",
+                    description = "Review and play this kiosk's recorded calls",
+                    icon = Icons.Default.History,
+                    iconColor = Color(0xFF009688),
+                    onClick = onCallHistoryClick
+                )
+            }
+
             // Device Info Card
             item {
                 AdminActionCard(
@@ -320,6 +334,7 @@ fun PreviewAdminDashboardMobile() {
             onDeviceInfoClick = {},
             onMisReportClick = {},
             onKioskAdminsClick = {},
+            onCallHistoryClick = {},
             onLogoutClick = {}
         )
     }
@@ -343,6 +358,9 @@ fun PreviewAdminDashboardTablet() {
             onAddPrisonerClick = {},
             onManagePrisonersClick = {},
             onDeviceInfoClick = {},
+            onMisReportClick = {},
+            onKioskAdminsClick = {},
+            onCallHistoryClick = {},
             onLogoutClick = {}
         )
     }

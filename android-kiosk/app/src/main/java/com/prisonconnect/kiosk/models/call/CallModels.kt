@@ -69,14 +69,27 @@ data class ScheduledCall(
 
 data class CallHistory(
     @SerializedName("callId") val callId: String,
+    @SerializedName("roomId") val roomId: String? = null,
     @SerializedName("type") val type: CallType? = null,
     @SerializedName("contactId") val contactId: String? = null,
     @SerializedName("contactName") val contactName: String? = null,
+    @SerializedName("inmateId") val inmateId: String? = null,
+    @SerializedName("inmateName") val inmateName: String? = null,
     @SerializedName("status") val status: String? = null,
     @SerializedName("startTime") val startTime: String? = null,
     @SerializedName("endTime") val endTime: String? = null,
     @SerializedName("durationMinutes") val durationMinutes: Int? = null,
-    @SerializedName("duration") val duration: Int? = null
+    @SerializedName("duration") val duration: Int? = null,
+    @SerializedName("recordingId") val recordingId: String? = null,
+    @SerializedName("recordingStatus") val recordingStatus: String? = null
+)
+
+/** Paged response of `GET /calls/history` (kiosk-scoped for a kiosk admin). */
+data class CallHistoryPage(
+    @SerializedName("calls") val calls: List<CallHistory> = emptyList(),
+    @SerializedName("total") val total: Int = 0,
+    @SerializedName("limit") val limit: Int = 0,
+    @SerializedName("offset") val offset: Int = 0
 )
 
 enum class SocketStatus {

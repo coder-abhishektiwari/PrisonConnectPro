@@ -3,7 +3,7 @@ import { Outlet } from 'react-router-dom';
 /** Real dashboard capabilities — must match Sidebar nav items. Kept short. */
 const features = [
   { icon: 'videocam', title: 'Live Calls', desc: 'Real-time monitoring' },
-  { icon: 'history', title: 'Call Logs', desc: 'History & recordings' },
+  { icon: 'history', title: 'Call Logs', desc: 'History' },
   { icon: 'devices_other', title: 'Kiosks', desc: 'Fleet health & status' },
   { icon: 'family_restroom', title: 'Inmates & Family', desc: 'Contacts & credits' },
   { icon: 'how_to_reg', title: 'Registrations', desc: 'Approve new devices' },

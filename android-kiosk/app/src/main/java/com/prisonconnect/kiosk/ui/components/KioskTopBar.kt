@@ -40,8 +40,9 @@ private val BAR_COLORS = listOf(
 /**
  * Four ascending signal bars. Bars at or below the current level light up
  * in their strength colour; the remaining bars stay dim — the icon loses
- * bars (and red-wards its colour) as the signal decays. Offline shows all
- * bars lit red.
+ * bars (and red-wards its colour) as the signal decays. Offline shows every
+ * bar lit RED (a full-colour stack used to read as "excellent", which made
+ * a dead link look like the strongest signal on the bar).
  */
 @Composable
 private fun WifiStrengthBars(
@@ -60,8 +61,13 @@ private fun WifiStrengthBars(
             val barHeight = maxWidthPx * (i + 1) / barCount
             val x = i * (barWidthPx + gapPx)
             val lit = !online || i < level
+            val barColor = when {
+                !online -> Color(0xFFF44336) // offline: all bars red — clearly the worst state
+                lit -> BAR_COLORS.getOrElse(i) { BAR_COLORS.last() }
+                else -> inactiveColor
+            }
             drawRoundRect(
-                color = if (lit) BAR_COLORS.getOrElse(i) { BAR_COLORS.last() } else inactiveColor,
+                color = barColor,
                 topLeft = androidx.compose.ui.geometry.Offset(x, size.height - barHeight),
                 size = Size(barWidthPx, barHeight),
                 cornerRadius = CornerRadius(cornerPx, cornerPx)

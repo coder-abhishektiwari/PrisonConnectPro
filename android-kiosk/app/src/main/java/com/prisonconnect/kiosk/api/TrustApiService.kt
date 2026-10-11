@@ -110,6 +110,17 @@ interface TrustApiService {
     @GET("calls/history/{id}")
     suspend fun getCallHistory(@Path("id") id: String): ApiResponse<List<CallHistory>>
 
+    /** Paged, filterable kiosk-scoped call history (admin dashboard). */
+    @GET("calls/history")
+    suspend fun getCallHistoryPage(
+        @Query("search") search: String? = null,
+        @Query("type") type: String? = null,
+        @Query("dateFrom") dateFrom: String? = null,
+        @Query("dateTo") dateTo: String? = null,
+        @Query("limit") limit: Int = 50,
+        @Query("offset") offset: Int = 0
+    ): ApiResponse<com.prisonconnect.kiosk.models.call.CallHistoryPage>
+
     @GET("schedule/slots/{kioskId}/{date}")
     suspend fun getBookedSlots(@Path("kioskId") kioskId: String, @Path("date") date: String): ApiResponse<com.prisonconnect.kiosk.models.schedule.SlotsResponse>
 

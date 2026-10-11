@@ -32,7 +32,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 /** Live hardware status shown inside the capture dialog. */
-private sealed interface BiometricCaptureStatus {
+internal sealed interface BiometricCaptureStatus {
     data object Waiting : BiometricCaptureStatus
     data object Detected : BiometricCaptureStatus
     data class Error(val message: String) : BiometricCaptureStatus
@@ -347,7 +347,7 @@ fun BiometricCard(
  * number + Enter), and [animation] renders the Lottie tap animation.
  */
 @Composable
-private fun BiometricCaptureDialog(
+internal fun BiometricCaptureDialog(
     title: String,
     icon: ImageVector,
     instruction: String,

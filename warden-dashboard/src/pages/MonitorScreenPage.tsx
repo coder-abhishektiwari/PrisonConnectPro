@@ -9,7 +9,7 @@ import { useWardenSocket } from '@/hooks/useWardenSocket';
 import { useToast } from '@/hooks/useToast';
 import { usePageHeader } from '@/context/PageHeaderContext';
 import { inmateLabel, contactLabel } from '@/utils/names';
-import type { ActiveCall, Inmate, Contact, Wallet, Recording, Device, CallStatistics, PaginatedResponse } from '@/services/api/wardenApi';
+import type { ActiveCall, Inmate, Contact, Wallet, Device, CallStatistics, PaginatedResponse } from '@/services/api/wardenApi';
 
 export function MonitorScreenPage() {
   const { callId } = useParams<{ callId: string }>();
@@ -44,13 +44,6 @@ export function MonitorScreenPage() {
   );
   const wallet = call ? (walletsData?.items ?? []).find((w) => w.inmateId === call.inmateId) || null : null;
 
-  const { data: recordingsData, refresh: refreshRecordings } = useCachedResource<Recording[]>(
-    cacheKeys.recordings(),
-    () => wardenApi.getRecordings(),
-    { ttl: 15_000, pollMs: 0 },
-  );
-  const recording = call ? (recordingsData ?? []).find((r) => r.callId === call.callId) || null : null;
-
   const { data: devicesData, refresh: refreshDevices } = useCachedResource<PaginatedResponse<Device>>(
     cacheKeys.devices(),
     () => wardenApi.getDevices(),
@@ -70,7 +63,6 @@ export function MonitorScreenPage() {
     refreshInmates();
     refreshContacts();
     refreshWallets();
-    refreshRecordings();
     refreshDevices();
     refreshStatistics();
   };
@@ -78,8 +70,7 @@ export function MonitorScreenPage() {
   refreshRef.current = refreshAll;
   const onCallUpdate = useCallback(() => { refreshRef.current(); }, []);
   const onDeviceStatusChange = useCallback(() => { refreshRef.current(); }, []);
-  const onRecordingUpdate = useCallback(() => { refreshRef.current(); }, []);
-  useWardenSocket(onCallUpdate, undefined, onDeviceStatusChange, onRecordingUpdate);
+  useWardenSocket(onCallUpdate, undefined, onDeviceStatusChange);
 
   const headerIcon = useMemo(() => <span className="material-icons text-primary-600 text-xl">videocam</span>, []);
 
@@ -177,12 +168,6 @@ export function MonitorScreenPage() {
                 </svg>
                 <p className="text-sm">Remote Video</p>
               </div>
-              {call.recordingStatus === 'recording' && (
-                <div className="absolute top-3 left-3 flex items-center gap-2 bg-error text-white px-3 py-1 rounded-full text-xs font-medium">
-                  <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
-                  REC
-                </div>
-              )}
               <div className="absolute top-3 right-3 bg-black/50 text-white px-3 py-1 rounded-full text-xs font-medium">
                 {formatDuration(call.durationMinutes * 60)}
               </div>

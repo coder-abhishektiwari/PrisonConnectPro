@@ -12,6 +12,7 @@ import androidx.work.workDataOf
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import com.prisonconnect.kiosk.BuildConfig
 import com.prisonconnect.kiosk.api.TrustApiService
 import com.prisonconnect.kiosk.core.Logger
 import com.prisonconnect.kiosk.models.auth.PendingRetrieval
@@ -37,6 +38,10 @@ import java.util.concurrent.TimeUnit
  *  - RETRIEVE: enqueued when the heartbeat reports a warden asked for this
  *    recording. Decrypts (if needed) and pushes the file to the backend via
  *    the existing chunked, resumable uploader. The master copy is kept.
+ *
+ * When [BuildConfig.RECORDINGS_LOCAL_ONLY] is on (the default), REGISTER
+ * only encrypts the master in place and RETRIEVE is a no-op — recordings
+ * never leave this kiosk and are played back from the Call History screen.
  */
 class RecordingUploadWorker(
     appContext: Context,
@@ -83,6 +88,15 @@ class RecordingUploadWorker(
     private suspend fun registerAndEncrypt(file: File, callId: String, durationSeconds: Int?): Boolean =
         withContext(Dispatchers.IO) {
             try {
+                if (BuildConfig.RECORDINGS_LOCAL_ONLY) {
+                    // Recordings never leave this kiosk: no backend row, no
+                    // upload — just encrypt the master in place at rest.
+                    if (!RecordingVault.isEncrypted(file)) {
+                        RecordingVault.encrypt(file)
+                    }
+                    Logger.i("RegisterWorker: local-only mode - encrypted ${file.name} (kept on kiosk)")
+                    return@withContext true
+                }
                 val size = file.length()
                 val sha256 = RecordingUploader.sha256OfStream(FileInputStream(file))
                 Logger.i("RegisterWorker: ${file.name} size=$size sha256=${sha256.take(12)}…")
@@ -123,6 +137,11 @@ class RecordingUploadWorker(
         val callId = inputData.getString(KEY_CALL_ID).orEmpty()
         val localName = inputData.getString(KEY_LOCAL_FILE)?.takeIf { it.isNotBlank() }
         if (callId.isBlank()) return Result.failure()
+
+        if (BuildConfig.RECORDINGS_LOCAL_ONLY) {
+            Logger.i("RetrieveWorker: local-only mode - keeping $recordingId on the kiosk")
+            return Result.success()
+        }
 
         val ok = try {
             retrieve(recordingId, callId, localName)

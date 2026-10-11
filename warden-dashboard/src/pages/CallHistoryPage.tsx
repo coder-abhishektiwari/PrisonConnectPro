@@ -12,11 +12,9 @@ import type { ColumnFilter } from '@/components/FilterDropdown';
 import { inmateLabel, contactLabel } from '@/utils/names';
 import ExcelJS from 'exceljs';
 
-import type { CallHistoryItem, Recording, Inmate, CallHistoryParams, PaginatedCallsResponse, PaginatedResponse, KioskItem, ListParams, Pricing, Settings } from '@/services/api/wardenApi';
+import type { CallHistoryItem, Inmate, CallHistoryParams, PaginatedCallsResponse, PaginatedResponse, KioskItem, ListParams, Pricing, Settings } from '@/services/api/wardenApi';
 
 const PAGE_SIZE = 20;
-const RETRIEVAL_POLL_MS = 2_000;
-const RETRIEVAL_TIMEOUT_MS = 10 * 60 * 1000;
 
 export function CallHistoryPage() {
   const [search, setSearch] = useState('');
@@ -25,18 +23,12 @@ export function CallHistoryPage() {
   const [page, setPage] = useState(1);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [selected, setSelected] = useState<CallHistoryItem | null>(null);
-  const [playing, setPlaying] = useState<Recording | null>(null);
-  const [detailUrl, setDetailUrl] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
-  // On-demand retrieval: which recording this tab is pulling, with progress.
-  const [retrieval, setRetrieval] = useState<{ recordingId: string; receivedBytes?: number; size?: number } | null>(null);
-  const [retrievalError, setRetrievalError] = useState<string | null>(null);
 
   const [typeFilter, setTypeFilter] = useState<ColumnFilter>({ value: 'all', open: false });
   const [statusFilter, setStatusFilter] = useState<ColumnFilter>({ value: 'all', open: false });
   const [kioskFilter, setKioskFilter] = useState<ColumnFilter>({ value: 'all', open: false });
   const [qualityFilter, setQualityFilter] = useState<ColumnFilter>({ value: 'all', open: false });
-  const [recordingFilter, setRecordingFilter] = useState<ColumnFilter>({ value: 'all', open: false });
 
   const params = useMemo<CallHistoryParams>(() => ({
     limit: PAGE_SIZE,
@@ -46,12 +38,11 @@ export function CallHistoryPage() {
     status: statusFilter.value !== 'all' ? statusFilter.value : undefined,
     kioskId: kioskFilter.value !== 'all' ? kioskFilter.value : undefined,
     quality: qualityFilter.value !== 'all' ? qualityFilter.value : undefined,
-    recording: recordingFilter.value !== 'all' ? recordingFilter.value : undefined,
     dateFrom: dateFrom || undefined,
     dateTo: dateTo || undefined,
     sortField: 'date',
     sortDir,
-  }), [page, search, typeFilter.value, statusFilter.value, kioskFilter.value, qualityFilter.value, recordingFilter.value, dateFrom, dateTo, sortDir]);
+  }), [page, search, typeFilter.value, statusFilter.value, kioskFilter.value, qualityFilter.value, dateFrom, dateTo, sortDir]);
 
   const { data, isLoading, error, refresh } = useCachedResource<PaginatedCallsResponse>(
     cacheKeys.callHistory(params),
@@ -82,118 +73,6 @@ export function CallHistoryPage() {
     const s = totalSeconds % 60;
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
-
-  const { data: recordingsData, refresh: refreshRecordings } = useCachedResource<Recording[]>(
-    cacheKeys.recordings(),
-    () => wardenApi.getRecordings(),
-    { ttl: 30_000, pollMs: 0 },
-  );
-  const recordings = useMemo(() => {
-    const map: Record<string, Recording> = {};
-    (recordingsData ?? []).forEach((r) => { map[r.callId] = r; });
-    return map;
-  }, [recordingsData]);
-
-  // Signed playback link for the row drawer - fetched on demand so the link
-  // is fresh each time the panel opens (it expires server-side).
-  useEffect(() => {
-    let stale = false;
-    setDetailUrl(null);
-    const rec = selected ? recordings[selected.callId] : undefined;
-    if (rec?.available) {
-      wardenApi.getRecordingUrl(rec.recordingId)
-        .then((url) => { if (!stale) setDetailUrl(url); })
-        .catch(() => { /* drawer simply hides the player */ });
-    }
-    return () => { stale = true; };
-  }, [selected, recordings]);
-
-  const playRecording = async (rec: Recording) => {
-    try {
-      setPlaying({ ...rec, url: await wardenApi.getRecordingUrl(rec.recordingId) });
-    } catch {
-      setPlaying({ ...rec, url: null });
-    }
-  };
-
-  // "Retrieve" — the master copy lives encrypted on the kiosk; this asks it
-  // (over its heartbeat) to push a temporary copy to the backend, which the
-  // TTL sweep deletes later. Idempotent server-side, so a double click is safe.
-  const startRetrieve = async (rec: Recording) => {
-    setRetrievalError(null);
-    setRetrieval({ recordingId: rec.recordingId });
-    try {
-      const result = await wardenApi.retrieveRecording(rec.recordingId);
-      if (result?.status === 'ready' || result?.available) {
-        setRetrieval(null);
-        refreshRecordings();
-      }
-    } catch (e: any) {
-      const code = e?.response?.data?.error?.code;
-      setRetrieval(null);
-      setRetrievalError(
-        code === 'KIOSK_OFFLINE'
-          ? 'Kiosk is offline — retrieval will work once it reconnects.'
-          : code === 'UNAVAILABLE'
-            ? 'No recording file is available for this call.'
-            : 'Could not start retrieval. Please try again.',
-      );
-    }
-  };
-
-  // Poll while a retrieval is in flight: requested -> transferring -> ready.
-  const retrievalId = retrieval?.recordingId;
-  useEffect(() => {
-    if (!retrievalId) return;
-    let done = false;
-    const startedAt = Date.now();
-    const tick = async () => {
-      if (done) return;
-      try {
-        const s = await wardenApi.getRecordingStatus(retrievalId);
-        if (done || !s) return;
-        if (s.status === 'ready' || s.available) {
-          done = true;
-          setRetrieval(null);
-          refreshRecordings();
-          return;
-        }
-        if (s.status === 'kiosk_offline') {
-          done = true;
-          setRetrieval(null);
-          setRetrievalError('Kiosk went offline during retrieval.');
-          return;
-        }
-        if (s.status === 'unavailable') {
-          done = true;
-          setRetrieval(null);
-          setRetrievalError('Recording file is unavailable.');
-          return;
-        }
-        setRetrieval({ recordingId: retrievalId, receivedBytes: s.receivedBytes, size: s.size });
-        if (Date.now() - startedAt > RETRIEVAL_TIMEOUT_MS) {
-          done = true;
-          setRetrieval(null);
-          setRetrievalError('Retrieval timed out — the kiosk may have lost its connection.');
-        }
-      } catch {
-        // transient network error: keep polling
-      }
-    };
-    void tick();
-    const iv = setInterval(tick, RETRIEVAL_POLL_MS);
-    return () => {
-      done = true;
-      clearInterval(iv);
-    };
-  }, [retrievalId, refreshRecordings]);
-
-  const drawerRec = selected ? recordings[selected.callId] : undefined;
-  const drawerRetrieving = !!drawerRec && (
-    retrieval?.recordingId === drawerRec.recordingId ||
-    drawerRec.retrieval?.status === 'requested' ||
-    drawerRec.retrieval?.status === 'transferring'
-  );
 
   const inmateParams = useMemo<ListParams>(() => ({ limit: 1000, offset: 0 }), []);
   const { data: inmatesData } = useCachedResource<PaginatedResponse<Inmate>>(
@@ -234,16 +113,16 @@ export function CallHistoryPage() {
   }), [pricingData, settingsData]);
 
   const refreshRef = useRef<() => void>(refresh);
-  refreshRef.current = () => { refresh(); refreshRecordings(); };
+  refreshRef.current = () => { refresh(); };
   const onCallUpdate = useCallback(() => { refreshRef.current(); }, []);
   useWardenSocket(onCallUpdate);
 
-  useEffect(() => { setPage(1); }, [search, dateFrom, dateTo, typeFilter.value, statusFilter.value, kioskFilter.value, qualityFilter.value, recordingFilter.value, sortDir]);
+  useEffect(() => { setPage(1); }, [search, dateFrom, dateTo, typeFilter.value, statusFilter.value, kioskFilter.value, qualityFilter.value, sortDir]);
 
   const exportExcel = async (rows: CallHistoryItem[], filename: string) => {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Call Logs');
-    const headers = ['Call ID', 'Date', 'Inmate', 'Family', 'Location', 'Kiosk', 'Type', 'Duration', 'Status', 'Quality', 'Recording'];
+    const headers = ['Call ID', 'Date', 'Inmate', 'Family', 'Location', 'Kiosk', 'Type', 'Duration', 'Status', 'Quality'];
     const colsCount = headers.length;
 
     ws.mergeCells(1, 1, 1, colsCount);
@@ -272,12 +151,11 @@ export function CallHistoryPage() {
     });
 
     rows.forEach((c) => {
-      const rec = recordings[c.callId];
       const row = ws.addRow([
         c.callId, fmtDate(c.startTime), inmateLabel(c, inmates[c.inmateId]),
         contactLabel(c), locationLabel(c.family?.location) || '', c.kioskId, c.type,
         c.status === 'active' ? fmtSec(liveDurationSeconds(c)) : fmtDur(c.durationMinutes),
-        c.status, c.connectionQuality || '', rec?.available ? 'Yes' : 'No'
+        c.status, c.connectionQuality || ''
       ]);
       row.eachCell((cell) => { cell.numFmt = '@'; });
     });
@@ -293,13 +171,13 @@ export function CallHistoryPage() {
         row.eachCell((cell, colNumber) => {
           cell.border = thinBorder;
           if (rowNumber > 4) {
-            cell.alignment = { horizontal: [1, 2, 6, 7, 8, 9, 10, 11].includes(colNumber) ? 'center' : 'left', vertical: 'middle' };
+            cell.alignment = { horizontal: [1, 2, 6, 7, 8, 9, 10].includes(colNumber) ? 'center' : 'left', vertical: 'middle' };
             cell.font = { name: 'Calibri', size: 10, color: { argb: 'FF000000' } };
           }
         });
       }
     });
-    ws.columns = [{ width: 18 }, { width: 15 }, { width: 22 }, { width: 22 }, { width: 26 }, { width: 15 }, { width: 12 }, { width: 14 }, { width: 15 }, { width: 14 }, { width: 14 }];
+    ws.columns = [{ width: 18 }, { width: 15 }, { width: 22 }, { width: 22 }, { width: 26 }, { width: 15 }, { width: 12 }, { width: 14 }, { width: 15 }, { width: 14 }];
 
     const buffer = await wb.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -370,10 +248,8 @@ export function CallHistoryPage() {
     return 'Call ended unexpectedly';
   };
 
-  const emptyTitle = recordingFilter.value === 'available' ? 'No calls with recordings found'
-    : recordingFilter.value === 'none' ? 'No calls without recordings found'
-    : 'No call logs found';
-  const emptySub = recordingFilter.value !== 'all' ? 'Try a different filter or date range' : 'Try adjusting filters or date range';
+  const emptyTitle = 'No call logs found';
+  const emptySub = 'Try adjusting filters or date range';
 
   return (
     <div className="space-y-6">
@@ -405,26 +281,24 @@ export function CallHistoryPage() {
                   <th className="text-left py-3 px-4"><span className="text-xs font-bold uppercase tracking-wider text-neutral-500">Duration</span></th>
                   <th className="text-left py-3 px-4"><FilterDropdown label="Status" options={[{ value: 'completed', label: 'Completed' }, { value: 'missed', label: 'Missed' }, { value: 'failed', label: 'Failed' }, { value: 'cancelled', label: 'Cancelled' }, { value: 'rejected', label: 'Rejected' }, { value: 'active', label: 'Active' }]} filter={statusFilter} setFilter={setStatusFilter} /></th>
                   <th className="text-left py-3 px-4"><FilterDropdown label="Quality" options={[{ value: 'excellent', label: 'Excellent' }, { value: 'good', label: 'Good' }, { value: 'fair', label: 'Fair' }, { value: 'poor', label: 'Poor' }]} filter={qualityFilter} setFilter={setQualityFilter} /></th>
-                  <th className="text-left py-3 px-4"><FilterDropdown label="Recording" options={[{ value: 'available', label: 'Available' }, { value: 'none', label: 'None' }]} filter={recordingFilter} setFilter={setRecordingFilter} /></th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading && calls.length === 0 ? (
-                  <SkeletonRows rows={8} cols={9} />
+                  <SkeletonRows rows={8} cols={8} />
                 ) : error && calls.length === 0 ? (
-                  <tr><td colSpan={9} className="py-16 text-center">
+                  <tr><td colSpan={8} className="py-16 text-center">
                     <p className="text-neutral-900 font-semibold">Couldn&apos;t load call logs</p>
                     <p className="text-sm text-neutral-500 mt-1">{error}</p>
                     <button onClick={() => refresh()} className="mt-4 px-4 py-2 bg-neutral-900 text-white rounded-xl text-sm font-bold">Retry</button>
                   </td></tr>
                 ) : calls.length === 0 ? (
-                  <tr><td colSpan={9} className="py-16 text-center">
+                  <tr><td colSpan={8} className="py-16 text-center">
                     <div className="w-16 h-16 bg-neutral-100 rounded-2xl flex items-center justify-center mx-auto mb-4"><svg className="w-8 h-8 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg></div>
                     <p className="text-neutral-900 font-semibold">{emptyTitle}</p>
                     <p className="text-sm text-neutral-500 mt-1">{emptySub}</p>
                   </td></tr>
                 ) : calls.map((call) => {
-                  const rec = recordings[call.callId];
                   const inmate = inmates[call.inmateId];
                   const isInmateName = inmateLabel(call, inmate);
                   const familyName = contactLabel(call);
@@ -483,34 +357,6 @@ export function CallHistoryPage() {
                       <td className="py-3 px-4">
                         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${call.connectionQuality === 'excellent' ? 'bg-success/10 text-success border-success/20' : call.connectionQuality === 'good' ? 'bg-info-100 text-info border-info/20' : call.connectionQuality === 'fair' ? 'bg-warning/10 text-warning border-warning/20' : 'bg-error/10 text-error border-error/20'}`}>{call.connectionQuality || '—'}</span>
                       </td>
-                      <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
-                        {rec?.available ? (
-                          <button onClick={() => void playRecording(rec)} className="w-9 h-9 bg-neutral-900 text-white rounded-full flex items-center justify-center hover:bg-black transition-colors shadow-sm" title="Play recording">
-                            <svg className="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-                          </button>
-                        ) : rec && rec.storage === 'kiosk' ? (
-                          retrieval?.recordingId === rec.recordingId || rec.retrieval?.status === 'requested' || rec.retrieval?.status === 'transferring' ? (
-                            <span className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-bold border bg-info-100 text-info border-info/20" title="Kiosk is pushing the file to the server">
-                              <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none">
-                                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
-                                <path d="M4 12a8 8 0 0 1 8-8" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
-                              </svg>
-                              Retrieving file…{retrieval?.size ? ` ${Math.min(100, Math.round(((retrieval.receivedBytes || 0) / retrieval.size) * 100))}%` : ''}
-                            </span>
-                          ) : (
-                            <button
-                              onClick={() => void startRetrieve(rec)}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border bg-primary-600 text-white border-primary-600 hover:bg-primary-700 transition-colors shadow-sm"
-                              title="The recording is stored on the kiosk — pull it to the server to watch"
-                            >
-                              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2M12 4v12m0 0l-4-4m4 4l4-4" /></svg>
-                              Retrieve
-                            </button>
-                          )
-                        ) : (
-                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border bg-neutral-100 text-neutral-500 border-neutral-200">Not Available</span>
-                        )}
-                      </td>
                     </tr>
                   );
                 })}
@@ -533,24 +379,6 @@ export function CallHistoryPage() {
       </Card>
 
       {createPortal(<>
-        {playing && (
-          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setPlaying(null)}>
-            <div className="bg-white rounded-2xl p-4 max-w-3xl w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
-              <div className="flex justify-between items-center mb-3">
-                <h3 className="font-bold text-neutral-900">Recording — {playing.callId}</h3>
-                <button onClick={() => setPlaying(null)} className="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center text-neutral-500 hover:text-neutral-900">✕</button>
-              </div>
-              {!playing.url ? (
-                <p className="py-8 text-center text-sm text-neutral-500">Recording file could not be loaded.</p>
-              ) : calls.find((c) => c.callId === playing.callId)?.type === 'audio' ? (
-                <audio controls autoPlay src={playing.url || ''} className="w-full" />
-              ) : (
-                <video controls autoPlay src={playing.url || ''} className="w-full rounded-lg bg-black" style={{ maxHeight: '60vh' }} />
-              )}
-            </div>
-          </div>
-        )}
-
         {selected && (
           <div className="fixed inset-0 bg-black/60 z-[999]" onClick={() => setSelected(null)}>
             <div className="absolute inset-y-0 right-0 w-full max-w-lg bg-white shadow-2xl flex flex-col" onClick={(e) => e.stopPropagation()}>
@@ -599,7 +427,6 @@ export function CallHistoryPage() {
                     <div className="space-y-2">
                       <div className="flex justify-between"><span className="text-sm text-neutral-600">Quality</span><span className={`text-sm font-semibold ${selected.connectionQuality === 'excellent' ? 'text-success' : selected.connectionQuality === 'good' ? 'text-info' : selected.connectionQuality === 'fair' ? 'text-warning' : selected.connectionQuality === 'N/A' ? 'text-neutral-400' : 'text-error'}`}>{selected.connectionQuality || '—'}</span></div>
                       <div className="flex justify-between"><span className="text-sm text-neutral-600">Media Connected</span><span className="text-sm text-neutral-900">{selected.mediaConnectedAt ? fmtDateTime(selected.mediaConnectedAt) : 'Never'}</span></div>
-                      <div className="flex justify-between"><span className="text-sm text-neutral-600">Recording</span><span className="text-sm text-neutral-900">{selected.recordingStatus || '—'}</span></div>
                     </div>
                   </div>
 
@@ -632,45 +459,8 @@ export function CallHistoryPage() {
                     </div>
                   </div>
                 </div>
-
-                {detailUrl && (
-                  <div className="mt-6">
-                    <p className="text-sm font-semibold text-neutral-900 mb-2">Recording</p>
-                    <video controls src={detailUrl} className="w-full rounded-lg bg-black" />
-                    <a href={detailUrl} download className="mt-2 inline-block px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-bold hover:bg-primary-700">⬇ Download</a>
-                  </div>
-                )}
-
-                {!detailUrl && drawerRec?.storage === 'kiosk' && (
-                  <div className="mt-6">
-                    <p className="text-sm font-semibold text-neutral-900 mb-2">Recording</p>
-                    <p className="text-sm text-neutral-600 mb-3">This recording is stored on the kiosk. Retrieve it to watch or download.</p>
-                    {drawerRetrieving ? (
-                      <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold border bg-info-100 text-info border-info/20">
-                        <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none">
-                          <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
-                          <path d="M4 12a8 8 0 0 1 8-8" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
-                        </svg>
-                        Retrieving file…
-                      </span>
-                    ) : (
-                      <button
-                        onClick={() => void startRetrieve(drawerRec)}
-                        className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-bold hover:bg-primary-700"
-                      >
-                        ⬇ Retrieve from kiosk
-                      </button>
-                    )}
-                  </div>
-                )}
               </div>
             </div>
-          </div>
-        )}
-        {retrievalError && (
-          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[1000] flex items-center gap-3 px-4 py-3 bg-error text-white rounded-xl shadow-2xl text-sm font-semibold max-w-md">
-            <span>{retrievalError}</span>
-            <button onClick={() => setRetrievalError(null)} className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-xs shrink-0">✕</button>
           </div>
         )}
       </>, document.body)}

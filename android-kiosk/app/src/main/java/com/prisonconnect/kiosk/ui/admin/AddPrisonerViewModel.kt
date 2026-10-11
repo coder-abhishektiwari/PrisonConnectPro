@@ -2,6 +2,8 @@ package com.prisonconnect.kiosk.ui.admin
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.prisonconnect.kiosk.hardware.FingerprintHardwareManager
+import com.prisonconnect.kiosk.hardware.RfidReaderManager
 import com.prisonconnect.kiosk.models.admin.CreatePrisonerRequest
 import com.prisonconnect.kiosk.network.NetworkResult
 import com.prisonconnect.kiosk.repository.AdminRepository
@@ -14,11 +16,35 @@ import javax.inject.Inject
 
 @HiltViewModel
 class AddPrisonerViewModel @Inject constructor(
-    private val adminRepository: AdminRepository
+    private val adminRepository: AdminRepository,
+    private val rfidReaderManager: RfidReaderManager,
+    private val fingerprintHardwareManager: FingerprintHardwareManager
 ) : ViewModel() {
 
     private val _registrationState = MutableStateFlow<RegistrationState>(RegistrationState.Idle)
     val registrationState: StateFlow<RegistrationState> = _registrationState.asStateFlow()
+
+    /** Live hardware sessions consumed by the Security step's capture dialogs. */
+    val rfidState = rfidReaderManager.state
+    val fingerprintState = fingerprintHardwareManager.captureState
+
+    fun startCapture(type: String) {
+        if (type == "rfid") rfidReaderManager.startSession() else fingerprintHardwareManager.startCapture()
+    }
+
+    fun stopCapture() {
+        rfidReaderManager.stopSession()
+        fingerprintHardwareManager.stopCapture()
+    }
+
+    fun acknowledgeCapture(type: String) {
+        if (type == "rfid") rfidReaderManager.acknowledgeRead() else fingerprintHardwareManager.acknowledgeCapture()
+    }
+
+    /** HID wedge reader typed a card number into the dialog's hidden field. */
+    fun onRfidCardTapped(token: String) {
+        rfidReaderManager.onCardRead(token)
+    }
 
     fun registerPrisoner(
         values: com.prisonconnect.kiosk.models.admin.PrisonerFormValues,

@@ -134,6 +134,28 @@ function inmateGetHandler(req, res) {
 
 async function inmateCreateHandler(req, res) {
   const inmateData = stripRemovedInmateFields(req.body);
+  // Kiosk "Add Prisoner" sends the captured biometrics at the TOP level of
+  // the payload. Fold them into biometricData — the shape the identify
+  // endpoints (auth.js) and the Biometrics screen actually read — and drop
+  // the strays so a raw template never persists on the inmate record.
+  if (inmateData.fingerprintTemplate && !inmateData.biometricData?.fingerprintRegistered) {
+    inmateData.biometricData = {
+      ...(inmateData.biometricData || {}),
+      fingerprintRegistered: true,
+      fingerprintTemplate: String(inmateData.fingerprintTemplate),
+      lastBiometricUpdate: new Date().toISOString()
+    };
+  }
+  if (inmateData.rfidTag) {
+    inmateData.biometricData = {
+      ...(inmateData.biometricData || {}),
+      rfidRegistered: true,
+      rfidToken: String(inmateData.rfidTag).trim(),
+      lastBiometricUpdate: new Date().toISOString()
+    };
+  }
+  delete inmateData.fingerprintTemplate;
+  delete inmateData.rfidTag;
   const jailId = jailScopeOf(req);
   const kioskId = kioskScopeOf(req);
   if (jailId && inmateData.prisonId && inmateData.prisonId !== jailId) {
@@ -188,6 +210,18 @@ async function inmateCreateHandler(req, res) {
         err.code = 'DUPLICATE';
         throw err;
       }
+      // One biometrics[] record per registered type — the same ids/shape the
+      // POST /prisoners/:id/biometrics route writes, so the Biometrics screen
+      // lists captures made during inmate creation too.
+      const registeredAt = inmateData.biometricData?.lastBiometricUpdate || new Date().toISOString();
+      const biometrics = [
+        inmateData.biometricData?.fingerprintRegistered
+          ? { biometricId: `BIO-${inmateId}-FGP`, prisonerId: inmateId, type: 'fingerprint', status: 'registered', registeredAt }
+          : null,
+        inmateData.biometricData?.rfidRegistered
+          ? { biometricId: `BIO-${inmateId}-RFID`, prisonerId: inmateId, type: 'rfid', status: 'registered', registeredAt }
+          : null
+      ].filter(Boolean);
       const record = {
         ...inmateData,
         inmateId: inmateId,
@@ -203,6 +237,7 @@ async function inmateCreateHandler(req, res) {
         biometricData: await hashBiometricData(inmateData.biometricData || {
           fingerprintRegistered: false, rfidRegistered: false, lastBiometricUpdate: null
         }),
+        ...(biometrics.length ? { biometrics } : {}),
         createdAt: new Date().toISOString()
       };
       return { data: [...inmates, record], result: record };

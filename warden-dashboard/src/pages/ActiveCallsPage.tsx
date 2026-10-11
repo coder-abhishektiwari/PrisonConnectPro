@@ -125,17 +125,7 @@ export function ActiveCallsPage() {
     }
   };
 
-  const getRecordingBadge = (status: string) => {
-    switch (status) {
-      case 'recording': return 'bg-error/10 text-error';
-      case 'completed': return 'bg-success/10 text-success';
-      case 'failed': return 'bg-error/10 text-error';
-      default: return 'bg-neutral-100 text-neutral-600';
-    }
-  };
-
   const showToast = (message: string) => { setToast(message); setTimeout(() => setToast(null), 3000); };
-
   const handleForceEnd = async (call: ActiveCall) => {
     try {
       await wardenApi.endCall(call.callId);
@@ -235,10 +225,6 @@ export function ActiveCallsPage() {
                       <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border uppercase tracking-wide ${call.type==='video'?'bg-primary-600 text-white border-primary-600':'bg-info text-white border-info'}`}>
                         <span className="material-icons text-[13px]">{call.type==='video'?'videocam':'mic'}</span>
                         {call.type==='video'?'Video':'Audio'}
-                      </span>
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border uppercase tracking-wide ${getRecordingBadge(call.recordingStatus)}`}>
-                        <span className={`material-icons text-[13px] ${call.recordingStatus==='recording'?'animate-pulse':''}`}>fiber_manual_record</span>
-                        {call.recordingStatus || '—'}
                       </span>
                       <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border uppercase tracking-wide ${getQualityBadge(call.connectionQuality)}`}>
                         <span className="material-icons text-[13px]">signal_cellular_alt</span>
