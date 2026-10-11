@@ -238,6 +238,9 @@ fun KioskNavHost(
                 onPrisonerClick = { prisonerId ->
                     navController.navigate("admin_view_prisoner/$prisonerId")
                 },
+                onEditClick = { prisonerId ->
+                    navController.navigate("admin_edit_prisoner/$prisonerId")
+                },
                 onManageContactsClick = { prisonerId ->
                     navController.navigate("admin_prisoner_contacts/$prisonerId")
                 },

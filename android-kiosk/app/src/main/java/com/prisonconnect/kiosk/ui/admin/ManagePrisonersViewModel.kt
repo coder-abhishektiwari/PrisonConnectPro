@@ -39,8 +39,22 @@ class ManagePrisonersViewModel @Inject constructor(
     private val _togglingPrisonerId = MutableStateFlow<String?>(null)
     val togglingPrisonerId: StateFlow<String?> = _togglingPrisonerId.asStateFlow()
 
+    private val _resetPinState = MutableStateFlow<NetworkResult<String>?>(null)
+    val resetPinState: StateFlow<NetworkResult<String>?> = _resetPinState.asStateFlow()
+
     init {
         loadPrisoners()
+    }
+
+    fun resetPrisonerPin(prisonerId: String, pin: String) {
+        _resetPinState.value = NetworkResult.Loading
+        viewModelScope.launch {
+            _resetPinState.value = adminRepository.resetPrisonerPin(prisonerId, pin)
+        }
+    }
+
+    fun resetResetPinState() {
+        _resetPinState.value = null
     }
 
     fun refreshPrisoners() {
