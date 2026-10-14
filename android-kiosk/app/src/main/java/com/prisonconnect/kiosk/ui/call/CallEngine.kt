@@ -180,6 +180,9 @@ class CallEngine @Inject constructor(
     private var statsReportJob: Job? = null
     @Volatile private var callSessionActive = false
 
+    /** Video vs audio for the CURRENT session — gates the recorder start. */
+    @Volatile private var isVideoCallSession = true
+
     /**
      * Room this session is joined to. Signaling events carry a roomId and any
      * event for a different room belongs to a previous session — it must never
@@ -295,6 +298,10 @@ class CallEngine @Inject constructor(
                         // Audio health diagnostics: proves the mic track is
                         // live and enabled when family reports missing sound.
                         webRtcManager.logAudioHealth()
+                        // Recording begins with the REAL call (media up),
+                        // never during the pre-OTP lobby. A second CONNECTED
+                        // emission after a blip no-ops inside the recorder.
+                        webRtcManager.startSessionRecording(isVideoCallSession)
                         startTimer()
                         startStatsReporting()
                     }
@@ -410,6 +417,7 @@ class CallEngine @Inject constructor(
         reconnectJob?.cancel(); reconnectJob = null
         _timerSeconds.value = 0
         callSessionActive = false
+        isVideoCallSession = isVideoCall
         webRtcManager.endCall()
         webRtcManager.init(context, eglContext)
         webRtcManager.startCall(roomId, context, isVideoCall)

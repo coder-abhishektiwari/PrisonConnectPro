@@ -4,8 +4,6 @@ export interface WalletLinkInfo {
   inmateName: string;
   balance: number;
   currency: string;
-  /** Pending offline-cash request the inmate raised on the kiosk, else 0. */
-  requestedAmount: number;
   limits: { minRupees: number; maxRupees: number };
 }
 

@@ -54,7 +54,10 @@ export function CallHistoryPage() {
 
   // Live duration tick: an active call has durationMinutes=0 until the
   // backend finalizes it, so while any call is live the column is computed
-  // from its media-connect (or start) time and re-rendered every second.
+  // from its media-connect time and re-rendered every second. A call still
+  // in the lobby (created, mediaConnectedAt=null) shows 00:00 instead of
+  // counting from startTime — the clock used to restart the moment the
+  // anchor switched to mediaConnectedAt.
   const [now, setNow] = useState(() => Date.now());
   const hasLiveCall = calls.some((c) => c.status === 'active');
   useEffect(() => {
@@ -64,7 +67,8 @@ export function CallHistoryPage() {
   }, [hasLiveCall]);
 
   const liveDurationSeconds = (c: CallHistoryItem) => {
-    const start = new Date(c.mediaConnectedAt || c.startTime || '').getTime();
+    if (!c.mediaConnectedAt) return 0;
+    const start = new Date(c.mediaConnectedAt).getTime();
     if (!Number.isFinite(start) || start <= 0) return 0;
     return Math.max(0, Math.floor((now - start) / 1000));
   };

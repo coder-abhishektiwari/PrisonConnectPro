@@ -9,7 +9,7 @@ import { useCachedResource } from '@/hooks/useCachedResource';
 import { usePageHeader } from '@/context/PageHeaderContext';
 import { FilterDropdown } from '@/components/FilterDropdown';
 import type { ColumnFilter } from '@/components/FilterDropdown';
-import type { Inmate, ListParams, PaginatedResponse, Wallet, Transaction, WalletRequest } from '@/services/api/wardenApi';
+import type { Inmate, ListParams, PaginatedResponse, Wallet, Transaction } from '@/services/api/wardenApi';
 
 export function InmateFamilyPage() {
   const navigate = useNavigate();
@@ -20,7 +20,6 @@ export function InmateFamilyPage() {
 
   const [selectedWalletId, setSelectedWalletId] = useState<string | null>(null);
   const [tab, setTab] = useState<'all' | 'charge' | 'recharge'>('all');
-  const [reqLoading, setReqLoading] = useState(false);
 
   const params = useMemo<ListParams>(() => ({ limit: 100, offset: 0, search: searchPrisoner || undefined }), [searchPrisoner]);
 
@@ -64,13 +63,6 @@ export function InmateFamilyPage() {
     videoRate: Number((pricingData as any)?.video?.ratePerMinute ?? 2.5),
   }), [pricingData]);
 
-  const { data: requestsData, isLoading: requestsLoading, refresh: refreshRequests } = useCachedResource<WalletRequest[]>(
-    cacheKeys.walletRequests(),
-    () => wardenApi.getWalletRequests(),
-    { ttl: 30_000 },
-  );
-  const requests = requestsData ?? [];
-
   const { data: statement, refresh: refreshStatement } = useCachedResource<{ wallet: Wallet; transactions: Transaction[] }>(
     selectedWalletId ? cacheKeys.walletStatement(selectedWalletId) : null,
     () => wardenApi.getWalletStatement(selectedWalletId as string),
@@ -100,27 +92,6 @@ export function InmateFamilyPage() {
     setTab('all');
     setSelectedWalletId(inmateId);
   };
-
-  const approveRequest = async (reqId: string) => {
-    setReqLoading(true);
-    try {
-      await wardenApi.approveWalletRequest(reqId);
-      await Promise.all([refreshWallets(), refreshRequests(), refreshStatement(), refreshWallet(), refresh()]);
-    } catch (e: any) {
-      alert(e?.response?.data?.error?.message || e?.message || 'Approve failed');
-    } finally { setReqLoading(false); }
-  };
-
-  const rejectRequest = async (reqId: string) => {
-    setReqLoading(true);
-    try {
-      await wardenApi.rejectWalletRequest(reqId);
-      await refreshRequests();
-    } catch (e: any) {
-      alert(e?.response?.data?.error?.message || e?.message || 'Reject failed');
-    } finally { setReqLoading(false); }
-  };
-
 
   const headerIcon = useMemo(() => <span className="material-icons text-primary-600 text-xl">family_restroom</span>, []);
 
@@ -156,7 +127,6 @@ export function InmateFamilyPage() {
     ? walletsByInmate[selectedWalletId] || statementForSelected?.wallet || walletForSelected || null
     : null;
   const selectedInmate = selectedWalletId ? inmates.find(x => x.inmateId === selectedWalletId) || null : null;
-  const pendingForSelected = selectedWalletId ? requests.find(r => r.inmateId === selectedWalletId && r.status === 'pending') || null : null;
   const txns = statementForSelected?.transactions ?? [];
   const filteredTxns = txns.filter(t => {
     const type = String(t.type || '').toLowerCase();
@@ -223,7 +193,6 @@ export function InmateFamilyPage() {
                         if (walletsLoading && !w) return <SkeletonText />;
                         if (!w) return <span className="text-xs text-neutral-400">—</span>;
                         const isLowBalance = w.balance < (pricing.audioRate || 1) * 5;
-                        const pending = requests.find(r => r.inmateId === i.inmateId && r.status === 'pending');
                         return (
                           <button
                             onClick={e => openWallet(i.inmateId, e)}
@@ -237,7 +206,6 @@ export function InmateFamilyPage() {
                             <span className="material-icons" style={{ fontSize: '14px' }}>account_balance_wallet</span>
                             ₹{Number(w.balance).toLocaleString('en-IN')}
                             {isLowBalance && <span className="text-[9px] font-semibold uppercase">low</span>}
-                            {pending && <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse" title="Pending recharge request" />}
                           </button>
                         );
                       })()}
@@ -309,23 +277,6 @@ export function InmateFamilyPage() {
                     <p className="text-lg font-extrabold text-slate-800 mt-1 font-mono">{Math.floor(selectedWallet.balance / (pricing.videoRate || 2.5))}<span className="text-xs font-normal text-slate-400"> min</span></p>
                   </div>
                 </div>
-
-                {/* Pending Recharge Request */}
-                {pendingForSelected && (
-                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-[11px] uppercase tracking-wider font-bold text-amber-800">Pending Recharge Request</p>
-                        <p className="text-lg font-extrabold text-amber-700 mt-1 font-mono">₹{pendingForSelected.amount}</p>
-                        {pendingForSelected.reason && <p className="text-xs text-amber-700/80 mt-0.5">{pendingForSelected.reason}</p>}
-                      </div>
-                      <div className="flex gap-2">
-                        <button disabled={reqLoading} onClick={() => approveRequest(pendingForSelected.requestId)} className="w-9 h-9 flex items-center justify-center bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-bold disabled:opacity-50 transition-all shadow-sm" title="Approve"><span className="material-icons text-base">check</span></button>
-                        <button disabled={reqLoading} onClick={() => rejectRequest(pendingForSelected.requestId)} className="w-9 h-9 flex items-center justify-center bg-white hover:bg-slate-100 text-slate-600 border border-slate-300 rounded-lg text-sm disabled:opacity-50 transition-all" title="Reject"><span className="material-icons text-base">close</span></button>
-                      </div>
-                    </div>
-                  </div>
-                )}
 
                 {/* Tabs */}
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">

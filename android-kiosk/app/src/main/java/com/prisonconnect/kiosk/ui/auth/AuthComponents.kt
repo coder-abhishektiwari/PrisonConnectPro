@@ -357,7 +357,6 @@ fun HiddenRfidTapInput(
             digits = raw.filter { it.isDigit() }.take(cardLength)
             if (digits.length == cardLength) submit()
         },
-        readOnly = true, // CRITICAL: HID keystrokes only — soft keyboard NEVER opens
         enabled = enabled,
         singleLine = true,
         modifier = Modifier

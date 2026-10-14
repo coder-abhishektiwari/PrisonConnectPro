@@ -182,10 +182,16 @@ export function ActiveCallsPage() {
                       </span>
                     </div>
 
-                    {/* Live running clock — the broadcast-style core of the card */}
+                    {/* Live running clock — starts only once the call's media
+                        is actually connected (mediaConnectedAt). Before that
+                        the record exists but the family is still verifying in
+                        the lobby; ticking from startTime made the clock count
+                        the lobby AND restart when the real call began. */}
                     <div className="flex items-center justify-between gap-2 rounded-xl bg-neutral-900 px-3.5 py-2.5 shadow-inner">
                       <span className="text-[10px] font-bold uppercase tracking-widest text-neutral-400">Elapsed</span>
-                      <span className="font-mono text-lg font-bold tabular-nums text-white leading-none">{elapsedOf(call.startTime)}</span>
+                      <span className="font-mono text-lg font-bold tabular-nums text-white leading-none">
+                        {call.mediaConnectedAt ? elapsedOf(call.mediaConnectedAt) : 'Connecting…'}
+                      </span>
                     </div>
                     <p className="-mt-1.5 text-[11px] text-neutral-500 flex items-center gap-1.5" title={call.startTime}>
                       <span className="material-icons text-[13px] text-neutral-400">schedule</span>

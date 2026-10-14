@@ -39,7 +39,6 @@ import com.prisonconnect.kiosk.core.UiState
 import com.prisonconnect.kiosk.models.wallet.WalletTransaction
 import com.prisonconnect.kiosk.ui.components.KioskErrorState
 import com.prisonconnect.kiosk.ui.components.KioskLoadingState
-import com.prisonconnect.kiosk.ui.auth.IPhoneKeypad
 import com.prisonconnect.kiosk.ui.theme.LightBg
 import com.prisonconnect.kiosk.ui.theme.MoneyGreen
 import com.prisonconnect.kiosk.ui.theme.MoneyGreenBg
@@ -61,20 +60,8 @@ fun WalletScreen(
     viewModel: WalletViewModel = hiltViewModel()
 ) {
     val state by viewModel.walletState.collectAsState()
-    val requestState by viewModel.requestState.collectAsState()
     val isExpanded = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Expanded
     val snackbarHostState = remember { SnackbarHostState() }
-    var showRequestDialog by remember { mutableStateOf(false) }
-
-    // Success: close the dialog, toast, refresh. (Errors stay inside the dialog.)
-    val requestSuccess = requestState.successMessage
-    LaunchedEffect(requestSuccess) {
-        if (requestSuccess != null) {
-            showRequestDialog = false
-            snackbarHostState.showSnackbar(requestSuccess)
-            viewModel.clearRequestEvent()
-        }
-    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -117,7 +104,6 @@ fun WalletScreen(
                         ) {
                             WalletSummaryCard(
                                 data = s.data,
-                                onRequestClick = { showRequestDialog = true },
                                 modifier = Modifier.weight(0.8f)
                             )
                             WalletTransactionsCard(
@@ -131,10 +117,7 @@ fun WalletScreen(
                                 .fillMaxSize()
                                 .padding(16.dp)
                         ) {
-                            WalletSummaryCard(
-                                data = s.data,
-                                onRequestClick = { showRequestDialog = true }
-                            )
+                            WalletSummaryCard(data = s.data)
                             Spacer(modifier = Modifier.height(16.dp))
                             WalletTransactionsCard(
                                 data = s.data,
@@ -147,104 +130,12 @@ fun WalletScreen(
             }
         }
     }
-
-    if (showRequestDialog) {
-        RequestBalanceDialog(
-            state = requestState,
-            onConfirm = { rupees -> viewModel.requestBalance(rupees) },
-            onDismiss = {
-                viewModel.clearRequestEvent()
-                showRequestDialog = false
-            }
-        )
-    }
 }
 
-/**
- * Amount keypad dialog: family ko paisa bhejne ka request.
- * AlertDialog must always carry confirmButton (material3 crashes without it).
- */
-@Composable
-private fun RequestBalanceDialog(
-    state: WalletViewModel.RequestState,
-    onConfirm: (Int) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var amountInput by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = { if (!state.submitting) onDismiss() },
-        title = {
-            Text(
-                text = "Request Balance",
-                fontWeight = FontWeight.Bold,
-                color = PrimaryDarkNavy,
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center
-            )
-        },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "How much should your family send?",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextGray
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                Text(
-                    text = if (amountInput.isEmpty()) "\u20B90" else "\u20B9$amountInput",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = PrimaryDarkNavy
-                )
-                state.error?.let { err ->
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = err,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                        textAlign = TextAlign.Center
-                    )
-                }
-                Spacer(modifier = Modifier.height(14.dp))
-                IPhoneKeypad(
-                    onNumberClick = { digit -> if (amountInput.length < 6) amountInput += digit },
-                    onDeleteClick = { amountInput = amountInput.dropLast(1) }
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { amountInput.toIntOrNull()?.let(onConfirm) },
-                enabled = !state.submitting && (amountInput.toIntOrNull() ?: 0) in 10..2000
-            ) {
-                if (state.submitting) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        strokeWidth = 2.dp,
-                        color = PrimaryNavy
-                    )
-                } else {
-                    Text("Send Request", color = PrimaryNavy, fontWeight = FontWeight.Bold)
-                }
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = { if (!state.submitting) onDismiss() }) {
-                Text("Cancel", color = TextGray)
-            }
-        }
-    )
-}
-
-/** Balance + Request Balance button — ek hi card me. */
+/** Balance card — family wallet-link se hi paisa aata hai, koi request UI nahi. */
 @Composable
 private fun WalletSummaryCard(
     data: WalletViewModel.WalletUiData,
-    onRequestClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -285,15 +176,6 @@ private fun WalletSummaryCard(
                 )
             }
             }
-            //Spacer(modifier = Modifier.height(4.dp))
-            //OutlinedButton(
-            //    onClick = onRequestClick,
-            //    modifier = Modifier
-            //        .fillMaxWidth()
-            //        .padding(horizontal = 16.dp, vertical = 12.dp)
-            //) {
-            //    Text("Request Balance from Family", fontWeight = FontWeight.SemiBold)
-            //}
         }
     }
 }

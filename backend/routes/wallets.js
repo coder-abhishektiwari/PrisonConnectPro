@@ -1,10 +1,9 @@
 const express = require('express');
-const { readDb, updateDb } = require('../lib/db');
+const { readDb } = require('../lib/db');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { sendSuccess, sendError, asyncRoute } = require('../lib/response');
 const { scopeList, inScopeOf } = require('../lib/scoping');
 const { paginate } = require('../lib/paginate');
-const { v4: uuidv4 } = require('uuid');
 const { deriveSummary } = require('../lib/jail-account');
 
 const router = express.Router();
@@ -48,88 +47,8 @@ router.get('/:inmateId', requireAuth, requireRole('admin', 'warden', 'kiosk_admi
   return sendSuccess(res, { ...wallet, ...summary });
 }));
 
-// POST /wallets/:inmateId/recharge — recharge wallet
-router.post('/:inmateId/recharge', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
-  const { amount, description } = req.body;
-  if (!amount || amount <= 0) return sendError(res, 'BAD_REQUEST', 'Invalid amount');
-
-  const wallets = await readDb('wallets.json');
-  let wallet = wallets.find((w) => w.inmateId === req.params.inmateId);
-
-  // Scope check: verify warden can access this inmate
-  if (wallet) {
-    if (!(await inScopeOf(req, wallet))) return sendError(res, 'NOT_FOUND', 'Wallet not found', 404);
-  } else {
-    // New wallet — verify the inmate belongs to warden's prison
-    const inmates = await readDb('inmates.json');
-    const inmate = inmates.find((i) => i.inmateId === req.params.inmateId);
-    if (!inmate || !(await inScopeOf(req, inmate))) return sendError(res, 'NOT_FOUND', 'Inmate not found', 404);
-  }
-
-  const transaction = {
-    transactionId: `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
-    walletId: wallet ? wallet.walletId : null,
-    inmateId: req.params.inmateId,
-    type: 'recharge',
-    status: 'completed',
-    amount: Number(amount),
-    description: description || 'Wallet recharge',
-    timestamp: new Date().toISOString(),
-    performedBy: req.auth?.sub || 'system'
-  };
-
-  if (wallet) {
-    // Update existing wallet
-    await updateDb('wallets.json', (all) => {
-      const idx = all.findIndex((w) => w.inmateId === req.params.inmateId);
-      if (idx !== -1) {
-        all[idx].balance = (all[idx].balance || 0) + Number(amount);
-        all[idx].lastRecharge = new Date().toISOString();
-        all[idx].lastRechargeAmount = Number(amount);
-        all[idx].totalRecharged = (all[idx].totalRecharged || 0) + Number(amount);
-        all[idx].updatedAt = new Date().toISOString();
-      }
-      return { data: all, result: all[idx] };
-    });
-
-    // Record transaction
-    await updateDb('transactions.json', (all) => {
-      all.push(transaction);
-      return { data: all, result: transaction };
-    });
-
-    // Re-read wallet to get updated data
-    const updatedWallets = await readDb('wallets.json');
-    const updatedWallet = updatedWallets.find((w) => w.inmateId === req.params.inmateId);
-    return sendSuccess(res, { wallet: updatedWallet, transaction });
-  } else {
-    // Create new wallet
-    const newWallet = {
-      walletId: `WAL-${Date.now()}`,
-      inmateId: req.params.inmateId,
-      balance: Number(amount),
-      currency: 'INR',
-      totalSpent: 0,
-      totalRecharged: Number(amount),
-      lastRecharge: new Date().toISOString(),
-      lastRechargeAmount: Number(amount),
-      remainingMinutes: 0,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-
-    await updateDb('wallets.json', (all) => {
-      all.push(newWallet);
-      return { data: all, result: newWallet };
-    });
-
-    await updateDb('transactions.json', (all) => {
-      all.push(transaction);
-      return { data: all, result: transaction };
-    });
-
-    return sendSuccess(res, { wallet: newWallet, transaction });
-  }
-}));
+// POST /wallets/:inmateId/recharge was REMOVED: wallet money can only enter
+// through the family Razorpay wallet-link flow (routes/wallet-link.js), where
+// the amount is enforced by the gateway's own payment entity.
 
 module.exports = router;

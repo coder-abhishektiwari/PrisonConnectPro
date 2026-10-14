@@ -54,6 +54,15 @@ const io = new Server(server, {
 });
 
 app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
+// Wallet-link payment endpoints only ever receive tiny JSON bodies ({amount}
+// or three short strings). Reject oversized payloads BEFORE the global parser
+// touches them — cheap flood guard on the money surface. Runs pre-parse on
+// purpose: router-level checks would fire after the body was already read.
+app.use('/family/wallet-link', (req, res, next) => {
+  const len = Number(req.headers['content-length']) || 0;
+  if (len > 8 * 1024) return sendError(res, 'PAYLOAD_TOO_LARGE', 'Request body too large', 413);
+  next();
+});
 // verify keeps the original bytes so the Razorpay webhook can HMAC its raw
 // body (the parsed req.body would fail signature verification).
 app.use(express.json({
@@ -217,158 +226,9 @@ app.get('/reports/:reportId', requireAuth, requireRole('admin', 'warden'), async
 }));
 
 // ==================== WALLET REQUESTS ====================
-app.get('/wallet-requests', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
-  const all = await readDb('wallet-requests.json');
-  return sendSuccess(res, await scopeList(req, all));
-}));
-
-app.post('/wallet-requests', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
-  const { inmateId, amount, reason } = req.body;
-  if (!inmateId || !amount) return sendError(res, 'BAD_REQUEST', 'inmateId and amount required');
-
-  const request = {
-    requestId: `WR-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
-    inmateId,
-    amount: Number(amount),
-    reason: reason || '',
-    status: 'pending',
-    requestedBy: req.auth?.sub || 'system',
-    requestedAt: new Date().toISOString(),
-    reviewedBy: null,
-    reviewedAt: null
-  };
-
-  await updateDb('wallet-requests.json', (all) => {
-    all.push(request);
-    return { data: all, result: request };
-  });
-
-  return sendSuccess(res, request);
-}));
-
-app.patch('/wallet-requests/:requestId/approve', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
-  const { requestId } = req.params;
-
-  // Claim the request INSIDE the wallet-requests mutex. The `pending` check
-  // has to be part of the same atomic write it flips: reading it first and
-  // writing later let two concurrent approves both see 'pending' and both
-  // credit the wallet.
-  const claim = await updateDb('wallet-requests.json', (data) => {
-    const i = data.findIndex((r) => r.requestId === requestId);
-    if (i === -1) return { data, result: { notFound: true } };
-    if (data[i].status !== 'pending') {
-      return { data, result: { alreadyProcessed: true, request: data[i] } };
-    }
-    data[i] = {
-      ...data[i],
-      status: 'approved',
-      reviewedBy: req.auth?.sub || 'system',
-      reviewedAt: new Date().toISOString(),
-    };
-    return { data, result: { request: data[i] } };
-  });
-
-  if (!claim || !claim.request) return sendError(res, 'NOT_FOUND', 'Request not found', 404);
-  if (claim.alreadyProcessed) return sendError(res, 'BAD_REQUEST', 'Request already processed', 400);
-
-  const approvedRequest = claim.request;
-  const { inmateId, amount } = approvedRequest;
-
-  // Second line of defence: the ledger is what the balance is derived from,
-  // so never write a second recharge row for the same request.
-  const priorCredit = (await readDb('transactions.json'))
-    .find((t) => t.requestId === requestId && t.type === 'recharge');
-  if (priorCredit) {
-    console.warn(`[wallet] request ${requestId} already credited (${priorCredit.transactionId}) — skipping`);
-    const existing = await readDb('wallets.json');
-    return sendSuccess(res, {
-      request: approvedRequest,
-      wallet: existing.find((w) => w.inmateId === inmateId) || null,
-      transaction: priorCredit,
-    });
-  }
-
-  const transaction = {
-    transactionId: `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
-    walletId: null,
-    requestId,
-    inmateId,
-    type: 'recharge',
-    status: 'completed',
-    amount: Number(amount),
-    description: 'Approved wallet request',
-    timestamp: new Date().toISOString(),
-    performedBy: req.auth?.sub || 'system'
-  };
-
-  // Create-or-credit in ONE write: a concurrent request may have created this
-  // wallet between our read and this update.
-  const walletRes = await updateDb('wallets.json', (data) => {
-    const i = data.findIndex((w) => w.inmateId === inmateId);
-    if (i !== -1) {
-      data[i] = {
-        ...data[i],
-        balance: (data[i].balance || 0) + Number(amount),
-        lastRecharge: new Date().toISOString(),
-        lastRechargeAmount: Number(amount),
-        totalRecharged: (data[i].totalRecharged || 0) + Number(amount),
-        updatedAt: new Date().toISOString()
-      };
-      return { data, result: data[i] };
-    }
-    const created = {
-      walletId: `WAL-${Date.now()}`,
-      inmateId,
-      balance: Number(amount),
-      currency: 'INR',
-      totalSpent: 0,
-      totalRecharged: Number(amount),
-      lastRecharge: new Date().toISOString(),
-      lastRechargeAmount: Number(amount),
-      remainingMinutes: 0,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    data.push(created);
-    return { data, result: created };
-  });
-  const wallet = walletRes && typeof walletRes.walletId === 'string' ? walletRes : null;
-  if (wallet) transaction.walletId = wallet.walletId;
-
-  await updateDb('transactions.json', (data) => {
-    data.push(transaction);
-    return { data, result: transaction };
-  });
-
-  return sendSuccess(res, { request: approvedRequest, wallet, transaction });
-}));
-
-app.patch('/wallet-requests/:requestId/reject', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
-  const { requestId } = req.params;
-  const { reason } = req.body;
-
-  // Same atomic claim as approve — the pending check must live in the write.
-  const claim = await updateDb('wallet-requests.json', (data) => {
-    const i = data.findIndex((r) => r.requestId === requestId);
-    if (i === -1) return { data, result: { notFound: true } };
-    if (data[i].status !== 'pending') {
-      return { data, result: { alreadyProcessed: true, request: data[i] } };
-    }
-    data[i] = {
-      ...data[i],
-      status: 'rejected',
-      reviewedBy: req.auth?.sub || 'system',
-      reviewedAt: new Date().toISOString(),
-      rejectionReason: reason || ''
-    };
-    return { data, result: { request: data[i] } };
-  });
-
-  if (!claim || !claim.request) return sendError(res, 'NOT_FOUND', 'Request not found', 404);
-  if (claim.alreadyProcessed) return sendError(res, 'BAD_REQUEST', 'Request already processed', 400);
-
-  return sendSuccess(res, claim.request);
-}));
+// REMOVED: the warden approve/reject inbox, admin-created requests and the
+// inmate keypad request are gone. Wallet money enters only through the family
+// Razorpay wallet-link flow (routes/wallet-link.js).
 
 // ==================== WARDENS ====================
 // A warden's prison can be missing from the token (accounts created before a
@@ -902,58 +762,8 @@ app.get('/inmate/wallet/:inmateId', requireAuth, asyncRoute(async (req, res) => 
 }));
 
 // ==================== INMATE: REQUEST BALANCE (kiosk) ====================
-// The inmate asks the family to send money from the kiosk keypad. The request
-// surfaces as `requestedAmount` on the family wallet link page and as a
-// pending row in the existing warden approve/reject inbox. Shape matches the
-// admin-created requests so the approve/reject flow needs no changes.
-app.post('/inmate/wallet-requests', requireAuth, requireRole('inmate'), asyncRoute(async (req, res) => {
-  const inmateId = req.auth?.inmateId || req.auth?.sub;
-  const amount = req.body && req.body.amount;
-  const minRupees = Math.max(1, Number(process.env.WALLET_MIN_RUPEES) || 10);
-  const maxRupees = Math.max(minRupees, Number(process.env.WALLET_MAX_RUPEES) || 2000);
-  if (!Number.isInteger(amount) || amount < minRupees || amount > maxRupees) {
-    return sendError(res, 'INVALID_AMOUNT', `Amount must be a whole number between Rs.${minRupees} and Rs.${maxRupees}`, 400);
-  }
-
-  const inmates = await readDb('inmates.json');
-  const inmate = inmates.find((i) => i.inmateId === inmateId);
-  if (!inmate || (inmate.status && inmate.status !== 'active')) {
-    return sendError(res, 'NOT_FOUND', 'Record not found', 404);
-  }
-
-  const mine = (await readDb('wallet-requests.json'))
-    .filter((r) => r.inmateId === inmateId || r.inmateId === `INM-${inmateId}`);
-  if (mine.some((r) => String(r.status || '').toLowerCase() === 'pending')) {
-    return sendError(res, 'PENDING_EXISTS', 'You already have a request waiting for approval', 409);
-  }
-  const dayStart = new Date();
-  dayStart.setUTCHours(0, 0, 0, 0);
-  const todayCount = mine.filter((r) => new Date(r.requestedAt || 0).getTime() >= dayStart.getTime()).length;
-  if (todayCount >= 3) {
-    return sendError(res, 'DAILY_LIMIT', 'You have sent the maximum of 3 requests today. Try again tomorrow.', 429);
-  }
-
-  const now = new Date().toISOString();
-  const request = {
-    requestId: `WR-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
-    inmateId,
-    amount,
-    reason: typeof (req.body && req.body.note) === 'string' ? req.body.note.slice(0, 140) : '',
-    status: 'pending',
-    source: 'inmate',
-    requestedBy: inmateId,
-    requestedAt: now,
-    reviewedBy: null,
-    reviewedAt: null
-  };
-
-  await updateDb('wallet-requests.json', (all) => {
-    all.push(request);
-    return { data: all, result: request };
-  });
-
-  return sendSuccess(res, request, 201);
-}));
+// REMOVED: the kiosk keypad "request balance" flow. Family sees only the
+// wallet-link page now — no pending request signal, no warden inbox.
 
 // Admin router mounted AFTER explicit /admin routes
 app.use('/admin', requireAuth, adminRouter);

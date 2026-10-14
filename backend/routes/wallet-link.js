@@ -3,18 +3,19 @@
  *
  * The token is the only credential: it authorises exactly three calls, all
  * scoped to one contact/one inmate:
- *   GET  /family/wallet-link/:token/info    - masked inmate name, balance copy,
- *                                             pending requested amount (no ids)
+ *   GET  /family/wallet-link/:token/info    - masked inmate name, balance copy
  *   POST /family/wallet-link/:token/order   - create a Razorpay order (min/max
  *                                             + rolling-24h cap enforced)
  *   POST /family/wallet-link/:token/verify  - verify signature, credit net
  *                                             (idempotent with the webhook)
  *
- * Hardening: per-IP rate limits, strict family-web Origin on writes, no-store
- * on every response, generic 410 for dead links (no probing), tokens never
- * logged and never echoed back.
+ * Hardening: per-IP rate limits AND a per-token limit (so a distributed scan
+ * of one token still stalls), strict family-web Origin on writes, no-store on
+ * every response, generic 410 for dead links (no probing), tokens never
+ * logged and never echoed back, structured audit lines on money events.
  */
 const express = require('express');
+const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
 const { sendSuccess, sendError, asyncRoute } = require('../lib/response');
 const { readDb } = require('../lib/db');
@@ -39,6 +40,19 @@ const infoLimiter = rateLimit({ windowMs: 60_000, limit: 20, standardHeaders: tr
 const orderLimiter = rateLimit({ windowMs: 60_000, limit: 5, standardHeaders: true, legacyHeaders: false, message: rateMessage });
 const verifyLimiter = rateLimit({ windowMs: 60_000, limit: 10, standardHeaders: true, legacyHeaders: false, message: rateMessage });
 
+// Per-TOKEN ceiling (60/hour across all three endpoints, key = sha256 of the
+// token, never the raw token in memory). Per-IP limits alone don't stop a
+// distributed scan of one token; this caps it regardless of source IP. Hashed
+// key so a memory dump can't recover the bearer from the limiter store.
+const tokenLimiter = rateLimit({
+  windowMs: 60 * 60_000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: rateMessage,
+  keyGenerator: (req) => crypto.createHash('sha256').update(String(req.params.token || '')).digest('hex').slice(0, 32),
+});
+
 /** Reject browser calls from anywhere but the family portal itself. */
 function familyOriginOnly(req, res, next) {
   const origin = req.headers.origin;
@@ -59,6 +73,9 @@ function noStore(res) {
 async function resolveLink(req, res) {
   const link = await findActiveLink(req.params.token);
   if (!link) {
+    // Audit: a dead-link probe usually means a copied/expired link or an
+    // active token scan. Log the source IP only — never the token itself.
+    console.warn(`[wallet-link] dead-link probe ip=${req.ip} method=${req.method} path=${req.baseUrl}${req.path}`);
     sendError(res, 'LINK_INVALID', 'This link is no longer valid. Ask the jail office to send you a new one.', 410);
     return null;
   }
@@ -84,29 +101,18 @@ async function balanceCopy(inmateId) {
   return stmt && stmt.wallet ? (Number(stmt.wallet.balance) || 0) : 0;
 }
 
-/** Latest pending offline-cash request amount for the inmate (0 when none). */
-async function pendingRequestedAmount(inmateId) {
-  const requests = await readDb('wallet-requests.json');
-  const mine = requests
-    .filter((r) => (r.inmateId === inmateId || r.inmateId === `INM-${inmateId}` || `INM-${r.inmateId}` === inmateId) &&
-      String(r.status || '').toLowerCase() === 'pending')
-    .sort((a, b) => new Date(b.requestedAt || b.createdAt || 0) - new Date(a.requestedAt || a.createdAt || 0));
-  return mine.length ? (Number(mine[0].amount) || 0) : 0;
-}
-
 // ---------------------------------------------------------------------------
 // GET /family/wallet-link/:token/info - the only read the family ever makes.
 // ---------------------------------------------------------------------------
-router.get('/wallet-link/:token/info', infoLimiter, asyncRoute(async (req, res) => {
+router.get('/wallet-link/:token/info', tokenLimiter, infoLimiter, asyncRoute(async (req, res) => {
   noStore(res);
   const link = await resolveLink(req, res);
   if (!link) return;
 
-  const [inmate, contact, balance, requestedAmount] = await Promise.all([
+  const [inmate, contact, balance] = await Promise.all([
     findInmate(link.inmateId),
     findContact(link.contactId),
     balanceCopy(link.inmateId),
-    pendingRequestedAmount(link.inmateId),
   ]);
   if (!inmate || !contact) {
     return sendError(res, 'LINK_INVALID', 'This link is no longer valid. Ask the jail office to send you a new one.', 410);
@@ -119,7 +125,6 @@ router.get('/wallet-link/:token/info', infoLimiter, asyncRoute(async (req, res) 
     inmateName: personName(inmate),
     balance,
     currency: 'INR',
-    requestedAmount,
     limits: { minRupees: MIN_RUPEES, maxRupees: MAX_RUPEES },
   });
 }));
@@ -127,7 +132,7 @@ router.get('/wallet-link/:token/info', infoLimiter, asyncRoute(async (req, res) 
 // ---------------------------------------------------------------------------
 // POST /family/wallet-link/:token/order - start a Razorpay checkout.
 // ---------------------------------------------------------------------------
-router.post('/wallet-link/:token/order', orderLimiter, familyOriginOnly, asyncRoute(async (req, res) => {
+router.post('/wallet-link/:token/order', tokenLimiter, orderLimiter, familyOriginOnly, asyncRoute(async (req, res) => {
   noStore(res);
   const link = await resolveLink(req, res);
   if (!link) return;
@@ -179,6 +184,9 @@ router.post('/wallet-link/:token/order', orderLimiter, familyOriginOnly, asyncRo
   });
   if (!attempt) return sendError(res, 'ORDER_EXISTS', 'A payment attempt for this order already exists', 409);
 
+  // Audit: money event. ids + amount + source IP; token deliberately absent.
+  console.log(`[wallet-link] order-created orderId=${order.id} contact=${contact.contactId} inmate=${link.inmateId} paise=${amountPaise} ip=${req.ip}`);
+
   return sendSuccess(res, {
     orderId: order.id,
     amountPaise,
@@ -192,7 +200,7 @@ router.post('/wallet-link/:token/order', orderLimiter, familyOriginOnly, asyncRo
 // POST /family/wallet-link/:token/verify - signature-checked, net-of-charges
 // credit. Same helper as the webhook, so a double call credits once.
 // ---------------------------------------------------------------------------
-router.post('/wallet-link/:token/verify', verifyLimiter, familyOriginOnly, asyncRoute(async (req, res) => {
+router.post('/wallet-link/:token/verify', tokenLimiter, verifyLimiter, familyOriginOnly, asyncRoute(async (req, res) => {
   noStore(res);
   const link = await resolveLink(req, res);
   if (!link) return;
@@ -207,6 +215,8 @@ router.post('/wallet-link/:token/verify', verifyLimiter, familyOriginOnly, async
     return sendError(res, 'ORDER_NOT_FOUND', 'Payment session not found for this link', 404);
   }
   if (!verifyPaymentSignature(razorpayOrderId, razorpayPaymentId, razorpaySignature)) {
+    // Audit: bad signature on a known order = tamper attempt worth seeing.
+    console.warn(`[wallet-link] signature-rejected orderId=${razorpayOrderId} contact=${link.contactId} ip=${req.ip}`);
     return sendError(res, 'SIGNATURE_INVALID', 'Payment verification failed', 400);
   }
 
@@ -216,9 +226,14 @@ router.post('/wallet-link/:token/verify', verifyLimiter, familyOriginOnly, async
       return sendError(res, 'PAYMENT_NOT_CAPTURED', 'Payment is not captured yet', 400);
     }
     if (out.reason === 'amount_mismatch' || out.reason === 'order_mismatch' || out.reason === 'payment_id_mismatch') {
+      console.warn(`[wallet-link] credit-rejected reason=${out.reason} orderId=${razorpayOrderId} ip=${req.ip}`);
       return sendError(res, 'SIGNATURE_INVALID', 'Payment verification failed', 400);
     }
     throw new Error(`wallet credit failed for ${razorpayOrderId}: ${out.reason}`);
+  }
+
+  if (!out.alreadyCredited) {
+    console.log(`[wallet-link] credited orderId=${razorpayOrderId} contact=${link.contactId} inmate=${link.inmateId} netPaise=${out.netPaise} tx=${out.transactionId} ip=${req.ip}`);
   }
 
   return sendSuccess(res, {

@@ -236,10 +236,10 @@ class WebRtcManager @Inject constructor(
             }
         }
 
-        // Record on the kiosk side for the whole session; upload+verify+delete
-        // runs when stopRecordingAndUpload() fires during endCall().
-        callRecorder.setCallInfo(roomId)
-        callRecorder.startRecording(eglBaseContext, isVideoCall)
+        // Recording is intentionally NOT started here. The lobby (pre-OTP
+        // wait) must not be captured — CallEngine starts it via
+        // startSessionRecording() once the peer connection reaches CONNECTED,
+        // so the file, timer and billing all begin with the real call.
 
         // Optimistic navigation: the POST /calls may still be in flight, and
         // the signaling socket authenticates with the backend-minted token.
@@ -260,6 +260,22 @@ class WebRtcManager @Inject constructor(
             callRepository.initSignaling()
             callRepository.joinRoom(roomId, peerId)
         }
+    }
+
+    /**
+     * Starts kiosk-side recording for the CURRENT session. Called by
+     * CallEngine only when the peer connection reaches CONNECTED, so the
+     * lobby (camera on, family still verifying) is never written to disk.
+     * Safe to call repeatedly — [KioskCallRecorder] no-ops while running.
+     */
+    fun startSessionRecording(isVideoCall: Boolean) {
+        val room = currentRoomId
+        if (room.isEmpty()) {
+            Logger.w("startSessionRecording skipped - no active room")
+            return
+        }
+        callRecorder.setCallInfo(room)
+        callRecorder.startRecording(eglBaseContext, isVideoCall)
     }
 
     private fun handleJoined(gen: Int, joinAck: JSONObject) {

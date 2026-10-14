@@ -24,44 +24,8 @@ class WalletViewModel @Inject constructor(
     private val _walletState = MutableStateFlow<UiState<WalletUiData>>(UiState.Loading)
     val walletState = _walletState.asStateFlow()
 
-    private val _requestState = MutableStateFlow(RequestState())
-    val requestState = _requestState.asStateFlow()
-
     init {
         loadWallet()
-    }
-
-    /** One-shot "request balance" dialog state: submit progress, error, success. */
-    data class RequestState(
-        val submitting: Boolean = false,
-        val error: String? = null,
-        val successMessage: String? = null
-    )
-
-    fun requestBalance(amount: Int) {
-        if (_requestState.value.submitting) return
-        _requestState.value = RequestState(submitting = true)
-        viewModelScope.launch {
-            inmateRepository.requestBalance(amount).collect { result ->
-                when (result) {
-                    is com.prisonconnect.kiosk.network.NetworkResult.Success -> {
-                        val rupees = String.format("%.2f", result.data.amount)
-                        _requestState.value = RequestState(
-                            successMessage = "Request sent for \u20B9$rupees - the warden will review it"
-                        )
-                        loadWallet()
-                    }
-                    is com.prisonconnect.kiosk.network.NetworkResult.Failure -> {
-                        _requestState.value = RequestState(error = result.error.message)
-                    }
-                    else -> Unit
-                }
-            }
-        }
-    }
-
-    fun clearRequestEvent() {
-        _requestState.value = RequestState()
     }
 
     fun loadWallet() {

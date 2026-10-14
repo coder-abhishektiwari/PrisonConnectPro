@@ -2,6 +2,9 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- Wallet links carry a bearer token in the URL; never leak it to any
+         third party through a Referer header (Razorpay iframe included). -->
+    <meta name="referrer" content="no-referrer" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta name="description" content="PrisonConnect Secure Family Calling Portal — Join scheduled secure video and audio calls with verified inmates." />

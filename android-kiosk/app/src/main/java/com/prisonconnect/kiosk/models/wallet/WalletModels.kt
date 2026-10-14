@@ -63,18 +63,3 @@ data class WalletTransaction(
             return "Paid \u20B9${String.format("%.2f", gross)} \u00B7 charges \u20B9${String.format("%.2f", charges)}"
         }
 }
-
-/** POST /inmate/wallet-requests body (kiosk keypad amount request). */
-data class WalletRequestPayload(
-    @SerializedName("amount") val amount: Int,
-    @SerializedName("note") val note: String? = null
-)
-
-/** Pending balance request row returned by POST /inmate/wallet-requests. */
-data class WalletRequest(
-    @SerializedName("requestId") val requestId: String,
-    @SerializedName("inmateId") val inmateId: String,
-    @SerializedName("amount") val amount: Double,
-    @SerializedName("status") val status: String = "pending",
-    @SerializedName("requestedAt") val requestedAt: String? = null
-)

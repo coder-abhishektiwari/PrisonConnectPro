@@ -222,15 +222,6 @@ export function WalletLinkPage() {
         </p>
       </div>
 
-      {info.requestedAmount > 0 && (
-        <div className="mt-3 p-3 rounded-xl border border-warning/40 bg-warning/10 text-center">
-          <p className="text-sm text-neutral-800">
-            Requested: <span className="font-semibold font-mono">&#8377;{info.requestedAmount.toLocaleString('en-IN')}</span>
-          </p>
-          <p className="text-xs text-neutral-600 mt-0.5">Your family member asked for this amount from the kiosk.</p>
-        </div>
-      )}
-
       <div className="mt-6">
         <Input
           label="Amount to send (Rs.)"

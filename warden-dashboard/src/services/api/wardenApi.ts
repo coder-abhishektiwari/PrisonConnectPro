@@ -91,6 +91,8 @@ export interface ActiveCall {
   type: 'audio' | 'video';
   status: string;
   startTime: string;
+  /** Set once the kiosk reports media connected; null while still in lobby. */
+  mediaConnectedAt?: string | null;
   endTime: string | null;
   durationMinutes: number;
   recordingEnabled: boolean;
@@ -360,21 +362,6 @@ export interface Wallet {
   minVideoBalance?: number;
 }
 
-export interface WalletRequest {
-  requestId: string;
-  walletId?: string;
-  inmateId: string;
-  prisonId?: string | null;
-  amount: number;
-  reason?: string;
-  status: 'pending' | 'approved' | 'rejected';
-  requestedBy?: string;
-  reviewedBy?: string | null;
-  rejectionReason?: string;
-  requestedAt: string;
-  reviewedAt?: string | null;
-}
-
 export interface Transaction {
   transactionId: string;
   walletId?: string;
@@ -523,7 +510,6 @@ export const cacheKeys = {
   wallets: (params?: ListParams) => listKey('wallets:list', params),
   wallet: (inmateId: string) => `wallets:${inmateId}`,
   walletStatement: (inmateId: string) => `wallet:stmt:${inmateId}`,
-  walletRequests: () => 'wallet-requests',
   kiosks: () => 'kiosks:list',
   kioskRegistrations: (params?: ListParams) => listKey('kiosks:registration', params),
   kioskRegistrationStats: () => 'kiosks:registration:stats',
@@ -748,34 +734,6 @@ export const wardenApi = {
       () => apiClient.get<ApiResponse<{ wallet: Wallet; transactions: Transaction[] }>>(`/inmate/wallet/${inmateId}`).then((r) => r.data?.data ?? { wallet: null as any, transactions: [] }),
       30_000,
     ),
-
-  rechargeWallet: (inmateId: string, amount: number, description?: string) =>
-    apiClient.post<ApiResponse<{ wallet: Wallet; transaction: Transaction }>>(`/wallets/${inmateId}/recharge`, { amount, description }).then((r) => {
-      invalidatePrefix('wallets', `wallets:${inmateId}`);
-      return r.data?.data;
-    }),
-
-  // Wallet Money Requests (inmate requests warden to add money)
-  getWalletRequests: () =>
-    cachedGet('wallet-requests', () => apiClient.get<ApiResponse<WalletRequest[]>>('/wallet-requests').then((r) => r.data?.data ?? [])),
-
-  createWalletRequest: (inmateId: string, amount: number, reason?: string) =>
-    apiClient.post<ApiResponse<WalletRequest>>('/wallet-requests', { inmateId, amount, reason }).then((r) => {
-      invalidatePrefix('wallet-requests');
-      return r.data?.data;
-    }),
-
-  approveWalletRequest: (requestId: string) =>
-    apiClient.patch<ApiResponse<{ request: WalletRequest; wallet: Wallet; transaction: Transaction }>>(`/wallet-requests/${requestId}/approve`).then((r) => {
-      invalidatePrefix('wallet-requests', 'wallets');
-      return r.data?.data;
-    }),
-
-  rejectWalletRequest: (requestId: string, reason?: string) =>
-    apiClient.patch<ApiResponse<WalletRequest>>(`/wallet-requests/${requestId}/reject`, { reason }).then((r) => {
-      invalidatePrefix('wallet-requests');
-      return r.data?.data;
-    }),
 
   // Schedule
   getSchedule: () =>

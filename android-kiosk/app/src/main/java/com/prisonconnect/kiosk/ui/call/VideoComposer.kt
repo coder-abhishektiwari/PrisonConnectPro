@@ -155,6 +155,12 @@ internal class VideoComposer(
         val local = localSlot.take()
         val remote = remoteSlot.take()
         try {
+            // Neither side delivered a frame since the last tick: encode
+            // NOTHING. The old code still swapped a cleared (black) surface
+            // on such ticks, which alternated composite -> black at tick
+            // rate — the "flicker". Skipping lets playback freeze on the
+            // last good frame instead.
+            if (local == null && remote == null) return
             val drawn = encoder.renderFrame(ptsNs) { compose(local, remote) }
             if (drawn) framesRendered++
         } finally {
@@ -179,25 +185,25 @@ internal class VideoComposer(
         GLES20.glClearColor(BACKGROUND_R, BACKGROUND_G, BACKGROUND_B, 1f)
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
 
-        when {
-            local == null && remote == null -> Unit // nothing captured yet
-            remote == null -> fd.drawFrame(local, d, IDENTITY, 0, 0, profile.width, profile.height)
-            local == null -> fd.drawFrame(remote, d, IDENTITY, 0, 0, profile.width, profile.height)
-            else -> {
-                // Family video letterboxed over the whole frame.
-                val r = fit(remote.rotatedWidth, remote.rotatedHeight, 0, 0, profile.width, profile.height)
-                fd.drawFrame(remote, d, IDENTITY, r[0], r[1], r[2], r[3])
+        // Family video letterboxed over the whole frame, when present.
+        remote?.let {
+            val r = fit(it.rotatedWidth, it.rotatedHeight, 0, 0, profile.width, profile.height)
+            fd.drawFrame(it, d, IDENTITY, r[0], r[1], r[2], r[3])
+        }
 
-                // Kiosk camera in the bottom-right corner.
-                val boxW = (profile.width * PIP_WIDTH_FRACTION).toInt()
-                val boxH = (profile.height * PIP_HEIGHT_FRACTION).toInt()
-                val margin = (profile.width * PIP_MARGIN_FRACTION).toInt()
-                val pip = fit(
-                    local.rotatedWidth, local.rotatedHeight,
-                    profile.width - boxW - margin, margin, boxW, boxH
-                )
-                fd.drawFrame(local, d, IDENTITY, pip[0], pip[1], pip[2], pip[3])
-            }
+        // Kiosk camera in the bottom-right corner, when present. Each side
+        // keeps its FIXED position even when the other side misses a tick —
+        // the old full-screen fallbacks made the two videos appear to swap
+        // whenever a frame was late.
+        local?.let {
+            val boxW = (profile.width * PIP_WIDTH_FRACTION).toInt()
+            val boxH = (profile.height * PIP_HEIGHT_FRACTION).toInt()
+            val margin = (profile.width * PIP_MARGIN_FRACTION).toInt()
+            val pip = fit(
+                it.rotatedWidth, it.rotatedHeight,
+                profile.width - boxW - margin, margin, boxW, boxH
+            )
+            fd.drawFrame(it, d, IDENTITY, pip[0], pip[1], pip[2], pip[3])
         }
     }
 
