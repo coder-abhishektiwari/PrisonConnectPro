@@ -264,8 +264,7 @@ export function CallConfigurationPage() {
                     {viewField('Jail Name', prison.name)}
                     {viewField('State', prison.state)}
                     {viewField('District', prison.district)}
-                    <div className="hidden md:block" />
-                    <div className="md:col-span-2">{viewField('Address', prison.address)}</div>
+                    {viewField('Address', prison.address)}
                   </>
                 )}
               </div>
