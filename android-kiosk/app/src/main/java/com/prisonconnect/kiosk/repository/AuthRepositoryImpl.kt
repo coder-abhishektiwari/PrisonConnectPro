@@ -425,18 +425,18 @@ class AuthRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun validateSetupPin(prisonId: String, pin: String): Flow<NetworkResult<ValidateSetupPinResponse>> = flow {
+    override fun validateSetupPassword(prisonId: String, password: String): Flow<NetworkResult<ValidateSetupPasswordResponse>> = flow {
         emit(NetworkResult.Loading)
         try {
-            val response = dataSource.validateSetupPin(ValidateSetupPinRequest(prisonId, pin))
+            val response = dataSource.validateSetupPassword(ValidateSetupPasswordRequest(prisonId, password))
             if (response.success && response.data != null) {
                 emit(NetworkResult.Success(response.data))
             } else {
-                val msg = response.error?.message ?: "Invalid Setup PIN"
-                emit(NetworkResult.Failure(ApiError("INVALID_PIN", msg)))
+                val msg = response.error?.message ?: "Invalid setup password"
+                emit(NetworkResult.Failure(ApiError("INVALID_PASSWORD", msg)))
             }
         } catch (e: Exception) {
-            emit(NetworkResult.Failure(ApiError("EXCEPTION", e.message ?: "Error validating setup PIN")))
+            emit(NetworkResult.Failure(ApiError("EXCEPTION", e.message ?: "Error validating setup password")))
         }
     }
 
@@ -460,7 +460,7 @@ class AuthRepositoryImpl @Inject constructor(
             val statusCode = if (e is HttpException) e.code() else null
             val error = when (statusCode) {
                 // Backend refuses /register without a valid (10-min) setup token.
-                401 -> ApiError("SETUP_TOKEN_REQUIRED", "Setup PIN session expired. Please enter the PIN again.")
+                401 -> ApiError("SETUP_TOKEN_REQUIRED", "Setup password session expired. Please enter the password again.")
                 429 -> ApiError("RATE_LIMITED", "Too many attempts. Please wait a minute and try again.")
                 else -> ApiError("EXCEPTION", e.message ?: "Network error submitting registration")
             }

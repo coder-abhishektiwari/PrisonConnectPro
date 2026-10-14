@@ -917,12 +917,12 @@ export const wardenApi = {
   getKioskStats: (kioskId: string) =>
     apiClient.get<ApiResponse<KioskStats>>(`/kiosks/${encodeURIComponent(kioskId)}/stats`).then((r) => r.data?.data),
 
-  getSetupPin: (prisonId: string) =>
-    cachedGet(`kiosks:pin:${prisonId}`, () => apiClient.get<ApiResponse<SetupPinData>>(`/kiosks/setup-pin/${prisonId}`).then((r) => r.data?.data)),
+  getSetupPassword: (prisonId: string) =>
+    cachedGet(`kiosks:password:${prisonId}`, () => apiClient.get<ApiResponse<SetupPasswordData>>(`/kiosks/setup-password/${prisonId}`).then((r) => r.data?.data)),
 
-  updateSetupPin: (prisonId: string, pin: string) =>
-    apiClient.put<ApiResponse<{ success: boolean }>>('/kiosks/setup-pin', { prisonId, pin }).then((r) => {
-      invalidatePrefix(`kiosks:pin:${prisonId}`);
+  updateSetupPassword: (prisonId: string, password: string) =>
+    apiClient.put<ApiResponse<{ success: boolean }>>('/kiosks/setup-password', { prisonId, password }).then((r) => {
+      invalidatePrefix(`kiosks:password:${prisonId}`);
       return r.data?.data ?? { success: false };
     }),
 
@@ -1116,9 +1116,9 @@ export interface KioskRegistrationRequestItem {
   rejectionReason?: string | null;
 }
 
-export interface SetupPinData {
+export interface SetupPasswordData {
   prisonId: string;
-  pinSet: boolean;
+  passwordSet: boolean;
   updatedAt?: string | null;
 }
 
@@ -1126,7 +1126,6 @@ export interface SetupPinData {
 export interface PrisonInfo {
   prisonId: string;
   name: string;
-  code?: string;
   state?: string;
   district?: string;
   address?: string;

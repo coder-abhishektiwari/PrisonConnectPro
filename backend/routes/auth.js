@@ -162,7 +162,6 @@ router.post('/register', authLimiter, asyncRoute(async (req, res) => {
   const newPrison = {
     prisonId,
     name: prisonName,
-    code: 'JAIL-' + prisonId.slice(-6),
     state: null,
     district: null,
     address: null,

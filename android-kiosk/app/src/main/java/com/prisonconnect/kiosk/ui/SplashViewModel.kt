@@ -117,7 +117,7 @@ class SplashViewModel @Inject constructor(
                         checkSessionAndNavigate()
                     } else {
                         // Koi bhi non-authorized device (not_found ya rejected) —
-                        // registration flow. Re-register ke liye setup PIN chahiye.
+                        // registration flow. Re-register ke liye setup password chahiye.
                         Logger.i("SplashViewModel: Kiosk is NOT authorized. Sending to Registration.")
                         sessionManager.clearRegistrationState()
                         _navigationEvent.emit(SplashNavigation.NavigateToRegistration)

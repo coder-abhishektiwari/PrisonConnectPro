@@ -24,7 +24,7 @@ import javax.inject.Inject
 
 enum class RegistrationStep {
     SELECT_JAIL,
-    ENTER_PIN,
+    ENTER_PASSWORD,
     SUBMIT_DEVICE_INFO,
     PENDING_APPROVAL
 }
@@ -60,8 +60,8 @@ data class RegistrationUiState(
     // Step 1: Jail ID Input (Manual)
     val prisonIdInput: String = "",
 
-    // Step 2: Setup PIN
-    val setupPin: String = "",
+    // Step 2: Setup Password
+    val setupPassword: String = "",
 
     // Step 3: Device Details
     val locationInput: String = "Main Entrance Gate",
@@ -93,7 +93,7 @@ class KioskRegistrationViewModel @Inject constructor(
 
     private var pollingJob: Job? = null
 
-    /** Short-lived proof from /validate-setup-pin; the backend requires it on /register. */
+    /** Short-lived proof from /validate-setup-password; the backend requires it on /register. */
     private var setupToken: String? = null
 
     init {
@@ -213,9 +213,9 @@ class KioskRegistrationViewModel @Inject constructor(
         _uiState.update { it.copy(prisonIdInput = id.uppercase(), errorMessage = null) }
     }
 
-    fun onPinChange(pin: String) {
-        if (pin.length <= 6) {
-            _uiState.update { it.copy(setupPin = pin, errorMessage = null) }
+    fun onPasswordChange(password: String) {
+        if (password.length <= 64) {
+            _uiState.update { it.copy(setupPassword = password, errorMessage = null) }
         }
     }
 
@@ -223,25 +223,25 @@ class KioskRegistrationViewModel @Inject constructor(
         _uiState.update { it.copy(locationInput = location) }
     }
 
-    fun goToPinStep() {
+    fun goToPasswordStep() {
         if (_uiState.value.prisonIdInput.isNullOrBlank()) {
             _uiState.update { it.copy(errorMessage = "Please enter a valid Jail ID") }
             return
         }
-        _uiState.update { it.copy(currentStep = RegistrationStep.ENTER_PIN, errorMessage = null) }
+        _uiState.update { it.copy(currentStep = RegistrationStep.ENTER_PASSWORD, errorMessage = null) }
     }
 
-    fun validatePinAndProceed() {
+    fun validatePasswordAndProceed() {
         val prisonId = _uiState.value.prisonIdInput
-        val pin = _uiState.value.setupPin
+        val password = _uiState.value.setupPassword
 
-        if (pin.length < 6) {
-            _uiState.update { it.copy(errorMessage = "Setup PIN must be 6 digits") }
+        if (password.length < 8 || password.length > 64 || !password.any { it.isLetter() } || !password.any { it.isDigit() }) {
+            _uiState.update { it.copy(errorMessage = "Setup password must be 8-64 characters with letters and numbers") }
             return
         }
 
         viewModelScope.launch {
-            authRepository.validateSetupPin(prisonId, pin).collect { result ->
+            authRepository.validateSetupPassword(prisonId, password).collect { result ->
                 when (result) {
                     is NetworkResult.Idle -> {}
                     is NetworkResult.Loading -> _uiState.update { it.copy(isLoading = true) }
@@ -259,7 +259,7 @@ class KioskRegistrationViewModel @Inject constructor(
                         _uiState.update {
                             it.copy(
                                 isLoading = false,
-                                errorMessage = result.error.message ?: "Invalid Jail ID or Setup PIN"
+                                errorMessage = result.error.message ?: "Invalid Jail ID or Setup Password"
                             )
                         }
                     }
@@ -324,14 +324,14 @@ class KioskRegistrationViewModel @Inject constructor(
                     is NetworkResult.Failure -> {
                         if (result.error?.code == "SETUP_TOKEN_REQUIRED") {
                             // The 10-minute setup token expired or is missing —
-                            // send the operator back to the PIN step for a new one.
+                            // send the operator back to the password step for a new one.
                             setupToken = null
                             _uiState.update {
                                 it.copy(
                                     isLoading = false,
-                                    currentStep = RegistrationStep.ENTER_PIN,
-                                    setupPin = "",
-                                    errorMessage = "Setup PIN session expired. Please enter the PIN again."
+                                    currentStep = RegistrationStep.ENTER_PASSWORD,
+                                    setupPassword = "",
+                                    errorMessage = "Setup password session expired. Please enter the password again."
                                 )
                             }
                         } else {
@@ -482,8 +482,8 @@ class KioskRegistrationViewModel @Inject constructor(
 
     fun backToPreviousStep() {
         val previousStep = when (_uiState.value.currentStep) {
-            RegistrationStep.ENTER_PIN -> RegistrationStep.SELECT_JAIL
-            RegistrationStep.SUBMIT_DEVICE_INFO -> RegistrationStep.ENTER_PIN
+            RegistrationStep.ENTER_PASSWORD -> RegistrationStep.SELECT_JAIL
+            RegistrationStep.SUBMIT_DEVICE_INFO -> RegistrationStep.ENTER_PASSWORD
             else -> RegistrationStep.SELECT_JAIL
         }
         _uiState.update { it.copy(currentStep = previousStep, errorMessage = null) }
@@ -495,12 +495,12 @@ class KioskRegistrationViewModel @Inject constructor(
         viewModelScope.launch {
             sessionManager.clearRegistrationState()
         }
-        // Always re-enter the PIN step: the backend requires a fresh setup
-        // token (10-min proof of the prison PIN) before it accepts /register.
+        // Always re-enter the password step: the backend requires a fresh setup
+        // token (10-min proof of the prison setup password) before it accepts /register.
         _uiState.update {
             it.copy(
-                currentStep = RegistrationStep.ENTER_PIN,
-                setupPin = "",
+                currentStep = RegistrationStep.ENTER_PASSWORD,
+                setupPassword = "",
                 approvalStatus = "pending",
                 isApproved = false,
                 errorMessage = null,

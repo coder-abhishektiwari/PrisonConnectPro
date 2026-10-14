@@ -1,5 +1,7 @@
+import { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
+import { wardenApi } from '@/services/api/wardenApi';
 
 interface NavItem {
   to: string;
@@ -20,6 +22,17 @@ const navItems: NavItem[] = [
 export function Sidebar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [prisonName, setPrisonName] = useState('');
+
+  useEffect(() => {
+    const prisonId = user?.prisonId;
+    if (!prisonId) return;
+    let cancelled = false;
+    wardenApi.getPrison(prisonId)
+      .then((p) => { if (!cancelled && p?.name) setPrisonName(p.name); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [user?.prisonId]);
 
   const displayName = user?.name || 'Warden';
   const displayEmail = user?.email || '';
@@ -38,7 +51,7 @@ export function Sidebar() {
           <img src="/ic_icon.webp" alt="Warden Panel" className="w-8 h-8 object-contain" />
         </div>
         <div className="opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300 overflow-hidden whitespace-nowrap">
-          <h1 className="text-lg font-bold text-white">Jail Admin Pannel</h1>
+          <h1 className="text-lg font-bold text-white">{prisonName}</h1>
           <p className="text-[12px] text-white">{user?.prisonId || '—'}</p>
         </div>
       </div>

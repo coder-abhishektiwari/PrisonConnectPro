@@ -834,7 +834,7 @@ async function runMigrations() {
     // Migrations run on every boot: they are idempotent (tracked in
     // schema_migrations) and a redeploy must never leave a table behind the
     // code that reads it. There is no data seeding anymore — a fresh database
-    // starts empty and fills through the API (register → setup PIN → kiosk).
+    // starts empty and fills through the API (register → setup password → kiosk).
     const { migrate } = require('./lib/migrate');
     await migrate();
   } catch (err) {

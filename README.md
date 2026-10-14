@@ -76,10 +76,10 @@ Point `DATABASE_URL` at a PostgreSQL database and start the backend: it runs
 **empty**; bring it to life through the API:
 
 1. `POST /auth/register` — creates the first warden account and its jail.
-2. Dashboard → Configuration → **Facility Setup PIN** — set the 6-digit PIN
-   the kiosk uses during device setup.
-3. Register the kiosk (it validates the Setup PIN first), then approve it from
-   the dashboard Kiosks page.
+2. Dashboard → Configuration → **Facility Setup Password** — set the setup
+   password (8-64 chars, letters + numbers) the kiosk uses during device setup.
+3. Register the kiosk (it validates the setup password first), then approve it
+   from the dashboard Kiosks page.
 
 If inmates exist without a wallet row, run `npm run backfill:wallets --workspace=backend`
 (idempotent; `-- --dry-run` to preview). It writes zero-balance wallets and

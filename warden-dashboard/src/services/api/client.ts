@@ -1,6 +1,6 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import { env } from '@/config/env';
-import { getStoredTokens, persistAuth, STORAGE_KEYS } from '@/services/auth/tokenStorage';
+import { getStoredTokens, getStoredUser, persistAuth, STORAGE_KEYS } from '@/services/auth/tokenStorage';
 import type { ApiError } from '@/types/api';
 
 interface FailedQueueItem {
@@ -81,7 +81,8 @@ apiClient.interceptors.response.use(
 
         const { accessToken, refreshToken, expiresIn } = response.data.data;
         const tokens = { accessToken, refreshToken, expiresIn };
-        persistAuth(tokens, {} as any);
+        // Refresh only rotates tokens — keep the stored user profile intact.
+        persistAuth(tokens, getStoredUser() ?? ({} as any));
 
         // Process queued requests
         processQueue(null, accessToken);

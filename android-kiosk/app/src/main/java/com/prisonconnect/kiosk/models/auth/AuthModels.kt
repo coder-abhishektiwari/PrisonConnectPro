@@ -66,23 +66,22 @@ data class KioskInfo(
 data class Prison(
     @SerializedName("prisonId") val prisonId: String,
     @SerializedName("name") val name: String,
-    @SerializedName("code") val code: String?,
     @SerializedName("city") val city: String?,
     @SerializedName("state") val state: String?
 )
 
-data class ValidateSetupPinRequest(
+data class ValidateSetupPasswordRequest(
     @SerializedName("prisonId") val prisonId: String,
-    @SerializedName("pin") val pin: String
+    @SerializedName("password") val password: String
 )
 
-    data class ValidateSetupPinResponse(
+data class ValidateSetupPasswordResponse(
     @SerializedName("valid") val valid: Boolean,
     @SerializedName("prisonId") val prisonId: String,
     @SerializedName("prisonName") val prisonName: String?,
-    /** Short-lived proof (10 min) that this device knows the setup PIN; POST /kiosks/register requires it. */
+    /** Short-lived proof (10 min) that this device knows the setup password; POST /kiosks/register requires it. */
     @SerializedName("setupToken") val setupToken: String? = null
-    )
+)
 
 data class KioskRegistrationRequest(
     @SerializedName("prisonId") val prisonId: String,
@@ -94,7 +93,7 @@ data class KioskRegistrationRequest(
     @SerializedName("androidVersion") val androidVersion: String,
     @SerializedName("appVersion") val appVersion: String,
     @SerializedName("deviceFingerprint") val deviceFingerprint: String,
-    /** From /validate-setup-pin — required by the backend before a kiosk can be registered. */
+    /** From /validate-setup-password — required by the backend before a kiosk can be registered. */
     @SerializedName("setupToken") val setupToken: String? = null
     )
 

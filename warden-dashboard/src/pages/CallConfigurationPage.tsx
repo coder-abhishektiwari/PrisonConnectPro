@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Card } from '@/components/Card';
-import { wardenApi, cacheKeys, Settings, SetupPinData, PrisonInfo } from '@/services/api/wardenApi';
+import { wardenApi, cacheKeys, Settings, SetupPasswordData, PrisonInfo } from '@/services/api/wardenApi';
 import { useCachedResource } from '@/hooks/useCachedResource';
 import { getStoredUser } from '@/services/auth/tokenStorage';
 import { useToast } from '@/hooks/useToast';
@@ -23,23 +23,23 @@ export function CallConfigurationPage() {
     { ttl: 60_000 },
   );
 
-  const { data: pinData, refresh: refreshPin } = useCachedResource<SetupPinData>(
-    `kiosks:pin:${prisonId}`,
-    () => wardenApi.getSetupPin(prisonId),
+  const { data: passwordData, refresh: refreshPassword } = useCachedResource<SetupPasswordData>(
+    `kiosks:password:${prisonId}`,
+    () => wardenApi.getSetupPassword(prisonId),
     { ttl: 60_000 },
   );
 
   const { toasts, success: toastSuccess, error: toastError, removeToast } = useToast();
-  const [pinInput, setPinInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
   const [editing, setEditing] = useState(false);
-  const [savingPin, setSavingPin] = useState(false);
+  const [savingPassword, setSavingPassword] = useState(false);
 
   const [prisonEditing, setPrisonEditing] = useState(false);
   const [savingPrison, setSavingPrison] = useState(false);
-  const [prisonForm, setPrisonForm] = useState({ name: '', code: '', state: '', district: '', address: '' });
+  const [prisonForm, setPrisonForm] = useState({ name: '', state: '', district: '', address: '' });
 
-  const pinSet = !!pinData?.pinSet;
-  const inputEnabled = !pinSet || editing;
+  const passwordSet = !!passwordData?.passwordSet;
+  const inputEnabled = !passwordSet || editing;
 
   usePageHeader({
     title: 'Configurations',
@@ -49,7 +49,6 @@ export function CallConfigurationPage() {
   const startPrisonEdit = () => {
     setPrisonForm({
       name: prison?.name ?? '',
-      code: prison?.code ?? '',
       state: prison?.state ?? '',
       district: prison?.district ?? '',
       address: prison?.address ?? '',
@@ -68,7 +67,6 @@ export function CallConfigurationPage() {
     try {
       await wardenApi.updatePrison(prisonId, {
         name,
-        code: prisonForm.code.trim(),
         state: prisonForm.state.trim(),
         district: prisonForm.district.trim(),
         address: prisonForm.address.trim(),
@@ -83,19 +81,22 @@ export function CallConfigurationPage() {
     }
   };
 
-  const savePin = async () => {
-    if (pinInput.length !== 6 || savingPin) return;
-    setSavingPin(true);
+  // Mirrors the backend policy: 8-64 chars, at least one letter and one digit.
+  const isStrongPassword = (v: string) => v.length >= 8 && v.length <= 64 && /[A-Za-z]/.test(v) && /\d/.test(v);
+
+  const savePassword = async () => {
+    if (!isStrongPassword(passwordInput) || savingPassword) return;
+    setSavingPassword(true);
     try {
-      await wardenApi.updateSetupPin(prisonId, pinInput);
-      toastSuccess('Setup PIN updated. New kiosks must use the new PIN.');
-      setPinInput('');
+      await wardenApi.updateSetupPassword(prisonId, passwordInput);
+      toastSuccess('Setup password updated. New kiosks must use the new password.');
+      setPasswordInput('');
       setEditing(false);
-      await refreshPin();
+      await refreshPassword();
     } catch {
-      toastError('Failed to update PIN. Must be 6 digits and prison must exist.');
+      toastError('Failed to update password. Must be 8-64 characters with letters and numbers.');
     } finally {
-      setSavingPin(false);
+      setSavingPassword(false);
     }
   };
 
@@ -244,9 +245,9 @@ export function CallConfigurationPage() {
                 {prisonEditing ? (
                   <>
                     {editField('Jail Name', prisonForm.name, (v) => setPrisonForm({ ...prisonForm, name: v }), { required: true })}
-                    {editField('Code', prisonForm.code, (v) => setPrisonForm({ ...prisonForm, code: v }))}
                     {editField('State', prisonForm.state, (v) => setPrisonForm({ ...prisonForm, state: v }))}
                     {editField('District', prisonForm.district, (v) => setPrisonForm({ ...prisonForm, district: v }))}
+                    <div className="hidden md:block" />
                     <div className="md:col-span-2">
                       <label className="block text-xs font-semibold text-neutral-700 uppercase tracking-wide mb-1">Address</label>
                       <textarea
@@ -261,7 +262,6 @@ export function CallConfigurationPage() {
                 ) : (
                   <>
                     {viewField('Jail Name', prison.name)}
-                    {viewField('Code', prison.code)}
                     {viewField('State', prison.state)}
                     {viewField('District', prison.district)}
                     <div className="hidden md:block" />
@@ -283,12 +283,12 @@ export function CallConfigurationPage() {
               </svg>
             </div>
             <div>
-              <h3 className="font-bold text-neutral-900">Facility Setup PIN</h3>
+              <h3 className="font-bold text-neutral-900">Facility Setup Password</h3>
               <p className="text-sm text-neutral-500">Required for first-time kiosk hardware provisioning</p>
             </div>
           </div>
 
-          {pinData === undefined ? (
+          {passwordData === undefined ? (
             <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-6 max-w-md space-y-3">
               <Skeleton className="h-3.5 w-24 blur-[1px] opacity-80" />
               <Skeleton className="h-14 w-full rounded-lg blur-[1px] opacity-80" />
@@ -297,34 +297,33 @@ export function CallConfigurationPage() {
           ) : (
             <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-6 max-w-md">
               <label className="block text-xs font-semibold text-neutral-700 uppercase tracking-wide mb-2">
-                6-Digit PIN <span className="text-error">*</span>
+                Setup Password <span className="text-error">*</span>
               </label>
               <div className="relative">
                 <input
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={6}
-                  disabled={!inputEnabled || savingPin}
-                  value={inputEnabled ? pinInput : '••••••'}
-                  placeholder="••••••"
-                  onChange={(e) => setPinInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  className="w-full px-4 py-3 pr-24 border-2 border-neutral-300 rounded-lg font-mono font-bold text-center tracking-[0.5em] text-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white disabled:bg-neutral-100 disabled:text-neutral-500 disabled:cursor-not-allowed"
+                  type="password"
+                  maxLength={64}
+                  disabled={!inputEnabled || savingPassword}
+                  value={inputEnabled ? passwordInput : '••••••••'}
+                  placeholder="••••••••"
+                  onChange={(e) => setPasswordInput(e.target.value.slice(0, 64))}
+                  className="w-full px-4 py-3 pr-24 border-2 border-neutral-300 rounded-lg font-mono font-bold text-center tracking-[0.35em] text-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white disabled:bg-neutral-100 disabled:text-neutral-500 disabled:cursor-not-allowed"
                 />
                 {inputEnabled ? (
-                  pinInput.length === 6 && (
+                  isStrongPassword(passwordInput) && (
                     <button
-                      onClick={savePin}
-                      disabled={savingPin}
-                      title="Save PIN"
+                      onClick={savePassword}
+                      disabled={savingPassword}
+                      title="Save password"
                       className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center bg-success text-white rounded-lg hover:opacity-90 transition disabled:opacity-50"
                     >
-                      <span className="material-icons text-lg">{savingPin ? 'hourglass_top' : 'check'}</span>
+                      <span className="material-icons text-lg">{savingPassword ? 'hourglass_top' : 'check'}</span>
                     </button>
                   )
                 ) : (
                   <button
-                    onClick={() => { setEditing(true); setPinInput(''); }}
-                    title="Edit PIN"
+                    onClick={() => { setEditing(true); setPasswordInput(''); }}
+                    title="Edit password"
                     className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center bg-white border-2 border-neutral-300 text-neutral-600 rounded-lg hover:border-primary-400 hover:text-primary-400 transition"
                   >
                     <span className="material-icons text-lg">edit</span>
@@ -332,18 +331,18 @@ export function CallConfigurationPage() {
                 )}
               </div>
               <p className="text-xs text-neutral-500 mt-3">
-                {!pinSet
-                  ? 'Enter all 6 digits, then tap the green tick to save.'
+                {!passwordSet
+                  ? '8-64 characters with at least one letter and one number, then tap the green tick to save.'
                   : inputEnabled
-                    ? `Current PIN is set. Enter a new 6-digit PIN, then tap the green tick.`
-                    : 'PIN is set. Tap the pencil to rotate it.'}
+                    ? `Current password is set. Enter a new password, then tap the green tick.`
+                    : 'Password is set. Tap the pencil to rotate it.'}
               </p>
             </div>
           )}
 
           <div className="text-xs text-neutral-600 bg-white border border-neutral-200 rounded-lg p-4 max-w-md">
             <p className="font-semibold text-neutral-900 mb-1">Security note</p>
-            PIN is bcrypt-hashed server-side and never returned in GET. Only <code className="bg-neutral-100 px-1 rounded">pinSet: true/false</code> is readable. Rotate periodically.
+            Password is bcrypt-hashed server-side and never returned in GET. Only <code className="bg-neutral-100 px-1 rounded">passwordSet: true/false</code> is readable. Rotate periodically.
           </div>
         </div>
       </Card>

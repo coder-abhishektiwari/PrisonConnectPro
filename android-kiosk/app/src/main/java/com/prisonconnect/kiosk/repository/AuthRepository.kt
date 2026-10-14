@@ -41,7 +41,7 @@ interface AuthRepository {
 
     // Kiosk Registration & Authorization
     fun getPrisonList(): Flow<NetworkResult<List<com.prisonconnect.kiosk.models.auth.Prison>>>
-    fun validateSetupPin(prisonId: String, pin: String): Flow<NetworkResult<com.prisonconnect.kiosk.models.auth.ValidateSetupPinResponse>>
+    fun validateSetupPassword(prisonId: String, password: String): Flow<NetworkResult<com.prisonconnect.kiosk.models.auth.ValidateSetupPasswordResponse>>
     fun registerKiosk(request: com.prisonconnect.kiosk.models.auth.KioskRegistrationRequest): Flow<NetworkResult<com.prisonconnect.kiosk.models.auth.KioskRegistrationResponse>>
     fun getRegistrationStatus(serialNumber: String): Flow<NetworkResult<com.prisonconnect.kiosk.models.auth.RegistrationStatusResponse>>
 }

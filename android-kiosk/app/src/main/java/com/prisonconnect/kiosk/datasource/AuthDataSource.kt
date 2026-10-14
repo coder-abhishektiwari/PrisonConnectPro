@@ -25,7 +25,7 @@ interface AuthDataSource {
 
     // Kiosk Registration & Authorization
     suspend fun getPrisonList(): ApiResponse<List<com.prisonconnect.kiosk.models.auth.Prison>>
-    suspend fun validateSetupPin(request: com.prisonconnect.kiosk.models.auth.ValidateSetupPinRequest): ApiResponse<com.prisonconnect.kiosk.models.auth.ValidateSetupPinResponse>
+    suspend fun validateSetupPassword(request: com.prisonconnect.kiosk.models.auth.ValidateSetupPasswordRequest): ApiResponse<com.prisonconnect.kiosk.models.auth.ValidateSetupPasswordResponse>
     suspend fun registerKiosk(request: com.prisonconnect.kiosk.models.auth.KioskRegistrationRequest): ApiResponse<com.prisonconnect.kiosk.models.auth.KioskRegistrationResponse>
     suspend fun getRegistrationStatus(serialNumber: String): ApiResponse<com.prisonconnect.kiosk.models.auth.RegistrationStatusResponse>
 }

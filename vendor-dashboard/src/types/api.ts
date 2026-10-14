@@ -16,7 +16,6 @@ export interface ApiError {
 export interface Prison {
   id: string;
   name: string;
-  code: string;
   state: string;
   district: string;
   status: 'online' | 'offline';

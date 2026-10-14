@@ -10,6 +10,14 @@ const { buildInmateIndex } = require('../lib/kioskView');
 
 const router = express.Router();
 
+// The facility setup secret used to be a 6-digit PIN; it is a real password
+// now. Policy shared by PUT /kiosks/setup-password and the change-request
+// flow: 8-64 chars, at least one letter and one digit.
+function isSetupPassword(value) {
+  return typeof value === 'string' && value.length >= 8 && value.length <= 64 &&
+    /[A-Za-z]/.test(value) && /\d/.test(value);
+}
+
 
 // ==================== KIOSK REPORT HELPERS ====================
 // States where the call actually reached the kiosk. 'scheduled'/'waiting'
@@ -105,13 +113,13 @@ function sanitizeObj(obj) {
 }
 
 // ==================== RATE LIMITING (in-memory) ====================
-const pinValidationAttempts = new Map();
+const rateLimitAttempts = new Map();
 function checkRateLimit(key, maxAttempts = 5, windowMs = 60000) {
   const now = Date.now();
-  const record = pinValidationAttempts.get(key) || { count: 0, resetAt: now + windowMs };
+  const record = rateLimitAttempts.get(key) || { count: 0, resetAt: now + windowMs };
   if (now > record.resetAt) { record.count = 0; record.resetAt = now + windowMs; }
   record.count++;
-  pinValidationAttempts.set(key, record);
+  rateLimitAttempts.set(key, record);
   return record.count <= maxAttempts;
 }
 
@@ -286,7 +294,7 @@ router.post('/heartbeat', asyncRoute(async (req, res) => {
   });
 }));
 
-// ==================== KIOSK REGISTRATION (public — after PIN validation) ====================
+// ==================== KIOSK REGISTRATION (public — after setup password validation) ====================
 
 router.post('/register', asyncRoute(async (req, res) => {
   // Basic flood protection: a device retries a handful of times at most.
@@ -310,9 +318,9 @@ router.post('/register', asyncRoute(async (req, res) => {
     return sendError(res, 'INVALID_REQUEST', 'deviceSerialNumber and prisonId are required', 400);
   }
 
-  // The setup PIN gate must hold server-side, not just in the app UI: a
-  // successful /validate-setup-pin issues a short-lived signed token bound to
-  // that prison, and this endpoint refuses to create/refresh a kiosk without
+  // The setup password gate must hold server-side, not just in the app UI: a
+  // successful /validate-setup-password issues a short-lived signed token bound
+  // to that prison, and this endpoint refuses to create/refresh a kiosk without
   // it (same prison only — a token for jail A cannot register into jail B).
   const setupHeader = (req.get('authorization') || '').replace(/^bearer\s+/i, '').trim();
   const setupToken = (typeof req.body.setupToken === 'string' && req.body.setupToken.trim()) || setupHeader;
@@ -321,7 +329,7 @@ router.post('/register', asyncRoute(async (req, res) => {
     try { setupClaims = verifyToken(setupToken); } catch (e) { setupClaims = null; }
   }
   if (!setupClaims || setupClaims.role !== 'setup' || setupClaims.prisonId !== prisonId) {
-    return sendError(res, 'SETUP_TOKEN_REQUIRED', 'Validate the prison setup PIN first (missing or invalid setup token)', 401);
+    return sendError(res, 'SETUP_TOKEN_REQUIRED', 'Validate the prison setup password first (missing or invalid setup token)', 401);
   }
   
   const prisons = await readDb('prisons.json');
@@ -822,28 +830,28 @@ router.delete('/:kioskId', requireAuth, requireRole('admin', 'warden', 'super-ad
   return sendSuccess(res, { message: 'Kiosk deleted successfully', kioskId: removed.kioskId });
 }));
 
-// ==================== KIOSK SETUP PIN ====================
+// ==================== KIOSK SETUP PASSWORD ====================
 
-router.get('/setup-pin/:prisonId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+router.get('/setup-password/:prisonId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const { prisonId } = req.params;
   const prisons = await readDb('prisons.json');
   const prison = prisons.find((p) => p.prisonId === prisonId);
   if (!prison || !(await inScopeOf(req, prison))) return sendError(res, 'NOT_FOUND', 'Prison not found', 404);
 
-  // The setup PIN is stored bcrypt-hashed; never return the value itself.
+  // The setup password is stored bcrypt-hashed; never return the value itself.
   return sendSuccess(res, {
     prisonId: prison.prisonId,
-    pinSet: Boolean(prison.setupPin),
+    passwordSet: Boolean(prison.setupPassword),
     updatedAt: prison.updatedAt || null
   });
 }));
 
-// ==================== SETUP PIN VALIDATION (public - for kiosk setup) ====================
+// ==================== SETUP PASSWORD VALIDATION (public - for kiosk setup) ====================
 
-router.post('/validate-setup-pin', asyncRoute(async (req, res) => {
-  const { pin, prisonId } = req.body;
-  if (!pin || !prisonId) {
-    return sendError(res, 'INVALID_REQUEST', 'pin and prisonId are required', 400);
+router.post('/validate-setup-password', asyncRoute(async (req, res) => {
+  const { password, prisonId } = req.body;
+  if (!password || !prisonId) {
+    return sendError(res, 'INVALID_REQUEST', 'password and prisonId are required', 400);
   }
   
   // Rate limiting — max 5 attempts per minute per IP+prisonId
@@ -852,9 +860,8 @@ router.post('/validate-setup-pin', asyncRoute(async (req, res) => {
     return sendError(res, 'RATE_LIMITED', 'Too many attempts. Try again in 1 minute.', 429);
   }
   
-  // Validate PIN length (6 digits)
-  if (!/^\d{6}$/.test(pin)) {
-    return sendError(res, 'INVALID_PIN', 'PIN must be exactly 6 digits', 400);
+  if (!isSetupPassword(password)) {
+    return sendError(res, 'INVALID_PASSWORD', 'Password must be 8-64 characters and include letters and numbers', 400);
   }
   
   const prisons = await readDb('prisons.json');
@@ -864,14 +871,14 @@ router.post('/validate-setup-pin', asyncRoute(async (req, res) => {
     return sendError(res, 'NOT_FOUND', 'Prison not found', 404);
   }
   
-  const valid = await verifySecret(pin, prison.setupPin);
+  const valid = await verifySecret(password, prison.setupPassword);
   if (!valid) {
-    return sendError(res, 'INVALID_CREDENTIALS', 'Invalid setup PIN', 401);
+    return sendError(res, 'INVALID_CREDENTIALS', 'Invalid setup password', 401);
   }
 
-  // Short-lived proof that this device knows the prison's setup PIN.
-  // POST /kiosks/register requires it, so the PIN gate cannot be bypassed by
-  // calling the register API directly. Bound to the prison it was validated
+  // Short-lived proof that this device knows the prison's setup password.
+  // POST /kiosks/register requires it, so the password gate cannot be bypassed
+  // by calling the register API directly. Bound to the prison it was validated
   // against; expires in 10 minutes.
   const setupToken = signAccessToken(
     { sub: 'device-setup', role: 'setup', prisonId: prison.prisonId },
@@ -884,29 +891,28 @@ router.post('/validate-setup-pin', asyncRoute(async (req, res) => {
     prisonId: prison.prisonId,
     prisonName: prison.name,
     setupToken,
-    message: 'Setup PIN validated successfully'
+    message: 'Setup password validated successfully'
   });
 }));
 
-router.put('/setup-pin', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
-  const { prisonId, pin } = req.body;
-  if (!prisonId || !pin) return sendError(res, 'INVALID_REQUEST', 'prisonId and pin are required', 400);
+router.put('/setup-password', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+  const { prisonId, password } = req.body;
+  if (!prisonId || !password) return sendError(res, 'INVALID_REQUEST', 'prisonId and password are required', 400);
 
   const prison = (await readDb('prisons.json')).find((p) => p.prisonId === prisonId);
   if (!prison || !(await inScopeOf(req, prison))) return sendError(res, 'NOT_FOUND', 'Prison not found', 404);
 
-  // Validate PIN length (6 digits)
-  if (!/^\d{6}$/.test(pin)) {
-    return sendError(res, 'INVALID_PIN', 'PIN must be exactly 6 digits', 400);
+  if (!isSetupPassword(password)) {
+    return sendError(res, 'INVALID_PASSWORD', 'Password must be 8-64 characters and include letters and numbers', 400);
   }
   
-  const hashedPin = await hashSecret(String(pin));
+  const hashedPassword = await hashSecret(String(password));
   const updated = await updateDb('prisons.json', (prisons) => {
     const idx = prisons.findIndex((p) => p.prisonId === prisonId);
     if (idx === -1) return { data: prisons, result: null };
     prisons[idx] = { 
       ...prisons[idx], 
-      setupPin: hashedPin,
+      setupPassword: hashedPassword,
       updatedAt: new Date().toISOString()
     };
     return { data: prisons, result: prisons[idx] };
@@ -915,17 +921,16 @@ router.put('/setup-pin', requireAuth, requireRole('admin', 'warden', 'super-admi
   return sendSuccess(res, { success: true });
 }));
 
-// ==================== PIN CHANGE REQUESTS ====================
+// ==================== PASSWORD CHANGE REQUESTS ====================
 
-router.post('/pin-change-request', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
-  const { prisonId, currentPin, newPin, reason } = req.body;
-  if (!prisonId || !currentPin || !newPin) {
-    return sendError(res, 'INVALID_REQUEST', 'prisonId, currentPin, and newPin are required', 400);
+router.post('/password-change-request', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+  const { prisonId, currentPassword, newPassword, reason } = req.body;
+  if (!prisonId || !currentPassword || !newPassword) {
+    return sendError(res, 'INVALID_REQUEST', 'prisonId, currentPassword, and newPassword are required', 400);
   }
   
-  // Validate PIN length (6 digits)
-  if (!/^\d{6}$/.test(newPin)) {
-    return sendError(res, 'INVALID_PIN', 'PIN must be exactly 6 digits', 400);
+  if (!isSetupPassword(newPassword)) {
+    return sendError(res, 'INVALID_PASSWORD', 'New password must be 8-64 characters and include letters and numbers', 400);
   }
 
   const prisons = await readDb('prisons.json');
@@ -933,19 +938,19 @@ router.post('/pin-change-request', requireAuth, requireRole('admin', 'warden', '
   if (!prison) return sendError(res, 'NOT_FOUND', 'Prison not found', 404);
   if (!(await inScopeOf(req, prison))) return sendError(res, 'NOT_FOUND', 'Prison not found', 404);
   
-  const valid = await verifySecret(currentPin, prison.setupPin);
+  const valid = await verifySecret(currentPassword, prison.setupPassword);
   if (!valid) {
-    return sendError(res, 'INVALID_CREDENTIALS', 'Current PIN is incorrect', 401);
+    return sendError(res, 'INVALID_CREDENTIALS', 'Current password is incorrect', 401);
   }
 
-  const hashedNewPin = await hashSecret(String(newPin));
-  // Create PIN change request
+  const hashedNewPassword = await hashSecret(String(newPassword));
+  // Create password change request
   const changeRequest = {
-    requestId: 'PIN-' + Date.now().toString(36).toUpperCase(),
+    requestId: 'PWREQ-' + Date.now().toString(36).toUpperCase(),
     prisonId,
     requestedBy: req.auth.sub,
     requestedByRole: req.auth.role,
-    newPinHash: hashedNewPin,
+    newPasswordHash: hashedNewPassword,
     reason: reason || 'Routine security update',
     status: 'pending',
     requestedAt: new Date().toISOString(),
@@ -959,10 +964,10 @@ router.post('/pin-change-request', requireAuth, requireRole('admin', 'warden', '
     const idx = prisons.findIndex((p) => p.prisonId === prisonId);
     if (idx === -1) return { data: prisons, result: null };
     
-    if (!prisons[idx].pinChangeRequests) {
-      prisons[idx].pinChangeRequests = [];
+    if (!prisons[idx].passwordChangeRequests) {
+      prisons[idx].passwordChangeRequests = [];
     }
-    prisons[idx].pinChangeRequests.push(changeRequest);
+    prisons[idx].passwordChangeRequests.push(changeRequest);
     return { data: prisons, result: prisons[idx] };
   });
 
@@ -970,17 +975,17 @@ router.post('/pin-change-request', requireAuth, requireRole('admin', 'warden', '
   return sendSuccess(res, changeRequest, 201);
 }));
 
-router.get('/pin-change-requests', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+router.get('/password-change-requests', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const { prisonId } = req.query;
   const prisons = await readDb('prisons.json');
   let requests = [];
   for (const prison of prisons) {
-    if (prison.pinChangeRequests && prison.pinChangeRequests.length > 0) {
-      // Scoped staff only see pin-change requests for prisons in their jail.
+    if (prison.passwordChangeRequests && prison.passwordChangeRequests.length > 0) {
+      // Scoped staff only see password-change requests for prisons in their jail.
       if (!(await inScopeOf(req, prison))) continue;
       if (!prisonId || prison.prisonId === prisonId) {
         const prisonName = prison.name;
-        requests.push(...prison.pinChangeRequests.map((req) => ({
+        requests.push(...prison.passwordChangeRequests.map((req) => ({
           ...req,
           prisonName
         })));
@@ -994,34 +999,34 @@ router.get('/pin-change-requests', requireAuth, requireRole('admin', 'warden', '
   return sendSuccess(res, requests);
 }));
 
-router.put('/pin-change-request/:requestId/approve', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+router.put('/password-change-request/:requestId/approve', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const { requestId } = req.params;
   const { comments } = req.body;
   
   const allPrisons = await readDb('prisons.json');
-  const owner = allPrisons.find((p) => p.pinChangeRequests && p.pinChangeRequests.some((r) => r.requestId === requestId));
+  const owner = allPrisons.find((p) => p.passwordChangeRequests && p.passwordChangeRequests.some((r) => r.requestId === requestId));
   if (!owner || !(await inScopeOf(req, owner))) {
-    return sendError(res, 'NOT_FOUND', 'PIN change request not found or already processed', 404);
+    return sendError(res, 'NOT_FOUND', 'Password change request not found or already processed', 404);
   }
   let found = false;
   
   const updated = await updateDb('prisons.json', (prisons) => {
     for (const prison of prisons) {
-      if (prison.pinChangeRequests) {
-        const reqIdx = prison.pinChangeRequests.findIndex((r) => r.requestId === requestId);
+      if (prison.passwordChangeRequests) {
+        const reqIdx = prison.passwordChangeRequests.findIndex((r) => r.requestId === requestId);
         if (reqIdx !== -1) {
-          const request = prison.pinChangeRequests[reqIdx];
+          const request = prison.passwordChangeRequests[reqIdx];
           
           // Only approve if still pending
           if (request.status !== 'pending') {
             return { data: prisons, result: null };
           }
           
-          // Update the PIN
-          prison.setupPin = request.newPinHash;
+          // Update the password
+          prison.setupPassword = request.newPasswordHash;
           
           // Update request status
-          prison.pinChangeRequests[reqIdx] = {
+          prison.passwordChangeRequests[reqIdx] = {
             ...request,
             status: 'approved',
             reviewedAt: new Date().toISOString(),
@@ -1038,35 +1043,35 @@ router.put('/pin-change-request/:requestId/approve', requireAuth, requireRole('a
     return { data: prisons, result: prisons };
   });
 
-  if (!found) return sendError(res, 'NOT_FOUND', 'PIN change request not found or already processed', 404);
-  return sendSuccess(res, { success: true, message: 'PIN changed successfully' });
+  if (!found) return sendError(res, 'NOT_FOUND', 'Password change request not found or already processed', 404);
+  return sendSuccess(res, { success: true, message: 'Password changed successfully' });
 }));
 
-router.put('/pin-change-request/:requestId/reject', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
+router.put('/password-change-request/:requestId/reject', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const { requestId } = req.params;
   const { comments } = req.body;
   
   const allPrisons = await readDb('prisons.json');
-  const owner = allPrisons.find((p) => p.pinChangeRequests && p.pinChangeRequests.some((r) => r.requestId === requestId));
+  const owner = allPrisons.find((p) => p.passwordChangeRequests && p.passwordChangeRequests.some((r) => r.requestId === requestId));
   if (!owner || !(await inScopeOf(req, owner))) {
-    return sendError(res, 'NOT_FOUND', 'PIN change request not found or already processed', 404);
+    return sendError(res, 'NOT_FOUND', 'Password change request not found or already processed', 404);
   }
   let found = false;
   
   const updated = await updateDb('prisons.json', (prisons) => {
     for (const prison of prisons) {
-      if (prison.pinChangeRequests) {
-        const reqIdx = prison.pinChangeRequests.findIndex((r) => r.requestId === requestId);
+      if (prison.passwordChangeRequests) {
+        const reqIdx = prison.passwordChangeRequests.findIndex((r) => r.requestId === requestId);
         if (reqIdx !== -1) {
-          const request = prison.pinChangeRequests[reqIdx];
+          const request = prison.passwordChangeRequests[reqIdx];
           
           // Only reject if still pending
           if (request.status !== 'pending') {
             return { data: prisons, result: null };
           }
           
-          // Update request status (don't change PIN)
-          prison.pinChangeRequests[reqIdx] = {
+          // Update request status (don't change the password)
+          prison.passwordChangeRequests[reqIdx] = {
             ...request,
             status: 'rejected',
             reviewedAt: new Date().toISOString(),
@@ -1083,8 +1088,8 @@ router.put('/pin-change-request/:requestId/reject', requireAuth, requireRole('ad
     return { data: prisons, result: prisons };
   });
 
-  if (!found) return sendError(res, 'NOT_FOUND', 'PIN change request not found or already processed', 404);
-  return sendSuccess(res, { success: true, message: 'PIN change request rejected' });
+  if (!found) return sendError(res, 'NOT_FOUND', 'Password change request not found or already processed', 404);
+  return sendSuccess(res, { success: true, message: 'Password change request rejected' });
 }));
 
 module.exports = router;

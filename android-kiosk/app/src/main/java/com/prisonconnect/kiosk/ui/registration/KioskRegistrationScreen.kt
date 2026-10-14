@@ -163,16 +163,16 @@ fun KioskRegistrationScreen(
                                     prisonId = uiState.prisonIdInput,
                                     isLoading = uiState.isLoading,
                                     onPrisonIdChange = { viewModel.onPrisonIdChange(it) },
-                                    onNext = { viewModel.goToPinStep() }
+                                    onNext = { viewModel.goToPasswordStep() }
                                 )
 
-                                RegistrationStep.ENTER_PIN -> StepEnterPin(
+                                RegistrationStep.ENTER_PASSWORD -> StepEnterPassword(
                                     prisonId = uiState.prisonIdInput,
-                                    pin = uiState.setupPin,
+                                    password = uiState.setupPassword,
                                     isLoading = uiState.isLoading,
-                                    onPinChange = { viewModel.onPinChange(it) },
+                                    onPasswordChange = { viewModel.onPasswordChange(it) },
                                     onBack = { viewModel.backToPreviousStep() },
-                                    onNext = { viewModel.validatePinAndProceed() }
+                                    onNext = { viewModel.validatePasswordAndProceed() }
                                 )
 
                                 RegistrationStep.SUBMIT_DEVICE_INFO -> StepSubmitDeviceInfo(
@@ -505,7 +505,7 @@ private fun StepSelectJail(
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
         ) {
-            Text("Continue to Setup PIN", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text("Continue to Setup Password", fontSize = 15.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.width(8.dp))
             Icon(imageVector = Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
         }
@@ -513,11 +513,11 @@ private fun StepSelectJail(
 }
 
 @Composable
-private fun StepEnterPin(
+private fun StepEnterPassword(
     prisonId: String?,
-    pin: String,
+    password: String,
     isLoading: Boolean,
-    onPinChange: (String) -> Unit,
+    onPasswordChange: (String) -> Unit,
     onBack: () -> Unit,
     onNext: () -> Unit
 ) {
@@ -535,14 +535,14 @@ private fun StepEnterPin(
         )
         Spacer(modifier = Modifier.height(12.dp))
         Text(
-            text = "Step 2: Enter Jail Setup PIN",
+            text = "Step 2: Enter Jail Setup Password",
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
             color = Color.White,
             textAlign = TextAlign.Center
         )
         Text(
-            text = "Enter the 6-digit Setup PIN configured by the Warden for facility: $prisonId.",
+            text = "Enter the setup password configured by the Warden for facility: $prisonId.",
             fontSize = 13.sp,
             color = Color(0xFF94A3B8),
             textAlign = TextAlign.Center,
@@ -551,13 +551,13 @@ private fun StepEnterPin(
 
 
         OutlinedTextField(
-            value = pin,
-            onValueChange = { if (it.length <= 6) onPinChange(it) },
-            label = { Text("6-Digit Setup PIN") },
-            placeholder = { Text("enter kiosk setup pin") },
+            value = password,
+            onValueChange = { if (it.length <= 64) onPasswordChange(it) },
+            label = { Text("Setup Password") },
+            placeholder = { Text("enter jail setup password") },
             singleLine = true,
             visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedContainerColor = Color(0xFF0F172A),
                 unfocusedContainerColor = Color(0xFF0F172A),
@@ -591,7 +591,7 @@ private fun StepEnterPin(
 
             Button(
                 onClick = onNext,
-                enabled = pin.length == 6 && !isLoading,
+                enabled = password.isNotEmpty() && !isLoading,
                 modifier = Modifier
                     .weight(1.5f)
                     .height(50.dp),
@@ -601,7 +601,7 @@ private fun StepEnterPin(
                 if (isLoading) {
                     CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White)
                 } else {
-                    Text("Validate PIN", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    Text("Validate Password", fontSize = 15.sp, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.width(6.dp))
                     Icon(imageVector = Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
                 }

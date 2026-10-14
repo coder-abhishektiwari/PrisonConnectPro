@@ -72,8 +72,8 @@ interface TrustApiService {
     @GET("prisons/list")
     suspend fun getPrisonList(): ApiResponse<List<Prison>>
 
-    @POST("kiosks/validate-setup-pin")
-    suspend fun validateSetupPin(@Body request: ValidateSetupPinRequest): ApiResponse<ValidateSetupPinResponse>
+    @POST("kiosks/validate-setup-password")
+    suspend fun validateSetupPassword(@Body request: ValidateSetupPasswordRequest): ApiResponse<ValidateSetupPasswordResponse>
 
     @POST("kiosks/register")
     suspend fun registerKiosk(@Body request: KioskRegistrationRequest): ApiResponse<KioskRegistrationResponse>

@@ -52,8 +52,8 @@ class RemoteAuthDataSource @Inject constructor(
     override suspend fun getPrisonList(): ApiResponse<List<Prison>> =
         cache.getOrFetch("prisons:list", ttlMs = 60_000L) { apiService.getPrisonList() }
 
-    override suspend fun validateSetupPin(request: ValidateSetupPinRequest): ApiResponse<ValidateSetupPinResponse> =
-        apiService.validateSetupPin(request)
+    override suspend fun validateSetupPassword(request: ValidateSetupPasswordRequest): ApiResponse<ValidateSetupPasswordResponse> =
+        apiService.validateSetupPassword(request)
 
     override suspend fun registerKiosk(request: KioskRegistrationRequest): ApiResponse<KioskRegistrationResponse> =
         apiService.registerKiosk(request)
