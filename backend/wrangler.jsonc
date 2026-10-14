@@ -47,8 +47,6 @@
   //   "FAST2SMS_LINK_TEMPLATE_ID": "",
   //   "FAST2SMS_SCHEDULED_TEMPLATE_ID": "",
   //   "JAIL_ACCOUNT_API_URL": "",
-  //   "SEED_SRC_DIR": "",
-  //   "FORCE_SEED": "",
   //   "DATABASE_SSL": "",
   //   "SMS_OTP_EXPIRY_MINUTES": "",
   //   "JAIL_ACCOUNT_TIMEOUT_MS": "",

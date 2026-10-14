@@ -9,7 +9,7 @@ PrisonConnect provides a multi-tenant, secure ecosystem consisting of:
 - **`android-kiosk/`**: Native Android Application (Kotlin) running on hardware kiosks for inmate multi-modal authentication (RFID, Fingerprint, Prisoner ID), call scheduling, balance checks, WebRTC audio/video streams, live billing, and receipt printing.
 - **`family-web/`**: Browser-based React + TypeScript web client requiring zero application download for verified family members joining scheduled encrypted calls.
 - **`warden-dashboard/`**: React + TypeScript administration portal for silent live call monitoring, call control (mute/disconnect), inmate profile management, prisoner trust account management, recording center, kiosk health monitoring, and SaaS multi-jail management.
-- **`backend/`**: Node.js/Express API + Socket.IO gateway. PostgreSQL persistence (migrations in `db-schema/`, self-seeding from `legacy-db/`), wallet/billing ledger, call records, and SMS/OTP dispatch.
+- **`backend/`**: Node.js/Express API + Socket.IO gateway. PostgreSQL persistence (migrations in `db-schema/`), wallet/billing ledger, call records, and SMS/OTP dispatch.
 - **`signaling-server/`**: Node.js Socket.IO hub that relays WebRTC offer/answer/ICE between the kiosk and the family browser. Pure P2P — no media passes through it.
 - **`docs/`**: Complete architectural diagrams, infrastructure design, security policies, and technical specifications.
 
@@ -70,23 +70,16 @@ npm run dev --workspace=warden-dashboard # warden console  → http://localhost:
 
 ### First boot and the database
 
-Point `DATABASE_URL` at an **empty** PostgreSQL database and start the backend:
-it runs `backend/db-schema/*.sql` (001→004) and then seeds itself from
-`backend/legacy-db/` — no manual schema step. Cells/blocks are created with
-sensible defaults. The seed is non-destructive: collections that already hold
-rows are skipped, so restarts and redeploys never wipe runtime-created records
-(kiosk registrations, new inmates, wallet top-ups).
+Point `DATABASE_URL` at a PostgreSQL database and start the backend: it runs
+`backend/db-schema/*.sql` on every boot (idempotent, tracked in
+`schema_migrations`) — no manual schema step. A fresh database starts
+**empty**; bring it to life through the API:
 
-Two things to know:
-
-- The auto-seed only triggers when the database has **zero** tables. A
-  database that already has _some_ tables is left alone, so a half-migrated
-  schema never gets repaired on its own. Fix that explicitly with
-  `npm run seed --workspace=backend` (runs `migrate()` first, still
-  non-destructive).
-- `FORCE_SEED=true` (or `npm run seed:force --workspace=backend`) **wipes and
-  re-seeds** every table from `legacy-db/`. Only use it on a database you are
-  happy to discard.
+1. `POST /auth/register` — creates the first warden account and its jail.
+2. Dashboard → Configuration → **Facility Setup PIN** — set the 6-digit PIN
+   the kiosk uses during device setup.
+3. Register the kiosk (it validates the Setup PIN first), then approve it from
+   the dashboard Kiosks page.
 
 If inmates exist without a wallet row, run `npm run backfill:wallets --workspace=backend`
 (idempotent; `-- --dry-run` to preview). It writes zero-balance wallets and

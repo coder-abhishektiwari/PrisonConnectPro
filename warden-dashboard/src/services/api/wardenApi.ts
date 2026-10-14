@@ -1012,26 +1012,6 @@ export const wardenApi = {
   getSubscriptions: () =>
     cachedGet('subscriptions', () => apiClient.get<ApiResponse<any[]>>('/subscriptions').then((r) => r.data?.data ?? [])),
 
-  // Cells
-  getCells: () =>
-    cachedGet('cells', () => apiClient.get<ApiResponse<{ items: any[] }>>('/cells/all').then((r) => r.data?.data?.items ?? [])),
-
-  createCell: (name: string) =>
-    apiClient.post<ApiResponse<any>>('/cells', { name }).then((r) => r.data?.data),
-
-  deleteCell: (cellId: string) =>
-    apiClient.delete(`/cells/${cellId}`),
-
-  // Blocks
-  getBlocks: () =>
-    cachedGet('blocks', () => apiClient.get<ApiResponse<{ items: any[] }>>('/blocks/all').then((r) => r.data?.data?.items ?? [])),
-
-  createBlock: (name: string) =>
-    apiClient.post<ApiResponse<any>>('/blocks', { name }).then((r) => r.data?.data),
-
-  deleteBlock: (blockId: string) =>
-    apiClient.delete(`/blocks/${blockId}`),
-
   // Toggle inmate active/inactive
   toggleInmate: (inmateId: string) =>
     apiClient.patch<ApiResponse<any>>(`/inmates/admin/prisoners/${inmateId}/toggle`).then((r) => r.data?.data),

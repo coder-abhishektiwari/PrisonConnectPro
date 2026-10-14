@@ -416,7 +416,7 @@ class KioskRegistrationViewModel @Inject constructor(
 
     /**
      * Resets the flow back to the Jail ID step when the registration record no
-     * longer exists (e.g. the backend was re-seeded and wiped it). Lets the
+     * longer exists (e.g. the kiosk row was deleted on the backend). Lets the
      * operator register the device again.
      */
     private fun resetForReRegistration(errorMessage: String) {

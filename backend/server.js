@@ -42,7 +42,6 @@ const createIncidentsRouter = require('./routes/incidents');
 const prisonsRouter = require('./routes/prisons');
 const transactionsRouter = require('./routes/transactions');
 const createSettingsRouter = require('./routes/settings');
-const { createCellsRouter, createBlocksRouter } = require('./routes/cells-blocks');
 const misRouter = require('./routes/mis');
 
 const app = express();
@@ -155,8 +154,6 @@ app.use('/prisons', prisonsRouter);
 app.use('/transactions', transactionsRouter);
 app.use('/settings', settingsRouter);
 app.use('/wallets', walletsRouter);
-app.use('/cells', createCellsRouter());
-app.use('/blocks', createBlocksRouter());
 app.use('/mis', misRouter);
 
 // ==================== RAZORPAY WEBHOOK ====================
@@ -828,39 +825,24 @@ app.use((err, req, res, next) => {
 // ==================== START ====================
 const PORT = process.env.PORT || 3000;
 
-async function autoSeed() {
+async function runMigrations() {
   if (!process.env.DATABASE_URL) {
-    console.warn('[startup] DATABASE_URL not set — skipping auto-seed');
+    console.warn('[startup] DATABASE_URL not set — skipping migrations');
     return;
   }
   try {
     // Migrations run on every boot: they are idempotent (tracked in
     // schema_migrations) and a redeploy must never leave a table behind the
-    // code that reads it.
+    // code that reads it. There is no data seeding anymore — a fresh database
+    // starts empty and fills through the API (register → setup PIN → kiosk).
     const { migrate } = require('./lib/migrate');
     await migrate();
-
-    const { Pool } = require('pg');
-    const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 2, connectionTimeoutMillis: 5000 });
-    const { rows } = await pool.query("SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'");
-    const tableCount = parseInt(rows[0].count, 10);
-    await pool.end();
-
-    if (tableCount === 0 || process.env.FORCE_SEED === 'true') {
-      console.log('[startup] database empty or FORCE_SEED set — running seed...');
-      // seed.js is a standalone script — exec it in a child process
-      const { execSync } = require('child_process');
-      execSync('node lib/seed.js', { cwd: __dirname, stdio: 'inherit', env: { ...process.env, FORCE_SEED: 'true' } });
-      console.log('[startup] auto-seed complete');
-    } else {
-      console.log(`[startup] database has ${tableCount} tables — schema up to date, seed skipped`);
-    }
   } catch (err) {
-    console.error('[startup] auto-seed failed (non-blocking):', err.message);
+    console.error('[startup] migration failed (non-blocking):', err.message);
   }
 }
 
-autoSeed().then(() => startServer());
+runMigrations().then(() => startServer());
 
 function startServer() {
   server.listen(PORT, () => {

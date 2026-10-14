@@ -9,7 +9,7 @@ COPY . .
 
 EXPOSE 3001
 
-# Migrations run on every startup and must succeed; the seed is best-effort so
-# a single bad collection can never keep the API from booting (a dead API looks
-# like "invalid credentials" on the login screen).
-CMD ["sh", "-c", "node lib/migrate.js || exit 1; node lib/seed.js || echo '[seed] failed - starting server anyway'; exec node server.js"]
+# Migrations run on every startup and must succeed; a failure means the code
+# would read tables that do not exist yet, so refuse to boot rather than serve
+# 500s (a dead API looks like "invalid credentials" on the login screen).
+CMD ["sh", "-c", "node lib/migrate.js || exit 1; exec node server.js"]
