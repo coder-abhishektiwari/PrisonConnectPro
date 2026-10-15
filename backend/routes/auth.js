@@ -15,6 +15,19 @@ const authLimiter = rateLimit({
   message: { success: false, error: { code: 'RATE_LIMITED', message: 'Too many attempts, try again later' } }
 });
 
+// Pre-auth identification primitives (fingerprint / RFID / prisoner number /
+// admin username). These are public by design — the kiosk has no session yet —
+// so they need their own budget: generous enough for a kiosk admitting one
+// inmate after another, but bounded so a remote caller cannot grind through
+// the inmate roster looking for matches.
+const identifyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: { code: 'RATE_LIMITED', message: 'Too many attempts, try again later' } }
+});
+
 const router = express.Router();
 
 // ==================== AUTH (real credential checks + JWT) ====================
@@ -335,7 +348,7 @@ async function matchesBiometric(presented, stored) {
   return false;
 }
 
-router.post('/fingerprint-identify', asyncRoute(async (req, res) => {
+router.post('/fingerprint-identify', identifyLimiter, asyncRoute(async (req, res) => {
   const { capture } = req.body;
   if (!capture) return sendError(res, 'INVALID_REQUEST', 'capture is required', 400);
   const presented = Buffer.from(String(capture), 'base64').toString('utf8').trim();
@@ -345,7 +358,7 @@ router.post('/fingerprint-identify', asyncRoute(async (req, res) => {
     await matchesBiometric(presented, i.biometricData?.fingerprintTemplate), 0.92);
 }));
 
-router.post('/rfid-identify', asyncRoute(async (req, res) => {
+router.post('/rfid-identify', identifyLimiter, asyncRoute(async (req, res) => {
   const { kioskId, rfidToken } = req.body;
   if (!kioskId || !rfidToken) return sendError(res, 'INVALID_REQUEST', 'kioskId and rfidToken are required', 400);
 
@@ -374,7 +387,7 @@ router.post('/rfid-identify', asyncRoute(async (req, res) => {
   });
 }));
 
-router.post('/prisoner/identify', asyncRoute(async (req, res) => {
+router.post('/prisoner/identify', identifyLimiter, asyncRoute(async (req, res) => {
   const prisonerId = req.query.prisonerId || req.body.prisonerId;
   const kioskId = req.query.kioskId || req.body.kioskId;
 
@@ -446,7 +459,7 @@ router.post('/verify-pin', authLimiter, asyncRoute(async (req, res) => {
   });
 }));
 
-router.post('/admin/identify', asyncRoute(async (req, res) => {
+router.post('/admin/identify', identifyLimiter, asyncRoute(async (req, res) => {
   const { kioskId, username } = req.body;
   const [admins, kiosks] = await Promise.all([readDb('admins.json'), readDb('kiosks.json')]);
   const kiosk = kiosks.find((k) => k.kioskId === kioskId);

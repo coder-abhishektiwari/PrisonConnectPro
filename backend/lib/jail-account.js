@@ -1,21 +1,16 @@
 /**
- * Jail-account integration layer.
- *
- * The kiosk wallet screen must reflect the inmate's REAL jail account balance
- * and the deductions applied to it. When JAIL_ACCOUNT_API_URL is configured
- * this module calls the external prison/jail accounting API. Otherwise it falls
- * back to the internal Postgres-backed collections (wallets.json /
- * transactions.json) so the kiosk keeps working during development.
+ * Wallet statement layer.
  *
  * The wallet statement is the SINGLE source of truth for everything the app
  * shows about money (balance, total spent, last recharge). Derived values are
  * computed here once, from the transaction ledger, so the dashboard, profile
  * and wallet screens always agree and the frontend never has to re-derive them.
+ *
+ * There is no external accounting API. Money only ever enters a wallet through
+ * the platform's own Razorpay flow (lib/wallet-credit.js) and leaves it through
+ * call charges, so transactions.json is a complete ledger on its own.
  */
 const { readDb } = require('./db');
-
-const JAIL_ACCOUNT_API_URL = process.env.JAIL_ACCOUNT_API_URL || '';
-const JAIL_ACCOUNT_TIMEOUT_MS = parseInt(process.env.JAIL_ACCOUNT_TIMEOUT_MS || '4000', 10);
 
 /** Resolve an inmate record by inmateId / assignedKioskId / prisonerNumber. */
 async function resolveInmate(id) {
@@ -70,37 +65,16 @@ function deriveSummary(transactions, wallet = {}) {
     balance: Number.isFinite(balance) ? balance : 0,
     totalSpent: Number.isFinite(totalSpent) ? totalSpent : 0,
     lastRecharge: lastRecharge ? lastRecharge.timestamp : null,
-    lastRechargeAmount: lastRecharge ? (Number(lastRecharge.amount) || 0) : null,
+    lastRechargeAmount: lastRecharge ? Number(lastRecharge.amount) || 0 : null,
     remainingMinutes: 0,
     transactionCount: settled.length
   };
 }
 
-/** Try the external jail accounting API. Returns null when not configured/failing. */
-async function externalStatement(wallet) {
-  if (!JAIL_ACCOUNT_API_URL) return null;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), JAIL_ACCOUNT_TIMEOUT_MS);
-  try {
-    const res = await fetch(`${JAIL_ACCOUNT_API_URL}/accounts/${encodeURIComponent(wallet.walletId)}/statement`, {
-      headers: { Accept: 'application/json' }
-    });
-    if (!res.ok) {
-      console.error(`[jail-account] external API ${res.status}: ${await res.text().catch(() => '')}`);
-      return null;
-    }
-    return await res.json();
-  } catch (err) {
-    console.error(`[jail-account] external API fetch failed: ${err.message}`);
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 /**
  * Fetch a wallet statement (balance + transactions) for an inmate.
- * Always returns { wallet, transactions } with internal data as fallback.
+ * Always returns `{ wallet, transactions }`, or null when the inmate/wallet is
+ * unknown.
  */
 async function getStatement(id) {
   const inmate = await resolveInmate(id);
@@ -108,25 +82,6 @@ async function getStatement(id) {
 
   const wallet = await internalWallet(inmate);
   if (!wallet) return null;
-
-  const external = await externalStatement(wallet);
-  if (external && (external.wallet || external.balance != null) && Array.isArray(external.transactions)) {
-    const summary = deriveSummary(external.transactions, external.wallet || wallet);
-    return {
-      wallet: {
-        walletId: wallet.walletId,
-        inmateId: wallet.inmateId || inmate.inmateId,
-        balance: summary.balance,
-        currency: external.currency || external.wallet?.currency || wallet.currency || 'INR',
-        status: external.status || external.wallet?.status || wallet.status || 'active',
-        totalSpent: summary.totalSpent,
-        lastRecharge: summary.lastRecharge,
-        lastRechargeAmount: summary.lastRechargeAmount,
-        remainingMinutes: summary.remainingMinutes
-      },
-      transactions: external.transactions
-    };
-  }
 
   const rawTransactions = await internalTransactions(wallet);
   // Normalize: ensure every transaction has status='completed' (standardize on single value)

@@ -38,9 +38,6 @@ export const callApi = {
   sendOtp: (linkToken: string) =>
     api.post<ApiResponse<SendOtpResult>>(`/family/secure-call/send-otp/${linkToken}`).then((r) => r.data.data),
 
-  getDevOtp: (linkToken: string) =>
-    api.get<ApiResponse<{ otp: string; expiresAt?: string | null }>>(`/family/secure-call/info/${linkToken}`).then((r) => r.data.data),
-
   verifyOtp: (linkToken: string, otp: string) =>
     api.post<ApiResponse<OtpVerificationResult>>(`/family/secure-call/verify-otp/${linkToken}`, { otp }).then((r) => r.data.data),
 

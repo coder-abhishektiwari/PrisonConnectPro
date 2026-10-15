@@ -7,8 +7,7 @@ import com.prisonconnect.kiosk.api.TrustApiService
 import com.prisonconnect.kiosk.core.Logger
 import com.prisonconnect.kiosk.hardware.DeviceInfoProvider
 import com.prisonconnect.kiosk.models.auth.KioskHeartbeatRequest
-import com.prisonconnect.kiosk.upload.RecordingUploadWorker
-import com.prisonconnect.kiosk.upload.RecordingUploadWorkerFactory
+import com.prisonconnect.kiosk.recordings.RecordingVaultWorker
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -33,11 +32,9 @@ class PrisonKioskApp : Application(), Configuration.Provider {
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    /** Custom factory so recording-upload workers get their Hilt deps. */
+    /** WorkManager needs no custom factory: the recording worker has no deps. */
     override val workManagerConfiguration: Configuration
-        get() = Configuration.Builder()
-            .setWorkerFactory(RecordingUploadWorkerFactory(this))
-            .build()
+        get() = Configuration.Builder().build()
 
     // Device identity and OS facts never change while the process lives, so
     // they are resolved once instead of on every ping.
@@ -69,19 +66,16 @@ class PrisonKioskApp : Application(), Configuration.Provider {
             }
         }
 
-        // Any recording whose metadata never reached the server before the
-        // last process died (crash, reboot, network outage) is queued for
-        // register+encrypt again; encrypted files are skipped by construction.
-        RecordingUploadWorker.scanPending(this)
+        // Any recording that was still plaintext when the last process died
+        // (crash, reboot) is queued for encryption again; anything already in
+        // the vault is skipped by construction.
+        RecordingVaultWorker.scanPending(this)
 
         // Single background ping. This is what the dashboard reads to decide
         // Online/Offline and Last Seen — without it a kiosk that is sitting idle
         // would never report in. A kiosk roams between Wi-Fi networks, so a
         // failed ping retries in a few seconds instead of waiting out the whole
-        // interval and looking offline for an extra half minute. The response
-        // also carries any warden retrieval requests — the only channel that
-        // can ask a kiosk to push a recording up (no kiosk socket; the session
-        // token dies on every app restart, but this public ping always works).
+        // interval and looking offline for an extra half minute.
         appScope.launch {
             var intervalMs = HEARTBEAT_INTERVAL_MS
             while (isActive) {
@@ -101,10 +95,6 @@ class PrisonKioskApp : Application(), Configuration.Provider {
                     appVersion = com.prisonconnect.kiosk.BuildConfig.VERSION_NAME
                 )
             )
-            response.data?.pendingRetrievals.orEmpty().forEach { pending ->
-                Logger.i("Heartbeat: retrieve requested recordingId=${pending.recordingId}")
-                RecordingUploadWorker.enqueueRetrieve(this, pending)
-            }
             true
         } catch (t: Throwable) {
             Logger.w("Heartbeat failed: ${t.message}")

@@ -95,8 +95,6 @@ export interface ActiveCall {
   mediaConnectedAt?: string | null;
   endTime: string | null;
   durationMinutes: number;
-  recordingEnabled: boolean;
-  recordingStatus: string;
   connectionQuality: string;
   bitrate: number;
   packetLoss: number;
@@ -123,8 +121,6 @@ export interface CallHistoryItem {
   startTime: string;
   endTime: string;
   durationMinutes: number;
-  recordingEnabled?: boolean;
-  recordingStatus?: string;
   connectionQuality?: string;
   inmateName?: string;
   inmateNumber?: string | null;
@@ -156,7 +152,6 @@ export interface CallHistoryParams {
   status?: string;
   kioskId?: string;
   quality?: string;
-  recording?: string;
   dateFrom?: string;
   dateTo?: string;
   sortField?: string;
@@ -183,60 +178,6 @@ export interface ListParams {
   inmateId?: string;
 }
 
-export interface Recording {
-  recordingId: string;
-  callId: string;
-  inmateId: string;
-  kioskId: string;
-  startTime: string;
-  endTime: string | null;
-  duration: number;
-  size?: number;
-  url?: string | null;
-  /** True when a stored, playable file exists (drives the Play button). */
-  available?: boolean;
-  fileName?: string;
-  encryptionKey?: string | null;
-  encryption?: string;
-  retentionDays?: number;
-  status: string;
-  /** Where the master copy lives: 'kiosk' (retrieval needed) or 'backend'. */
-  storage?: 'kiosk' | 'backend';
-  /** On-demand retrieval lifecycle of the backend's temp copy. */
-  retrieval?: {
-    status?: 'requested' | 'transferring' | 'ready' | 'expired';
-    requestedAt?: string | null;
-    startedAt?: string | null;
-    completedAt?: string | null;
-    expiresAt?: string | null;
-    expiredAt?: string | null;
-  } | null;
-}
-
-/** Snapshot of one recording's retrieval/upload state (GET /recordings/:id/status). */
-export interface RecordingStatus {
-  status: 'ready' | 'transferring' | 'requested' | 'stored' | 'kiosk_offline' | 'unavailable';
-  available: boolean;
-  storage?: 'kiosk' | 'backend';
-  receivedBytes?: number;
-  size?: number;
-  expiresAt?: string | null;
-  requestedAt?: string | null;
-}
-
-export interface Alert {
-  alertId: string;
-  type: string;
-  severity: string;
-  message: string;
-  source: string;
-  sourceId: string;
-  timestamp: string;
-  resolved: boolean;
-  resolvedAt?: string | null;
-  resolvedBy?: string | null;
-}
-
 export interface Device {
   deviceId: string;
   type: string;
@@ -254,22 +195,6 @@ export interface Device {
   camera?: string;
   microphone?: string;
   printer?: string;
-}
-
-export interface Report {
-  reportId: string;
-  name: string;
-  type: string;
-  generatedAt: string;
-  period: string;
-  totalCalls?: number;
-  totalDuration?: number;
-  totalRevenue?: number;
-  failedCalls?: number;
-  avgDuration?: number;
-  peakUsage?: string;
-  fileSize: string;
-  downloadUrl: string;
 }
 
 export interface Inmate {
@@ -384,25 +309,12 @@ export interface Transaction {
   orderId?: string;
 }
 
-export interface Schedule {
-  scheduleId: string;
-  inmateId: string;
-  contactId: string;
-  kioskId: string;
-  date: string;
-  timeSlot: string;
-  callType: string;
-  status: string;
-  createdAt: string;
-}
-
 export interface Settings {
   callSettings: {
     defaultCallType?: string;
     /** Backend key used by POST /calls — the warden-controlled max call length. */
     maxCallDurationMinutes: number;
     maxDuration?: number;
-    recordingEnabled?: boolean;
     autoTerminate?: boolean;
   };
   systemSettings: {
@@ -424,29 +336,6 @@ export interface Pricing {
   billingRules?: Record<string, unknown>;
 }
 
-export interface DashboardStats {
-  activeCalls: number;
-  activeRecordings: number;
-  onlineKiosks: number;
-  offlineKiosks: number;
-  totalKiosks: number;
-  todayCalls: number;
-  failedCalls: number;
-  alerts: number;
-  revenueToday: number;
-}
-
-export interface Incident {
-  incidentId: string;
-  category: string;
-  severity: string;
-  remarks: string;
-  time: string;
-  officerName: string;
-  callId?: string | null;
-  createdAt: string;
-}
-
 export interface CallStatistics {
   callId: string;
   packetLoss: number;
@@ -457,14 +346,6 @@ export interface CallStatistics {
   fps: number;
   networkHealth: string;
   timestamp: string;
-}
-
-export interface CallControlEvent {
-  callId: string;
-  action: string;
-  target?: string;
-  timestamp: string;
-  appliedBy: string;
 }
 
 export interface SecurityStatus {
@@ -499,11 +380,8 @@ function listKey(prefix: string, params?: object): string {
 export const cacheKeys = {
   activeCalls: (params?: ListParams) => listKey('calls:active', params),
   callHistory: (params?: CallHistoryParams) => listKey('calls:history', params),
-  allCalls: () => 'calls:all',
   call: (callId: string) => `calls:${callId}`,
-  dashboardStats: () => 'dash:stats',
   devices: (params?: ListParams) => listKey('devices:list', params),
-  device: (deviceId: string) => `devices:${deviceId}`,
   inmates: (params?: ListParams) => listKey('inmates:list', params),
   inmate: (inmateId: string) => `inmates:${inmateId}`,
   contacts: (params?: ListParams) => listKey('contacts:list', params),
@@ -514,18 +392,10 @@ export const cacheKeys = {
   kioskRegistrations: (params?: ListParams) => listKey('kiosks:registration', params),
   kioskRegistrationStats: () => 'kiosks:registration:stats',
   wardens: (params?: ListParams) => listKey('wardens:list', params),
-  warden: (wardenId: string) => `wardens:${wardenId}`,
   wardenStats: () => 'wardens:stats',
   kioskAdmins: () => 'kiosk-admins',
   settings: () => 'settings',
   pricing: () => 'pricing',
-  schedule: () => 'schedule',
-  alerts: () => 'alerts',
-  recordings: () => 'recordings',
-  recording: (recordingId: string) => `recordings:${recordingId}`,
-  incidents: () => 'incidents',
-  reports: () => 'reports',
-  prisons: () => 'prisons',
   prison: (prisonId: string) => `prisons:${prisonId}`,
 };
 
@@ -541,20 +411,9 @@ export const wardenApi = {
     );
   },
 
-  // All Calls
-  getAllCalls: () =>
-    cachedGet('calls:all', () => apiClient.get<ApiResponse<ActiveCall[]>>('/calls').then((r) => r.data?.data ?? [])),
-
   // Call by ID
   getCall: (callId: string) =>
     cachedGet(`calls:${callId}`, () => apiClient.get<ApiResponse<ActiveCall>>(`/calls/${callId}`).then((r) => r.data?.data)),
-
-  // Update Call
-  updateCall: (callId: string, updates: Partial<ActiveCall>) =>
-    apiClient.patch<ApiResponse<ActiveCall>>(`/calls/${callId}`, updates).then((r) => {
-      invalidatePrefix('calls:active', 'calls:all', `calls:${callId}`);
-      return r.data?.data;
-    }),
 
   // Call History
   getCallHistory: (params?: CallHistoryParams) => {
@@ -567,67 +426,6 @@ export const wardenApi = {
     );
   },
 
-  // Recordings
-  getRecordings: () =>
-    cachedGet('recordings', () => apiClient.get<ApiResponse<Recording[]>>('/recordings').then((r) => r.data?.data ?? [])),
-
-  getRecording: (recordingId: string) =>
-    cachedGet(`recordings:${recordingId}`, () => apiClient.get<ApiResponse<Recording>>(`/recordings/${recordingId}`).then((r) => r.data?.data)),
-
-  /**
-   * Short-lived, signed streaming URL for the <video> tag (media requests
-   * cannot carry the Authorization header). Absolute, so it can be used
-   * directly as src/href.
-   */
-  getRecordingUrl: (recordingId: string) =>
-    apiClient
-      .get<ApiResponse<{ url: string; expiresAt: string }>>(`/recordings/${recordingId}/url`)
-      .then((r) => {
-        const url = r.data?.data?.url;
-        if (!url) throw new Error('Recording URL missing');
-        const base = (apiClient.defaults.baseURL || '').replace(/\/+$/, '');
-        return `${base}${url}`;
-      }),
-
-  startRecording: (recordingId: string) =>
-    apiClient.post<ApiResponse<Recording>>(`/recordings/${recordingId}/start`).then((r) => {
-      invalidatePrefix('recordings');
-      return r.data?.data;
-    }),
-
-  stopRecording: (recordingId: string) =>
-    apiClient.post<ApiResponse<Recording>>(`/recordings/${recordingId}/stop`).then((r) => {
-      invalidatePrefix('recordings');
-      return r.data?.data;
-    }),
-
-  /**
-   * Ask the kiosk holding this recording's master copy to push it to the
-   * backend (temporary copy, TTL-swept later). 409 KIOSK_OFFLINE when the
-   * device has not heartbeated recently.
-   */
-  retrieveRecording: (recordingId: string) =>
-    apiClient
-      .post<ApiResponse<{ status: string; available?: boolean }>>(`/recordings/${recordingId}/retrieve`)
-      .then((r) => {
-        invalidatePrefix('recordings');
-        return r.data?.data;
-      }),
-
-  /** Poll point for the "Retrieving file…" overlay. */
-  getRecordingStatus: (recordingId: string) =>
-    apiClient.get<ApiResponse<RecordingStatus>>(`/recordings/${recordingId}/status`).then((r) => r.data?.data),
-
-  // Alerts
-  getAlerts: () =>
-    cachedGet('alerts', () => apiClient.get<ApiResponse<Alert[]>>('/alerts').then((r) => r.data?.data ?? [])),
-
-  resolveAlert: (alertId: string, resolvedBy: string) =>
-    apiClient.patch<ApiResponse<Alert>>(`/alerts/${alertId}/resolve`, { resolvedBy }).then((r) => {
-      invalidatePrefix('alerts');
-      return r.data?.data;
-    }),
-
   // Devices
   getDevices: (params?: ListParams) => {
     const qs = buildQs(params);
@@ -638,22 +436,6 @@ export const wardenApi = {
       60_000,
     );
   },
-
-  getDevice: (deviceId: string) =>
-    cachedGet(`devices:${deviceId}`, () => apiClient.get<ApiResponse<Device>>(`/devices/${deviceId}`).then((r) => r.data?.data)),
-
-  updateDeviceStatus: (deviceId: string, status: string) =>
-    apiClient.patch<ApiResponse<Device>>(`/devices/${deviceId}/status`, { status }).then((r) => {
-      invalidatePrefix('devices');
-      return r.data?.data;
-    }),
-
-  // Reports
-  getReports: () =>
-    cachedGet('reports', () => apiClient.get<ApiResponse<Report[]>>('/reports').then((r) => r.data?.data ?? [])),
-
-  getReport: (reportId: string) =>
-    cachedGet(`reports:${reportId}`, () => apiClient.get<ApiResponse<Report>>(`/reports/${reportId}`).then((r) => r.data?.data)),
 
   // Inmates
   getInmates: (params?: ListParams) => {
@@ -735,10 +517,6 @@ export const wardenApi = {
       30_000,
     ),
 
-  // Schedule
-  getSchedule: () =>
-    cachedGet('schedule', () => apiClient.get<ApiResponse<Schedule[]>>('/schedule').then((r) => r.data?.data ?? [])),
-
   // Settings
   getSettings: () =>
     // Some deployments return the singleton settings row as a 1-element array
@@ -749,17 +527,6 @@ export const wardenApi = {
       return (Array.isArray(d) ? (d[0] as Settings | undefined) : d) ?? undefined;
     }), 60_000),
 
-  updateSettings: (settings: Partial<Settings>) =>
-    apiClient.patch<ApiResponse<Settings>>('/settings', settings).then((r) => {
-      invalidatePrefix('settings');
-      return r.data?.data;
-    }),
-
-  // Ensure wallet statements also refresh when settings that could affect UI are changed
-  invalidateWallets: () => {
-    invalidatePrefix('wallet');
-  },
-
   // Pricing (per-minute call rates set by the warden)
   getPricing: () =>
     // Same singleton-as-array quirk as getSettings — normalize.
@@ -768,106 +535,17 @@ export const wardenApi = {
       return (Array.isArray(d) ? (d[0] as Pricing | undefined) : d) ?? undefined;
     }), 60_000),
 
-  updatePricing: (pricing: Partial<Pricing>) =>
-    apiClient.patch<ApiResponse<Pricing>>('/pricing', pricing).then((r) => {
-      // Pricing directly affects wallet remaining minutes, so bust every wallet + pricing entry
-      invalidatePrefix('wallet', 'pricing');
-      return r.data?.data;
-    }),
-
-  // Incidents
-  getIncidents: () =>
-    cachedGet('incidents', () => apiClient.get<ApiResponse<Incident[]>>('/incidents').then((r) => r.data?.data ?? [])),
-
-  createIncident: (incident: Partial<Incident>) =>
-    apiClient.post<ApiResponse<Incident>>('/incidents', incident).then((r) => {
-      invalidatePrefix('incidents');
-      return r.data?.data;
-    }),
-
-  getIncident: (incidentId: string) =>
-    cachedGet(`incidents:${incidentId}`, () => apiClient.get<ApiResponse<Incident>>(`/incidents/${incidentId}`).then((r) => r.data?.data)),
-
   // Statistics
   getStatistics: () =>
     cachedGet('statistics', () => apiClient.get<ApiResponse<CallStatistics[]>>('/statistics').then((r) => r.data?.data ?? [])),
 
-  getCallStatistics: (callId: string) =>
-    cachedGet(`statistics:${callId}`, () => apiClient.get<ApiResponse<CallStatistics>>(`/statistics/${callId}`).then((r) => r.data?.data)),
-
-  updateCallStatistics: (callId: string, updates: Partial<CallStatistics>) =>
-    apiClient.patch<ApiResponse<CallStatistics>>(`/statistics/${callId}`, updates).then((r) => {
-      invalidatePrefix('statistics', `statistics:${callId}`);
-      return r.data?.data;
-    }),
-
-  // Call Control
-  sendCallControl: (callId: string, action: string, target?: string) =>
-    apiClient.post<ApiResponse<CallControlEvent>>(`/calls/${callId}/control`, { action, target }).then((r) => r.data?.data),
-
-  // End Call (force disconnect) — immediately moves from active → call logs (completed) + synthesizes recording
+  // End Call (force disconnect) — immediately moves from active → call logs (completed)
   endCall: (callId: string) =>
     apiClient.post<ApiResponse<ActiveCall>>(`/calls/${callId}/end`, { endReason: 'warden_ended' }).then((r) => {
-      // Bust live + history + recordings + stats caches so next fetches are fresh, not 30s stale
-      invalidatePrefix('calls:active', 'calls:all', 'calls:history', `calls:${callId}`, 'recordings', `recordings:${callId}`, 'statistics');
+      // Bust live + history + stats caches so next fetches are fresh, not 30s stale
+      invalidatePrefix('calls:active', 'calls:all', 'calls:history', `calls:${callId}`, 'statistics');
       return r.data?.data;
     }),
-
-  // Dashboard Stats
-  getDashboardStats: (): Promise<DashboardStats> =>
-    cachedGet('dash:stats', async () => {
-    try {
-      const [callsRes, devicesRes, alertsRes, recordingsRes, reportsRes] = await Promise.allSettled([
-        apiClient.get<ApiResponse<ActiveCall[]>>('/calls'),
-        apiClient.get<ApiResponse<Device[]>>('/devices'),
-        apiClient.get<ApiResponse<Alert[]>>('/alerts'),
-        apiClient.get<ApiResponse<Recording[]>>('/recordings'),
-        apiClient.get<ApiResponse<Report[]>>('/reports'),
-      ]);
-
-      const calls = callsRes.status === 'fulfilled' ? callsRes.value.data?.data ?? [] : [];
-      const devices = devicesRes.status === 'fulfilled' ? devicesRes.value.data?.data ?? [] : [];
-      const alerts = alertsRes.status === 'fulfilled' ? alertsRes.value.data?.data ?? [] : [];
-      const recordings = recordingsRes.status === 'fulfilled' ? recordingsRes.value.data?.data ?? [] : [];
-      const reports = reportsRes.status === 'fulfilled' ? reportsRes.value.data?.data ?? [] : [];
-
-      const todayStr = new Date().toDateString();
-
-      const activeCalls = calls.filter((c) => c.status === 'active');
-      const activeRecordings = recordings.filter((r) => r.status === 'recording');
-      const onlineKiosks = devices.filter((d) => d.status === 'online');
-      const offlineKiosks = devices.filter((d) => d.status === 'offline');
-      const todayCalls = calls.filter((c) => new Date(c.startTime).toDateString() === todayStr);
-      const failedCalls = calls.filter((c) => c.status === 'failed');
-      const unresolvedAlerts = alerts.filter((a) => !a.resolved);
-      const dailyReport = reports.find((r) => r.type === 'daily');
-
-      return {
-        activeCalls: activeCalls.length,
-        activeRecordings: activeRecordings.length,
-        onlineKiosks: onlineKiosks.length,
-        offlineKiosks: offlineKiosks.length,
-        totalKiosks: devices.length,
-        todayCalls: todayCalls.length,
-        failedCalls: failedCalls.length,
-        alerts: unresolvedAlerts.length,
-        revenueToday: dailyReport?.totalRevenue ?? 0,
-      };
-    } catch (error) {
-      console.error('Failed to fetch dashboard stats', error);
-      return {
-        activeCalls: 0, activeRecordings: 0, onlineKiosks: 0, offlineKiosks: 0,
-        totalKiosks: 0, todayCalls: 0, failedCalls: 0, alerts: 0, revenueToday: 0
-      };
-    }
-    }, 30_000),
-
-  getStorage: async () => {
-    try {
-      const r = await apiClient.get<ApiResponse<{ used: number; total: number; available: number; retentionDays: number; encryption: string }>>('/storage');
-      return r.data?.data ?? null;
-    } catch { return null; }
-  },
 
   // Kiosk Registration & Authorization
   getKiosks: () =>
@@ -995,9 +673,6 @@ export const wardenApi = {
       }),
 
   // Prisons
-  getPrisons: () =>
-    cachedGet('prisons', () => apiClient.get<ApiResponse<any[]>>('/prisons').then((r) => r.data?.data ?? [])),
-
   getPrison: (prisonId: string) =>
     cachedGet(`prisons:${prisonId}`, () => apiClient.get<ApiResponse<PrisonInfo>>(`/prisons/${encodeURIComponent(prisonId)}`).then((r) => r.data?.data)),
 
@@ -1007,10 +682,6 @@ export const wardenApi = {
       invalidatePrefix('prisons');
       return r.data?.data;
     }),
-
-  // Subscriptions
-  getSubscriptions: () =>
-    cachedGet('subscriptions', () => apiClient.get<ApiResponse<any[]>>('/subscriptions').then((r) => r.data?.data ?? [])),
 
   // Toggle inmate active/inactive
   toggleInmate: (inmateId: string) =>

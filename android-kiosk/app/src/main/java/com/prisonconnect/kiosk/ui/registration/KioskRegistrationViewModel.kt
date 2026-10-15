@@ -8,7 +8,6 @@ import com.prisonconnect.kiosk.core.Logger
 import com.prisonconnect.kiosk.core.SessionManager
 import com.prisonconnect.kiosk.hardware.DeviceInfoProvider
 import com.prisonconnect.kiosk.models.auth.KioskRegistrationRequest
-import com.prisonconnect.kiosk.models.auth.Prison
 import com.prisonconnect.kiosk.network.NetworkResult
 import com.prisonconnect.kiosk.repository.AuthRepository
 import dagger.hilt.android.lifecycle.HiltViewModel

@@ -214,20 +214,6 @@ class CallRepositoryImpl @Inject constructor(
         }
     }.flowOn(Dispatchers.IO)
 
-    override fun uploadRecording(request: RecordingUploadRequest): Flow<NetworkResult<RecordingUploadResponse>> = flow {
-        try {
-            val response = apiService.uploadRecording(request)
-            if (response.success && response.data != null) {
-                emit(NetworkResult.Success(response.data))
-            } else {
-                emit(NetworkResult.Failure(response.error ?: ApiError("UPLOAD_FAILED", "Recording upload failed")))
-            }
-        } catch (e: Exception) {
-            Logger.e("Recording upload exception", e)
-            emit(NetworkResult.Failure(ApiError("EXCEPTION", e.message ?: "Upload network exception")))
-        }
-    }.flowOn(Dispatchers.IO)
-
     override fun notifyCallEnded(callId: String, request: EndCallRequest) {
         // Fire-and-forget: finalizes duration/billing on the backend. Failure
         // (e.g. transient network) is non-fatal — the call has already ended.

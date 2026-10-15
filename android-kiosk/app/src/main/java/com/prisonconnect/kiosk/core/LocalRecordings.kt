@@ -1,7 +1,7 @@
 package com.prisonconnect.kiosk.core
 
 import android.content.Context
-import com.prisonconnect.kiosk.upload.RecordingVault
+import com.prisonconnect.kiosk.recordings.RecordingVault
 import java.io.File
 
 /**

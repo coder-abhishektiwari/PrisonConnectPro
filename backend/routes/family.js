@@ -328,21 +328,4 @@ router.get('/secure-call/heartbeat/:linkToken', asyncRoute(async (req, res) => {
   return sendSuccess(res, payload);
 }));
 
-// 6. GET /secure-call/info/:linkToken
-router.get('/secure-call/info/:linkToken', asyncRoute(async (req, res) => {
-  const { linkToken } = req.params;
-  if (process.env.NODE_ENV === 'production' || (process.env.SMS_PROVIDER || '').toLowerCase() === 'fast2sms') {
-    return sendError(res, 'FORBIDDEN', 'OTP debug endpoint is disabled', 403);
-  }
-  const calls = await readDb('calls.json');
-  const call = calls.find((c) => c.linkToken === linkToken);
-  if (!call) return sendError(res, 'NOT_FOUND', 'Invalid or expired call link', 404);
-  if (call.status === 'completed' || call.status === 'cancelled') {
-    return sendError(res, 'CALL_ENDED', 'This call has already ended', 410);
-  }
-  if (call.family?.otpVerified) return sendError(res, 'ALREADY_VERIFIED', 'OTP already verified', 409);
-  if (!call.otp) return sendError(res, 'NO_OTP', 'No pending OTP; dispatch it first', 404);
-  return sendSuccess(res, { otp: String(call.otp), expiresAt: call.otpExpiresAt || null });
-}));
-
 module.exports = router;

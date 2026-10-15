@@ -6,7 +6,6 @@ import {
   MonitorPlay, 
   CircleDollarSign, 
   ShieldCheck, 
-  HardDrive, 
   BarChart3, 
   Settings,
   LogOut,
@@ -21,7 +20,6 @@ const navItems = [
   { to: '/live-monitoring', label: 'Live Monitoring', icon: MonitorPlay },
   { to: '/pricing', label: 'Pricing', icon: CircleDollarSign },
   { to: '/subscriptions', label: 'Subscriptions', icon: ShieldCheck },
-  { to: '/storage', label: 'Recording Storage', icon: HardDrive },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/settings', label: 'Global Settings', icon: Settings },
 ];

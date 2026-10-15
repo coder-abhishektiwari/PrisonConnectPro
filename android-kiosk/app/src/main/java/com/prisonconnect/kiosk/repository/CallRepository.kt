@@ -35,7 +35,6 @@ interface CallRepository {
     fun sendCallEnded(reason: String = "hangup")
     fun sendIceCandidate(candidate: JSONObject)
     fun getCallStatus(callId: String): Flow<NetworkResult<CallStatusSnapshot>>
-    fun uploadRecording(request: RecordingUploadRequest): Flow<NetworkResult<RecordingUploadResponse>>
 
     /** Finalize the backend call record (duration/billing) once the call ends. */
     fun notifyCallEnded(callId: String, request: EndCallRequest = EndCallRequest())

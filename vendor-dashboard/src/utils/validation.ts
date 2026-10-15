@@ -104,30 +104,3 @@ export function validateRegister(
 
   return { valid: Object.keys(errors).length === 0, errors };
 }
-
-/**
- * Validate forgot password form.
- */
-export function validateForgotPassword(email: string): ValidationResult {
-  const errors: Record<string, string> = {};
-  const emailError = validateEmail(email);
-  if (emailError) errors.email = emailError;
-  return { valid: Object.keys(errors).length === 0, errors };
-}
-
-/**
- * Validate reset password form.
- */
-export function validateResetPassword(
-  newPassword: string,
-  confirmPassword: string
-): ValidationResult {
-  const errors: Record<string, string> = {};
-  const passwordError = validateStrongPassword(newPassword);
-  const confirmError = validateConfirmPassword(newPassword, confirmPassword);
-
-  if (passwordError) errors.newPassword = passwordError;
-  if (confirmError) errors.confirmPassword = confirmError;
-
-  return { valid: Object.keys(errors).length === 0, errors };
-}

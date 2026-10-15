@@ -5,11 +5,9 @@ import { apiClient } from '@/services/api/client';
 import type {
   AuthUser,
   ChangePasswordRequest,
-  ForgotPasswordResponse,
   LoginResponse,
   RegisterRequest,
   RegisterResponse,
-  ResetPasswordRequest,
 } from '@/types/auth';
 
 interface ApiEnvelope<T> {
@@ -71,28 +69,6 @@ export const authApi = {
     const response = await apiClient.get<ApiEnvelope<AuthUser>>('/auth/me', {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
-    return response.data.data;
-  },
-
-  /**
-   * Request a password reset.
-   */
-  forgotPassword: async (email: string): Promise<ForgotPasswordResponse> => {
-    const response = await apiClient.post<ApiEnvelope<ForgotPasswordResponse>>(
-      '/auth/forgot-password',
-      { email }
-    );
-    return response.data.data;
-  },
-
-  /**
-   * Reset password using a reset token.
-   */
-  resetPassword: async (data: ResetPasswordRequest): Promise<{ message: string }> => {
-    const response = await apiClient.post<ApiEnvelope<{ message: string }>>(
-      '/auth/reset-password',
-      data
-    );
     return response.data.data;
   },
 

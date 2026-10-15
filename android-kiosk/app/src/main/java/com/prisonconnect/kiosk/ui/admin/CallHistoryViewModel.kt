@@ -26,9 +26,9 @@ import javax.inject.Inject
 
 /**
  * Call History for the kiosk admin: the backend's kiosk-scoped call list
- * merged with the local recording vault. Recordings never leave the device
- * (RECORDINGS_LOCAL_ONLY), so "has recording" is answered by scanning the
- * local vault, and playback happens entirely on this kiosk.
+ * merged with the local recording vault. Recordings never leave the device,
+ * so "has recording" is answered by scanning the local vault, and playback
+ * happens entirely on this kiosk.
  */
 @HiltViewModel
 class CallHistoryViewModel @Inject constructor(

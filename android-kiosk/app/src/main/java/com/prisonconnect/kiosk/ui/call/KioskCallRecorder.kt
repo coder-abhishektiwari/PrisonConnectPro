@@ -6,7 +6,7 @@ import android.media.MediaCodec
 import android.media.MediaCodecInfo
 import android.media.MediaFormat
 import com.prisonconnect.kiosk.core.Logger
-import com.prisonconnect.kiosk.upload.RecordingUploadWorker
+import com.prisonconnect.kiosk.recordings.RecordingVaultWorker
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -55,7 +55,6 @@ class KioskCallRecorder @Inject constructor(
     @Volatile private var pcmQueue: ArrayBlockingQueue<ByteArray>? = null
     @Volatile private var worker: Thread? = null
     @Volatile private var pacer: Thread? = null
-    @Volatile private var sessionStartNs = 0L
 
     // Video side: encoder + composition thread.
     @Volatile private var encoder: RecordingVideoEncoder? = null
@@ -168,7 +167,6 @@ class KioskCallRecorder @Inject constructor(
         val st = StereoStitcher().also { it.reset() }
         stitcher = st
         val startNs = System.nanoTime()
-        sessionStartNs = startNs
 
         val dir = appContext.getExternalFilesDir("Recordings")
             ?: File(appContext.filesDir, "Recordings")
@@ -262,13 +260,9 @@ class KioskCallRecorder @Inject constructor(
         val size = file?.length() ?: 0L
         Logger.i("Recording finalized size=$size path=$path")
         if (file != null && size > 0) {
-            // WorkManager takes over: registers the metadata with the backend
-            // (dashboard row appears) and then encrypts the master in place.
-            // The file itself stays on the device until a warden retrieves it.
-            val durationSeconds = if (sessionStartNs > 0) {
-                ((System.nanoTime() - sessionStartNs) / 1_000_000_000L).toInt().coerceAtLeast(1)
-            } else null
-            RecordingUploadWorker.enqueueRegister(appContext, file, currentCallId, durationSeconds)
+            // WorkManager takes over: encrypts the master in place with the
+            // keystore key. Nothing about this file ever leaves the kiosk.
+            RecordingVaultWorker.enqueueEncrypt(appContext, file)
         }
     }
 

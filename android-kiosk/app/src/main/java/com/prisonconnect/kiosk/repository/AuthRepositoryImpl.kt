@@ -411,20 +411,6 @@ class AuthRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun getPrisonList(): Flow<NetworkResult<List<Prison>>> = flow {
-        emit(NetworkResult.Loading)
-        try {
-            val response = dataSource.getPrisonList()
-            if (response.success && response.data != null) {
-                emit(NetworkResult.Success(response.data))
-            } else {
-                emit(NetworkResult.Failure(ApiError("FETCH_FAILED", response.error?.message ?: "Failed to fetch prisons")))
-            }
-        } catch (e: Exception) {
-            emit(NetworkResult.Failure(ApiError("EXCEPTION", e.message ?: "Network error fetching prison list")))
-        }
-    }
-
     override fun validateSetupPassword(prisonId: String, password: String): Flow<NetworkResult<ValidateSetupPasswordResponse>> = flow {
         emit(NetworkResult.Loading)
         try {

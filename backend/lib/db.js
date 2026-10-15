@@ -68,7 +68,6 @@ const REGISTRY = {
   'contacts.json':     { table: 'contacts',                idKey: 'contactId', cols: { inmateId: 'inmate_id', prisonId: 'prison_id' } },
   'rooms.json':        { table: 'rooms',                   idKey: 'roomId', cols: { kioskId: 'kiosk_id', inmateId: 'inmate_id', contactId: 'contact_id', status: 'status' } },
   'calls.json':        { table: 'calls',                   idKey: 'callId', cols: { roomId: 'room_id', inmateId: 'inmate_id', contactId: 'contact_id', kioskId: 'kiosk_id', prisonId: 'prison_id', status: 'status', startTime: 'start_time', endTime: 'end_time' } },
-  'recordings.json':   { table: 'recordings',              idKey: 'recordingId', cols: { callId: 'call_id', kioskId: 'kiosk_id', inmateId: 'inmate_id' } },
   'schedule.json':     { table: 'schedule',                idKey: 'scheduleId', cols: { inmateId: 'inmate_id', contactId: 'contact_id', kioskId: 'kiosk_id', date: 'date', timeSlot: 'time_slot', status: 'status' } },
   'wallets.json':      { table: 'wallets',                 idKey: 'walletId', cols: { inmateId: 'inmate_id' } },
   'transactions.json': { table: 'transactions',            idKey: 'transactionId', cols: { walletId: 'wallet_id', inmateId: 'inmate_id', callId: 'call_id' } },

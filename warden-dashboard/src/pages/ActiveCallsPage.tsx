@@ -38,7 +38,7 @@ export function ActiveCallsPage() {
   const refreshRef = useRef(refresh);
   refreshRef.current = refresh;
   const onCallUpdate = useCallback(() => { refreshRef.current(); }, []);
-  useWardenSocket(onCallUpdate, undefined, undefined, undefined);
+  useWardenSocket(onCallUpdate);
   useEffect(() => { setPage(1); }, [search]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));

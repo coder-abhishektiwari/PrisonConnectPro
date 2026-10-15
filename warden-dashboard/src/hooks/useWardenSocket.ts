@@ -1,16 +1,10 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { backendSocket } from '@/services/socket/socketClient';
 import { invalidatePrefix } from '@/services/api/cache';
-import type { Alert, Device, Recording } from '@/services/api/wardenApi';
 
 type EventHandler = (data: any) => void;
 
-export function useWardenSocket(
-  onActiveCallsUpdate?: () => void,
-  onAlertGenerated?: (alert: Alert) => void,
-  onDeviceStatusChange?: (device: Device) => void,
-  onRecordingUpdate?: (recording: Recording) => void
-) {
+export function useWardenSocket(onActiveCallsUpdate?: () => void) {
   const handlersRef = useRef<Map<string, EventHandler>>(new Map());
 
   useEffect(() => {
@@ -20,7 +14,7 @@ export function useWardenSocket(
     const handlers: Record<string, EventHandler> = {
       'call-created': (data) => {
         console.log('[Socket] Call created:', data);
-        invalidatePrefix('calls:active', 'calls:all', 'calls:history');
+        invalidatePrefix('calls:active', 'calls:all', 'calls:history', 'statistics');
         onActiveCallsUpdate?.();
       },
       'call-updated': (data) => {
@@ -30,44 +24,8 @@ export function useWardenSocket(
       },
       'call-ended': (data) => {
         console.log('[Socket] Call ended:', data);
-        invalidatePrefix('calls:active', 'calls:all', 'calls:history', 'recordings', 'statistics');
+        invalidatePrefix('calls:active', 'calls:all', 'calls:history', 'statistics');
         onActiveCallsUpdate?.();
-      },
-      'alert-generated': (data) => {
-        console.log('[Socket] Alert generated:', data);
-        onAlertGenerated?.(data);
-      },
-      'device-status-change': (data) => {
-        console.log('[Socket] Device status changed:', data);
-        onDeviceStatusChange?.(data);
-      },
-      'recording-started': (data) => {
-        console.log('[Socket] Recording started:', data);
-        invalidatePrefix('recordings');
-        onRecordingUpdate?.(data);
-      },
-      'recording-finished': (data) => {
-        console.log('[Socket] Recording finished:', data);
-        invalidatePrefix('recordings');
-        onRecordingUpdate?.(data);
-      },
-      // Kiosk registered a recording's metadata (file stays on the device).
-      'recording-registered': (data) => {
-        console.log('[Socket] Recording registered:', data);
-        invalidatePrefix('recordings');
-        onRecordingUpdate?.(data);
-      },
-      // Retrieval accepted / bytes moving — row shows "Retrieving file…".
-      'recording-retrieving': (data) => {
-        console.log('[Socket] Recording retrieving:', data);
-        invalidatePrefix('recordings');
-        onRecordingUpdate?.(data);
-      },
-      // Status flips (ready / expired) outside of this tab's own poll.
-      'recording-updated': (data) => {
-        console.log('[Socket] Recording updated:', data);
-        invalidatePrefix('recordings');
-        onRecordingUpdate?.(data);
       },
       'settings-updated': (data) => {
         console.log('[Socket] Settings updated:', data);
@@ -76,9 +34,6 @@ export function useWardenSocket(
       'pricing-updated': (data) => {
         console.log('[Socket] Pricing updated:', data);
         invalidatePrefix('pricing', 'wallets', 'wallets:all', 'statistics');
-      },
-      'incident-created': (data) => {
-        console.log('[Socket] Incident created:', data);
       },
       'statistics-updated': (data) => {
         console.log('[Socket] Statistics updated:', data);
@@ -96,8 +51,12 @@ export function useWardenSocket(
         socket.off(event, handler as any);
       });
       handlersRef.current.clear();
+      // The backend broadcasts every event to every connected socket, so a
+      // socket outliving its page (or the login that opened it) would keep
+      // receiving live call/alert traffic after logout.
+      socket.disconnect();
     };
-  }, [onActiveCallsUpdate, onAlertGenerated, onDeviceStatusChange, onRecordingUpdate]);
+  }, [onActiveCallsUpdate]);
 
   const sendEvent = useCallback((event: string, data: any) => {
     backendSocket.emit(event, data);

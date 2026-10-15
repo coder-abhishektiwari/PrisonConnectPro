@@ -109,16 +109,6 @@ export function LoginPage() {
               icon={<Lock className="w-5 h-5" />}
             />
 
-            {/* Forgot Password Link */}
-            <div className="flex justify-end">
-              <Link
-                to="/forgot-password"
-                className="text-sm font-medium text-primary-400 hover:text-primary-300 transition-colors"
-              >
-                Forgot password?
-              </Link>
-            </div>
-
             <LoadingButton
               type="submit"
               size="lg"

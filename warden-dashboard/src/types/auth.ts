@@ -34,16 +34,6 @@ export interface RegisterResponse extends AuthTokens {
   user: AuthUser;
 }
 
-export interface ForgotPasswordResponse {
-  message: string;
-  resetToken?: string; // Mock only - remove in production
-}
-
-export interface ResetPasswordRequest {
-  token: string;
-  newPassword: string;
-}
-
 export interface ChangePasswordRequest {
   currentPassword: string;
   newPassword: string;

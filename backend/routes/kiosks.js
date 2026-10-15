@@ -71,12 +71,6 @@ function parseWhen(value) {
 // the moment they are written, so they are never trusted for online/offline.
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const HEARTBEAT_GRACE_MS = 4 * HEARTBEAT_INTERVAL_MS;
-// Keep in step with routes/recordings.js: a retrieve request the kiosk never
-// picked up stops being delivered after this long.
-const RETRIEVE_REQUEST_TTL_MS = 30 * 60 * 1000;
-// Once bytes are moving, the request stays on the queue much longer so a
-// mid-transfer process restart can resume instead of stranding the row.
-const RETRIEVE_TRANSFER_TTL_MS = 2 * 60 * 60 * 1000;
 
 function kioskLive(k) {
   const beat = parseWhen(k?.lastHeartbeatAt);
@@ -147,9 +141,8 @@ router.post('/verify', asyncRoute(async (req, res) => {
 
   if (!authorized) return sendSuccess(res, { success: true, authorized: false, reason: 'unauthorized', kiosk: null });
 
-  // Long-lived device credential: the kiosk's background workers (recording
-  // registration, on-demand retrieval uploads) run without a logged-in user,
-  // so they authenticate with this instead of an expiring session token.
+  // Long-lived device credential: background workers that run without a
+  // logged-in user authenticate with this instead of an expiring session token.
   const deviceToken = signAccessToken(
     {
       sub: kiosk.kioskId,
@@ -253,44 +246,11 @@ router.post('/heartbeat', asyncRoute(async (req, res) => {
   });
   if (!updated) return sendError(res, 'NOT_FOUND', 'Unknown kiosk device', 404);
 
-  // On-demand retrieval queue: recordings whose master sits on this device and
-  // a warden has asked for. The heartbeat is how the request reaches a kiosk
-  // that holds no user session (idle, between inmates). Fresh 'requested'
-  // items expire after 30 minutes (warden just re-requests); 'transferring'
-  // items get a 2-hour window measured from their start so a slow upload or a
-  // kiosk process restart mid-transfer can still re-queue itself.
-  let pendingRetrievals = [];
-  try {
-    const recordings = await readDb('recordings.json');
-    const now = Date.now();
-    pendingRetrievals = recordings
-      .filter((r) => {
-        if (r.kioskId !== updated.kioskId) return false;
-        if (r.storage !== 'kiosk' || !r.retrieval) return false;
-        const st = r.retrieval.status;
-        if (st !== 'requested' && st !== 'transferring') return false;
-        const windowMs = st === 'transferring' ? RETRIEVE_TRANSFER_TTL_MS : RETRIEVE_REQUEST_TTL_MS;
-        const anchor = st === 'transferring'
-          ? (r.retrieval.startedAt || r.retrieval.requestedAt)
-          : r.retrieval.requestedAt;
-        const at = anchor ? Date.parse(anchor) : 0;
-        return at >= now - windowMs;
-      })
-      .map((r) => ({
-        recordingId: r.recordingId,
-        callId: r.callId,
-        fileName: r.localFileName || r.fileName || null
-      }));
-  } catch (err) {
-    console.warn('[kiosks] pendingRetrievals lookup failed:', err.message);
-  }
-
   return sendSuccess(res, {
     ok: true,
     kioskId: updated.kioskId,
     status: kioskDisplayStatus(updated),
-    lastSeen: updated.lastSeen,
-    pendingRetrievals
+    lastSeen: updated.lastSeen
   });
 }));
 
@@ -919,177 +879,6 @@ router.put('/setup-password', requireAuth, requireRole('admin', 'warden', 'super
   });
   if (!updated) return sendError(res, 'NOT_FOUND', 'Prison not found', 404);
   return sendSuccess(res, { success: true });
-}));
-
-// ==================== PASSWORD CHANGE REQUESTS ====================
-
-router.post('/password-change-request', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
-  const { prisonId, currentPassword, newPassword, reason } = req.body;
-  if (!prisonId || !currentPassword || !newPassword) {
-    return sendError(res, 'INVALID_REQUEST', 'prisonId, currentPassword, and newPassword are required', 400);
-  }
-  
-  if (!isSetupPassword(newPassword)) {
-    return sendError(res, 'INVALID_PASSWORD', 'New password must be 8-64 characters and include letters and numbers', 400);
-  }
-
-  const prisons = await readDb('prisons.json');
-  const prison = prisons.find((p) => p.prisonId === prisonId);
-  if (!prison) return sendError(res, 'NOT_FOUND', 'Prison not found', 404);
-  if (!(await inScopeOf(req, prison))) return sendError(res, 'NOT_FOUND', 'Prison not found', 404);
-  
-  const valid = await verifySecret(currentPassword, prison.setupPassword);
-  if (!valid) {
-    return sendError(res, 'INVALID_CREDENTIALS', 'Current password is incorrect', 401);
-  }
-
-  const hashedNewPassword = await hashSecret(String(newPassword));
-  // Create password change request
-  const changeRequest = {
-    requestId: 'PWREQ-' + Date.now().toString(36).toUpperCase(),
-    prisonId,
-    requestedBy: req.auth.sub,
-    requestedByRole: req.auth.role,
-    newPasswordHash: hashedNewPassword,
-    reason: reason || 'Routine security update',
-    status: 'pending',
-    requestedAt: new Date().toISOString(),
-    reviewedAt: null,
-    reviewedBy: null,
-    reviewedByRole: null,
-    comments: null
-  };
-
-  const updated = await updateDb('prisons.json', (prisons) => {
-    const idx = prisons.findIndex((p) => p.prisonId === prisonId);
-    if (idx === -1) return { data: prisons, result: null };
-    
-    if (!prisons[idx].passwordChangeRequests) {
-      prisons[idx].passwordChangeRequests = [];
-    }
-    prisons[idx].passwordChangeRequests.push(changeRequest);
-    return { data: prisons, result: prisons[idx] };
-  });
-
-  if (!updated) return sendError(res, 'NOT_FOUND', 'Prison not found', 404);
-  return sendSuccess(res, changeRequest, 201);
-}));
-
-router.get('/password-change-requests', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
-  const { prisonId } = req.query;
-  const prisons = await readDb('prisons.json');
-  let requests = [];
-  for (const prison of prisons) {
-    if (prison.passwordChangeRequests && prison.passwordChangeRequests.length > 0) {
-      // Scoped staff only see password-change requests for prisons in their jail.
-      if (!(await inScopeOf(req, prison))) continue;
-      if (!prisonId || prison.prisonId === prisonId) {
-        const prisonName = prison.name;
-        requests.push(...prison.passwordChangeRequests.map((req) => ({
-          ...req,
-          prisonName
-        })));
-      }
-    }
-  }
-
-  // Sort by requestedAt descending (newest first)
-  requests.sort((a, b) => new Date(b.requestedAt) - new Date(a.requestedAt));
-  
-  return sendSuccess(res, requests);
-}));
-
-router.put('/password-change-request/:requestId/approve', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
-  const { requestId } = req.params;
-  const { comments } = req.body;
-  
-  const allPrisons = await readDb('prisons.json');
-  const owner = allPrisons.find((p) => p.passwordChangeRequests && p.passwordChangeRequests.some((r) => r.requestId === requestId));
-  if (!owner || !(await inScopeOf(req, owner))) {
-    return sendError(res, 'NOT_FOUND', 'Password change request not found or already processed', 404);
-  }
-  let found = false;
-  
-  const updated = await updateDb('prisons.json', (prisons) => {
-    for (const prison of prisons) {
-      if (prison.passwordChangeRequests) {
-        const reqIdx = prison.passwordChangeRequests.findIndex((r) => r.requestId === requestId);
-        if (reqIdx !== -1) {
-          const request = prison.passwordChangeRequests[reqIdx];
-          
-          // Only approve if still pending
-          if (request.status !== 'pending') {
-            return { data: prisons, result: null };
-          }
-          
-          // Update the password
-          prison.setupPassword = request.newPasswordHash;
-          
-          // Update request status
-          prison.passwordChangeRequests[reqIdx] = {
-            ...request,
-            status: 'approved',
-            reviewedAt: new Date().toISOString(),
-            reviewedBy: req.auth.sub,
-            reviewedByRole: req.auth.role,
-            comments: comments || 'Approved'
-          };
-          
-          found = true;
-          break;
-        }
-      }
-    }
-    return { data: prisons, result: prisons };
-  });
-
-  if (!found) return sendError(res, 'NOT_FOUND', 'Password change request not found or already processed', 404);
-  return sendSuccess(res, { success: true, message: 'Password changed successfully' });
-}));
-
-router.put('/password-change-request/:requestId/reject', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
-  const { requestId } = req.params;
-  const { comments } = req.body;
-  
-  const allPrisons = await readDb('prisons.json');
-  const owner = allPrisons.find((p) => p.passwordChangeRequests && p.passwordChangeRequests.some((r) => r.requestId === requestId));
-  if (!owner || !(await inScopeOf(req, owner))) {
-    return sendError(res, 'NOT_FOUND', 'Password change request not found or already processed', 404);
-  }
-  let found = false;
-  
-  const updated = await updateDb('prisons.json', (prisons) => {
-    for (const prison of prisons) {
-      if (prison.passwordChangeRequests) {
-        const reqIdx = prison.passwordChangeRequests.findIndex((r) => r.requestId === requestId);
-        if (reqIdx !== -1) {
-          const request = prison.passwordChangeRequests[reqIdx];
-          
-          // Only reject if still pending
-          if (request.status !== 'pending') {
-            return { data: prisons, result: null };
-          }
-          
-          // Update request status (don't change the password)
-          prison.passwordChangeRequests[reqIdx] = {
-            ...request,
-            status: 'rejected',
-            reviewedAt: new Date().toISOString(),
-            reviewedBy: req.auth.sub,
-            reviewedByRole: req.auth.role,
-            comments: comments || 'Rejected'
-          };
-          
-          found = true;
-          break;
-        }
-      }
-    }
-    return { data: prisons, result: prisons };
-  });
-
-  if (!found) return sendError(res, 'NOT_FOUND', 'Password change request not found or already processed', 404);
-  return sendSuccess(res, { success: true, message: 'Password change request rejected' });
 }));
 
 module.exports = router;

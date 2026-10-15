@@ -76,15 +76,6 @@ export function OtpVerificationPage() {
       setPhoneMasked(result.phoneMasked);
       listenForOtp();
       setWaitingForSms(false);
-      // Dev/demo: auto-fill from backend log
-      if (import.meta.env.DEV && session) {
-        try {
-          const dev = await callApi.getDevOtp(linkToken);
-          if (dev?.otp) setOtp(dev.otp);
-        } catch (err) {
-          console.warn('[otp] dev auto-fill unavailable:', err);
-        }
-      }
     } catch (err) {
       setWaitingForSms(false);
       setError(err instanceof Error ? err.message : 'Failed to send OTP.');

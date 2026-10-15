@@ -63,13 +63,6 @@ data class KioskInfo(
     @SerializedName("ipAddress") val ipAddress: String?
 )
 
-data class Prison(
-    @SerializedName("prisonId") val prisonId: String,
-    @SerializedName("name") val name: String,
-    @SerializedName("city") val city: String?,
-    @SerializedName("state") val state: String?
-)
-
 data class ValidateSetupPasswordRequest(
     @SerializedName("prisonId") val prisonId: String,
     @SerializedName("password") val password: String
@@ -125,14 +118,5 @@ data class KioskHeartbeatResponse(
     @SerializedName("ok") val ok: Boolean = false,
     @SerializedName("kioskId") val kioskId: String? = null,
     @SerializedName("status") val status: String? = null,
-    @SerializedName("lastSeen") val lastSeen: String? = null,
-    /** Recordings a warden asked this device to push to the backend. */
-    @SerializedName("pendingRetrievals") val pendingRetrievals: List<PendingRetrieval>? = null
-)
-
-/** One on-demand retrieval request delivered over the heartbeat. */
-data class PendingRetrieval(
-    @SerializedName("recordingId") val recordingId: String,
-    @SerializedName("callId") val callId: String,
-    @SerializedName("fileName") val fileName: String? = null
+    @SerializedName("lastSeen") val lastSeen: String? = null
 )

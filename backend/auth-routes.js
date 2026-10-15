@@ -89,19 +89,6 @@ router.post('/logout', requireAuth, async (req, res) => {
   return res.json({ success: true, message: 'Logged out' });
 });
 
-// Password reset request (stub — wire to email service in production)
-router.post('/forgot-password', (req, res) => {
-  const { email } = req.body;
-  if (!email) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'email is required' } });
-  return res.json({ success: true, message: 'If an account exists, a reset link has been sent.' });
-});
-
-router.post('/reset-password', (req, res) => {
-  const { token, newPassword } = req.body;
-  if (!token || !newPassword) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'token and newPassword are required' } });
-  return res.json({ success: true, message: 'Password reset successful' });
-});
-
 // Health check for auth service
 router.get('/health', (req, res) => {
   res.json({ success: true, service: 'auth', timestamp: Date.now() });

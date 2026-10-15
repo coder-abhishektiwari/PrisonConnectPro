@@ -3,8 +3,6 @@ import { AuthLayout } from '@/layouts/AuthLayout';
 import { DashboardLayout } from '@/layouts/DashboardLayout';
 import { LoginPage } from '@/pages/LoginPage';
 import { RegisterPage } from '@/pages/RegisterPage';
-import { ForgotPasswordPage } from '@/pages/ForgotPasswordPage';
-import { ResetPasswordPage } from '@/pages/ResetPasswordPage';
 import { ActiveCallsPage } from '@/pages/ActiveCallsPage';
 import { MonitorScreenPage } from '@/pages/MonitorScreenPage';
 import { CallHistoryPage } from '@/pages/CallHistoryPage';
@@ -19,8 +17,6 @@ import { RequireAuth, RedirectIfAuthenticated } from '@/components/auth/RouteGua
 export const RoutePaths = {
   login: '/login',
   register: '/register',
-  forgotPassword: '/forgot-password',
-  resetPassword: '/reset-password',
   activeCalls: '/calls',
   monitorScreen: '/monitoring/live/:callId',
   callHistory: '/calls/logs',
@@ -45,8 +41,6 @@ export const router = createBrowserRouter([
       { index: true, element: <Navigate to="/login" replace /> },
       { path: RoutePaths.login, element: <LoginPage /> },
       { path: RoutePaths.register, element: <RegisterPage /> },
-      { path: RoutePaths.forgotPassword, element: <ForgotPasswordPage /> },
-      { path: RoutePaths.resetPassword, element: <ResetPasswordPage /> },
     ],
   },
   {

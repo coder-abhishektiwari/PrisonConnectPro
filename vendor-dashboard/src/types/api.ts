@@ -55,11 +55,3 @@ export interface Pricing {
   gst: string;
   billingRules: string[];
 }
-
-export interface StorageStats {
-  total: number;
-  used: number;
-  available: number;
-  retention: string;
-  encryption: string;
-}

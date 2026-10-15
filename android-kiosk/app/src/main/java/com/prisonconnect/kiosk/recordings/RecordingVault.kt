@@ -1,4 +1,4 @@
-package com.prisonconnect.kiosk.upload
+package com.prisonconnect.kiosk.recordings
 
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
@@ -99,9 +99,9 @@ object RecordingVault {
     }
 
     /**
-     * Decrypts [enc] into [dest] (plain MP4 the uploader can stream). Throws
-     * when a chunk fails authentication — the caller must not upload the
-     * result of a failed decryption.
+     * Decrypts [enc] into [dest] (a plain MP4 the caller can play). Throws
+     * when a chunk fails authentication — a failed decryption must never be
+     * handed to a player as if it were the original.
      */
     fun decrypt(enc: File, dest: File) {
         DataInputStream(BufferedInputStream(FileInputStream(enc), IO_BUFFER)).use { input ->

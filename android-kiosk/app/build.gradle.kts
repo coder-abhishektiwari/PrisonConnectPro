@@ -48,9 +48,6 @@ android {
         val turnUsername = appProp("TURN_USERNAME", "turnuser")
         val turnCredential = appProp("TURN_CREDENTIAL", "turnpass")
         val autoLogoutMs = appProp("AUTO_LOGOUT_TIMEOUT_MS", "120000")
-        // Recordings stay on the kiosk: no backend registration, no upload.
-        // Flip to "false" in local.properties to restore push-to-backend.
-        val recordingsLocalOnly = appProp("RECORDINGS_LOCAL_ONLY", "true")
 
         buildConfigField("String", "TRUST_API_HOST", "\"$trustApiHost\"")
         buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
@@ -60,7 +57,6 @@ android {
         buildConfigField("String", "TURN_USERNAME", "\"$turnUsername\"")
         buildConfigField("String", "TURN_CREDENTIAL", "\"$turnCredential\"")
         buildConfigField("long", "AUTO_LOGOUT_TIMEOUT_MS", "${autoLogoutMs}L")
-        buildConfigField("boolean", "RECORDINGS_LOCAL_ONLY", recordingsLocalOnly)
 
         ndk {
             abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64"))

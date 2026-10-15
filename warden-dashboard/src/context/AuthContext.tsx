@@ -14,7 +14,6 @@ import type {
   ChangePasswordRequest,
   LoginResponse,
   RegisterRequest,
-  ResetPasswordRequest,
 } from '@/types/auth';
 import { authApi, getAuthErrorMessage } from '@/services/auth/authApi';
 import {
@@ -45,8 +44,6 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<void>;
   register: (data: RegisterRequest) => Promise<void>;
   logout: () => Promise<void>;
-  forgotPassword: (email: string) => Promise<{ message: string; resetToken?: string }>;
-  resetPassword: (data: ResetPasswordRequest) => Promise<void>;
   changePassword: (data: ChangePasswordRequest) => Promise<void>;
   clearError: () => void;
 }
@@ -285,42 +282,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [clearAuth]);
 
   /**
-   * Forgot password.
-   */
-  const forgotPassword = useCallback(async (email: string) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      return await authApi.forgotPassword(email);
-    } catch (err) {
-      setError(getAuthErrorMessage(err));
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  /**
-   * Reset password.
-   */
-  const resetPassword = useCallback(
-    async (data: ResetPasswordRequest) => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        await authApi.resetPassword(data);
-        clearAuth();
-      } catch (err) {
-        setError(getAuthErrorMessage(err));
-        throw err;
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [clearAuth]
-  );
-
-  /**
    * Change password.
    */
   const changePassword = useCallback(
@@ -353,8 +314,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       register,
       logout,
-      forgotPassword,
-      resetPassword,
       changePassword,
       clearError,
     }),
@@ -367,8 +326,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       register,
       logout,
-      forgotPassword,
-      resetPassword,
       changePassword,
       clearError,
     ]

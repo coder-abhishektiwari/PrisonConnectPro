@@ -9,7 +9,6 @@ const { v4: uuidv4 } = require('uuid');
 const { readDb, updateDb } = require('./lib/db');
 const { verifyToken, hashSecret } = require('./lib/auth');
 const { requireAuth, requireRole } = require('./middleware/auth');
-const { sendSms, otpTemplateVars } = require('./lib/sms');
 const { sendSuccess, sendError, asyncRoute, deepMerge } = require('./lib/response');
 const { jailScopeOf, inAdminScope, inScopeOf, scopeList, kioskScopeOf } = require('./lib/scoping');
 const { paginate } = require('./lib/paginate');
@@ -34,13 +33,8 @@ const inmatesRouter = require('./routes/inmates');
 const createContactsRouter = require('./routes/contacts');
 const createRoomsRouter = require('./routes/rooms');
 const scheduleRouter = require('./routes/schedule');
-const createRecordingsRouter = require('./routes/recordings');
-const createAlertsRouter = require('./routes/alerts');
-const createDevicesRouter = require('./routes/devices');
 const createStatisticsRouter = require('./routes/statistics');
-const createIncidentsRouter = require('./routes/incidents');
 const prisonsRouter = require('./routes/prisons');
-const transactionsRouter = require('./routes/transactions');
 const createSettingsRouter = require('./routes/settings');
 const misRouter = require('./routes/mis');
 
@@ -82,20 +76,18 @@ app.use((err, req, res, next) => {
 });
 
 // ==================== SOCKET.IO ====================
+// Only a holder of a valid JWT gets a socket. Handshake auth is checked on
+// every (re)connection so a dropped connection cannot rejoin anonymously —
+// broadcastEvent() is io.emit(), i.e. every event goes to every connected
+// socket, so "connected" must mean "authenticated".
 io.use((socket, next) => {
   const token = socket.handshake.auth?.token;
-  if (!token) {
-    // Allow unauthenticated connections for dashboard monitoring
-    socket.data.auth = { sub: 'anonymous', role: 'warden' };
-    return next();
-  }
+  if (!token) return next(new Error('unauthorized'));
   try {
     socket.data.auth = verifyToken(token);
     next();
   } catch (err) {
-    // Allow connection even with invalid token for monitoring
-    socket.data.auth = { sub: 'anonymous', role: 'warden' };
-    next();
+    next(new Error('unauthorized'));
   }
 });
 
@@ -145,13 +137,8 @@ app.use('/inmates', inmatesRouter);
 app.use('/contacts', createContactsRouter(broadcastEvent));
 app.use('/rooms', createRoomsRouter(broadcastEvent));
 app.use('/schedule', scheduleRouter);
-app.use('/recordings', createRecordingsRouter(broadcastEvent));
-app.use('/alerts', createAlertsRouter(broadcastEvent));
-app.use('/devices', createDevicesRouter(broadcastEvent));
 app.use('/statistics', createStatisticsRouter(broadcastEvent));
-app.use('/incidents', createIncidentsRouter(broadcastEvent));
 app.use('/prisons', prisonsRouter);
-app.use('/transactions', transactionsRouter);
 app.use('/settings', settingsRouter);
 app.use('/wallets', walletsRouter);
 app.use('/mis', misRouter);
@@ -779,7 +766,6 @@ app.get('/health', asyncRoute(async (req, res) => {
     sms: {
       provider: PROVIDER || process.env.SMS_PROVIDER || 'log',
       hasApiKey: !!process.env.FAST2SMS_API_KEY,
-      apiKeyPrefix: (process.env.FAST2SMS_API_KEY || '').substring(0, 4),
       domain: process.env.SMS_OTP_DOMAIN || '(none)',
       // Which DLT header each kind goes out under, and whether that kind is
       // actually routed to the gateway (some stay on `log` on purpose).
@@ -796,21 +782,6 @@ app.get('/health', asyncRoute(async (req, res) => {
       },
     }
   });
-}));
-
-// Sends a real SMS, so it stays behind an operator login.
-app.get('/test-sms', requireAuth, requireRole('admin', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
-  const phone = req.query.phone;
-  if (!phone) return sendError(res, 'BAD_REQUEST', 'Add ?phone=XXXXXXXXXX (10 digit)');
-  try {
-    const result = await sendSms({
-      phone, message: 'Test OTP 123456', kind: 'otp', callId: 'TEST',
-      templateVars: otpTemplateVars('123456')
-    });
-    return sendSuccess(res, result);
-  } catch (err) {
-    return sendError(res, 'SMS_FAILED', err.message);
-  }
 }));
 
 // ==================== ERROR HANDLER ====================
@@ -853,11 +824,6 @@ function startServer() {
 
   // Periodic sweep: finalize orphaned active calls every 2 minutes
   setInterval(() => sweepStaleCalls(broadcastEvent), 2 * 60 * 1000);
-
-  // On-demand retrieval temp copies are TTL-deleted (default 24h) so the
-  // server's disk only ever holds recordings someone is actually watching.
-  const { sweepKioskCopyTTL } = createRecordingsRouter;
-  setInterval(() => sweepKioskCopyTTL(broadcastEvent), 10 * 60 * 1000);
 
 // Razorpay reconciliation: catch payments the gateway captured while this
 // server could not process the webhook (downtime, restart). 15-min interval

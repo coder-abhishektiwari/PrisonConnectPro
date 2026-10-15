@@ -1,6 +1,6 @@
 {
-  "total": 43,
-  "passed": 43,
+  "total": 41,
+  "passed": 41,
   "failed": 0,
   "results": [
     {
@@ -101,7 +101,7 @@
     {
       "name": "FIXTURE: free inmate + contact for call tests",
       "status": "PASS",
-      "detail": "inmate=INM-30B0FFAF, busyActive=1, contact=CONT-72679377"
+      "detail": "inmate=INM-30B0FFAF, busyActive=1, contact=CONT-880925DB"
     },
     {
       "name": "POST /calls create",
@@ -127,16 +127,6 @@
       "name": "POST /calls/:id/control (signaling delegation)",
       "status": "PASS",
       "detail": "skipped: signaling server not running locally"
-    },
-    {
-      "name": "POST /recordings/:id/start",
-      "status": "PASS",
-      "detail": "status=200"
-    },
-    {
-      "name": "POST /recordings/:id/stop (outputPaths undefined)",
-      "status": "PASS",
-      "detail": "status=200, error=undefined"
     },
     {
       "name": "POST /auth/refresh rotates token pair",
@@ -169,14 +159,14 @@
       "detail": "status=401, code=INVALID_CREDENTIALS"
     },
     {
-      "name": "SOCKET: anonymous connect allowed (dashboard monitor)",
+      "name": "SOCKET: anonymous connect rejected",
       "status": "PASS",
-      "detail": "socket connected"
+      "detail": "unauthorized"
     },
     {
-      "name": "SOCKET: invalid token downgraded to anonymous (by design)",
+      "name": "SOCKET: invalid token rejected",
       "status": "PASS",
-      "detail": "socket connected"
+      "detail": "unauthorized"
     },
     {
       "name": "SOCKET: valid warden token accepted",
@@ -196,7 +186,7 @@
     {
       "name": "Warden /calls scoped to own prison(s)",
       "status": "PASS",
-      "detail": "status=200, count=13"
+      "detail": "status=200, count=28"
     },
     {
       "name": "STORAGE: seeded warden password bcrypt-hashed",

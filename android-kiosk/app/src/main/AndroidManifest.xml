@@ -58,8 +58,8 @@
             </intent-filter>
         </receiver>
 
-        <!-- WorkManager is configured by PrisonKioskApp (custom worker factory
-             for Hilt), so the default startup initializer must not race it. -->
+        <!-- WorkManager is configured by PrisonKioskApp, so the default
+             startup initializer must not race it. -->
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"

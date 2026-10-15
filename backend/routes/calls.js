@@ -11,7 +11,6 @@ const { maskedPhone, contactPhone, buildLinkSms, buildCallLink } = require('../l
 const { paginate } = require('../lib/paginate');
 const { personName, callInmateName, callContactName } = require('../lib/names');
 const { pickWallet, ensureWallet } = require('../lib/wallets');
-const { recordingFileOf } = require('../lib/recorder');
 
 // ==================== CALL STATE MACHINE ====================
 const CALL_STATES = ['scheduled', 'ringing', 'connecting', 'active', 'reconnecting', 'completed', 'failed', 'cancelled', 'rejected', 'missed'];
@@ -437,18 +436,6 @@ function createCallsRouter(broadcastEvent, signaling) {
     if (qualityFilterVal && qualityFilterVal !== 'all') {
       calls = calls.filter((c) => (c.connectionQuality || 'unknown') === qualityFilterVal);
     }
-    // Recording filter: the dashboard sends available/none (the older yes/no
-    // pair is still accepted). "Available" means a stored, playable file —
-    // the same condition that makes the Play button show up.
-    const recordingFilterVal = req.query.recording;
-    if (recordingFilterVal === 'yes' || recordingFilterVal === 'available' ||
-        recordingFilterVal === 'no' || recordingFilterVal === 'none') {
-      const recordings = await readDb('recordings.json').catch(() => []);
-      const recMap = {};
-      recordings.forEach((r) => { recMap[r.callId] = r; });
-      const wanted = recordingFilterVal === 'yes' || recordingFilterVal === 'available';
-      calls = calls.filter((c) => (wanted === !!recordingFileOf(recMap[c.callId])));
-    }
 
     // --- Date Range ---
     const dateFrom = req.query.dateFrom;
@@ -629,8 +616,6 @@ function createCallsRouter(broadcastEvent, signaling) {
       startTime: callData.startTime || new Date().toISOString(),
       mediaConnectedAt: null,  // Set when WebRTC media actually connects — billing starts from here
       endTime: null, durationMinutes: 0,
-      recordingEnabled: callData.recordingEnabled !== undefined ? callData.recordingEnabled : true,
-      recordingStatus: 'not_recording',
       connectionQuality: 'good', bitrate: 0, packetLoss: 0, jitter: 0, iceState: 'new',
       inmateName: callData.inmateName || callInmateName(null, inmate) || 'An inmate',
       familyMemberName: callData.familyMemberName || callContactName(null, contact),
@@ -841,23 +826,11 @@ function createCallsRouter(broadcastEvent, signaling) {
     if (!updatedCall) return sendError(res, 'NOT_FOUND', 'Call not found', 404);
 
     // A duplicate /end (retry, or a race with the warden's force-end) must be
-    // a no-op: the call is already finalized and billed. Room/recording
-    // cleanup below is idempotent, so only the broadcast is skipped —
-    // re-sending 'call-ended' can knock a live call off the family screen.
+    // a no-op: the call is already finalized and billed. Room cleanup below is
+    // idempotent, so only the broadcast is skipped — re-sending 'call-ended'
+    // can knock a live call off the family screen.
     const alreadyFinalized = !!updatedCall._alreadyFinalized;
     delete updatedCall._alreadyFinalized;
-
-    await updateDb('recordings.json', (recordings) => {
-      const idx = recordings.findIndex((r) => r.callId === callId);
-      if (idx === -1) return { data: recordings, result: null };
-      recordings[idx] = {
-        ...recordings[idx],
-        status: 'completed',
-        endTime: new Date().toISOString(),
-        duration: updatedCall.durationMinutes * 60
-      };
-      return { data: recordings, result: recordings[idx] };
-    });
 
     // Close the media room on the signaling server so live media stops (best effort).
     try {

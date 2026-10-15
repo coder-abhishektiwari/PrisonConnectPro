@@ -69,8 +69,7 @@ export function MonitorScreenPage() {
   const refreshRef = useRef(refreshAll);
   refreshRef.current = refreshAll;
   const onCallUpdate = useCallback(() => { refreshRef.current(); }, []);
-  const onDeviceStatusChange = useCallback(() => { refreshRef.current(); }, []);
-  useWardenSocket(onCallUpdate, undefined, onDeviceStatusChange);
+  useWardenSocket(onCallUpdate);
 
   const headerIcon = useMemo(() => <span className="material-icons text-primary-600 text-xl">videocam</span>, []);
 
