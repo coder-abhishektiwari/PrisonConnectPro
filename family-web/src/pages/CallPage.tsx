@@ -533,9 +533,8 @@ export function CallPage() {
       setStatus('connecting');
       setStatusMessage('Joining room...');
 
-      // Media join happens over the socket 'join-room' event below. The REST
-      // /rooms/join endpoint requires a persisted room record the kiosk never
-      // creates, so skip it.
+      // Media join happens over the socket 'join-room' event below — there is
+      // no REST join; the signaling server keeps rooms in memory.
       const response = await socketService.joinRoom(session!.roomId, peerIdRef.current);
 
       if (response?.success) {

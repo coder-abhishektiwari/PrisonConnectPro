@@ -11,13 +11,6 @@ export default defineConfig({
     },
   },
   server: {
-    proxy: {
-      '/api': {
-        target: 'https://prisonconnect-mockbackend.onrender.com',
-        changeOrigin: true,
-        secure: false,
-      },
-    },
     port: 3001,
     host: true,
     // Allow cloudflared quick-tunnel hostnames (random subdomain each run).

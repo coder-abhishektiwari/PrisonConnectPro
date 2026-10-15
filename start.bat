@@ -278,10 +278,6 @@ if "%HAS_CF%"=="1" (
     ping -n 16 127.0.0.1 >nul
     for /f "delims=" %%u in ('powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%extract-tunnel-url.ps1" -LogFile "%LOGS%\tun_wardendash.log"') do set "TUN_WARDENDASH=%%u"
     for /f "delims=" %%u in ('powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%extract-tunnel-url.ps1" -LogFile "%LOGS%\tun_vendordash.log"') do set "TUN_VENDORDASH=%%u"
-    if not "!TUN_WARDENDASH!"=="" (
-        powershell -NoProfile -Command "(Get-Content '%ROOT%warden-dashboard\.env' -Raw) -replace '(?m)^VITE_SIGNALING_URL=.*$', 'VITE_SIGNALING_URL=!TUN_WARDENDASH!' | Set-Content -Path '%ROOT%warden-dashboard\.env' -NoNewline"
-        echo   [OK] warden-dashboard VITE_SIGNALING_URL=!TUN_WARDENDASH!
-    )
     if not "!TUN_VENDORDASH!"=="" (
         powershell -NoProfile -Command "(Get-Content '%ROOT%vendor-dashboard\.env' -Raw) -replace '(?m)^VITE_SIGNALING_URL=.*$', 'VITE_SIGNALING_URL=!TUN_VENDORDASH!' | Set-Content -Path '%ROOT%vendor-dashboard\.env' -NoNewline"
         echo   [OK] vendor-dashboard VITE_SIGNALING_URL=!TUN_VENDORDASH!

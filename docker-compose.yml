@@ -112,7 +112,6 @@ services:
       context: ./warden-dashboard
       args:
         VITE_API_GATEWAY_URL: ${VITE_API_GATEWAY_URL:-http://127.0.0.1:3001}
-        VITE_SIGNALING_URL: ${VITE_SIGNALING_URL:-http://127.0.0.1:3002}
     container_name: prisonconnect-warden-dashboard
     restart: unless-stopped
     ports:

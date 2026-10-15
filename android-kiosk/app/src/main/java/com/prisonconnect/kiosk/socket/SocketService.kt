@@ -1,6 +1,5 @@
 package com.prisonconnect.kiosk.socket
 
-import io.socket.client.Socket
 import kotlinx.coroutines.flow.Flow
 
 interface SocketService {

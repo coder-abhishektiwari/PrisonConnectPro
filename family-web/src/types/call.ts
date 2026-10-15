@@ -58,25 +58,6 @@ export interface OtpVerificationResult {
   sessionToken: string;
 }
 
-export interface JoinRoomResult {
-  status: 'ready';
-}
-
-export interface LeaveRoomResult {
-  status: 'left';
-}
-
-export interface CallSummary {
-  callId: string;
-  durationMinutes: number;
-  charges: number;
-}
-
-export interface RoomStatus {
-  status: 'idle' | 'waiting' | 'ready' | 'joining' | 'joined' | 'error';
-  message?: string;
-}
-
 /**
  * Response of `/family/secure-call/heartbeat/:linkToken`.
  *

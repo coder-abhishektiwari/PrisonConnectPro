@@ -144,11 +144,6 @@
       "detail": "status=404, msg=Invalid or expired call link"
     },
     {
-      "name": "FAMILY: POST /rooms/leave exists",
-      "status": "PASS",
-      "detail": "status=400"
-    },
-    {
       "name": "VENDOR: /auth/login accepts email+password",
       "status": "PASS",
       "detail": "status=401, code=INVALID_CREDENTIALS"

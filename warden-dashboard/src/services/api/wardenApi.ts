@@ -615,9 +615,6 @@ export const wardenApi = {
     );
   },
 
-  getWarden: (wardenId: string) =>
-    cachedGet(`wardens:${wardenId}`, () => apiClient.get<ApiResponse<any>>(`/wardens/${wardenId}`).then((r) => r.data?.data)),
-
   getWardenStats: () =>
     cachedGet(
       'wardens:stats',

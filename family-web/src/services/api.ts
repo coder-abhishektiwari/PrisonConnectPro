@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { env } from '@/config/env';
 import type { ApiResponse, ApiError } from '@/types/api';
-import type { CallSession, CallTimerStatus, DeviceInfo, DeviceVerificationResult, FamilyLocation, SendOtpResult, OtpVerificationResult, JoinRoomResult, LeaveRoomResult, CallSummary } from '@/types/call';
+import type { CallSession, CallTimerStatus, DeviceInfo, DeviceVerificationResult, FamilyLocation, SendOtpResult, OtpVerificationResult } from '@/types/call';
 import type { WalletLinkInfo, WalletOrder, WalletVerifyResult } from '@/types/wallet';
 
 export const api = axios.create({
@@ -40,15 +40,6 @@ export const callApi = {
 
   verifyOtp: (linkToken: string, otp: string) =>
     api.post<ApiResponse<OtpVerificationResult>>(`/family/secure-call/verify-otp/${linkToken}`, { otp }).then((r) => r.data.data),
-
-  joinRoom: (roomId: string, participantId: string) =>
-    api.post<ApiResponse<JoinRoomResult>>('/rooms/join', { roomId, participantId }).then((r) => r.data.data),
-
-  leaveRoom: (roomId: string, participantId: string) =>
-    api.post<ApiResponse<LeaveRoomResult>>('/rooms/leave', { roomId, participantId }).then((r) => r.data.data),
-
-  endCall: (callId: string) =>
-    api.post<ApiResponse<CallSummary>>(`/calls/${callId}/end`).then((r) => r.data.data),
 };
 
 /**

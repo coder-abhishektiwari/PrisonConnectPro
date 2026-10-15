@@ -224,8 +224,6 @@ try {
   record('FAMILY: POST /family/secure-call/verify-otp/:token exists', famOtp.json?.error?.message === 'Invalid or expired call link' ? 'PASS' : 'FAIL', `status=${famOtp.status}, msg=${famOtp.json?.error?.message}`);
   const famDev = await api('POST', '/family/secure-call/device/whatever-token', { browser: 'x' });
   record('FAMILY: POST /family/secure-call/device/:token exists', famDev.json?.error?.message === 'Invalid or expired call link' ? 'PASS' : 'FAIL', `status=${famDev.status}, msg=${famDev.json?.error?.message}`);
-  const famLeave = await api('POST', '/rooms/leave', {}, kioskToken);
-  record('FAMILY: POST /rooms/leave exists', famLeave.status === 400 ? 'PASS' : 'FAIL', `status=${famLeave.status}`);
 
   // Vendor login flow: /auth/login accepts email+password for vendor/admin
   // accounts — bogus creds must fail with 401 INVALID_CREDENTIALS (a 400 would

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef } from 'react';
 import { backendSocket } from '@/services/socket/socketClient';
 import { invalidatePrefix } from '@/services/api/cache';
 
@@ -57,10 +57,4 @@ export function useWardenSocket(onActiveCallsUpdate?: () => void) {
       socket.disconnect();
     };
   }, [onActiveCallsUpdate]);
-
-  const sendEvent = useCallback((event: string, data: any) => {
-    backendSocket.emit(event, data);
-  }, []);
-
-  return { sendEvent };
 }

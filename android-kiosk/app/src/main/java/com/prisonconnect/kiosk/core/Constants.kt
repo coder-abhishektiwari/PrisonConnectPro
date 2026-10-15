@@ -9,9 +9,6 @@ package com.prisonconnect.kiosk.core
  * / SessionManager.getKioskInfo() and hard-fail when it is missing.
  */
 object Constants {
-    /** Base URL of the Node.js signaling server (WebRTC signaling). */
-    const val SIGNALING_SERVER_URL: String = "http://10.15.246.69:3002"
-
     /** Logging tag prefix for all kiosk logs. */
     const val LOG_TAG: String = "PrisonKiosk"
 }
