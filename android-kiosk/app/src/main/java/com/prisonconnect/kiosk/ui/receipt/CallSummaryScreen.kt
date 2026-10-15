@@ -178,7 +178,7 @@ fun CallSummaryContent(
                         )
                         ReceiptRow(
                             label = stringResource(R.string.remaining_balance),
-                            value = "₹${String.format("%.2f", remainingBalance)}",
+                            value = "₹${String.format("%.2f", remainingBalance / 100.0)}",
                             isTablet = isTablet
                         )
 

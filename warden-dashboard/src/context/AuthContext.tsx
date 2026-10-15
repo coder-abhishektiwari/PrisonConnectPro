@@ -130,7 +130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       window.clearInterval(refreshTimerRef.current);
     }
 
-    const refreshInterval = Math.max((expiresIn - 10) * 1000, 50 * 60 * 1000);
+    const refreshInterval = Math.max((expiresIn - 10) * 1000, 30 * 1000);
 
     refreshTimerRef.current = window.setInterval(async () => {
       const currentTokens = tokensRef.current;

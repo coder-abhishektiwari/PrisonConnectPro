@@ -463,7 +463,7 @@ export function CallHistoryPage() {
                     <p className="text-[11px] font-bold text-primary-600 uppercase tracking-wide mb-2">Billing</p>
                     <div className="space-y-2">
                       <div className="flex justify-between"><span className="text-sm text-neutral-600">Rate</span><span className="text-sm text-neutral-900">₹{selected.ratePerMinute || 0}/min</span></div>
-                      <div className="flex justify-between"><span className="text-sm text-neutral-600">Charge</span><span className="text-sm font-bold text-neutral-900">₹{selected.chargeAmount || 0}</span></div>
+                      <div className="flex justify-between"><span className="text-sm text-neutral-600">Charge</span><span className="text-sm font-bold text-neutral-900">₹{(Number(selected.chargeAmount || 0) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
                     </div>
                   </div>
                 </div>

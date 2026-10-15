@@ -46,7 +46,8 @@ fun CallLobbyDialog(
     val createRoomState by viewModel.createRoomState.collectAsState()
     val isVideo = callType.equals("Video", ignoreCase = true)
     val ratePerMin = if (isVideo) 2 else 1
-    val isSufficient = balance >= ratePerMin
+    // balance is paise; rate is rupees-per-minute.
+    val isSufficient = balance >= ratePerMin * 100
     var roomError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(contactId) {
@@ -111,7 +112,7 @@ fun CallLobbyDialog(
                             color = Color.White
                         )
                         Text(
-                            text = "₹${String.format("%.2f", balance)}",
+                            text = "₹${String.format("%.2f", balance / 100.0)}",
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Black,
                             color = Color.White

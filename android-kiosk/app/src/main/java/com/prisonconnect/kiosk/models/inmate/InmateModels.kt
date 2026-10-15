@@ -41,10 +41,13 @@ enum class InmateStatus {
 }
 
 data class InmateBalance(
+    /** Paise — divide by 100 for ₹ display. */
     @SerializedName("balance") val credits: Double = 0.0,
     @SerializedName("currency") val currency: String = "INR",
     @SerializedName("lastRecharge") val lastRechargeDate: String? = null,
+    /** Paise. */
     @SerializedName("totalSpent") val totalSpent: Double? = null,
     @SerializedName("remainingMinutes") val remainingMinutes: Int? = null,
+    /** Paise. */
     val lastRechargeAmount: Double? = null
 )

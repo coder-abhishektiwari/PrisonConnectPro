@@ -7,7 +7,10 @@ if (!JWT_SECRET) {
   throw new Error('JWT_SECRET env var is required — set it before starting the server.');
 }
 
-const ACCESS_TOKEN_TTL = process.env.ACCESS_TOKEN_TTL || '1h';
+// Short-lived access tokens: a stolen JWT (localStorage/XSS) stays useful for
+// minutes, not hours. Refresh tokens (7d) handle renewal - every client
+// (dashboards, Android kiosk) refreshes on schedule/401 automatically.
+const ACCESS_TOKEN_TTL = process.env.ACCESS_TOKEN_TTL || '15m';
 const REFRESH_TOKEN_TTL = process.env.REFRESH_TOKEN_TTL || '7d';
 
 function signAccessToken(payload, expiresIn = ACCESS_TOKEN_TTL) {

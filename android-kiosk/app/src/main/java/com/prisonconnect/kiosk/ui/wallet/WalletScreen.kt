@@ -169,7 +169,8 @@ private fun WalletSummaryCard(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "₹${String.format("%.2f", data.balance)}",
+                    // Server ledger stores paise; display rupees.
+                    text = "₹${String.format("%.2f", data.balance / 100.0)}",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = PrimaryDarkNavy
@@ -223,7 +224,8 @@ private fun TransactionRow(tx: WalletTransaction) {
     val icon = if (isDebit) Icons.Default.RemoveCircle else Icons.Default.AddCircle
     val iconTint = if (isDebit) MoneyRed else MoneyGreen
     val iconBg = if (isDebit) MoneyRedBg else MoneyGreenBg
-    val amountText = if (isDebit) "-₹${String.format("%.2f", tx.amount)}" else "+₹${String.format("%.2f", tx.amount)}"
+    // Transaction amounts are paise on the server ledger.
+    val amountText = if (isDebit) "-₹${String.format("%.2f", tx.amount / 100.0)}" else "+₹${String.format("%.2f", tx.amount / 100.0)}"
     val amountColor = if (isDebit) MoneyRed else MoneyGreen
 
     Card(

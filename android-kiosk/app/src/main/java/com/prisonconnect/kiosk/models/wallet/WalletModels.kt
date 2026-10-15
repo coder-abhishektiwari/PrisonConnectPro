@@ -11,11 +11,14 @@ data class WalletStatement(
 data class WalletInfo(
     @SerializedName("walletId") val walletId: String,
     @SerializedName("inmateId") val inmateId: String,
+    /** Paise — the server ledger's unit; divide by 100 for ₹ display. */
     @SerializedName("balance") val balance: Double,
     @SerializedName("currency") val currency: String = "INR",
     @SerializedName("status") val status: String = "active",
+    /** Paise. */
     @SerializedName("totalSpent") val totalSpent: Double = 0.0,
     @SerializedName("lastRecharge") val lastRecharge: String? = null,
+    /** Paise. */
     @SerializedName("lastRechargeAmount") val lastRechargeAmount: Double? = null,
     @SerializedName("remainingMinutes") val remainingMinutes: Int = 0
 )
@@ -23,6 +26,7 @@ data class WalletInfo(
 data class WalletTransaction(
     @SerializedName("transactionId") val transactionId: String,
     @SerializedName("type") val type: String = "charge",
+    /** Paise. */
     @SerializedName("amount") val amount: Double,
     @SerializedName("currency") val currency: String = "INR",
     @SerializedName("status") val status: String = "success",
@@ -53,6 +57,7 @@ data class WalletTransaction(
     /**
      * Grey sub-line for online deposits: "Paid Rs.100.00 - charges Rs.2.36".
      * Only for Razorpay rows where a gateway charge was actually taken.
+     * gross/amount/charges are paise on the server ledger.
      */
     val chargesSubLine: String?
         get() {
@@ -60,6 +65,6 @@ data class WalletTransaction(
             val gross = grossAmount ?: return null
             val charges = gross - amount
             if (charges <= 0.0) return null
-            return "Paid \u20B9${String.format("%.2f", gross)} \u00B7 charges \u20B9${String.format("%.2f", charges)}"
+            return "Paid \u20B9${String.format("%.2f", gross / 100.0)} \u00B7 charges \u20B9${String.format("%.2f", charges / 100.0)}"
         }
 }

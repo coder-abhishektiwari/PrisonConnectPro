@@ -20,7 +20,7 @@ const rateLimit = require('express-rate-limit');
 const { sendSuccess, sendError, asyncRoute } = require('../lib/response');
 const { readDb } = require('../lib/db');
 const { findActiveLink } = require('../lib/wallet-links');
-const { getPaymentByOrder, createPaymentRow, committedPaiseByContact, creditFromRazorpay } = require('../lib/wallet-credit');
+const { getPaymentByOrder, createPaymentRow, committedPaiseByContact, creditFromRazorpay, IN_FLIGHT_WINDOW_MS } = require('../lib/wallet-credit');
 const { createOrder, verifyPaymentSignature, configured, keyId, RazorpayError } = require('../lib/razorpay');
 const { getStatement } = require('../lib/jail-account');
 const { personName } = require('../lib/names');
@@ -54,16 +54,46 @@ const tokenLimiter = rateLimit({
 });
 
 /** Reject browser calls from anywhere but the family portal itself. */
+let originUnconfiguredWarned = false;
 function familyOriginOnly(req, res, next) {
   const origin = req.headers.origin;
   if (!origin) return next(); // non-browser clients: the token still gates
   const allowed = (process.env.FAMILY_WEB_URL || '').trim();
-  if (!allowed) return next();
-  try {
-    if (new URL(origin).origin === new URL(allowed).origin) return next();
-  } catch { /* fall through */ }
+  if (allowed) {
+    try {
+      if (new URL(origin).origin === new URL(allowed).origin) return next();
+    } catch { /* fall through */ }
+    return sendError(res, 'FORBIDDEN', 'Origin not allowed', 403);
+  }
+  // Fail closed: no allowlist configured. Outside production, localhost dev
+  // servers (Vite on 5173 etc.) are still allowed — an attacker who can send
+  // a localhost Origin runs their own machine anyway; this gate exists to stop
+  // *other websites* from riding a victim's browser, and those never carry a
+  // localhost origin. In production, unset FAMILY_WEB_URL means writes stay
+  // blocked until the operator configures it.
+  if (process.env.NODE_ENV !== 'production') {
+    try {
+      const host = new URL(origin).hostname;
+      if (host === 'localhost' || host === '127.0.0.1') return next();
+    } catch { /* fall through */ }
+  }
+  if (!originUnconfiguredWarned) {
+    originUnconfiguredWarned = true;
+    console.warn('[wallet-link] FAMILY_WEB_URL is not set - rejecting browser payment requests. Set FAMILY_WEB_URL to the family portal origin.');
+  }
   return sendError(res, 'FORBIDDEN', 'Origin not allowed', 403);
 }
+
+// Post-parse body cap. The pre-parse Content-Length guard in server.js is
+// bypassable with Transfer-Encoding: chunked (which sends no Content-Length).
+// req.rawBody is the exact byte count express.json captured, so this closes
+// the chunked hole for every /family/wallet-link/* route.
+router.use('/wallet-link', (req, res, next) => {
+  if (req.rawBody && req.rawBody.length > 8 * 1024) {
+    return sendError(res, 'PAYLOAD_TOO_LARGE', 'Request body too large', 413);
+  }
+  next();
+});
 
 function noStore(res) {
   res.set('Cache-Control', 'no-store');
@@ -166,6 +196,10 @@ router.post('/wallet-link/:token/order', tokenLimiter, orderLimiter, familyOrigi
       amountPaise,
       receipt: paymentId,
       notes: { linkId: link.linkId, contactId: contact.contactId, inmateId: link.inmateId },
+      // Gateway-side expiry matches the in-flight cap window: after this the
+      // order is dead at Razorpay, so stale attempts can neither be paid nor
+      // hold a slot in the rolling deposit cap.
+      expireBy: Math.floor(Date.now() / 1000) + Math.ceil(IN_FLIGHT_WINDOW_MS / 1000),
     });
   } catch (err) {
     if (err instanceof RazorpayError && err.code === 'PAYMENT_NOT_CONFIGURED') {

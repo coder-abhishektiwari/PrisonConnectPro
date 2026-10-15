@@ -128,8 +128,6 @@ services:
       args:
         VITE_API_GATEWAY_URL: ${VITE_API_GATEWAY_URL:-http://127.0.0.1:3001}
         VITE_SIGNALING_URL: ${VITE_SIGNALING_URL:-http://127.0.0.1:3002}
-        VITE_DEFAULT_USERNAME: ${VITE_DEFAULT_USERNAME:-admin}
-        VITE_DEFAULT_PASSWORD: ${VITE_DEFAULT_PASSWORD:-admin}
     container_name: prisonconnect-vendor-dashboard
     restart: unless-stopped
     ports:

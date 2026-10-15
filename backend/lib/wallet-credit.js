@@ -23,6 +23,13 @@ const razorpay = require('./razorpay');
 
 const RECHARGE_TYPE = 'recharge';
 
+// A 'created' attempt is only in-flight (still worth counting against the
+// rolling cap) for this long. Stale unpaid attempts stop counting so abandoned
+// orders cannot lock a contact out of deposits for 24h (griefing), and orders
+// are expired gateway-side after the same window (routes/wallet-link.js
+// `expire_by`) so a stale attempt can never be paid later to dodge the cap.
+const IN_FLIGHT_WINDOW_MS = 30 * 60 * 1000;
+
 function newTxnId() {
   return `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
 }
@@ -80,15 +87,23 @@ async function createPaymentRow(fields, deps = {}) {
   return mutatorResult(out);
 }
 
-/** Rolling-24h gross already committed by a contact (created + credited). */
+/** Rolling-24h gross committed by a contact: every credited rupee plus
+ *  still-in-flight attempts. Unpaid attempts older than IN_FLIGHT_WINDOW_MS
+ *  are excluded (they moved no money and the gateway order expires with them). */
 async function committedPaiseByContact(contactId, deps = {}) {
   const read = deps.readDb || realRead;
   const rows = await read('wallet-payments.json');
-  const since = Date.now() - 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  const creditedSince = now - 24 * 60 * 60 * 1000;
+  const inFlightSince = now - IN_FLIGHT_WINDOW_MS;
   return rows
-    .filter((r) => r.contactId === contactId &&
-      (r.status === 'created' || r.status === 'credited') &&
-      new Date(r.createdAt || 0).getTime() >= since)
+    .filter((r) => {
+      if (r.contactId !== contactId) return false;
+      const created = new Date(r.createdAt || 0).getTime();
+      if (r.status === 'credited') return created >= creditedSince;
+      if (r.status === 'created') return created >= inFlightSince;
+      return false;
+    })
     .reduce((sum, r) => sum + (Number(r.amountPaise) || 0), 0);
 }
 
@@ -267,7 +282,7 @@ async function sweepWalletPayments(deps = {}) {
           stats.failed += 1;
           continue;
         }
-        if (payments.length === 0 && now - new Date(r.createdAt || 0).getTime() > 24 * 60 * 60 * 1000) {
+        if (payments.length === 0 && now - new Date(r.createdAt || 0).getTime() > IN_FLIGHT_WINDOW_MS) {
           await markPaymentExpired(r.orderId, deps);
           stats.expired += 1;
           continue;
@@ -289,6 +304,7 @@ async function sweepWalletPayments(deps = {}) {
 
 module.exports = {
   RECHARGE_TYPE,
+  IN_FLIGHT_WINDOW_MS,
   getPaymentByOrder,
   createPaymentRow,
   committedPaiseByContact,

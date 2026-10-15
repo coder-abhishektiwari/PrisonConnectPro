@@ -486,7 +486,8 @@ fun WalletDetailCard(balance: InmateBalance?, onClick: () -> Unit) {
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text("BALANCE", style = MaterialTheme.typography.labelSmall, color = TextGray)
-                Text("₹${String.format("%.2f", balance?.credits ?: 0.0)}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                // credits is paise from the server ledger; display rupees.
+                Text("₹${String.format("%.2f", (balance?.credits ?: 0.0) / 100.0)}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = PrimaryNavy)
             }
             Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Open wallet", tint = PrimaryNavy)
         }

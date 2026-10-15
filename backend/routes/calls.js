@@ -194,7 +194,9 @@ async function finalizeCall(call, requestedEndTimeMs, broadcastEvent, endReason,
     const durationSec = Math.max(0, (endMs - billingStartMs) / 1000);
     const billedMinutes = Math.ceil(durationSec / 60);
     const ratePerMinute = Number(current.ratePerMinute) || 0;
-    const chargeAmount = neverConnected ? 0 : +(billedMinutes * ratePerMinute).toFixed(2);
+    // Paise — the ledger's unit (recharges credit paise from the gateway net).
+    // Storing rupees here made every call debit 100x too little.
+    const chargeAmount = neverConnected ? 0 : Math.round(billedMinutes * ratePerMinute * 100);
 
     calls[idx] = {
       ...current,
@@ -274,7 +276,7 @@ async function finalizeCall(call, requestedEndTimeMs, broadcastEvent, endReason,
             all[idx].totalSpent = (Number(all[idx].totalSpent) || 0) + chargeAmount;
             return { data: all, result: all[idx] };
           });
-          console.log(`[wallet] charged ₹${chargeAmount} to ${wallet.walletId} for ${claimed.callId}`);
+          console.log(`[wallet] charged ₹${(chargeAmount / 100).toFixed(2)} to ${wallet.walletId} for ${claimed.callId}`);
         } else {
           console.warn(`[wallet] could not provision a wallet for inmate ${claimed.inmateId} — charge skipped`);
         }

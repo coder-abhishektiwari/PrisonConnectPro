@@ -38,6 +38,10 @@ const createSettingsRouter = require('./routes/settings');
 const misRouter = require('./routes/mis');
 
 const app = express();
+// Trust exactly one proxy hop (Render/nginx) so req.ip sees the real client
+// behind it. A *direct* client can still spoof X-Forwarded-For, so per-IP rate
+// limits are best-effort only - the per-token limiter in routes/wallet-link.js
+// is the spoof-proof control (60/h per hashed token, regardless of source IP).
 app.set('trust proxy', 1);
 
 const server = http.createServer(app);
@@ -46,6 +50,16 @@ const io = new Server(server, {
 });
 
 app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
+// Baseline response hardening. The backend serves JSON only (SPAs are hosted
+// separately and carry their own CSP meta), so the policy here can be strict:
+// nothing to execute, nothing to frame, nothing to sniff.
+app.use((req, res, next) => {
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.set('X-Frame-Options', 'DENY');
+  res.set('Referrer-Policy', 'no-referrer');
+  res.set('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
+  next();
+});
 // Wallet-link payment endpoints only ever receive tiny JSON bodies ({amount}
 // or three short strings). Reject oversized payloads BEFORE the global parser
 // touches them — cheap flood guard on the money surface. Runs pre-parse on
@@ -791,7 +805,13 @@ async function runMigrations() {
   }
 }
 
-runMigrations().then(() => startServer());
+// Start only when launched directly (`node server.js`); tests import `app`
+// without binding a port or starting sweep intervals.
+if (require.main === module) {
+  runMigrations().then(() => startServer());
+}
+
+module.exports = { app, server };
 
 function startServer() {
   server.listen(PORT, () => {

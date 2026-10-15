@@ -131,6 +131,7 @@ export interface CallHistoryItem {
   endReasonDescription?: string;
   callIssues?: Array<{ type: string; description: string; severity: string }>;
   mediaConnectedAt?: string;
+  /** Deducted from the wallet in paise. */
   chargeAmount?: number;
   ratePerMinute?: number;
   /** Family-side state for this call; location is captured at device verify. */
@@ -271,11 +272,15 @@ export interface Contact {
 export interface Wallet {
   walletId: string;
   inmateId: string;
+  /** Ledger-derived, paise. */
   balance: number;
   currency: string;
   lastRecharge: string;
+  /** Paise. */
   lastRechargeAmount: number;
+  /** Paise. */
   totalSpent: number;
+  /** Paise. */
   totalRecharged?: number;
   remainingMinutes: number;
   remainingAudioMinutes?: number;

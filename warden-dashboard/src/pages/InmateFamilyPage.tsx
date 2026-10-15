@@ -192,7 +192,7 @@ export function InmateFamilyPage() {
                         const w = walletsByInmate[i.inmateId];
                         if (walletsLoading && !w) return <SkeletonText />;
                         if (!w) return <span className="text-xs text-neutral-400">—</span>;
-                        const isLowBalance = w.balance < (pricing.audioRate || 1) * 5;
+                        const isLowBalance = w.balance < (pricing.audioRate || 1) * 5 * 100; // balance is paise
                         return (
                           <button
                             onClick={e => openWallet(i.inmateId, e)}
@@ -204,7 +204,7 @@ export function InmateFamilyPage() {
                             }`}
                           >
                             <span className="material-icons" style={{ fontSize: '14px' }}>account_balance_wallet</span>
-                            ₹{Number(w.balance).toLocaleString('en-IN')}
+                            ₹{(Number(w.balance) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             {isLowBalance && <span className="text-[9px] font-semibold uppercase">low</span>}
                           </button>
                         );
@@ -262,19 +262,19 @@ export function InmateFamilyPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-2xl">
                     <p className="text-[11px] uppercase tracking-wider font-bold text-emerald-800">Balance</p>
-                    <p className="text-2xl font-extrabold text-emerald-600 mt-1 font-mono">₹{selectedWallet.balance}</p>
+                    <p className="text-2xl font-extrabold text-emerald-600 mt-1 font-mono">₹{(Number(selectedWallet.balance) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                   </div>
                   <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl">
                     <p className="text-[11px] uppercase tracking-wider font-bold text-slate-500">Total Spent</p>
-                    <p className="text-2xl font-extrabold text-slate-800 mt-1 font-mono">₹{selectedWallet.totalSpent}</p>
+                    <p className="text-2xl font-extrabold text-slate-800 mt-1 font-mono">₹{(Number(selectedWallet.totalSpent) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                   </div>
                   <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl">
                     <p className="text-[11px] uppercase tracking-wider font-bold text-slate-500">Audio Call Time</p>
-                    <p className="text-lg font-extrabold text-slate-800 mt-1 font-mono">{Math.floor(selectedWallet.balance / (pricing.audioRate || 1))}<span className="text-xs font-normal text-slate-400"> min</span></p>
+                    <p className="text-lg font-extrabold text-slate-800 mt-1 font-mono">{Math.floor(Number(selectedWallet.balance) / 100 / (pricing.audioRate || 1))}<span className="text-xs font-normal text-slate-400"> min</span></p>
                   </div>
                   <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl">
                     <p className="text-[11px] uppercase tracking-wider font-bold text-slate-500">Video Call Time</p>
-                    <p className="text-lg font-extrabold text-slate-800 mt-1 font-mono">{Math.floor(selectedWallet.balance / (pricing.videoRate || 2.5))}<span className="text-xs font-normal text-slate-400"> min</span></p>
+                    <p className="text-lg font-extrabold text-slate-800 mt-1 font-mono">{Math.floor(Number(selectedWallet.balance) / 100 / (pricing.videoRate || 2.5))}<span className="text-xs font-normal text-slate-400"> min</span></p>
                   </div>
                 </div>
 
@@ -316,15 +316,15 @@ export function InmateFamilyPage() {
                             <p className="text-[10px] text-slate-400 font-mono mt-0.5">{date.toLocaleDateString('en-IN')} • {date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</p>
                             {tx.grossAmount != null && Number(tx.grossAmount) > Number(tx.amount) && (
                               <p className="text-[10px] text-slate-400 font-mono mt-0.5">
-                                Paid ₹{Number(tx.grossAmount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                {' · '}charges ₹{(Number(tx.grossAmount) - Number(tx.amount)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                Paid ₹{(Number(tx.grossAmount) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {' · '}charges ₹{((Number(tx.grossAmount) - Number(tx.amount)) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </p>
                             )}
                           </div>
                         </div>
                         <div className="text-right">
                           <p className={`text-sm font-bold font-mono ${isRecharge ? 'text-emerald-600' : 'text-slate-800'}`}>
-                            {isRecharge ? '+' : '−'}₹{Number(tx.amount).toLocaleString('en-IN')}
+                            {isRecharge ? '+' : '−'}₹{(Number(tx.amount) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </p>
                         </div>
                       </div>

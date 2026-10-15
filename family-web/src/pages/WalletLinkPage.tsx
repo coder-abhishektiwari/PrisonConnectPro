@@ -189,7 +189,7 @@ export function WalletLinkPage() {
         <div className="mt-4 p-4 rounded-xl border border-neutral-200 text-center">
           <p className="text-xs text-neutral-500 uppercase tracking-wide">New balance</p>
           <p className="text-3xl font-extrabold text-success font-mono mt-1">
-            &#8377;{result.balance.toLocaleString('en-IN')}
+            &#8377;{rupees(result.balance)}
           </p>
         </div>
 
@@ -218,7 +218,7 @@ export function WalletLinkPage() {
       <div className="mt-5 p-4 rounded-xl border border-neutral-200 bg-neutral-50 text-center">
         <p className="text-xs text-neutral-500 uppercase tracking-wide">Current balance</p>
         <p className="text-3xl font-extrabold text-success font-mono mt-1">
-          &#8377;{info.balance.toLocaleString('en-IN')}
+          &#8377;{rupees(info.balance)}
         </p>
       </div>
 

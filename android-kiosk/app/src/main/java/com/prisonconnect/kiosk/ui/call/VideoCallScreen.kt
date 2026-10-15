@@ -659,7 +659,7 @@ fun VideoCallContent(
                     shape = RoundedCornerShape(50)
                 ) {
                     Text(
-                        text = "Live Billing: â‚¹${String.format("%.2f", currentCost)}",
+                        text = "Live Billing: \u20B9${String.format("%.2f", currentCost)}",
                         color = Color.White,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
