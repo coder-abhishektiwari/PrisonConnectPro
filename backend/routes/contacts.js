@@ -38,7 +38,7 @@ function hasContactExtras(c) {
   return !!c && typeof c === 'object' && CONTACT_EXTRA_FIELDS.some((k) => k in c);
 }
 
-function createContactsRouter(broadcastEvent) {
+function createContactsRouter() {
   const router = express.Router();
 
   // One-time table cleanup: older rows (and stale clients) stored email,
@@ -118,7 +118,6 @@ function createContactsRouter(broadcastEvent) {
       return { data: all, result: { contactId, removedDevices: removed, clearedAt: new Date().toISOString() } };
     });
     if (!cleared) return sendError(res, 'NOT_FOUND', 'Contact not found', 404);
-    broadcastEvent('contact-devices-cleared', cleared);
     return sendSuccess(res, cleared);
   }));
 
@@ -142,7 +141,6 @@ function createContactsRouter(broadcastEvent) {
       return { data: all, result: { contactId, fingerprintId, phone: target.phone || null, removedAt: new Date().toISOString() } };
     });
     if (!removed) return sendError(res, 'NOT_FOUND', 'Device not found for this contact', 404);
-    broadcastEvent('contact-device-removed', removed);
     return sendSuccess(res, removed);
   }));
 

@@ -4,22 +4,14 @@ const { v4: uuidv4 } = require('uuid');
 const { readDb, updateDb } = require('../lib/db');
 const { requireAuth } = require('../middleware/auth');
 const { sendSuccess, sendError, asyncRoute } = require('../lib/response');
-const { inScopeOf, scopeList, kioskScopeOf } = require('../lib/scoping');
+const { inScopeOf, kioskScopeOf } = require('../lib/scoping');
 const { sendSms, scheduledTemplateVars } = require('../lib/sms');
 const { contactPhone, buildCallLink } = require('../lib/familySecurity');
 
 const router = express.Router();
 
-router.get('/', requireAuth, asyncRoute(async (req, res) => {
-  let schedules = await readDb('schedule.json');
-  // Inmate: only see own schedules
-  if (req.auth.role === 'inmate') {
-    schedules = schedules.filter((s) => s.inmateId === req.auth.inmateId);
-  } else {
-    schedules = await scopeList(req, schedules);
-  }
-  return sendSuccess(res, schedules);
-}));
+// The list view (GET /) had no caller: the kiosk only asks for slots, books
+// and cancels. Removed rather than left as an unused roster dump.
 
 router.get('/slots/:kioskId/:date', requireAuth, asyncRoute(async (req, res) => {
   const { kioskId, date } = req.params;

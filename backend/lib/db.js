@@ -13,7 +13,7 @@
  *  - `updateDb` still runs a read-modify-write inside a single PostgreSQL
  *    transaction and a per-collection in-process mutex, preserving the old
  *    atomicity semantics.
- *  - Singleton collections (pricing, settings, storage) are stored as a single
+ *  - Singleton collections (pricing, settings) are stored as a single
  *    row in `singleton_config`.
  */
 const { Pool } = require('pg');
@@ -85,8 +85,7 @@ const REGISTRY = {
   'reports.json':      { table: 'reports',                 idKey: 'reportId', cols: { prisonId: 'prison_id' } },
   'servers.json':      { table: 'servers',                 idKey: 'serverId', cols: {} },
   'pricing.json':      { singleton: true },
-  'settings.json':     { singleton: true },
-  'storage.json':      { singleton: true }
+  'settings.json':     { singleton: true }
 };
 
 function normalizeFilename(filename) {
@@ -197,7 +196,7 @@ function readDb(filename) {
         data = value;
       } else {
         // Seed defaults so users see a coherent config even before first write.
-        const defaults = { pricing: { audio: 0, video: 0, tax: 0, billingRules: {} }, settings: { callSettings: {}, systemSettings: {}, securitySettings: {} }, storage: { total: 0, used: 0, available: 0, retentionDays: 30, encryption: true } };
+        const defaults = { pricing: { audio: 0, video: 0, tax: 0, billingRules: {} }, settings: { callSettings: {}, systemSettings: {}, securitySettings: {} } };
         data = defaults[filename.replace('.json', '')] || {};
       }
     } else {

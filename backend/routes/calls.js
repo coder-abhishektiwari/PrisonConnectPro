@@ -3,7 +3,7 @@ const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const { readDb, updateDb } = require('../lib/db');
 const { signAccessToken } = require('../lib/auth');
-const { requireAuth, requireRole } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 const { sendSuccess, sendError, asyncRoute } = require('../lib/response');
 const { inAdminScope, adminScopeFilter, inScopeOf, scopeList, kioskScopeOf } = require('../lib/scoping');
 const { sendSms, otpTemplateVars, linkTemplateVars } = require('../lib/sms');
@@ -857,36 +857,6 @@ function createCallsRouter(broadcastEvent, signaling) {
 
     if (!alreadyFinalized) broadcastEvent('call-ended', { callId, status: 'completed' });
     return sendSuccess(res, updatedCall);
-  }));
-
-  router.post('/:callId/control', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
-    const { callId } = req.params;
-    const { action, target } = req.body;
-
-    const allowedActions = ['mute', 'unmute', 'hangup', 'disable-camera', 'enable-camera'];
-    if (!action || !allowedActions.includes(action)) {
-      return sendError(res, 'INVALID_ACTION', `Action must be one of: ${allowedActions.join(', ')}`, 400);
-    }
-
-    const calls = await readDb('calls.json');
-    const call = calls.find((c) => c.callId === callId);
-    if (!call) return sendError(res, 'NOT_FOUND', 'Call not found', 404);
-    // Control actions (mute/hangup) must be scoped to the operator's jail/kiosk.
-    if (!inAdminScope(req, call)) return sendError(res, 'NOT_FOUND', 'Call not found', 404);
-
-    // Apply the control action on the media room via the signaling server.
-    if (call.roomId) {
-      try {
-        await signaling('POST', `/api/rooms/${encodeURIComponent(call.roomId)}/control`, { action, target: target || null });
-      } catch (err) {
-        console.error('[calls] signaling control failed:', err.message);
-        return sendError(res, 'SIGNALING_ERROR', `Signaling server unavailable: ${err.message}`, 502);
-      }
-    }
-
-    const controlEvent = { callId, action, target, timestamp: new Date().toISOString(), appliedBy: req.auth?.sub || 'unknown' };
-    broadcastEvent('call-control', controlEvent);
-    return sendSuccess(res, controlEvent);
   }));
 
   return router;

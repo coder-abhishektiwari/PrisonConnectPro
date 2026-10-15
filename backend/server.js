@@ -134,10 +134,10 @@ app.use('/calls', createCallsRouter(broadcastEvent, signaling));
 app.use('/family', familyRouter);
 app.use('/family', walletLinkRouter);
 app.use('/inmates', inmatesRouter);
-app.use('/contacts', createContactsRouter(broadcastEvent));
-app.use('/rooms', createRoomsRouter(broadcastEvent));
+app.use('/contacts', createContactsRouter());
+app.use('/rooms', createRoomsRouter());
 app.use('/schedule', scheduleRouter);
-app.use('/statistics', createStatisticsRouter(broadcastEvent));
+app.use('/statistics', createStatisticsRouter());
 app.use('/prisons', prisonsRouter);
 app.use('/settings', settingsRouter);
 app.use('/wallets', walletsRouter);
@@ -197,17 +197,6 @@ app.patch('/pricing', requireAuth, requireRole('admin', 'warden', 'super-admin',
 }));
 app.get('/subscriptions', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('subscriptions.json')))));
 app.get('/reports', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('reports.json')))));
-app.get('/storage', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
-  const { readDb } = require('./lib/db');
-  const storage = await readDb('storage.json');
-  return sendSuccess(res, storage);
-}));
-app.get('/reports/:reportId', requireAuth, requireRole('admin', 'warden'), asyncRoute(async (req, res) => {
-  const reports = await readDb('reports.json');
-  const report = reports.find((r) => r.reportId === req.params.reportId);
-  if (!report || !(await inScopeOf(req, report))) return sendError(res, 'NOT_FOUND', 'Report not found', 404);
-  return sendSuccess(res, report);
-}));
 
 // ==================== WALLET REQUESTS ====================
 // REMOVED: the warden approve/reject inbox, admin-created requests and the
@@ -664,21 +653,12 @@ app.delete('/wardens/:wardenId', requireAuth, requireRole('admin', 'warden', 'su
 }));
 
 // ==================== ADMIN PROFILE ====================
+// Self profile only: the kiosk admin screen reads it. Looking up another
+// admin by id had no caller and was removed.
 app.get('/admin/profile', requireAuth, asyncRoute(async (req, res) => {
   const admins = await readDb('admins.json');
   const admin = admins.find((a) => a.adminId === req.auth.sub);
   if (!admin) return sendError(res, 'NOT_FOUND', 'Admin not found', 404);
-  const { password, pin, ...profile } = admin;
-  return sendSuccess(res, profile);
-}));
-app.get('/admin/profile/:adminId', requireAuth, requireRole('admin', 'super-admin'), asyncRoute(async (req, res) => {
-  const admins = await readDb('admins.json');
-  const admin = admins.find((a) => a.adminId === req.params.adminId);
-  if (!admin) return sendError(res, 'NOT_FOUND', 'Admin not found', 404);
-  const callerRole = req.auth?.role;
-  if (callerRole !== 'super-admin' && callerRole !== 'super_admin' && req.auth?.sub !== req.params.adminId) {
-    return sendError(res, 'FORBIDDEN', 'Cannot view other admin profiles', 403);
-  }
   const { password, pin, ...profile } = admin;
   return sendSuccess(res, profile);
 }));

@@ -206,15 +206,6 @@ try {
   const dup = await api('POST', '/calls', { inmateId: inmate?.inmateId, contactId: contact?.contactId, kioskId }, wardenToken);
   record('CALL STATE: duplicate active call blocked', dup.status === 409 ? 'PASS' : 'FAIL', `status=${dup.status}, code=${dup.json?.error?.code}`);
 
-  // Call control: delegates the room action to the signaling server. Locally
-  // (no signaling-server running) the delegation fails with SIGNALING_ERROR —
-  // that is an environment gap, not a broken route.
-  if (callId) {
-    const control = await api('POST', `/calls/${callId}/control`, { action: 'mute' }, wardenToken);
-    const envGap = control.json?.error?.code === 'SIGNALING_ERROR';
-    record('POST /calls/:id/control (signaling delegation)', control.status === 200 || envGap ? 'PASS' : 'FAIL', envGap ? 'skipped: signaling server not running locally' : `status=${control.status}, error=${control.json?.error?.code}`);
-  }
-
   // Leave no active call behind — complete it so the next run can reuse the
   // same inmate instead of hitting CALL_IN_PROGRESS.
   if (callId) await api('PATCH', `/calls/${callId}`, { status: 'completed' }, wardenToken);

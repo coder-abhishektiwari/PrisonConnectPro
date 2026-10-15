@@ -7,8 +7,6 @@ const { jailScopeOf, kioskScopeOf, inScopeOf, scopeList } = require('../lib/scop
 
 const router = express.Router();
 
-router.get('/list', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('prisons.json')))));
-
 router.get('/', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('prisons.json')))));
 
 router.get('/:prisonId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {

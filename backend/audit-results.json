@@ -1,6 +1,6 @@
 {
-  "total": 41,
-  "passed": 41,
+  "total": 40,
+  "passed": 40,
   "failed": 0,
   "results": [
     {
@@ -101,7 +101,7 @@
     {
       "name": "FIXTURE: free inmate + contact for call tests",
       "status": "PASS",
-      "detail": "inmate=INM-30B0FFAF, busyActive=1, contact=CONT-880925DB"
+      "detail": "inmate=INM-30B0FFAF, busyActive=1, contact=CONT-75C56CF7"
     },
     {
       "name": "POST /calls create",
@@ -122,11 +122,6 @@
       "name": "CALL STATE: duplicate active call blocked",
       "status": "PASS",
       "detail": "status=409, code=CALL_IN_PROGRESS"
-    },
-    {
-      "name": "POST /calls/:id/control (signaling delegation)",
-      "status": "PASS",
-      "detail": "skipped: signaling server not running locally"
     },
     {
       "name": "POST /auth/refresh rotates token pair",
@@ -186,7 +181,7 @@
     {
       "name": "Warden /calls scoped to own prison(s)",
       "status": "PASS",
-      "detail": "status=200, count=28"
+      "detail": "status=200, count=29"
     },
     {
       "name": "STORAGE: seeded warden password bcrypt-hashed",

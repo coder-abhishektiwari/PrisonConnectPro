@@ -89,9 +89,4 @@ router.post('/logout', requireAuth, async (req, res) => {
   return res.json({ success: true, message: 'Logged out' });
 });
 
-// Health check for auth service
-router.get('/health', (req, res) => {
-  res.json({ success: true, service: 'auth', timestamp: Date.now() });
-});
-
 module.exports = { router };
