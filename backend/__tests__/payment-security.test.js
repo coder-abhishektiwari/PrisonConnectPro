@@ -439,6 +439,83 @@ describe('signature primitives (lib/razorpay)', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Call-creation balance gate. The kiosk's disabled lobby button is only UX;
+// the server must refuse calls the wallet cannot pay for (end-of-call clamp
+// would otherwise write them off 100%).
+// ---------------------------------------------------------------------------
+describe('call creation balance gate', () => {
+  const { signAccessToken } = require('../lib/auth');
+
+  const KIOSK = 'KIOSK-GATE';
+  const INMATE = 'INM-GATE';
+  const CONTACT = 'CNT-GATE';
+  const kioskAuth = () => ({
+    Authorization: `Bearer ${signAccessToken({ sub: KIOSK, role: 'kiosk', kioskId: KIOSK, prisonId: 'PR-1' })}`,
+  });
+
+  beforeEach(() => {
+    store['kiosks.json'] = [{ kioskId: KIOSK, prisonId: 'PR-1', status: 'active', authorizationStatus: 'authorized' }];
+    store['inmates.json'] = [{ inmateId: INMATE, assignedKioskId: KIOSK, prisonId: 'PR-1', firstName: 'Gate', lastName: 'Test', status: 'active' }];
+    store['contacts.json'] = [{ contactId: CONTACT, inmateId: INMATE, firstName: 'Fam', lastName: 'One', phone: '+911111111111', approvalStatus: 'approved', status: 'active', active: true }];
+    store['calls.json'] = [];
+    store['rooms.json'] = [];
+    store['schedule.json'] = [];
+    store['settings.json'] = [];
+    store['pricing.json'] = [{ audio: { ratePerMinute: 1 }, video: { ratePerMinute: 2.5 } }];
+    store['wallets.json'] = [];
+    store['transactions.json'] = [];
+  });
+
+  const startCall = (over = {}) =>
+    request(app)
+      .post('/calls')
+      .set(ip())
+      .set(kioskAuth())
+      .set('Content-Type', 'application/json')
+      .send({ inmateId: INMATE, contactId: CONTACT, kioskId: KIOSK, type: 'audio', ...over });
+
+  const fundWallet = (paise) => {
+    store['wallets.json'] = [{ walletId: 'W-GATE', inmateId: INMATE, balance: paise, currency: 'INR' }];
+    store['transactions.json'] = [{
+      transactionId: 'TXN-GATE', walletId: 'W-GATE', inmateId: INMATE,
+      type: 'recharge', amount: paise, status: 'completed', timestamp: new Date().toISOString(),
+    }];
+  };
+
+  test('no wallet at all -> 402 INSUFFICIENT_BALANCE, nothing created', async () => {
+    const res = await startCall();
+    expect(res.status).toBe(402);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error.code).toBe('INSUFFICIENT_BALANCE');
+    expect(store['calls.json']).toHaveLength(0);
+    expect(store['rooms.json']).toHaveLength(0);
+  });
+
+  test('balance below the first billed minute -> 402', async () => {
+    fundWallet(99); // audio rate 1/min => first minute costs 100 paise
+    const res = await startCall();
+    expect(res.status).toBe(402);
+    expect(store['calls.json']).toHaveLength(0);
+  });
+
+  test('balance covering the first minute -> call created (201)', async () => {
+    fundWallet(100);
+    const res = await startCall();
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.callId).toBeTruthy();
+    expect(store['calls.json']).toHaveLength(1);
+    expect(store['rooms.json']).toHaveLength(1);
+  });
+
+  test('zero-rate pricing stays free at zero balance', async () => {
+    store['pricing.json'] = [{ audio: { ratePerMinute: 0 } }];
+    const res = await startCall();
+    expect(res.status).toBe(201);
+  });
+});
+
 describe('rate limits (default IP; runs last)', () => {
   test('verify: 11th request same IP in a minute -> 429', async () => {
     razorpay.fetchPayment.mockResolvedValue(capturedEntity({ status: 'created' }));

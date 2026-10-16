@@ -11,6 +11,7 @@ const { maskedPhone, contactPhone, buildLinkSms, buildCallLink } = require('../l
 const { paginate } = require('../lib/paginate');
 const { personName, callInmateName, callContactName } = require('../lib/names');
 const { pickWallet, ensureWallet } = require('../lib/wallets');
+const { getStatement } = require('../lib/jail-account');
 
 // ==================== CALL STATE MACHINE ====================
 const CALL_STATES = ['scheduled', 'ringing', 'connecting', 'active', 'reconnecting', 'completed', 'failed', 'cancelled', 'rejected', 'missed'];
@@ -603,6 +604,18 @@ function createCallsRouter(broadcastEvent, signaling) {
     const settings = settingsDocs?.[0] || {};
     const pricing = pricingDocs?.[0] || {};
     const ratePerMinute = pricing[callData.type || 'video']?.ratePerMinute ?? (callData.type === 'audio' ? 1.0 : 2.5);
+
+    // Server-side balance gate — the kiosk's disabled button is only UX; the
+    // kiosk is an inmate-facing device, so a direct API call with a stolen or
+    // patched client must not start calls the wallet cannot pay for (the
+    // end-of-call clamp would then write them off 100%). Requiring just the
+    // first billed minute mirrors the lobby's isSufficient rule; rate 0 stays
+    // free. Ledger-derived balance, never the cache.
+    const stmt = await getStatement(callData.inmateId);
+    const firstMinutePaise = Math.ceil(Number(ratePerMinute) * 100);
+    if (firstMinutePaise > 0 && (!stmt || !stmt.wallet || (Number(stmt.wallet.balance) || 0) < firstMinutePaise)) {
+      return sendError(res, 'INSUFFICIENT_BALANCE', 'Wallet balance is too low for a call. Ask the family to top up the wallet.', 402);
+    }
 
     const newCall = {
       callId: callData.callId || `CALL-${uuidv4().substring(0, 8).toUpperCase()}`,
