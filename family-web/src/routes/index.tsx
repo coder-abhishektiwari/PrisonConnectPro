@@ -19,22 +19,18 @@ export const RoutePaths = {
 } as const;
 
 function Home() {
-  return (
-    <div className="flex min-h-screen items-center justify-center p-4 bg-gradient-to-br from-primary-50 to-neutral-100">
-      <div className="max-w-md w-full text-center bg-white p-8 rounded-2xl shadow-xl">
-        <h1 className="text-2xl font-bold text-neutral-900 mb-2">PrisonConnect</h1>
-        <p className="text-neutral-600 mb-8">Family Calling Portal</p>
-        <p className="text-sm text-neutral-500">Please use the secure link sent to your registered mobile number.</p>
-      </div>
-    </div>
-  );
+  // The portal has no landing page: a direct visit without a call or wallet
+  // link gets NO UI at all — bounce straight to a blank page.
+  window.location.replace('about:blank');
+  return null;
 }
 
 function QueryLinkRedirect() {
   const [searchParams] = useSearchParams();
   const firstKey = searchParams.keys().next().value;
   if (firstKey) return <Navigate to={`/c/${firstKey}`} replace />;
-  return <Navigate to="/" replace />;
+  window.location.replace('about:blank');
+  return null;
 }
 
 export const router = createBrowserRouter([

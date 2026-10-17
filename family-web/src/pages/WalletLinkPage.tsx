@@ -44,9 +44,6 @@ export function WalletLinkPage() {
 
   const [phase, setPhase] = useState<Phase>('loading');
   const [info, setInfo] = useState<WalletLinkInfo | null>(null);
-  const [invalidMsg, setInvalidMsg] = useState(
-    'This link is no longer valid. Ask the jail office to send you a new one.',
-  );
   const [amount, setAmount] = useState('');
   const [payError, setPayError] = useState('');
   const [result, setResult] = useState<WalletVerifyResult | null>(null);
@@ -59,7 +56,8 @@ export function WalletLinkPage() {
 
   const fetchInfo = useCallback(async () => {
     if (!token) {
-      setInvalidMsg('This link is missing its access key. Open the link exactly as it was sent to you.');
+      // A direct /w visit with no key: blank page, nothing to poke at.
+      window.location.replace('about:blank');
       setPhase('invalid');
       return;
     }
@@ -68,8 +66,9 @@ export function WalletLinkPage() {
       const data = await walletApi.getInfo(token);
       setInfo(data);
       setPhase('ready');
-    } catch (e) {
-      setInvalidMsg(errMessage(e, 'This link is no longer valid. Ask the jail office to send you a new one.'));
+    } catch {
+      // Expired or unknown key gets the same treatment as a direct visit.
+      window.location.replace('about:blank');
       setPhase('invalid');
     }
   }, [token]);
@@ -150,15 +149,9 @@ export function WalletLinkPage() {
   if (phase === 'loading') return shell(<Loading message="Checking your wallet link..." />);
 
   if (phase === 'invalid' || !info) {
-    return shell(
-      <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
-        <div className="w-14 h-14 mx-auto rounded-full bg-neutral-100 flex items-center justify-center mb-4 text-neutral-500 text-2xl font-bold">
-          &#8377;
-        </div>
-        <h1 className="text-xl font-bold text-neutral-900">Wallet link</h1>
-        <p className="text-sm text-neutral-600 mt-3 leading-relaxed">{invalidMsg}</p>
-      </div>,
-    );
+    // Terminal state: never show portal UI for a bad link.
+    window.location.replace('about:blank');
+    return null;
   }
 
   if (phase === 'success' && result) {

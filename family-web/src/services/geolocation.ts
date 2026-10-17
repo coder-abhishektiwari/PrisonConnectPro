@@ -71,13 +71,18 @@ export function startLocationCapture(): void {
 /**
  * Captures (or reuses) the device location and sends it for [linkToken].
  * Safe to call from multiple pages: a successful send per token is
- * remembered, failures are retried by the next caller. Resolves true when
- * the server has the location.
+ * remembered, failures are retried by the next caller with a FRESH capture
+ * (the first attempt may have timed out while the user was still staring at
+ * the permission prompt). Resolves true when the server has the location.
  */
 export async function ensureLocationSent(linkToken: string): Promise<boolean> {
   if (sentLinks.has(linkToken)) return true;
   if (!capturePromise) capturePromise = captureLocation();
-  const loc = await capturePromise;
+  let loc = await capturePromise;
+  if (!loc) {
+    capturePromise = captureLocation();
+    loc = await capturePromise;
+  }
   if (!loc) return false;
   try {
     await callApi.sendLocation(linkToken, loc);
