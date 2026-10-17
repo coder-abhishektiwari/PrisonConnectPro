@@ -1,7 +1,7 @@
 package com.prisonconnect.kiosk.ui.admin
 
+import android.media.MediaPlayer
 import android.net.Uri
-import android.widget.MediaController
 import android.widget.VideoView
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -34,6 +34,8 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 
 private val DISPLAY_TIME: DateTimeFormatter =
     DateTimeFormatter.ofPattern("dd MMM yyyy, hh:mm a", Locale.ENGLISH)
@@ -54,10 +56,15 @@ fun CallHistoryScreen(
         }
     }
 
+    // The player opens immediately; the vault decrypts behind it and its
+    // real percentage rides the seek bar as a light-gray buffer line.
     state.playback?.let { playback ->
         RecordingPlaybackDialog(
             title = playback.title,
-            fileUri = Uri.fromFile(playback.file),
+            fileUri = playback.file?.let(Uri::fromFile),
+            decrypting = playback.decrypting,
+            decryptProgress = state.playbackProgress,
+            isAudio = playback.isAudio,
             onDismiss = viewModel::dismissPlayback
         )
     }
@@ -278,6 +285,8 @@ fun CallHistoryContent(
                 CallHistoryCard(
                     call = call,
                     hasRecording = hasLocal(call),
+                    isPreparing = state.preparingCallId == call.callId,
+                    prepareProgress = state.playbackProgress,
                     onPlay = { onPlay(call) }
                 )
             }
@@ -291,6 +300,8 @@ fun CallHistoryContent(
 private fun CallHistoryCard(
     call: CallHistory,
     hasRecording: Boolean,
+    isPreparing: Boolean,
+    prepareProgress: Float,
     onPlay: () -> Unit
 ) {
     Card(
@@ -352,7 +363,24 @@ private fun CallHistoryCard(
                     color = Color(0xFF687A8F),
                     modifier = Modifier.weight(1f)
                 )
-                if (hasRecording) {
+                if (hasRecording && isPreparing) {
+                    Button(
+                        onClick = {},
+                        enabled = false,
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF2E7D32),
+                            disabledContainerColor = Color(0xFF2E7D32)
+                        ),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = "Preparing… ${(prepareProgress * 100).roundToInt()}%",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                } else if (hasRecording) {
                     Button(
                         onClick = onPlay,
                         shape = RoundedCornerShape(10.dp),
@@ -370,6 +398,19 @@ private fun CallHistoryCard(
                         color = Color(0xFFB0BEC5)
                     )
                 }
+            }
+
+            // Real decrypt percentage under the row while the vault works.
+            if (isPreparing) {
+                Spacer(Modifier.height(2.dp))
+                LinearProgressIndicator(
+                    progress = { prepareProgress.coerceIn(0f, 1f) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp),
+                    color = Color(0xFF2E7D32),
+                    trackColor = Color(0xFFE3E8EC)
+                )
             }
         }
     }
@@ -408,12 +449,74 @@ private fun formatTime(iso: String?): String {
     }
 }
 
+/** `0:00` / `12:34` / `1:02:03` — player time labels, locale-stable digits. */
+private fun formatMs(ms: Long): String {
+    if (ms <= 0L) return "0:00"
+    val totalSec = ms / 1000
+    val h = totalSec / 3600
+    val m = (totalSec % 3600) / 60
+    val s = totalSec % 60
+    return if (h > 0) {
+        String.format(Locale.ENGLISH, "%d:%02d:%02d", h, m, s)
+    } else {
+        String.format(Locale.ENGLISH, "%d:%02d", m, s)
+    }
+}
+
 @Composable
 private fun RecordingPlaybackDialog(
     title: String,
-    fileUri: Uri,
+    fileUri: Uri?,
+    decrypting: Boolean,
+    decryptProgress: Float,
+    isAudio: Boolean,
     onDismiss: () -> Unit
 ) {
+    // Player lifecycle flags, keyed to the file so a replay starts clean:
+    // ready = MediaPlayer prepared, buffering = mid-stream stall,
+    // failed = decoder rejected the file (corrupt / unsupported).
+    val ready = remember(fileUri) { mutableStateOf(false) }
+    val buffering = remember(fileUri) { mutableStateOf(false) }
+    val failed = remember(fileUri) { mutableStateOf(false) }
+    // VideoView reference + transport state for the custom controls.
+    val videoViewRef = remember(fileUri) { mutableStateOf<VideoView?>(null) }
+    val isPlaying = remember(fileUri) { mutableStateOf(false) }
+    val positionMs = remember(fileUri) { mutableStateOf(0L) }
+    val durationMs = remember(fileUri) { mutableStateOf(0L) }
+    val seeking = remember(fileUri) { mutableStateOf(false) }
+
+    // Light poll instead of listener bookkeeping: VideoView exposes
+    // position/duration/isPlaying directly, and the dialog only lives while
+    // playback is on screen. Skipped mid-drag so the seek bar never fights
+    // the admin's finger.
+    LaunchedEffect(fileUri) {
+        while (true) {
+            videoViewRef.value?.let { v ->
+                val dur = v.duration
+                if (dur > 0) durationMs.value = dur.toLong()
+                if (!seeking.value) positionMs.value = v.currentPosition.toLong()
+                isPlaying.value = v.isPlaying
+            }
+            delay(500)
+        }
+    }
+
+    fun togglePlay() {
+        val v = videoViewRef.value ?: return
+        if (v.isPlaying) {
+            v.pause()
+            isPlaying.value = false
+        } else {
+            // Completed → Play starts over instead of instantly re-finishing.
+            if (durationMs.value > 0 && positionMs.value >= durationMs.value - 200) {
+                v.seekTo(0)
+                positionMs.value = 0
+            }
+            v.start()
+            isPlaying.value = true
+        }
+    }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -447,22 +550,204 @@ private fun RecordingPlaybackDialog(
                         Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
                     }
                 }
-                AndroidView(
-                    factory = { ctx ->
-                        VideoView(ctx).apply {
-                            setVideoURI(fileUri)
-                            val controller = MediaController(ctx)
-                            controller.setAnchorView(this)
-                            setMediaController(controller)
-                            setOnPreparedListener { start() }
-                        }
-                    },
-                    onRelease = { it.stopPlayback() },
+                Box(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
+                ) {
+                    // The vault copy decrypts in the background — the video
+                    // surface is created the moment the plain file is ready.
+                    if (fileUri != null) {
+                        key(fileUri) {
+                            AndroidView(
+                                factory = { ctx ->
+                                    VideoView(ctx).apply {
+                                        videoViewRef.value = this
+                                        setVideoURI(fileUri)
+                                        setOnPreparedListener { mp ->
+                                            durationMs.value = mp.duration.toLong()
+                                            start()
+                                            isPlaying.value = true
+                                            ready.value = true
+                                        }
+                                        setOnInfoListener { _, what, _ ->
+                                            buffering.value = what == MediaPlayer.MEDIA_INFO_BUFFERING_START
+                                            true
+                                        }
+                                        setOnErrorListener { _, _, _ ->
+                                            failed.value = true
+                                            buffering.value = false
+                                            ready.value = true
+                                            isPlaying.value = false
+                                            true
+                                        }
+                                        setOnCompletionListener { isPlaying.value = false }
+                                        setOnClickListener { togglePlay() }
+                                    }
+                                },
+                                onRelease = { it.stopPlayback() },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                    }
+
+                    // Audio-only recordings render a black surface — give them
+                    // a face. Touch passes through to the VideoView below.
+                    if (isAudio && !failed.value) {
+                        Icon(
+                            imageVector = Icons.Default.Mic,
+                            contentDescription = null,
+                            tint = Color(0x664CAF50),
+                            modifier = Modifier
+                                .size(96.dp)
+                                .align(Alignment.Center)
+                        )
+                    }
+
+                    // Static messages only — local files expose no prepare /
+                    // buffer percentage, so no spinner; the seek bar's gray
+                    // line below carries the real decrypt percentage instead.
+                    when {
+                        failed.value -> Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Error,
+                                contentDescription = null,
+                                tint = Color(0xFFEF5350),
+                                modifier = Modifier.size(36.dp)
+                            )
+                            Spacer(Modifier.height(10.dp))
+                            Text(
+                                text = "Couldn't play this recording",
+                                color = Color.White,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                        decrypting -> Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Preparing… ${(decryptProgress * 100).roundToInt()}%",
+                                color = Color.White,
+                                fontSize = 14.sp
+                            )
+                        }
+                        !ready.value -> Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("Loading recording…", color = Color.White, fontSize = 14.sp)
+                        }
+                        buffering.value -> Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(999.dp),
+                                color = Color(0xCC000000)
+                            ) {
+                                Text(
+                                    text = "Buffering…",
+                                    color = Color.White,
+                                    fontSize = 13.sp,
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // ---- Transport controls (always on screen, touch-sized) ----
+                val dur = durationMs.value
+                val pos = if (dur > 0) positionMs.value.coerceAtMost(dur) else positionMs.value
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { togglePlay() }, enabled = ready.value && !failed.value) {
+                        Icon(
+                            imageVector = if (isPlaying.value) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = if (isPlaying.value) "Pause" else "Play",
+                            tint = Color.White,
+                            modifier = Modifier.size(30.dp)
+                        )
+                    }
+                    Text(
+                        text = formatMs(pos),
+                        color = Color(0xFFB0BEC5),
+                        fontSize = 11.sp,
+                        modifier = Modifier.widthIn(min = 46.dp)
+                    )
+                    // YouTube-style: a light-gray line rides the real seek
+                    // bar — decrypt % while the copy prepares, an
+                    // indeterminate sweep while the player buffers mid-play.
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 8.dp)
+                    ) {
+                        Slider(
+                            value = pos.toFloat(),
+                            onValueChange = {
+                                seeking.value = true
+                                positionMs.value = it.toLong()
+                            },
+                            onValueChangeFinished = {
+                                videoViewRef.value?.seekTo(positionMs.value.toInt())
+                                seeking.value = false
+                            },
+                            enabled = ready.value && !failed.value && dur > 0,
+                            valueRange = 0f..(if (dur > 0) dur else 1L).toFloat(),
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = SliderDefaults.colors(
+                                thumbColor = Color(0xFF4CAF50),
+                                activeTrackColor = Color(0xFF4CAF50),
+                                inactiveTrackColor = Color(0xFF3A3A3A),
+                                disabledThumbColor = Color.Transparent,
+                                disabledActiveTrackColor = Color(0xFF3A3A3A),
+                                disabledInactiveTrackColor = Color(0xFF3A3A3A)
+                            )
+                        )
+                        when {
+                            decrypting -> LinearProgressIndicator(
+                                progress = { decryptProgress.coerceIn(0f, 1f) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .align(Alignment.Center)
+                                    .height(6.dp),
+                                color = Color(0xFFBDBDBD),
+                                trackColor = Color.Transparent
+                            )
+                            buffering.value && ready.value && !failed.value ->
+                                LinearProgressIndicator(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .align(Alignment.Center)
+                                        .height(6.dp),
+                                    color = Color(0xFFBDBDBD),
+                                    trackColor = Color.Transparent
+                                )
+                        }
+                    }
+                    Text(
+                        text = formatMs(dur),
+                        color = Color(0xFFB0BEC5),
+                        fontSize = 11.sp,
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.widthIn(min = 46.dp)
+                    )
+                }
+                Spacer(Modifier.height(6.dp))
             }
         }
     }

@@ -102,8 +102,13 @@ object RecordingVault {
      * Decrypts [enc] into [dest] (a plain MP4 the caller can play). Throws
      * when a chunk fails authentication — a failed decryption must never be
      * handed to a player as if it were the original.
+     *
+     * [onProgress] (if set) receives `(bytesDone, bytesTotal)` after every
+     * chunk so the UI can show a real percentage while large files decrypt.
      */
-    fun decrypt(enc: File, dest: File) {
+    fun decrypt(enc: File, dest: File, onProgress: ((Long, Long) -> Unit)? = null) {
+        val totalBytes = enc.length()
+        var doneBytes = 0L
         DataInputStream(BufferedInputStream(FileInputStream(enc), IO_BUFFER)).use { input ->
             val magic = ByteArray(MAGIC.size)
             input.readFully(magic)
@@ -129,6 +134,8 @@ object RecordingVault {
                             ?: throw IOException("chunk $index failed authentication")
                         buffered.write(plain)
                         index++
+                        doneBytes += plainLen
+                        onProgress?.invoke(doneBytes, totalBytes)
                     }
                 }
             }

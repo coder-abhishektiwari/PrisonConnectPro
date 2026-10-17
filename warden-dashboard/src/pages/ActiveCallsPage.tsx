@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
 import { Card } from '@/components/Card';
 import { LocationLink } from '@/components/LocationLink';
 import { SkeletonCards } from '@/components/Skeleton';
@@ -14,7 +13,6 @@ import type { ActiveCall, ListParams, PaginatedResponse, Pricing, Settings } fro
 const PAGE_SIZE = 20;
 
 export function ActiveCallsPage() {
-  const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [toast, setToast] = useState<string | null>(null);
@@ -167,17 +165,17 @@ export function ActiveCallsPage() {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 p-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 p-4">
               {calls.map((call) => (
-                <div key={call.callId} className="group bg-white border border-neutral-200 rounded-2xl shadow-sm hover:shadow-lg hover:border-neutral-300 transition-all duration-200 flex flex-col overflow-hidden">
+                <div key={call.callId} className="group bg-white border border-neutral-200 rounded-xl shadow-sm hover:shadow-lg hover:border-neutral-300 transition-all duration-200 flex flex-col overflow-hidden">
                   <div className="h-1 bg-gradient-to-r from-primary-600 via-primary-400 to-neutral-900" />
-                  <div className="p-4 flex flex-col gap-3 flex-1">
+                  <div className="p-3 flex flex-col gap-2 flex-1">
                     <div className="flex justify-between items-start gap-2">
                       <div className="min-w-0">
                         <p className="font-mono text-xs font-bold text-neutral-900 truncate">{call.callId}</p>
-                        <p className="font-mono text-[11px] text-neutral-400 truncate">{call.roomIdLabel || call.roomId}</p>
+                        <p className="font-mono text-[10px] text-neutral-400 truncate">{call.roomIdLabel || call.roomId}</p>
                       </div>
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-success/10 text-success border border-success/20 rounded-full text-[11px] font-bold shrink-0" title={call.startTime}>
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-success/10 text-success border border-success/20 rounded-full text-[10px] font-bold shrink-0" title={call.startTime}>
                         <span className="w-1.5 h-1.5 bg-success rounded-full animate-pulse" />Live
                       </span>
                     </div>
@@ -187,61 +185,49 @@ export function ActiveCallsPage() {
                         the record exists but the family is still verifying in
                         the lobby; ticking from startTime made the clock count
                         the lobby AND restart when the real call began. */}
-                    <div className="flex items-center justify-between gap-2 rounded-xl bg-neutral-900 px-3.5 py-2.5 shadow-inner">
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-neutral-400">Elapsed</span>
-                      <span className="font-mono text-lg font-bold tabular-nums text-white leading-none">
+                    <div className="flex items-center justify-between gap-2 rounded-lg bg-neutral-900 px-2.5 py-1.5 shadow-inner">
+                      <span className="text-[9px] font-bold uppercase tracking-widest text-neutral-400">Elapsed</span>
+                      <span className="font-mono text-sm font-bold tabular-nums text-white leading-none">
                         {call.mediaConnectedAt ? elapsedOf(call.mediaConnectedAt) : 'Connecting…'}
                       </span>
                     </div>
-                    <p className="-mt-1.5 text-[11px] text-neutral-500 flex items-center gap-1.5" title={call.startTime}>
-                      <span className="material-icons text-[13px] text-neutral-400">schedule</span>
+                    <p className="text-[10px] text-neutral-500 flex items-center gap-1" title={call.startTime}>
+                      <span className="material-icons text-[12px] text-neutral-400">schedule</span>
                       Started {formatStartedAt(call.startTime)}
                     </p>
 
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="flex items-center gap-2.5 p-3 bg-primary-50/60 rounded-xl border border-primary-100">
-                        <div className="w-9 h-9 rounded-full bg-white border border-primary-200 flex items-center justify-center shrink-0">
-                          <span className="material-icons text-primary-600 text-lg">person</span>
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-[10px] font-bold text-primary-600 uppercase tracking-wide">Inmate</p>
-                          <p className="text-sm font-semibold text-neutral-900 truncate leading-tight">{inmateLabel(call)}</p>
-                          <p className="text-[11px] text-neutral-500 font-mono truncate" title={`${call.inmateNumber || call.inmateId} • ${call.kioskId}`}>{call.inmateNumber || call.inmateId} • {call.kioskId}</p>
-                        </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="px-2 py-1.5 bg-primary-50/60 rounded-lg border border-primary-100 min-w-0">
+                        <p className="text-[9px] font-bold text-primary-600 uppercase tracking-wide">Inmate</p>
+                        <p className="text-xs font-semibold text-neutral-900 truncate leading-tight">{inmateLabel(call)}</p>
+                        <p className="text-[10px] text-neutral-500 font-mono truncate" title={`${call.inmateNumber || call.inmateId} • ${call.kioskId}`}>{call.inmateNumber || call.inmateId} • {call.kioskId}</p>
                       </div>
-                      <div className="flex items-center gap-2.5 p-3 bg-info/5 rounded-xl border border-info/20">
-                        <div className="w-9 h-9 rounded-full bg-white border border-info/30 flex items-center justify-center shrink-0">
-                          <span className="material-icons text-info text-lg">face</span>
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-[10px] font-bold text-info uppercase tracking-wide">Family</p>
-                          <p className="text-sm font-semibold text-neutral-900 truncate leading-tight">{contactLabel(call)}</p>
-                          <p className="text-[11px] text-neutral-500 font-mono truncate" title={call.contactId}>{call.contactId}</p>
-                        </div>
+                      <div className="px-2 py-1.5 bg-info/5 rounded-lg border border-info/20 min-w-0">
+                        <p className="text-[9px] font-bold text-info uppercase tracking-wide">Family</p>
+                        <p className="text-xs font-semibold text-neutral-900 truncate leading-tight">{contactLabel(call)}</p>
+                        <p className="text-[10px] text-neutral-500 font-mono truncate" title={call.contactId}>{call.contactId}</p>
                       </div>
                     </div>
 
-                    {/* Captured when this call's device was verified - the
-                        family side's current location for THIS call. */}
-                    <div className="text-xs text-neutral-600 -mt-1">
-                      <LocationLink location={call.family?.location} />
+                    {/* Location + call-type/quality badges share one row now —
+                        captured when this call's device was verified. */}
+                    <div className="flex items-center justify-between gap-2">
+                      <LocationLink location={call.family?.location} className="min-w-0 truncate text-[11px] text-neutral-600" />
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wide ${call.type==='video'?'bg-primary-600 text-white border-primary-600':'bg-info text-white border-info'}`}>
+                          <span className="material-icons text-[12px]">{call.type==='video'?'videocam':'mic'}</span>
+                          {call.type==='video'?'Video':'Audio'}
+                        </span>
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wide ${getQualityBadge(call.connectionQuality)}`}>
+                          <span className="material-icons text-[12px]">signal_cellular_alt</span>
+                          {call.connectionQuality || '—'}
+                        </span>
+                      </div>
                     </div>
 
-                    <div className="flex flex-wrap gap-2">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border uppercase tracking-wide ${call.type==='video'?'bg-primary-600 text-white border-primary-600':'bg-info text-white border-info'}`}>
-                        <span className="material-icons text-[13px]">{call.type==='video'?'videocam':'mic'}</span>
-                        {call.type==='video'?'Video':'Audio'}
-                      </span>
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border uppercase tracking-wide ${getQualityBadge(call.connectionQuality)}`}>
-                        <span className="material-icons text-[13px]">signal_cellular_alt</span>
-                        {call.connectionQuality || '—'}
-                      </span>
-                    </div>
-
-                    <div className="mt-auto pt-1">
-                      {/* <button onClick={() => navigate(`/monitoring/live/${call.callId}`)} className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 bg-white border-2 border-neutral-900 text-neutral-900 rounded-xl text-xs font-bold hover:bg-neutral-900 hover:text-white transition-colors"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a9 9 0 11-18 0 9 9 0 0118 0zM15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg> Monitor</button> */}
-                      <button onClick={() => setConfirmForceEnd(call)} className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-error text-white rounded-xl text-sm font-bold hover:bg-error-700 focus:outline-none focus:ring-2 focus:ring-error/40 shadow-sm transition-colors">
-                        <span className="material-icons text-lg">call_end</span>
+                    <div className="mt-auto pt-0.5">
+                      <button onClick={() => setConfirmForceEnd(call)} className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-error text-white rounded-lg text-xs font-bold hover:bg-error-700 focus:outline-none focus:ring-2 focus:ring-error/40 shadow-sm transition-colors">
+                        <span className="material-icons text-sm">call_end</span>
                         Disconnect
                       </button>
                     </div>

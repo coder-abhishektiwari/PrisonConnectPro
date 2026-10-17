@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.prisonconnect.kiosk.api.TrustApiService
 import com.prisonconnect.kiosk.core.LocalRecordings
 import com.prisonconnect.kiosk.models.call.CallHistory
+import com.prisonconnect.kiosk.models.call.CallType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -52,8 +53,12 @@ class CallHistoryViewModel @Inject constructor(
     data class Playback(
         val callId: String,
         val title: String,
-        val file: File,
-        val isTemporary: Boolean
+        /** Plain playable copy; null while the vault is still decrypting. */
+        val file: File?,
+        val isTemporary: Boolean,
+        val isAudio: Boolean,
+        /** True while the decrypt runs in the background. */
+        val decrypting: Boolean
     )
 
     data class UiState(
@@ -67,7 +72,11 @@ class CallHistoryViewModel @Inject constructor(
         val total: Int = 0,
         val localCallIds: Set<String> = emptySet(),
         val playback: Playback? = null,
-        val playbackError: String? = null
+        val playbackError: String? = null,
+        val isPreparingPlayback: Boolean = false,
+        val preparingCallId: String? = null,
+        /** Vault-decrypt progress for the preparing playback, 0f..1f. */
+        val playbackProgress: Float = 0f
     )
 
     private val _state = MutableStateFlow(UiState())
@@ -107,35 +116,107 @@ class CallHistoryViewModel @Inject constructor(
     fun retry() = load()
 
     fun startPlayback(call: CallHistory) {
+        // The player opens FIRST and the vault decrypts behind it (YouTube
+        // style) — the seek bar's gray line reports real percentage. Never
+        // run two decrypts at once, though.
+        val snapshot = _state.value
+        val callId = call.callId
+        val title = listOfNotNull(
+            call.inmateName ?: "Inmate",
+            call.contactName ?: "Family"
+        ).joinToString("  →  ")
+        val isAudio = call.type == CallType.AUDIO
+        if (snapshot.playback != null) return
+        if (snapshot.isPreparingPlayback) {
+            // Same call already decrypting in the background — just bring
+            // the player back; the running job keeps feeding progress.
+            if (snapshot.preparingCallId == callId) {
+                _state.update {
+                    it.copy(
+                        playback = Playback(
+                            callId = callId,
+                            title = title,
+                            file = null,
+                            isTemporary = false,
+                            isAudio = isAudio,
+                            decrypting = true
+                        )
+                    )
+                }
+            }
+            return
+        }
         viewModelScope.launch {
-            _state.update { it.copy(playbackError = null) }
-            val callId = call.callId
+            _state.update {
+                it.copy(
+                    playbackError = null,
+                    isPreparingPlayback = true,
+                    preparingCallId = callId,
+                    playbackProgress = 0f,
+                    playback = Playback(
+                        callId = callId,
+                        title = title,
+                        file = null,
+                        isTemporary = false,
+                        isAudio = isAudio,
+                        decrypting = true
+                    )
+                )
+            }
             try {
-                val materialized = withContext(Dispatchers.IO) {
-                    val file = LocalRecordings.materializeForPlay(context, callId)
+                // Real decrypt percentage, chunk by chunk — drives the gray
+                // buffer line on the player's seek bar and the card bar
+                // (visible if the dialog gets dismissed mid-decrypt).
+                val emit: (Long, Long) -> Unit = { done, total ->
+                    val fraction = if (total > 0) done.toFloat() / total else 0f
+                    _state.update { s -> s.copy(playbackProgress = fraction.coerceIn(0f, 1f)) }
+                }
+                val materialized: File? = withContext(Dispatchers.IO) {
+                    val file = LocalRecordings.materializeForPlay(context, callId, emit)
                     // A master written under its roomId (the recorder's id)
                     // is still playable when the list row carries both ids.
                     if (file == null && call.roomId != null) {
-                        LocalRecordings.materializeForPlay(context, call.roomId)
+                        LocalRecordings.materializeForPlay(context, call.roomId, emit)
                     } else file
                 }
                 if (materialized == null) {
-                    _state.update {
-                        it.copy(playbackError = "No recording stored on this kiosk for that call")
+                    _state.update { s ->
+                        val pb = s.playback
+                        s.copy(
+                            playbackError = "No recording stored on this kiosk for that call",
+                            playback = if (pb != null && pb.callId == callId) null else pb
+                        )
                     }
-                    return@launch
-                }
-                val title = listOfNotNull(
-                    call.inmateName ?: "Inmate",
-                    call.contactName ?: "Family"
-                ).joinToString("  →  ")
-                _state.update {
-                    it.copy(playback = Playback(callId, title, materialized, isTemporary = materialized.name.startsWith("play-")))
+                } else {
+                    val isTemp = materialized.name.startsWith("play-")
+                    _state.update { s ->
+                        val pb = s.playback
+                        if (pb != null && pb.callId == callId) {
+                            s.copy(
+                                playback = pb.copy(
+                                    file = materialized,
+                                    isTemporary = isTemp,
+                                    decrypting = false
+                                ),
+                                playbackProgress = 1f
+                            )
+                        } else s.copy(playbackProgress = 1f)
+                    }
+                    // Dismissed mid-decrypt → nobody is waiting for this copy.
+                    if (_state.value.playback == null && isTemp) {
+                        withContext(Dispatchers.IO) { runCatching { materialized.delete() } }
+                    }
                 }
             } catch (t: Throwable) {
-                _state.update {
-                    it.copy(playbackError = "Could not open the recording: ${t.message}")
+                _state.update { s ->
+                    val pb = s.playback
+                    s.copy(
+                        playbackError = "Could not open the recording: ${t.message}",
+                        playback = if (pb != null && pb.callId == callId && pb.decrypting) null else pb
+                    )
                 }
+            } finally {
+                _state.update { it.copy(isPreparingPlayback = false, preparingCallId = null) }
             }
         }
     }
@@ -146,7 +227,7 @@ class CallHistoryViewModel @Inject constructor(
         if (current.isTemporary) {
             val temp = current.file
             viewModelScope.launch(Dispatchers.IO) {
-                runCatching { temp.delete() }
+                runCatching { temp?.delete() }
             }
         }
     }

@@ -38,13 +38,23 @@ object LocalRecordings {
      * Returns a file the caller can hand to a MediaPlayer. Encrypted masters
      * are decrypted into the cache dir (caller deletes that temp copy when
      * playback ends); plain files are returned as-is and must NOT be deleted.
+     *
+     * [onProgress] (if set) receives `(bytesDone, bytesTotal)` while the
+     * decrypt runs; plain files report completion immediately.
      */
-    fun materializeForPlay(context: Context, callId: String): File? {
+    fun materializeForPlay(
+        context: Context,
+        callId: String,
+        onProgress: ((Long, Long) -> Unit)? = null
+    ): File? {
         val master = findFor(context, callId) ?: return null
-        if (!master.name.endsWith(".enc")) return master
+        if (!master.name.endsWith(".enc")) {
+            onProgress?.invoke(1L, 1L)
+            return master
+        }
         val dest = File(context.cacheDir, "play-$callId.mp4")
         if (dest.exists()) dest.delete()
-        RecordingVault.decrypt(master, dest)
+        RecordingVault.decrypt(master, dest, onProgress)
         return dest
     }
 
