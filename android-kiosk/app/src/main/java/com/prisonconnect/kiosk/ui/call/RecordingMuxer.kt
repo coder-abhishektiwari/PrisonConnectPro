@@ -133,6 +133,9 @@ class RecordingMuxer(
         }
     }
 
+    /** True once [MediaMuxer.start] ran — i.e. samples are actually landing in the file. */
+    fun isStarted(): Boolean = synchronized(lock) { started }
+
     fun finish() {
         synchronized(lock) {
             if (released) return

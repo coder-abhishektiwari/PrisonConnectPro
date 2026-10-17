@@ -4,7 +4,7 @@ import { Button } from '@/components/Button';
 import { callApi } from '@/services/api';
 import { useSession } from '@/context/SessionContext';
 import { collectSignals, fingerprintHash } from '@/services/fingerprint';
-import { captureLocation, type CapturedLocation } from '@/services/geolocation';
+import { startLocationCapture, ensureLocationSent } from '@/services/geolocation';
 import { useHeartbeat } from '@/hooks/useHeartbeat';
 
 const STEPS = ['Checking your device…', 'Matching your secure profile…', 'Almost done…'];
@@ -46,9 +46,8 @@ export function DeviceVerificationPage() {
   // Kick off the permission prompt the moment the page mounts so the user is
   // answering it while the fingerprint is being computed. Location is NOT part
   // of the fingerprint - it is only shipped once verification has succeeded.
-  const locationRef = useRef<Promise<CapturedLocation | null> | null>(null);
   useEffect(() => {
-    if (!locationRef.current) locationRef.current = captureLocation();
+    startLocationCapture();
   }, []);
 
   // Rotate a single short line while verifying — keeps the wait calm.
@@ -98,10 +97,9 @@ export function DeviceVerificationPage() {
         // Verification has already passed: hand the captured location over in
         // the background (own request, errors swallowed) so it can never hold
         // up or fail the call. Sent only now because the device record it
-        // belongs to is written by the request above.
-        void locationRef.current?.then((loc) => {
-          if (loc) callApi.sendLocation(linkToken, loc).catch(() => undefined);
-        });
+        // belongs to is written by the request above. The call page retries
+        // the send when this attempt never lands (denied prompt, timeout).
+        void ensureLocationSent(linkToken);
         // Returning device -> OTP. First call to this number -> straight to
         // the call screen (the lobby was only ever a redirect hop).
         navigate(session.deviceRegistered ? `/c/${linkToken}/otp` : `/c/${linkToken}/call`, { replace: true });
@@ -129,6 +127,10 @@ export function DeviceVerificationPage() {
             </div>
             <p className="text-lg font-semibold text-neutral-900 mb-1">Securing your connection</p>
             <p className="text-sm text-neutral-500">{STEPS[step]}</p>
+            <p className="text-xs text-neutral-400 mt-4">
+              Please tap <span className="font-medium text-neutral-500">Allow</span> if asked for location — the
+              prison records it for every visit.
+            </p>
           </div>
         </div>
       </div>

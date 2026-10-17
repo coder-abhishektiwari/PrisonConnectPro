@@ -258,11 +258,18 @@ class KioskCallRecorder @Inject constructor(
 
         val path = file?.absolutePath ?: ""
         val size = file?.length() ?: 0L
-        Logger.i("Recording finalized size=$size path=$path")
-        if (file != null && size > 0) {
+        val muxerStarted = sessionMuxer?.isStarted() == true
+        Logger.i("Recording finalized size=$size started=$muxerStarted path=$path")
+        if (file != null && size > 0 && muxerStarted) {
             // WorkManager takes over: encrypts the master in place with the
             // keystore key. Nothing about this file ever leaves the kiosk.
             RecordingVaultWorker.enqueueEncrypt(appContext, file)
+        } else if (file != null && !muxerStarted) {
+            // The muxer never got a complete track list (encoder/composer died
+            // before its first frame): the file has no moov atom and would only
+            // show up in Call History as an unplayable "with recording" badge.
+            Logger.w("Recording dropped - no complete track list (${file.name})")
+            file.delete()
         }
     }
 

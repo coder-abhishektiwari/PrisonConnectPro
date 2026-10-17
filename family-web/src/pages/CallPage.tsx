@@ -5,6 +5,7 @@ import { useSession } from '@/context/SessionContext';
 import { useToast } from '@/components/Toast';
 import { socketService } from '@/services/socket';
 import { callApi } from '@/services/api';
+import { ensureLocationSent } from '@/services/geolocation';
 import { webRtcService, type ConnectionState, type QualitySnapshot } from '@/services/webrtc';
 
 type CallStatus =
@@ -80,6 +81,14 @@ export function CallPage() {
       if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
     };
   }, [status, bumpInteraction]);
+
+  // Location send retry: the device page fires the first attempt, but a
+  // denied-then-allowed prompt or a flaky network can leave it unsent — the
+  // warden's history then shows "Location not shared" for the call.
+  useEffect(() => {
+    if (!linkToken) return;
+    void ensureLocationSent(linkToken);
+  }, [linkToken]);
 
   // Refs
   const localVideoRef = useRef<HTMLVideoElement>(null);

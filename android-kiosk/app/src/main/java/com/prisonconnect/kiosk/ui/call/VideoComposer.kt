@@ -6,6 +6,9 @@ import com.prisonconnect.kiosk.core.Logger
 import org.webrtc.GlRectDrawer
 import org.webrtc.VideoFrame
 import org.webrtc.VideoFrameDrawer
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.nio.FloatBuffer
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -39,6 +42,21 @@ internal class VideoComposer(
 
     private var drawer: GlRectDrawer? = null
     private var frameDrawer: VideoFrameDrawer? = null
+
+    // Cached composite kept as an FBO texture — NOT as a retained VideoFrame
+    // (this WebRTC build stalls every video sink while one is held). The FBO
+    // holds the last frame BOTH sides were present for; ticks where a side
+    // misses simply re-emit it. Drawing a partial composite (or clearing to
+    // black) on those ticks is what made recordings flicker.
+    private var fboId = 0
+    private var fboTex = 0
+    private var blitProgram = 0
+    private var posAttr = -1
+    private var texAttr = -1
+    private var texUniform = -1
+    private var posBuffer: FloatBuffer? = null
+    private var texBuffer: FloatBuffer? = null
+    private var compositeValid = false
 
     @Volatile private var framesRendered = 0L
 
@@ -103,7 +121,7 @@ internal class VideoComposer(
         encoder.makeCurrent()
         drawer = GlRectDrawer()
         frameDrawer = VideoFrameDrawer()
-        true
+        initBlitPipeline()
     } catch (e: Throwable) {
         Logger.e("VideoComposer GL init failed", e)
         false
@@ -112,6 +130,7 @@ internal class VideoComposer(
     private fun cleanupGl() {
         try {
             encoder.makeCurrent()
+            releaseBlitPipeline()
             frameDrawer?.release()
             drawer?.release()
         } catch (e: Throwable) {
@@ -155,13 +174,22 @@ internal class VideoComposer(
         val local = localSlot.take()
         val remote = remoteSlot.take()
         try {
-            // Neither side delivered a frame since the last tick: encode
-            // NOTHING. The old code still swapped a cleared (black) surface
-            // on such ticks, which alternated composite -> black at tick
-            // rate — the "flicker". Skipping lets playback freeze on the
-            // last good frame instead.
-            if (local == null && remote == null) return
-            val drawn = encoder.renderFrame(ptsNs) { compose(local, remote) }
+            val bothFresh = local != null && remote != null
+            val seedComposite = !compositeValid && (local != null || remote != null)
+            // No fresh frames AND no cached composite to fall back to: emit
+            // nothing. The encoder surface keeps whatever the codec last
+            // displayed, so playback freezes instead of flashing black.
+            if (!bothFresh && !seedComposite && !compositeValid) return
+            val update = bothFresh || seedComposite
+            val drawn = encoder.renderFrame(ptsNs) {
+                if (update) {
+                    GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fboId)
+                    compose(local, remote)
+                    GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
+                    if (bothFresh) compositeValid = true
+                }
+                blitComposite()
+            }
             if (drawn) framesRendered++
         } finally {
             local?.release()
@@ -214,6 +242,126 @@ internal class VideoComposer(
         val w = (srcW * scale).toInt().coerceIn(1, dstW)
         val h = (srcH * scale).toInt().coerceIn(1, dstH)
         return intArrayOf(dstX + (dstW - w) / 2, dstY + (dstH - h) / 2, w, h)
+    }
+
+    // ---- composite cache (FBO) + blit ----
+
+    /** Creates the RGBA cache texture, its FBO, and the 2D blit program. */
+    private fun initBlitPipeline(): Boolean {
+        val vert = compileShader(GLES20.GL_VERTEX_SHADER, VERT_SRC) ?: return false
+        val frag = compileShader(GLES20.GL_FRAGMENT_SHADER, FRAG_SRC) ?: run {
+            GLES20.glDeleteShader(vert)
+            return false
+        }
+        val prog = GLES20.glCreateProgram()
+        GLES20.glAttachShader(prog, vert)
+        GLES20.glAttachShader(prog, frag)
+        GLES20.glLinkProgram(prog)
+        GLES20.glDeleteShader(vert)
+        GLES20.glDeleteShader(frag)
+        val linked = IntArray(1)
+        GLES20.glGetProgramiv(prog, GLES20.GL_LINK_STATUS, linked, 0)
+        if (linked[0] == 0) {
+            Logger.w("VideoComposer blit link failed: ${GLES20.glGetProgramInfoLog(prog)}")
+            GLES20.glDeleteProgram(prog)
+            return false
+        }
+        blitProgram = prog
+        posAttr = GLES20.glGetAttribLocation(prog, "aPos")
+        texAttr = GLES20.glGetAttribLocation(prog, "aTex")
+        texUniform = GLES20.glGetUniformLocation(prog, "uTex")
+
+        val quad = floatArrayOf(-1f, -1f, 1f, -1f, -1f, 1f, 1f, 1f)
+        val texCoords = floatArrayOf(0f, 0f, 1f, 0f, 0f, 1f, 1f, 1f)
+        posBuffer = ByteBuffer.allocateDirect(quad.size * 4)
+            .order(ByteOrder.nativeOrder()).asFloatBuffer().apply { put(quad); position(0) }
+        texBuffer = ByteBuffer.allocateDirect(texCoords.size * 4)
+            .order(ByteOrder.nativeOrder()).asFloatBuffer().apply { put(texCoords); position(0) }
+
+        val tex = IntArray(1)
+        GLES20.glGenTextures(1, tex, 0)
+        fboTex = tex[0]
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, fboTex)
+        GLES20.glTexImage2D(
+            GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA,
+            profile.width, profile.height, 0,
+            GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, null
+        )
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR)
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
+        val fb = IntArray(1)
+        GLES20.glGenFramebuffers(1, fb, 0)
+        fboId = fb[0]
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fboId)
+        GLES20.glFramebufferTexture2D(
+            GLES20.GL_FRAMEBUFFER, GLES20.GL_COLOR_ATTACHMENT0,
+            GLES20.GL_TEXTURE_2D, fboTex, 0
+        )
+        val status = GLES20.glCheckFramebufferStatus(GLES20.GL_FRAMEBUFFER)
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
+        if (status != GLES20.GL_FRAMEBUFFER_COMPLETE) {
+            Logger.w("VideoComposer FBO incomplete (status=$status)")
+            releaseBlitPipeline()
+            return false
+        }
+        return true
+    }
+
+    private fun compileShader(type: Int, source: String): Int? {
+        val shader = GLES20.glCreateShader(type)
+        GLES20.glShaderSource(shader, source)
+        GLES20.glCompileShader(shader)
+        val compiled = IntArray(1)
+        GLES20.glGetShaderiv(shader, GLES20.GL_COMPILE_STATUS, compiled, 0)
+        if (compiled[0] == 0) {
+            Logger.w("VideoComposer shader compile failed: ${GLES20.glGetShaderInfoLog(shader)}")
+            GLES20.glDeleteShader(shader)
+            return null
+        }
+        return shader
+    }
+
+    /** Draws the cached composite full-frame onto the encoder's input surface. */
+    private fun blitComposite() {
+        val program = blitProgram
+        val pb = posBuffer ?: return
+        val tb = texBuffer ?: return
+        if (program == 0 || fboTex == 0) return
+        GLES20.glUseProgram(program)
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, fboTex)
+        GLES20.glUniform1i(texUniform, 0)
+        GLES20.glEnableVertexAttribArray(posAttr)
+        GLES20.glVertexAttribPointer(posAttr, 2, GLES20.GL_FLOAT, false, 0, pb)
+        GLES20.glEnableVertexAttribArray(texAttr)
+        GLES20.glVertexAttribPointer(texAttr, 2, GLES20.GL_FLOAT, false, 0, tb)
+        GLES20.glViewport(0, 0, profile.width, profile.height)
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+        GLES20.glDisableVertexAttribArray(posAttr)
+        GLES20.glDisableVertexAttribArray(texAttr)
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0)
+        GLES20.glUseProgram(0)
+    }
+
+    /** Frees the FBO, its texture and the blit program. GL must be current. */
+    private fun releaseBlitPipeline() {
+        if (fboId != 0) {
+            GLES20.glDeleteFramebuffers(1, intArrayOf(fboId), 0)
+            fboId = 0
+        }
+        if (fboTex != 0) {
+            GLES20.glDeleteTextures(1, intArrayOf(fboTex), 0)
+            fboTex = 0
+        }
+        if (blitProgram != 0) {
+            GLES20.glDeleteProgram(blitProgram)
+            blitProgram = 0
+        }
+        posBuffer = null
+        texBuffer = null
+        compositeValid = false
     }
 
     /**
@@ -283,5 +431,25 @@ internal class VideoComposer(
 
         /** Identity transform — [VideoFrameDrawer] already applies rotation/flip. */
         private val IDENTITY = Matrix()
+
+        /** Fullscreen-quad passthrough for blitting the cached composite. */
+        private const val VERT_SRC = """
+            attribute vec4 aPos;
+            attribute vec2 aTex;
+            varying vec2 vTex;
+            void main() {
+                gl_Position = aPos;
+                vTex = aTex;
+            }
+        """
+
+        private const val FRAG_SRC = """
+            precision mediump float;
+            varying vec2 vTex;
+            uniform sampler2D uTex;
+            void main() {
+                gl_FragColor = texture2D(uTex, vTex);
+            }
+        """
     }
 }
