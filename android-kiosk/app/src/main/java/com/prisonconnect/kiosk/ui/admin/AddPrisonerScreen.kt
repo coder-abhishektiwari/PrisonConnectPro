@@ -1,5 +1,6 @@
 package com.prisonconnect.kiosk.ui.admin
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -74,7 +75,7 @@ fun AddPrisonerContent(
     windowWidthSizeClass: WindowWidthSizeClass,
     onBackClick: () -> Unit,
     onComplete: () -> Unit,
-    onRegister: (PrisonerFormValues, String, String?, String?, FamilyContactPayload?) -> Unit,
+    onRegister: (PrisonerFormValues, String, String?, String?, List<FamilyContactPayload>?) -> Unit,
     registrationState: AddPrisonerViewModel.RegistrationState = AddPrisonerViewModel.RegistrationState.Idle,
     fingerprintState: FingerprintCaptureState = FingerprintCaptureState.Idle,
     rfidState: RfidReaderState = RfidReaderState.Idle,
@@ -90,10 +91,10 @@ fun AddPrisonerContent(
     var confirmPin by remember { mutableStateOf("") }
     var fingerprintTemplate by remember { mutableStateOf("") }
     var rfidTag by remember { mutableStateOf("") }
-    var familyEnabled by remember { mutableStateOf(false) }
-    var familyName by remember { mutableStateOf("") }
-    var familyRelation by remember { mutableStateOf("") }
-    var familyMobile by remember { mutableStateOf("") }
+    var familyMembers by remember { mutableStateOf<List<FamilyContactPayload>>(emptyList()) }
+    var familyDraftName by remember { mutableStateOf("") }
+    var familyDraftRelation by remember { mutableStateOf("") }
+    var familyDraftMobile by remember { mutableStateOf("") }
     var formError by remember { mutableStateOf("") }
     var showFingerprintDialog by remember { mutableStateOf(false) }
     var showRfidDialog by remember { mutableStateOf(false) }
@@ -145,7 +146,8 @@ fun AddPrisonerContent(
         ) {
             if (completed) {
                 CompleteStep(
-                    familyAdded = (registrationState as? AddPrisonerViewModel.RegistrationState.Success)?.familyContactId != null,
+                    familyAdded = (registrationState as? AddPrisonerViewModel.RegistrationState.Success)
+                        ?.familyContactIds?.isNotEmpty() == true,
                     modifier = Modifier
                         .padding(16.dp)
                         .verticalScroll(rememberScrollState())
@@ -179,17 +181,27 @@ fun AddPrisonerContent(
     1 -> IdentityAdmissionCard(formState, kioskOptions)
     2 -> AddressCard(formState)
     3 -> FamilyContactStep(
-        enabled = familyEnabled,
-        name = familyName,
-        relationship = familyRelation,
-        mobile = familyMobile,
-        onEnabledChange = { familyEnabled = it; formError = "" },
-        onNameChange = { familyName = it; formError = "" },
-        onRelationshipChange = { familyRelation = it },
-        onMobileChange = { mobile ->
-            familyMobile = mobile.filter { it.isDigit() || it == '+' }.take(15)
+        members = familyMembers,
+        draftName = familyDraftName,
+        draftRelationship = familyDraftRelation,
+        draftMobile = familyDraftMobile,
+        onDraftNameChange = { familyDraftName = it; formError = "" },
+        onDraftRelationshipChange = { familyDraftRelation = it },
+        onDraftMobileChange = { mobile ->
+            familyDraftMobile = mobile.filter { it.isDigit() }.take(10)
             formError = ""
-        }
+        },
+        onAddMember = {
+            familyMembers = familyMembers + FamilyContactPayload(
+                name = familyDraftName.trim(),
+                mobileNumber = familyDraftMobile.trim(),
+                relationship = familyDraftRelation.trim().ifBlank { "Family" }
+            )
+            familyDraftName = ""
+            familyDraftRelation = ""
+            familyDraftMobile = ""
+        },
+        onRemoveMember = { index -> familyMembers = familyMembers.filterIndexed { i, _ -> i != index } }
     )
                         else -> BiometricDataStep(
                             pin = pin,
@@ -251,15 +263,8 @@ fun AddPrisonerContent(
                             onClick = {
                                 if (step == ADD_STEP_TITLES.lastIndex) {
                                     val personalError = formState.validatePersonal()
-                                    val familyError = when {
-                                        !familyEnabled -> ""
-                                        familyName.isBlank() -> "Family member name is required"
-                                        familyMobile.isBlank() -> "Family mobile number is required"
-                                        else -> ""
-                                    }
                                     formError = when {
                                         personalError.isNotEmpty() -> personalError
-                                        familyError.isNotEmpty() -> familyError
                                         pin.length != 6 -> "PIN must be exactly 6 digits"
                                         pin != confirmPin -> "PINs do not match"
                                         else -> ""
@@ -270,11 +275,7 @@ fun AddPrisonerContent(
                                             pin,
                                             fingerprintTemplate.ifBlank { null },
                                             rfidTag.ifBlank { null },
-                                            if (familyEnabled) FamilyContactPayload(
-                                                name = familyName.trim(),
-                                                mobileNumber = familyMobile.trim(),
-                                                relationship = familyRelation.trim().ifBlank { "Family" }
-                                            ) else null
+                                            familyMembers.ifEmpty { null }
                                         )
                                     }
                                 } else {
@@ -548,21 +549,25 @@ private fun BiometricDataStep(
 }
 
 /**
- * Optional one-shot family member (Add Prisoner step 4). Same three fields the
- * Manage Contacts form collects — the backend creates the contact and fires
- * the wallet-link SMS with the prisoner itself.
+ * Optional family members (Add Prisoner step 4). A list of the same three
+ * fields the Manage Contacts form collects — any number can be stacked here.
+ * The backend creates each contact and fires the wallet-link SMS with the
+ * prisoner itself. Mobile is the bare 10-digit number, no +91.
  */
 @Composable
 private fun FamilyContactStep(
-    enabled: Boolean,
-    name: String,
-    relationship: String,
-    mobile: String,
-    onEnabledChange: (Boolean) -> Unit,
-    onNameChange: (String) -> Unit,
-    onRelationshipChange: (String) -> Unit,
-    onMobileChange: (String) -> Unit
+    members: List<FamilyContactPayload>,
+    draftName: String,
+    draftRelationship: String,
+    draftMobile: String,
+    onDraftNameChange: (String) -> Unit,
+    onDraftRelationshipChange: (String) -> Unit,
+    onDraftMobileChange: (String) -> Unit,
+    onAddMember: () -> Unit,
+    onRemoveMember: (Int) -> Unit
 ) {
+    val canAdd = draftName.isNotBlank() && draftMobile.length == 10
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -574,67 +579,117 @@ private fun FamilyContactStep(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = "Family Member",
+                text = "Family Members",
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF0B2240)
             )
 
             Text(
-                text = "A verified family contact can view the wallet balance and add money for calls. This step is optional — contacts can also be added later from Manage Contacts.",
+                text = "Verified family contacts can view the wallet balance and add money for calls. Optional — add as many as needed, or manage them later from Manage Contacts.",
                 fontSize = 14.sp,
                 color = Color(0xFF687A8F)
             )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Add a family member now",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
-                        color = Color(0xFF0B2240)
-                    )
-                    Text(
-                        text = "They receive the wallet-link SMS immediately",
-                        fontSize = 12.sp,
-                        color = Color(0xFF687A8F)
-                    )
+            if (members.isEmpty()) {
+                Text(
+                    text = "No family members added yet",
+                    fontSize = 13.sp,
+                    color = Color(0xFF9AA6B5)
+                )
+            } else {
+                members.forEachIndexed { index, member ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFFF5F7FA), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = null,
+                            tint = Color(0xFF003366),
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = member.name,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = Color(0xFF0B2240)
+                            )
+                            Text(
+                                text = "${member.relationship} · ${member.mobileNumber}",
+                                fontSize = 12.sp,
+                                color = Color(0xFF687A8F)
+                            )
+                        }
+                        IconButton(onClick = { onRemoveMember(index) }) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Remove ${member.name}",
+                                tint = Color(0xFFD32F2F),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
                 }
-                Switch(checked = enabled, onCheckedChange = onEnabledChange)
             }
 
-            if (enabled) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = onNameChange,
-                    label = { Text("Full Name *") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
+            HorizontalDivider(color = Color(0xFFE2E8F0))
 
-                KioskSelectField(
-                    value = relationship,
-                    onValueChange = onRelationshipChange,
-                    label = "Relationship",
-                    options = listOf("") + RELATIONSHIP_OPTIONS,
-                    display = { if (it.isBlank()) "Select" else it },
-                    modifier = Modifier.fillMaxWidth()
-                )
+            Text(
+                text = "Add a family member",
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                color = Color(0xFF0B2240)
+            )
 
-                OutlinedTextField(
-                    value = mobile,
-                    onValueChange = onMobileChange,
-                    label = { Text("Mobile Number *") },
-                    placeholder = { Text("+91XXXXXXXXXX") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Phone
-                    )
+            OutlinedTextField(
+                value = draftName,
+                onValueChange = onDraftNameChange,
+                label = { Text("Full Name *") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+
+            KioskSelectField(
+                value = draftRelationship,
+                onValueChange = onDraftRelationshipChange,
+                label = "Relationship",
+                options = listOf("") + RELATIONSHIP_OPTIONS,
+                display = { if (it.isBlank()) "Select" else it },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            OutlinedTextField(
+                value = draftMobile,
+                onValueChange = onDraftMobileChange,
+                label = { Text("Mobile Number *") },
+                placeholder = { Text("10-digit number") },
+                supportingText = { Text("Enter the 10-digit mobile number (no +91)") },
+                isError = draftMobile.isNotEmpty() && draftMobile.length != 10,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
                 )
+            )
+
+            Button(
+                onClick = onAddMember,
+                enabled = canAdd,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF003366))
+            ) {
+                Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Add Family Member", fontSize = 14.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -703,7 +758,7 @@ private fun CompleteStep(modifier: Modifier = Modifier, familyAdded: Boolean = f
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = "Family member added — the wallet-link SMS has been sent to their mobile number.",
+                            text = "Family members added — the wallet-link SMS has been sent to each mobile number.",
                             fontSize = 12.sp,
                             color = Color(0xFF003366)
                         )

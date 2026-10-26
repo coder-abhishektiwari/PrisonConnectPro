@@ -37,7 +37,7 @@ data class Prisoner(
     @SerializedName("approvedContactIds") val approvedContactIds: List<String>? = null,
     @SerializedName("biometricData") val biometricData: BiometricData? = null,
     @SerializedName("rfidCardNumber") val rfidCardNumber: String? = null,
-    @SerializedName("familyContactId") val familyContactId: String? = null,
+    @SerializedName("familyContactIds") val familyContactIds: List<String>? = null,
     @SerializedName("createdAt") val createdAt: String? = null,
     @SerializedName("updatedAt") val updatedAt: String? = null
 ) {
@@ -178,12 +178,13 @@ data class CreatePrisonerRequest(
     @SerializedName("assignedKioskId") val assignedKioskId: String? = null,
     @SerializedName("fingerprintTemplate") val fingerprintTemplate: String? = null,
     @SerializedName("rfidTag") val rfidTag: String? = null,
-    @SerializedName("familyContact") val familyContact: FamilyContactPayload? = null
+    @SerializedName("familyContacts") val familyContacts: List<FamilyContactPayload>? = null
 )
 
 /**
- * One-shot family member sent with the prisoner itself (Add Prisoner "Family"
- * step). The backend creates the contact and fires the wallet-link SMS.
+ * One family member sent with the prisoner itself (Add Prisoner "Family"
+ * step). The backend creates each contact and fires the wallet-link SMS.
+ * `mobileNumber` is the bare 10-digit Indian mobile - no +91.
  */
 data class FamilyContactPayload(
     @SerializedName("name") val name: String,

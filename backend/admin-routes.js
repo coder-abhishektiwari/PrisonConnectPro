@@ -67,22 +67,29 @@ router.get('/prisoners/:prisonerId', requireRole(...ALL_ROLES), async (req, res)
 
 router.post('/prisoners', requireRole(...ALL_ROLES), async (req, res) => {
   const inmateData = stripRemovedInmateFields(req.body);
-  // Optional one-shot family member (kiosk Add Prisoner "Family" step): created
-  // right after the prisoner commits, exactly like POST /prisoners/:id/contacts
-  // including the auto wallet-link SMS. Stripped from the inmate payload so it
-  // never persists on the prisoner record.
-  let familyContact = req.body && req.body.familyContact && typeof req.body.familyContact === 'object'
-    ? req.body.familyContact
-    : null;
-  delete inmateData.familyContact;
-  if (familyContact) {
-    const familyName = String(familyContact.name || '').trim();
-    const familyMobile = String(familyContact.mobileNumber || familyContact.phoneNumber || familyContact.phone || '').trim();
-    const familyRelationship = String(familyContact.relationship || '').trim() || 'Family';
-    if (!familyName || !familyMobile) {
-      return res.status(422).json({ success: false, error: { code: 'INVALID_FAMILY_CONTACT', message: 'familyContact requires a name and mobileNumber' } });
+  // Optional one-shot family members (kiosk Add Prisoner "Family" step): each
+  // is created right after the prisoner commits, exactly like POST
+  // /prisoners/:id/contacts including the auto wallet-link SMS. Stripped from
+  // the inmate payload so they never persist on the prisoner record.
+  let familyContacts = Array.isArray(req.body && req.body.familyContacts) ? req.body.familyContacts.slice(0, 10) : [];
+  delete inmateData.familyContacts;
+  const normalizedFamily = [];
+  for (const [idx, entry] of familyContacts.entries()) {
+    if (!entry || typeof entry !== 'object') {
+      return res.status(422).json({ success: false, error: { code: 'INVALID_FAMILY_CONTACT', message: `familyContacts[${idx}] must be an object` } });
     }
-    familyContact = { name: familyName, mobileNumber: familyMobile, relationship: familyRelationship };
+    const familyName = String(entry.name || '').trim();
+    // Accept any common input (+91/0/91 prefixes, spaces, dashes) and reduce to
+    // the bare 10-digit Indian mobile - sms.js expects exactly that.
+    const digits = String(entry.mobileNumber || entry.phoneNumber || entry.phone || '').replace(/\D/g, '');
+    const familyMobile = digits.length === 12 && digits.startsWith('91') ? digits.slice(2)
+      : digits.length === 11 && digits.startsWith('0') ? digits.slice(1)
+      : digits;
+    const familyRelationship = String(entry.relationship || '').trim() || 'Family';
+    if (!familyName || !/^\d{10}$/.test(familyMobile)) {
+      return res.status(422).json({ success: false, error: { code: 'INVALID_FAMILY_CONTACT', message: `familyContacts[${idx}] requires a name and a 10-digit mobileNumber` } });
+    }
+    normalizedFamily.push({ name: familyName, mobileNumber: familyMobile, relationship: familyRelationship });
   }
   // Kiosk "Add Prisoner" sends the captured biometrics at the TOP level of
   // the payload. Fold them into biometricData — the shape the identify
@@ -162,32 +169,34 @@ router.post('/prisoners', requireRole(...ALL_ROLES), async (req, res) => {
     record.lastName = record.name.split(' ').slice(1).join(' ');
   }
   const updated = await updateDb('inmates.json', (inmates) => ({ data: [...inmates, record], result: record }));
-  // Prisoner is committed — now the optional family contact. A contact/DB
+  // Prisoner is committed — now the optional family contacts. A contact/DB
   // failure must never 500 a registration that already succeeded; the warden
-  // can always add the contact later from Manage Contacts.
-  let familyContactId = null;
-  if (familyContact) {
+  // can always add contacts later from Manage Contacts.
+  const familyContactIds = [];
+  if (normalizedFamily.length) {
     try {
-      const newContact = {
-        contactId: `CONT-${uuidv4().substring(0, 8).toUpperCase()}`,
-        inmateId: record.inmateId,
-        prisonId: record.prisonId || null,
-        name: familyContact.name,
-        relationship: familyContact.relationship,
-        mobileNumber: familyContact.mobileNumber,
-        status: 'approved',
-        active: true,
-        approvalStatus: 'approved',
-        createdAt: new Date().toISOString()
-      };
-      await updateDb('contacts.json', (contacts) => ({ data: [...contacts, newContact], result: newContact }));
-      familyContactId = newContact.contactId;
-      issueAndSendWalletSms(newContact, record).catch((err) => console.warn(`[wallet-link] auto-send failed for ${newContact.contactId}: ${err.message}`));
+      for (const entry of normalizedFamily) {
+        const newContact = {
+          contactId: `CONT-${uuidv4().substring(0, 8).toUpperCase()}`,
+          inmateId: record.inmateId,
+          prisonId: record.prisonId || null,
+          name: entry.name,
+          relationship: entry.relationship,
+          mobileNumber: entry.mobileNumber,
+          status: 'approved',
+          active: true,
+          approvalStatus: 'approved',
+          createdAt: new Date().toISOString()
+        };
+        await updateDb('contacts.json', (contacts) => ({ data: [...contacts, newContact], result: newContact }));
+        familyContactIds.push(newContact.contactId);
+        issueAndSendWalletSms(newContact, record).catch((err) => console.warn(`[wallet-link] auto-send failed for ${newContact.contactId}: ${err.message}`));
+      }
     } catch (err) {
       console.warn(`[admin] family contact create failed for ${record.inmateId}: ${err.message}`);
     }
   }
-  return res.status(201).json({ success: true, data: { ...normalizeInmate(updated), familyContactId } });
+  return res.status(201).json({ success: true, data: { ...normalizeInmate(updated), familyContactIds } });
 });
 
 router.put('/prisoners/:prisonerId', requireRole(...ALL_ROLES), async (req, res) => {
