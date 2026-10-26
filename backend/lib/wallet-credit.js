@@ -142,6 +142,7 @@ async function creditFromRazorpay({ orderId, paymentId, entity } = {}, deps = {}
   const read = deps.readDb || realRead;
   const update = deps.updateDb || realUpdate;
   const fetchPayment = deps.fetchPayment || razorpay.fetchPayment;
+  const capturePayment = deps.capturePayment || razorpay.capturePayment;
 
   if (!orderId) return { ok: false, reason: 'missing_order' };
 
@@ -158,10 +159,23 @@ async function creditFromRazorpay({ orderId, paymentId, entity } = {}, deps = {}
   }
   if (!pay) return { ok: false, reason: 'no_payment_entity' };
   if (pay.order_id && pay.order_id !== orderId) return { ok: false, reason: 'order_mismatch' };
-  if (String(pay.status) !== 'captured') return { ok: false, reason: `status_${pay.status}` };
   if (pay.id && row.razorpayPaymentId && pay.id !== row.razorpayPaymentId) {
     return { ok: false, reason: 'payment_id_mismatch' };
   }
+  // Dashboard auto-capture may be off: capture an authorized payment here so
+  // the family's immediate verify call still credits. On capture failure the
+  // payment is re-fetched once - a webhook or concurrent path may have
+  // captured it in between ("already captured" etc).
+  if (String(pay.status) === 'authorized') {
+    try {
+      pay = (await capturePayment(pay.id, Number(pay.amount) || 0)) || pay;
+    } catch {
+      try {
+        pay = (await fetchPayment(paymentId || row.razorpayPaymentId)) || pay;
+      } catch { /* keep the last known entity; falls through to the status guard */ }
+    }
+  }
+  if (String(pay.status) !== 'captured') return { ok: false, reason: `status_${pay.status}` };
   const amountPaise = Number(pay.amount) || 0;
   if (amountPaise !== Number(row.amountPaise)) {
     console.error(`[wallet-credit] amount mismatch order=${orderId} expected=${row.amountPaise} got=${amountPaise} - NOT crediting`);

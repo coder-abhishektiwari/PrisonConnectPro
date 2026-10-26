@@ -54,6 +54,7 @@ jest.mock('../lib/razorpay', () => {
       currency: 'INR',
     })),
     fetchPayment: jest.fn(),
+    capturePayment: jest.fn(),
     fetchPaymentsForOrder: jest.fn(async () => []),
   };
 });
@@ -97,6 +98,7 @@ function resetStore() {
   store['transactions.json'] = [];
   razorpay.createOrder.mockClear();
   razorpay.fetchPayment.mockReset();
+  razorpay.capturePayment.mockReset();
 }
 
 beforeEach(resetStore);
@@ -275,6 +277,36 @@ describe('verify endpoint: tampering and cross-tenant', () => {
     const res = await verify(goodBody(), TOKEN_A, ip());
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('PAYMENT_NOT_CAPTURED');
+  });
+
+  test('authorized payment: verify captures on the spot then credits', async () => {
+    razorpay.fetchPayment.mockResolvedValue(capturedEntity({ status: 'authorized' }));
+    razorpay.capturePayment.mockResolvedValue(capturedEntity({ status: 'captured' }));
+    const res = await verify(goodBody(), TOKEN_A, ip());
+    expect(res.status).toBe(200);
+    expect(razorpay.capturePayment).toHaveBeenCalledWith(PAYMENT, GROSS);
+    expect(res.body.data.creditedPaise).toBe(NET);
+    expect(store['transactions.json']).toHaveLength(1);
+  });
+
+  test('capture fails and payment stays authorized -> 400 PAYMENT_NOT_CAPTURED', async () => {
+    razorpay.fetchPayment.mockResolvedValue(capturedEntity({ status: 'authorized' }));
+    razorpay.capturePayment.mockRejectedValue(new Error('capture refused'));
+    const res = await verify(goodBody(), TOKEN_A, ip());
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('PAYMENT_NOT_CAPTURED');
+    expect(store['transactions.json']).toHaveLength(0);
+  });
+
+  test('capture loses a race (already captured): re-fetch credits once', async () => {
+    razorpay.fetchPayment
+      .mockResolvedValueOnce(capturedEntity({ status: 'authorized' }))
+      .mockResolvedValue(capturedEntity({ status: 'captured' }));
+    razorpay.capturePayment.mockRejectedValue(new Error('already captured'));
+    const res = await verify(goodBody(), TOKEN_A, ip());
+    expect(res.status).toBe(200);
+    expect(res.body.data.creditedPaise).toBe(NET);
+    expect(store['transactions.json']).toHaveLength(1);
   });
 
   test('payment id mismatch vs previously recorded id -> 400', async () => {

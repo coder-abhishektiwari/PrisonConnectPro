@@ -75,6 +75,17 @@ async function fetchPayment(paymentId) {
   return apiRequest(`/payments/${encodeURIComponent(paymentId)}`);
 }
 
+/**
+ * Capture an authorized payment. `amountPaise` must equal the authorized
+ * amount exactly. Returns the updated payment entity (status captured).
+ */
+async function capturePayment(paymentId, amountPaise) {
+  return apiRequest(`/payments/${encodeURIComponent(paymentId)}/capture`, {
+    method: 'POST',
+    body: { amount: amountPaise },
+  });
+}
+
 /** All payments ever made against an order - reconciler probe. */
 async function fetchPaymentsForOrder(orderId) {
   const out = await apiRequest(`/orders/${encodeURIComponent(orderId)}/payments`);
@@ -125,6 +136,7 @@ module.exports = {
   keyId,
   createOrder,
   fetchPayment,
+  capturePayment,
   fetchPaymentsForOrder,
   verifyPaymentSignature,
   verifyWebhookSignature,
