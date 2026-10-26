@@ -54,10 +54,9 @@ async function apiRequest(path, { method = 'GET', body } = {}) {
 /**
  * Create an order the family pays. `receipt` is our paymentId (idempotent key
  * on the way back), notes carry the row ids for reconciliation forensics.
- * `expireBy` (unix seconds) voids the order at the gateway so a stale checkout
- * can never be paid after we stop counting it toward the rolling deposit cap.
+ * No expiry field: Razorpay's Orders API rejects `expire_by` with a 400.
  */
-async function createOrder({ amountPaise, receipt, notes, expireBy }) {
+async function createOrder({ amountPaise, receipt, notes }) {
   const order = await apiRequest('/orders', {
     method: 'POST',
     body: {
@@ -65,7 +64,6 @@ async function createOrder({ amountPaise, receipt, notes, expireBy }) {
       currency: 'INR',
       receipt: String(receipt || '').slice(0, 40),
       notes: notes || {},
-      ...(expireBy ? { expire_by: Math.floor(expireBy) } : {}),
     },
   });
   if (!order || !order.id) throw new RazorpayError(502, 'GATEWAY_ERROR', 'Razorpay order creation returned no id');

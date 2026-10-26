@@ -25,9 +25,9 @@ const RECHARGE_TYPE = 'recharge';
 
 // A 'created' attempt is only in-flight (still worth counting against the
 // rolling cap) for this long. Stale unpaid attempts stop counting so abandoned
-// orders cannot lock a contact out of deposits for 24h (griefing), and orders
-// are expired gateway-side after the same window (routes/wallet-link.js
-// `expire_by`) so a stale attempt can never be paid later to dodge the cap.
+// orders cannot lock a contact out of deposits for 24h (griefing). There is no
+// gateway-side order expiry - Razorpay's Orders API rejects `expire_by` - so
+// this window alone bounds how long an unpaid attempt can hold cap space.
 const IN_FLIGHT_WINDOW_MS = 30 * 60 * 1000;
 
 function newTxnId() {

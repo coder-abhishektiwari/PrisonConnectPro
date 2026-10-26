@@ -20,7 +20,7 @@ const rateLimit = require('express-rate-limit');
 const { sendSuccess, sendError, asyncRoute } = require('../lib/response');
 const { readDb } = require('../lib/db');
 const { findActiveLink } = require('../lib/wallet-links');
-const { getPaymentByOrder, createPaymentRow, committedPaiseByContact, creditFromRazorpay, IN_FLIGHT_WINDOW_MS } = require('../lib/wallet-credit');
+const { getPaymentByOrder, createPaymentRow, committedPaiseByContact, creditFromRazorpay } = require('../lib/wallet-credit');
 const { createOrder, verifyPaymentSignature, configured, keyId, RazorpayError } = require('../lib/razorpay');
 const { getStatement } = require('../lib/jail-account');
 const { personName } = require('../lib/names');
@@ -192,14 +192,13 @@ router.post('/wallet-link/:token/order', tokenLimiter, orderLimiter, familyOrigi
   const paymentId = `PAY-${Date.now()}-${Math.random().toString(36).substr(2, 8)}`;
   let order;
   try {
+    // No gateway-side expiry: Razorpay's Orders API rejects `expire_by`
+    // (it only exists on invoices/links/subscriptions). The rolling cap
+    // window is enforced server-side by wallet-credit's IN_FLIGHT_WINDOW_MS.
     order = await createOrder({
       amountPaise,
       receipt: paymentId,
       notes: { linkId: link.linkId, contactId: contact.contactId, inmateId: link.inmateId },
-      // Gateway-side expiry matches the in-flight cap window: after this the
-      // order is dead at Razorpay, so stale attempts can neither be paid nor
-      // hold a slot in the rolling deposit cap.
-      expireBy: Math.floor(Date.now() / 1000) + Math.ceil(IN_FLIGHT_WINDOW_MS / 1000),
     });
   } catch (err) {
     if (err instanceof RazorpayError && err.code === 'PAYMENT_NOT_CONFIGURED') {

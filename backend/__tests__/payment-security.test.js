@@ -340,15 +340,15 @@ describe('order creation: client-side price manipulation', () => {
       expect(razorpay.createOrder).not.toHaveBeenCalled();
     });
 
-  test('valid amount: server computes paise, extras ignored, expire_by set', async () => {
+  test('valid amount: server computes paise, extras ignored, no expire_by sent', async () => {
     const res = await order({ amount: 100, amountPaise: 1, currency: 'USD', receipt: 'x' }, TOKEN_A, ip());
     expect(res.status).toBe(200);
     expect(res.body.data.amountPaise).toBe(10000);
     expect(res.body.data.currency).toBe('INR');
     expect(razorpay.createOrder).toHaveBeenCalledWith(expect.objectContaining({
       amountPaise: 10000,
-      expireBy: expect.any(Number),
     }));
+    expect(razorpay.createOrder.mock.calls[0][0].expireBy).toBeUndefined();
     const dump = JSON.stringify(res.body);
     expect(dump).not.toContain(KEY_SECRET);
     expect(dump).not.toContain(WH_SECRET);
