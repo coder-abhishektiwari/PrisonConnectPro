@@ -167,11 +167,11 @@ fun AdminDashboardContent(
                 )
             }
 
-            // Add Prisoner Card
+            // Add Inmate Card
             item {
                 AdminActionCard(
-                    title = "Add New Prisoner",
-                    description = "Register a new prisoner with biometric data",
+                    title = "Add New Inmate",
+                    description = "Register a new inmate with biometric data",
                     icon = Icons.Default.PersonAdd,
                     iconColor = Color(0xFF4CAF50),
                     onClick = onAddPrisonerClick
@@ -182,7 +182,7 @@ fun AdminDashboardContent(
             item {
                 AdminActionCard(
                     title = "Manage Inmates",
-                    description = "View, edit or delete existing prisoners",
+                    description = "View, edit or delete existing inmates",
                     icon = Icons.Default.List,
                     iconColor = Color(0xFF2196F3),
                     onClick = onManagePrisonersClick

@@ -132,7 +132,7 @@ fun AddPrisonerContent(
     Scaffold(
         topBar = {
             KioskTopBar(
-                title = "Add New Prisoner",
+                title = "Add New Inmate",
                 showBackButton = true,
                 onBackClick = onBackClick
             )
@@ -303,7 +303,7 @@ fun AddPrisonerContent(
                                 )
                             } else if (step == ADD_STEP_TITLES.lastIndex) {
                                 Text(
-                                    text = "Register Prisoner",
+                                    text = "Register Inmate",
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -430,7 +430,7 @@ private fun BiometricDataStep(
             )
 
             Text(
-                text = "Set up a 6-digit PIN for the prisoner. This PIN will be required for authentication.",
+                text = "Set up a 6-digit PIN for the inmate. This PIN will be required for authentication.",
                 fontSize = 14.sp,
                 color = Color(0xFF687A8F)
             )
@@ -549,10 +549,10 @@ private fun BiometricDataStep(
 }
 
 /**
- * Optional family members (Add Prisoner step 4). A list of the same three
+ * Optional family members (Add Inmate step 4). A list of the same three
  * fields the Manage Contacts form collects — any number can be stacked here.
  * The backend creates each contact and fires the wallet-link SMS with the
- * prisoner itself. Mobile is the bare 10-digit number, no +91.
+ * inmate itself. Mobile is the bare 10-digit number, no +91.
  */
 @Composable
 private fun FamilyContactStep(
@@ -586,7 +586,7 @@ private fun FamilyContactStep(
             )
 
             Text(
-                text = "Verified family contacts can view the wallet balance and add money for calls. Optional — add as many as needed, or manage them later from Manage Contacts.",
+                text = "You can manage them later from Manage Inmates.",
                 fontSize = 14.sp,
                 color = Color(0xFF687A8F)
             )
@@ -734,7 +734,7 @@ private fun CompleteStep(modifier: Modifier = Modifier, familyAdded: Boolean = f
             )
 
             Text(
-                text = "The prisoner has been successfully registered.",
+                text = "The inmate has been successfully registered.",
                 fontSize = 14.sp,
                 color = Color(0xFF687A8F),
                 textAlign = TextAlign.Center

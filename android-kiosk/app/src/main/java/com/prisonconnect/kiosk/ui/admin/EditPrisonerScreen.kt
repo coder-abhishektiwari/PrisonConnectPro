@@ -44,7 +44,7 @@ fun EditPrisonerScreen(
     Scaffold(
         topBar = {
             KioskTopBar(
-                title = "Edit Prisoner",
+                title = "Edit Inmate",
                 showBackButton = true,
                 onBackClick = onBackClick
             )
@@ -68,7 +68,7 @@ fun EditPrisonerScreen(
                 }
                 is NetworkResult.Failure -> {
                     Text(
-                        text = result.error.message ?: "Failed to load prisoner",
+                        text = result.error.message ?: "Failed to load inmate",
                         color = Color(0xFFD32F2F),
                         modifier = Modifier.align(Alignment.Center)
                     )
