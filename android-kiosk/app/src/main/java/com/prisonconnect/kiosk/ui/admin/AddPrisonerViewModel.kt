@@ -63,7 +63,8 @@ class AddPrisonerViewModel @Inject constructor(
         values: com.prisonconnect.kiosk.models.admin.PrisonerFormValues,
         pin: String,
         fingerprintTemplate: String? = null,
-        rfidTag: String? = null
+        rfidTag: String? = null,
+        familyContact: com.prisonconnect.kiosk.models.admin.FamilyContactPayload? = null
     ) {
         if (values.name.isEmpty()) {
             _registrationState.value = RegistrationState.Error("Prisoner name is required")
@@ -94,7 +95,8 @@ class AddPrisonerViewModel @Inject constructor(
             pin = pin.ifBlank { null },
             assignedKioskId = values.assignedKioskId,
             fingerprintTemplate = fingerprintTemplate?.ifBlank { null },
-            rfidTag = rfidTag?.ifBlank { null }
+            rfidTag = rfidTag?.ifBlank { null },
+            familyContact = familyContact
         )
 
         viewModelScope.launch {
@@ -103,7 +105,8 @@ class AddPrisonerViewModel @Inject constructor(
                     is NetworkResult.Success -> {
                         _registrationState.value = RegistrationState.Success(
                             prisonerId = result.data.inmateId,
-                            message = "Prisoner registered successfully"
+                            message = "Prisoner registered successfully",
+                            familyContactId = result.data.familyContactId
                         )
                     }
                     is NetworkResult.Failure -> {
@@ -124,7 +127,7 @@ class AddPrisonerViewModel @Inject constructor(
     sealed class RegistrationState {
         object Idle : RegistrationState()
         object Loading : RegistrationState()
-        data class Success(val prisonerId: String, val message: String) : RegistrationState()
+        data class Success(val prisonerId: String, val message: String, val familyContactId: String? = null) : RegistrationState()
         data class Error(val message: String) : RegistrationState()
     }
 

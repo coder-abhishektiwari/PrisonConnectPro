@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -42,6 +41,7 @@ import com.prisonconnect.kiosk.ui.components.KioskSelectField
 
 val ID_PROOF_OPTIONS = listOf("Aadhaar Card", "Voter ID", "PAN Card")
 val RELIGION_OPTIONS = listOf("Hindu", "Muslim", "Christian", "Sikh", "Buddhist", "Jain", "Other")
+val RELATIONSHIP_OPTIONS = listOf("Father", "Mother", "Spouse", "Brother", "Sister", "Son", "Daughter", "Guardian", "Relative", "Other")
 val NATIONALITY_OPTIONS = listOf("Indian", "Other")
 val STATE_OPTIONS = listOf(
     "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh",
@@ -320,11 +320,14 @@ fun PrisonerStepIndicator(
     stepNumber: Int,
     title: String,
     isActive: Boolean,
-    isCompleted: Boolean
+    isCompleted: Boolean,
+    modifier: Modifier = Modifier
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.width(80.dp)
+        // The shared step header passes weight(1f) so every step gets an equal
+        // share and 5 steps still fit a compact screen; bare callers wrap-content.
+        modifier = modifier
     ) {
         Surface(
             shape = CircleShape,
@@ -389,7 +392,8 @@ fun PrisonerStepHeader(titles: List<String>, currentStep: Int) {
                 stepNumber = index + 1,
                 title = title,
                 isActive = index == currentStep,
-                isCompleted = index < currentStep
+                isCompleted = index < currentStep,
+                modifier = Modifier.weight(1f)
             )
         }
     }

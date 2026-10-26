@@ -67,6 +67,23 @@ router.get('/prisoners/:prisonerId', requireRole(...ALL_ROLES), async (req, res)
 
 router.post('/prisoners', requireRole(...ALL_ROLES), async (req, res) => {
   const inmateData = stripRemovedInmateFields(req.body);
+  // Optional one-shot family member (kiosk Add Prisoner "Family" step): created
+  // right after the prisoner commits, exactly like POST /prisoners/:id/contacts
+  // including the auto wallet-link SMS. Stripped from the inmate payload so it
+  // never persists on the prisoner record.
+  let familyContact = req.body && req.body.familyContact && typeof req.body.familyContact === 'object'
+    ? req.body.familyContact
+    : null;
+  delete inmateData.familyContact;
+  if (familyContact) {
+    const familyName = String(familyContact.name || '').trim();
+    const familyMobile = String(familyContact.mobileNumber || familyContact.phoneNumber || familyContact.phone || '').trim();
+    const familyRelationship = String(familyContact.relationship || '').trim() || 'Family';
+    if (!familyName || !familyMobile) {
+      return res.status(422).json({ success: false, error: { code: 'INVALID_FAMILY_CONTACT', message: 'familyContact requires a name and mobileNumber' } });
+    }
+    familyContact = { name: familyName, mobileNumber: familyMobile, relationship: familyRelationship };
+  }
   // Kiosk "Add Prisoner" sends the captured biometrics at the TOP level of
   // the payload. Fold them into biometricData — the shape the identify
   // endpoints (routes/auth.js) and the Biometrics screen actually read — and
@@ -145,7 +162,32 @@ router.post('/prisoners', requireRole(...ALL_ROLES), async (req, res) => {
     record.lastName = record.name.split(' ').slice(1).join(' ');
   }
   const updated = await updateDb('inmates.json', (inmates) => ({ data: [...inmates, record], result: record }));
-  return res.status(201).json({ success: true, data: normalizeInmate(updated) });
+  // Prisoner is committed — now the optional family contact. A contact/DB
+  // failure must never 500 a registration that already succeeded; the warden
+  // can always add the contact later from Manage Contacts.
+  let familyContactId = null;
+  if (familyContact) {
+    try {
+      const newContact = {
+        contactId: `CONT-${uuidv4().substring(0, 8).toUpperCase()}`,
+        inmateId: record.inmateId,
+        prisonId: record.prisonId || null,
+        name: familyContact.name,
+        relationship: familyContact.relationship,
+        mobileNumber: familyContact.mobileNumber,
+        status: 'approved',
+        active: true,
+        approvalStatus: 'approved',
+        createdAt: new Date().toISOString()
+      };
+      await updateDb('contacts.json', (contacts) => ({ data: [...contacts, newContact], result: newContact }));
+      familyContactId = newContact.contactId;
+      issueAndSendWalletSms(newContact, record).catch((err) => console.warn(`[wallet-link] auto-send failed for ${newContact.contactId}: ${err.message}`));
+    } catch (err) {
+      console.warn(`[admin] family contact create failed for ${record.inmateId}: ${err.message}`);
+    }
+  }
+  return res.status(201).json({ success: true, data: { ...normalizeInmate(updated), familyContactId } });
 });
 
 router.put('/prisoners/:prisonerId', requireRole(...ALL_ROLES), async (req, res) => {

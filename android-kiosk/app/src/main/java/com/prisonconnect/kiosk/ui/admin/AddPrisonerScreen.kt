@@ -22,15 +22,17 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.prisonconnect.kiosk.hardware.FingerprintCaptureState
 import com.prisonconnect.kiosk.hardware.RfidReaderState
+import com.prisonconnect.kiosk.models.admin.FamilyContactPayload
 import com.prisonconnect.kiosk.models.admin.KioskDevice
 import com.prisonconnect.kiosk.models.admin.PrisonerFormValues
 import com.prisonconnect.kiosk.ui.auth.HiddenRfidTapInput
 import com.prisonconnect.kiosk.ui.auth.RfidKeypadEntry
 import com.prisonconnect.kiosk.ui.auth.RfidTapAnimation
+import com.prisonconnect.kiosk.ui.components.KioskSelectField
 import com.prisonconnect.kiosk.ui.components.KioskTopBar
 import com.prisonconnect.kiosk.ui.theme.PrisonKioskTheme
 
-private val ADD_STEP_TITLES = listOf("Personal", "Identity", "Address", "Security")
+private val ADD_STEP_TITLES = listOf("Personal", "Identity", "Address", "Family", "Security")
 
 @Composable
 fun AddPrisonerScreen(
@@ -53,8 +55,8 @@ fun AddPrisonerScreen(
         windowWidthSizeClass = windowSizeClass.widthSizeClass,
         onBackClick = onBackClick,
         onComplete = onComplete,
-        onRegister = { values, pin, finger, rfid ->
-            viewModel.registerPrisoner(values, pin, finger, rfid)
+        onRegister = { values, pin, finger, rfid, family ->
+            viewModel.registerPrisoner(values, pin, finger, rfid, family)
         },
         registrationState = registrationState,
         fingerprintState = fingerprintState,
@@ -72,7 +74,7 @@ fun AddPrisonerContent(
     windowWidthSizeClass: WindowWidthSizeClass,
     onBackClick: () -> Unit,
     onComplete: () -> Unit,
-    onRegister: (PrisonerFormValues, String, String?, String?) -> Unit,
+    onRegister: (PrisonerFormValues, String, String?, String?, FamilyContactPayload?) -> Unit,
     registrationState: AddPrisonerViewModel.RegistrationState = AddPrisonerViewModel.RegistrationState.Idle,
     fingerprintState: FingerprintCaptureState = FingerprintCaptureState.Idle,
     rfidState: RfidReaderState = RfidReaderState.Idle,
@@ -88,6 +90,10 @@ fun AddPrisonerContent(
     var confirmPin by remember { mutableStateOf("") }
     var fingerprintTemplate by remember { mutableStateOf("") }
     var rfidTag by remember { mutableStateOf("") }
+    var familyEnabled by remember { mutableStateOf(false) }
+    var familyName by remember { mutableStateOf("") }
+    var familyRelation by remember { mutableStateOf("") }
+    var familyMobile by remember { mutableStateOf("") }
     var formError by remember { mutableStateOf("") }
     var showFingerprintDialog by remember { mutableStateOf(false) }
     var showRfidDialog by remember { mutableStateOf(false) }
@@ -139,6 +145,7 @@ fun AddPrisonerContent(
         ) {
             if (completed) {
                 CompleteStep(
+                    familyAdded = (registrationState as? AddPrisonerViewModel.RegistrationState.Success)?.familyContactId != null,
                     modifier = Modifier
                         .padding(16.dp)
                         .verticalScroll(rememberScrollState())
@@ -171,6 +178,19 @@ fun AddPrisonerContent(
     0 -> PersonalDetailsCard(formState)
     1 -> IdentityAdmissionCard(formState, kioskOptions)
     2 -> AddressCard(formState)
+    3 -> FamilyContactStep(
+        enabled = familyEnabled,
+        name = familyName,
+        relationship = familyRelation,
+        mobile = familyMobile,
+        onEnabledChange = { familyEnabled = it; formError = "" },
+        onNameChange = { familyName = it; formError = "" },
+        onRelationshipChange = { familyRelation = it },
+        onMobileChange = { mobile ->
+            familyMobile = mobile.filter { it.isDigit() || it == '+' }.take(15)
+            formError = ""
+        }
+    )
                         else -> BiometricDataStep(
                             pin = pin,
                             confirmPin = confirmPin,
@@ -231,8 +251,15 @@ fun AddPrisonerContent(
                             onClick = {
                                 if (step == ADD_STEP_TITLES.lastIndex) {
                                     val personalError = formState.validatePersonal()
+                                    val familyError = when {
+                                        !familyEnabled -> ""
+                                        familyName.isBlank() -> "Family member name is required"
+                                        familyMobile.isBlank() -> "Family mobile number is required"
+                                        else -> ""
+                                    }
                                     formError = when {
                                         personalError.isNotEmpty() -> personalError
+                                        familyError.isNotEmpty() -> familyError
                                         pin.length != 6 -> "PIN must be exactly 6 digits"
                                         pin != confirmPin -> "PINs do not match"
                                         else -> ""
@@ -242,7 +269,12 @@ fun AddPrisonerContent(
                                             formState.toValues(),
                                             pin,
                                             fingerprintTemplate.ifBlank { null },
-                                            rfidTag.ifBlank { null }
+                                            rfidTag.ifBlank { null },
+                                            if (familyEnabled) FamilyContactPayload(
+                                                name = familyName.trim(),
+                                                mobileNumber = familyMobile.trim(),
+                                                relationship = familyRelation.trim().ifBlank { "Family" }
+                                            ) else null
                                         )
                                     }
                                 } else {
@@ -515,8 +547,101 @@ private fun BiometricDataStep(
     }
 }
 
+/**
+ * Optional one-shot family member (Add Prisoner step 4). Same three fields the
+ * Manage Contacts form collects — the backend creates the contact and fires
+ * the wallet-link SMS with the prisoner itself.
+ */
 @Composable
-private fun CompleteStep(modifier: Modifier = Modifier) {
+private fun FamilyContactStep(
+    enabled: Boolean,
+    name: String,
+    relationship: String,
+    mobile: String,
+    onEnabledChange: (Boolean) -> Unit,
+    onNameChange: (String) -> Unit,
+    onRelationshipChange: (String) -> Unit,
+    onMobileChange: (String) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(2.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = "Family Member",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF0B2240)
+            )
+
+            Text(
+                text = "A verified family contact can view the wallet balance and add money for calls. This step is optional — contacts can also be added later from Manage Contacts.",
+                fontSize = 14.sp,
+                color = Color(0xFF687A8F)
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Add a family member now",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = Color(0xFF0B2240)
+                    )
+                    Text(
+                        text = "They receive the wallet-link SMS immediately",
+                        fontSize = 12.sp,
+                        color = Color(0xFF687A8F)
+                    )
+                }
+                Switch(checked = enabled, onCheckedChange = onEnabledChange)
+            }
+
+            if (enabled) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = onNameChange,
+                    label = { Text("Full Name *") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                KioskSelectField(
+                    value = relationship,
+                    onValueChange = onRelationshipChange,
+                    label = "Relationship",
+                    options = listOf("") + RELATIONSHIP_OPTIONS,
+                    display = { if (it.isBlank()) "Select" else it },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = mobile,
+                    onValueChange = onMobileChange,
+                    label = { Text("Mobile Number *") },
+                    placeholder = { Text("+91XXXXXXXXXX") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Phone
+                    )
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompleteStep(modifier: Modifier = Modifier, familyAdded: Boolean = false) {
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -559,6 +684,32 @@ private fun CompleteStep(modifier: Modifier = Modifier) {
                 color = Color(0xFF687A8F),
                 textAlign = TextAlign.Center
             )
+
+            if (familyAdded) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFFE3F2FD)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Message,
+                            contentDescription = null,
+                            tint = Color(0xFF003366),
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "Family member added — the wallet-link SMS has been sent to their mobile number.",
+                            fontSize = 12.sp,
+                            color = Color(0xFF003366)
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -573,7 +724,7 @@ fun PreviewAddPrisonerMobile() {
             windowWidthSizeClass = WindowWidthSizeClass.Compact,
             onBackClick = {},
             onComplete = {},
-            onRegister = { _, _, _, _ -> },
+            onRegister = { _, _, _, _, _ -> },
             registrationState = AddPrisonerViewModel.RegistrationState.Idle
         )
     }

@@ -37,6 +37,7 @@ data class Prisoner(
     @SerializedName("approvedContactIds") val approvedContactIds: List<String>? = null,
     @SerializedName("biometricData") val biometricData: BiometricData? = null,
     @SerializedName("rfidCardNumber") val rfidCardNumber: String? = null,
+    @SerializedName("familyContactId") val familyContactId: String? = null,
     @SerializedName("createdAt") val createdAt: String? = null,
     @SerializedName("updatedAt") val updatedAt: String? = null
 ) {
@@ -176,7 +177,18 @@ data class CreatePrisonerRequest(
     @SerializedName("assignedDeviceId") val assignedDeviceId: String? = null,
     @SerializedName("assignedKioskId") val assignedKioskId: String? = null,
     @SerializedName("fingerprintTemplate") val fingerprintTemplate: String? = null,
-    @SerializedName("rfidTag") val rfidTag: String? = null
+    @SerializedName("rfidTag") val rfidTag: String? = null,
+    @SerializedName("familyContact") val familyContact: FamilyContactPayload? = null
+)
+
+/**
+ * One-shot family member sent with the prisoner itself (Add Prisoner "Family"
+ * step). The backend creates the contact and fires the wallet-link SMS.
+ */
+data class FamilyContactPayload(
+    @SerializedName("name") val name: String,
+    @SerializedName("mobileNumber") val mobileNumber: String,
+    @SerializedName("relationship") val relationship: String
 )
 
 data class EditPrisonerRequest(
