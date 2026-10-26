@@ -1,0 +1,42 @@
+appId: com.prisonconnect.warden
+productName: PrisonConnect Warden
+copyright: Copyright © PrisonConnect
+
+directories:
+  output: release
+
+files:
+  - electron/**
+  - dist/**
+  - package.json
+
+asar: true
+npmRebuild: false
+
+# Windows 10/11 (Electron 45 does not support Windows 7/8 — ship the web URL
+# on those machines instead).
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: PrisonConnect Warden
+
+# AppImage runs on Ubuntu/Kali/any modern distro without install; deb covers
+# the Debian/Ubuntu family directly.
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Office
+  synopsis: PrisonConnect Warden & Admin Console
+  maintainer: PrisonConnect <admin@dsssolutions.in>
+  mimeTypes:
+    - x-scheme-handler/app

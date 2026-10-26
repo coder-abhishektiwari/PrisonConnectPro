@@ -3,11 +3,15 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "main": "electron/main.mjs",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "desktop": "vite build && electron .",
+    "desktop:dev": "vite build && electron . --dev",
+    "desktop:dist": "vite build && electron-builder --win nsis --linux AppImage deb"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
@@ -23,10 +27,15 @@
     "@types/react-dom": "^18.2.22",
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.19",
+    "electron": "45.0.0",
+    "electron-builder": "^26.18.0",
     "eslint": "^8.57.0",
     "postcss": "^8.4.38",
     "tailwindcss": "^3.4.3",
     "typescript": "^5.2.2",
     "vite": "^5.1.6"
-  }
+  },
+  "description": "PrisonConnect Warden & Admin Console desktop app",
+  "author": "PrisonConnect",
+  "homepage": "https://warden-dashboard.onrender.com"
 }

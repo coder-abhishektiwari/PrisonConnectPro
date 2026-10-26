@@ -1,0 +1,60 @@
+name: Warden Desktop Builds
+
+# Builds the Electron desktop packages for the warden console:
+#  - Windows: NSIS installer (Windows 10/11 x64 — Electron 45 has no Win7/8 support)
+#  - Linux: AppImage (any modern distro incl. Kali) + .deb (Ubuntu/Debian)
+# Local builds on Windows cannot produce the Linux targets (no fpm/symlinks
+# without elevated privileges), so CI owns them.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'warden-dashboard/**'
+      - '.github/workflows/warden-desktop.yml'
+  workflow_dispatch:
+
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Build web bundle
+        run: npm run build
+        working-directory: warden-dashboard
+      - name: Package NSIS installer
+        run: npx electron-builder --win nsis
+        working-directory: warden-dashboard
+      - uses: actions/upload-artifact@v4
+        with:
+          name: warden-windows-setup
+          path: warden-dashboard/release/*.exe
+          if-no-files-found: error
+
+  linux-packages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Build web bundle
+        run: npm run build
+        working-directory: warden-dashboard
+      - name: Package AppImage + deb
+        run: npx electron-builder --linux AppImage deb
+        working-directory: warden-dashboard
+      - uses: actions/upload-artifact@v4
+        with:
+          name: warden-linux-packages
+          path: |
+            warden-dashboard/release/*.AppImage
+            warden-dashboard/release/*.deb
+          if-no-files-found: error
