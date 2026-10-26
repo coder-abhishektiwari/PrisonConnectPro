@@ -7,10 +7,10 @@ import path from 'path';
 // Injected only for builds (ctx.server) so Vite/React inline dev scripts and
 // HMR keep working locally.
 const CSP =
-  "default-src 'self'; script-src 'self' https://checkout.razorpay.com; " +
+  "default-src 'self'; script-src 'self' https://*.razorpay.com; " +
   "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; " +
   "media-src 'self' blob: https:; font-src 'self' data:; " +
-  "connect-src 'self' https: wss: ws:; frame-src https://checkout.razorpay.com; " +
+  "connect-src 'self' https: wss: ws:; frame-src https://*.razorpay.com; " +
   "worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'";
 
 function securityMetas(): Plugin {
