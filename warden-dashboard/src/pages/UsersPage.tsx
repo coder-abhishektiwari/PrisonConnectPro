@@ -388,7 +388,7 @@ export function UsersPage() {
                                 aria-label={`Reset password for ${user.name}`}
                                 className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 transition disabled:opacity-50"
                               >
-                                <span className="material-icons text-[18px]">lock_reset</span>
+                                <span className="material-icons text-18">lock_reset</span>
                               </button>
                               <button
                                 onClick={() => openEditWarden(user)}
@@ -397,7 +397,7 @@ export function UsersPage() {
                                 aria-label={`Edit ${user.name}`}
                                 className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 transition disabled:opacity-50"
                               >
-                                <span className="material-icons text-[18px]">edit</span>
+                                <span className="material-icons text-18">edit</span>
                               </button>
 
                               {/* No delete and no switch for the chief warden. */}
@@ -414,9 +414,9 @@ export function UsersPage() {
                                         : 'text-neutral-500 hover:bg-error/5 hover:text-error'
                                     }`}
                                   >
-                                    <span className="material-icons text-[18px]">delete_outline</span>
+                                    <span className="material-icons text-18">delete_outline</span>
                                   </button>
-                                  <span className={`ml-1 text-[11px] font-bold ${isActive ? 'text-success' : 'text-neutral-400'}`}>
+                                  <span className={`ml-1 text-11 font-bold ${isActive ? 'text-success' : 'text-neutral-400'}`}>
                                     {isActive ? 'Active' : 'Inactive'}
                                   </span>
                                   <button
@@ -544,7 +544,7 @@ export function UsersPage() {
                           aria-label={`Reset password for ${a.name}`}
                           className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 transition disabled:opacity-50"
                         >
-                          <span className="material-icons text-[18px]">lock_reset</span>
+                          <span className="material-icons text-18">lock_reset</span>
                         </button>
                         <button
                           onClick={() => openEditAdmin(a)}
@@ -553,7 +553,7 @@ export function UsersPage() {
                           aria-label={`Edit ${a.name}`}
                           className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 transition disabled:opacity-50"
                         >
-                          <span className="material-icons text-[18px]">edit</span>
+                          <span className="material-icons text-18">edit</span>
                         </button>
                         <button
                           onClick={() => deleteAdmin(a)}
@@ -566,10 +566,10 @@ export function UsersPage() {
                               : 'text-neutral-500 hover:bg-error/5 hover:text-error'
                           }`}
                         >
-                          <span className="material-icons text-[18px]">delete_outline</span>
+                          <span className="material-icons text-18">delete_outline</span>
                         </button>
 
-                        <span className={`ml-1 text-[11px] font-bold ${isActive ? 'text-success' : 'text-neutral-400'}`}>
+                        <span className={`ml-1 text-11 font-bold ${isActive ? 'text-success' : 'text-neutral-400'}`}>
                           {isActive ? 'Active' : 'Inactive'}
                         </span>
                         <button

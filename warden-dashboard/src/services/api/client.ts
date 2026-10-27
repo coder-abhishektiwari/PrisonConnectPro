@@ -1,6 +1,7 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import { env } from '@/config/env';
 import { getStoredTokens, getStoredUser, persistAuth, STORAGE_KEYS } from '@/services/auth/tokenStorage';
+import { isDefinitiveAuthRejection } from '@/utils/authErrors';
 import type { ApiError } from '@/types/api';
 
 interface FailedQueueItem {
@@ -92,12 +93,16 @@ apiClient.interceptors.response.use(
         isRefreshing = false;
         return apiClient(originalRequest);
       } catch (refreshError) {
-        // Refresh failed, logout and redirect to login
+        // Refresh failed. Only a DEFINITIVE 4xx from the auth server means the
+        // session is actually dead — network drops and 5xx (Render cold starts)
+        // must NOT wipe the stored session, or the warden gets logged out
+        // whenever the backend hiccups.
         isRefreshing = false;
         processQueue(refreshError as Error, null);
-        // Clear auth state
-        localStorage.removeItem(STORAGE_KEYS.tokens);
-        localStorage.removeItem(STORAGE_KEYS.user);
+        if (isDefinitiveAuthRejection(refreshError)) {
+          localStorage.removeItem(STORAGE_KEYS.tokens);
+          localStorage.removeItem(STORAGE_KEYS.user);
+        }
         return Promise.reject(refreshError);
       }
     }

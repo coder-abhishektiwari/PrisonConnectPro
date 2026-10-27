@@ -56,7 +56,7 @@ export function FilterDropdown({ label, options, filter, setFilter }: {
         className={`inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wider hover:text-primary-600 transition-colors ${filter.value !== 'all' ? 'text-primary-600' : 'text-neutral-500'}`}
       >
         {label}
-        {filter.value !== 'all' && <span className="w-4 h-4 bg-primary-600 text-white rounded-full text-[9px] flex items-center justify-center">1</span>}
+        {filter.value !== 'all' && <span className="w-4 h-4 bg-primary-600 text-white rounded-full text-9 flex items-center justify-center">1</span>}
         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
       </button>
       {filter.open && createPortal(

@@ -1,85 +1,114 @@
+/**
+ * Tailwind maps onto the GLOBAL THEME FILE (src/styles/theme.css).
+ * Every value below reads a CSS variable — change theme.css (or the
+ * in-app Theme Editor at /theme-editor) and the whole app re-themes.
+ */
+
+/** RGB triplet var + Tailwind <alpha-value> support: rgb(var(--x) / .5) */
+const color = (name) => `rgb(var(--${name}) / <alpha-value>)`;
+
+/** Full 50..900 palette from vars --<name>-50 … --<name>-900 */
+const scale = (name) => ({
+  50: color(`${name}-50`),
+  100: color(`${name}-100`),
+  200: color(`${name}-200`),
+  300: color(`${name}-300`),
+  400: color(`${name}-400`),
+  500: color(`${name}-500`),
+  600: color(`${name}-600`),
+  700: color(`${name}-700`),
+  800: color(`${name}-800`),
+  900: color(`${name}-900`),
+});
+
+/** Status colors also expose a DEFAULT (e.g. bg-success) = their 600. */
+const status = (name) => ({ DEFAULT: color(`${name}-600`), ...scale(name) });
+
+/** text-N sizes from --text-N (each already = Npx * --text-scale). */
+const size = (n) => [`var(--text-${n})`];
+
+/** Standard scale with Tailwind's exact default line-heights. */
+const std = (token, lineHeight, letterSpacing) => [
+  `var(--text-${token})`,
+  { lineHeight, ...(letterSpacing ? { letterSpacing } : {}) },
+];
+
+/** rounded-* from radius vars (each already = base * --roundness). */
+const radius = (token) => `var(--radius-${token})`;
+
+/** shadow-* from shadow vars. */
+const shadow = (token) => `var(--shadow-${token})`;
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
       colors: {
-        primary: {
-          50: '#eef2ff',
-          100: '#e0e7ff',
-          200: '#c7d2fe',
-          300: '#a5b4fc',
-          400: '#818cf8',
-          500: '#6366f1',
-          600: '#4f46e5',
-          700: '#4338ca',
-          800: '#3730a3',
-          900: '#312e81',
-        },
-        success: {
-          DEFAULT: '#16a34a',
-          50: '#f0fdf4',
-          100: '#dcfce7',
-          200: '#bbf7d0',
-          300: '#86efac',
-          400: '#4ade80',
-          500: '#22c55e',
-          600: '#16a34a',
-          700: '#15803d',
-          800: '#166534',
-          900: '#14532d',
-        },
-        error: {
-          DEFAULT: '#dc2626',
-          50: '#fef2f2',
-          100: '#fee2e2',
-          200: '#fecaca',
-          300: '#fca5a5',
-          400: '#f87171',
-          500: '#ef4444',
-          600: '#dc2626',
-          700: '#b91c1c',
-          800: '#991b1b',
-          900: '#7f1d1d',
-        },
-        warning: {
-          DEFAULT: '#d97706',
-          50: '#fffbeb',
-          100: '#fef3c7',
-          200: '#fde68a',
-          300: '#fcd34d',
-          400: '#fbbf24',
-          500: '#f59e0b',
-          600: '#d97706',
-          700: '#b45309',
-          800: '#92400e',
-          900: '#78350f',
-        },
-        info: {
-          DEFAULT: '#0284c7',
-          50: '#f0f9ff',
-          100: '#e0f2fe',
-          200: '#bae6fd',
-          300: '#7dd3fc',
-          400: '#38bdf8',
-          500: '#0ea5e9',
-          600: '#0284c7',
-          700: '#0369a1',
-          800: '#075985',
-          900: '#0c4a6e',
-        },
-        neutral: {
-          50: '#f9fafb',
-          100: '#f3f4f6',
-          200: '#e5e7eb',
-          300: '#d1d5db',
-          400: '#9ca3af',
-          500: '#6b7280',
-          600: '#4b5563',
-          700: '#374151',
-          800: '#1f2937',
-          900: '#111827',
-        },
+        primary: scale('primary'),
+        success: status('success'),
+        error: status('error'),
+        warning: status('warning'),
+        info: status('info'),
+        neutral: scale('neutral'),
+        muted: color('muted'),
+        line: color('line'),
+        surface: color('surface'),
+        canvas: color('canvas'),
+        ink: color('ink'),
+      },
+      fontSize: {
+        // pixel tokens (former text-[Npx] arbitraries)
+        9: size(9),
+        10: size(10),
+        11: size(11),
+        12: size(12),
+        13: size(13),
+        14: size(14),
+        15: size(15),
+        16: size(16),
+        18: size(18),
+        26: size(26),
+        28: size(28),
+        32: size(32),
+        // standard scale (line-heights = Tailwind defaults)
+        xs: std('xs', '1rem'),
+        sm: std('sm', '1.25rem'),
+        base: std('base', '1.5rem'),
+        lg: std('lg', '1.75rem'),
+        xl: std('xl', '1.75rem'),
+        '2xl': std('2xl', '2rem'),
+        '3xl': std('3xl', '2.25rem'),
+        '4xl': std('4xl', '2.5rem'),
+        '5xl': std('5xl', '1', '-0.02em'),
+        '6xl': std('6xl', '1', '-0.025em'),
+        '7xl': std('7xl', '1', '-0.03em'),
+        '8xl': std('8xl', '1', '-0.035em'),
+        '9xl': std('9xl', '1', '-0.04em'),
+      },
+      borderRadius: {
+        DEFAULT: radius('default'),
+        sm: radius('sm'),
+        md: radius('md'),
+        lg: radius('lg'),
+        xl: radius('xl'),
+        '2xl': radius('2xl'),
+        '3xl': radius('3xl'),
+        card: radius('card'), // 28px auth cards -> rounded-card
+        full: radius('full'),
+      },
+      boxShadow: {
+        DEFAULT: shadow('default'),
+        sm: shadow('sm'),
+        md: shadow('md'),
+        lg: shadow('lg'),
+        xl: shadow('xl'),
+        '2xl': shadow('2xl'),
+        card: shadow('card'),
+        btn: shadow('btn'),
+      },
+      fontFamily: {
+        sans: ['var(--font-sans)'],
       },
     },
   },

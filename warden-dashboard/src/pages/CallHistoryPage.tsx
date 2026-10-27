@@ -408,7 +408,7 @@ export function CallHistoryPage() {
 
                 <div className="space-y-4">
                   <div className="bg-neutral-50 rounded-xl p-4 border border-neutral-200">
-                    <p className="text-[11px] font-bold text-primary-600 uppercase tracking-wide mb-2">Participants</p>
+                    <p className="text-11 font-bold text-primary-600 uppercase tracking-wide mb-2">Participants</p>
                     <div className="space-y-2">
                       <div className="flex justify-between"><span className="text-sm text-neutral-600">Inmate</span><span className="text-sm font-semibold text-neutral-900">{inmateLabel(selected, inmates[selected.inmateId])}</span></div>
                       <div className="flex justify-between"><span className="text-sm text-neutral-600">Inmate No</span><span className="text-sm font-mono text-neutral-900">{inmates[selected.inmateId]?.prisonerNumber || selected.inmateNumber || selected.inmateId}</span></div>
@@ -418,7 +418,7 @@ export function CallHistoryPage() {
                   </div>
 
                   <div className="bg-neutral-50 rounded-xl p-4 border border-neutral-200">
-                    <p className="text-[11px] font-bold text-primary-600 uppercase tracking-wide mb-2">Call Info</p>
+                    <p className="text-11 font-bold text-primary-600 uppercase tracking-wide mb-2">Call Info</p>
                     <div className="space-y-2">
                       <div className="flex justify-between"><span className="text-sm text-neutral-600">Call ID</span><span className="text-sm font-mono text-neutral-900">{selected.callId}</span></div>
                       <div className="flex justify-between"><span className="text-sm text-neutral-600">Room ID</span><span className="text-sm font-mono text-neutral-900">{selected.roomId}</span></div>
@@ -431,7 +431,7 @@ export function CallHistoryPage() {
                   </div>
 
                   <div className="bg-neutral-50 rounded-xl p-4 border border-neutral-200">
-                    <p className="text-[11px] font-bold text-primary-600 uppercase tracking-wide mb-2">Technical</p>
+                    <p className="text-11 font-bold text-primary-600 uppercase tracking-wide mb-2">Technical</p>
                     <div className="space-y-2">
                       <div className="flex justify-between"><span className="text-sm text-neutral-600">Quality</span><span className={`text-sm font-semibold ${selected.connectionQuality === 'excellent' ? 'text-success' : selected.connectionQuality === 'good' ? 'text-info' : selected.connectionQuality === 'fair' ? 'text-warning' : selected.connectionQuality === 'N/A' ? 'text-neutral-400' : 'text-error'}`}>{selected.connectionQuality || '—'}</span></div>
                       <div className="flex justify-between"><span className="text-sm text-neutral-600">Media Connected</span><span className="text-sm text-neutral-900">{selected.mediaConnectedAt ? fmtDateTime(selected.mediaConnectedAt) : 'Never'}</span></div>
@@ -440,14 +440,14 @@ export function CallHistoryPage() {
 
                   {selected.endReasonDescription && (
                     <div className={`rounded-xl p-4 border ${selected.status === 'completed' ? 'bg-success/5 border-success/20' : 'bg-error/5 border-error/20'}`}>
-                      <p className={`text-[11px] font-bold uppercase tracking-wide mb-2 ${selected.status === 'completed' ? 'text-success' : 'text-error'}`}>Reason</p>
+                      <p className={`text-11 font-bold uppercase tracking-wide mb-2 ${selected.status === 'completed' ? 'text-success' : 'text-error'}`}>Reason</p>
                       <p className="text-sm text-neutral-700">{selected.endReasonDescription}</p>
                     </div>
                   )}
 
                   {selected.callIssues && selected.callIssues.length > 0 && (
                     <div className="bg-warning/5 rounded-xl p-4 border border-warning/20">
-                      <p className="text-[11px] font-bold text-warning uppercase tracking-wide mb-2">Call Issues ({selected.callIssues.length})</p>
+                      <p className="text-11 font-bold text-warning uppercase tracking-wide mb-2">Call Issues ({selected.callIssues.length})</p>
                       <ul className="space-y-1.5">
                         {selected.callIssues.map((issue, idx) => (
                           <li key={idx} className="flex items-start gap-2">
@@ -460,7 +460,7 @@ export function CallHistoryPage() {
                   )}
 
                   <div className="bg-neutral-50 rounded-xl p-4 border border-neutral-200">
-                    <p className="text-[11px] font-bold text-primary-600 uppercase tracking-wide mb-2">Billing</p>
+                    <p className="text-11 font-bold text-primary-600 uppercase tracking-wide mb-2">Billing</p>
                     <div className="space-y-2">
                       <div className="flex justify-between"><span className="text-sm text-neutral-600">Rate</span><span className="text-sm text-neutral-900">₹{selected.ratePerMinute || 0}/min</span></div>
                       <div className="flex justify-between"><span className="text-sm text-neutral-600">Charge</span><span className="text-sm font-bold text-neutral-900">₹{(Number(selected.chargeAmount || 0) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>

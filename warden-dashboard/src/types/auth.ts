@@ -28,6 +28,9 @@ export interface RegisterRequest {
   password: string;
   employeeId?: string;
   prisonName?: string;
+  state?: string;
+  district?: string;
+  address?: string;
 }
 
 export interface RegisterResponse extends AuthTokens {

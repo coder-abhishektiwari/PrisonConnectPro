@@ -28,7 +28,7 @@ export function LocationLink({ location, className = '' }: { location?: Location
       title={`Open in Google Maps (${location.lat}, ${location.lng})`}
       className={`inline-flex items-center gap-1 hover:underline ${className}`}
     >
-      <span className="material-icons text-[15px] leading-none">location_on</span>
+      <span className="material-icons text-15 leading-none">location_on</span>
       <span>{label}</span>
     </a>
   );

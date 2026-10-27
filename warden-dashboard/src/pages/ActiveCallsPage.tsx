@@ -173,9 +173,9 @@ export function ActiveCallsPage() {
                     <div className="flex justify-between items-start gap-2">
                       <div className="min-w-0">
                         <p className="font-mono text-xs font-bold text-neutral-900 truncate">{call.callId}</p>
-                        <p className="font-mono text-[10px] text-neutral-400 truncate">{call.roomIdLabel || call.roomId}</p>
+                        <p className="font-mono text-10 text-neutral-400 truncate">{call.roomIdLabel || call.roomId}</p>
                       </div>
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-success/10 text-success border border-success/20 rounded-full text-[10px] font-bold shrink-0" title={call.startTime}>
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-success/10 text-success border border-success/20 rounded-full text-10 font-bold shrink-0" title={call.startTime}>
                         <span className="w-1.5 h-1.5 bg-success rounded-full animate-pulse" />Live
                       </span>
                     </div>
@@ -186,40 +186,40 @@ export function ActiveCallsPage() {
                         the lobby; ticking from startTime made the clock count
                         the lobby AND restart when the real call began. */}
                     <div className="flex items-center justify-between gap-2 rounded-lg bg-neutral-900 px-2.5 py-1.5 shadow-inner">
-                      <span className="text-[9px] font-bold uppercase tracking-widest text-neutral-400">Elapsed</span>
+                      <span className="text-9 font-bold uppercase tracking-widest text-neutral-400">Elapsed</span>
                       <span className="font-mono text-sm font-bold tabular-nums text-white leading-none">
                         {call.mediaConnectedAt ? elapsedOf(call.mediaConnectedAt) : 'Connecting…'}
                       </span>
                     </div>
-                    <p className="text-[10px] text-neutral-500 flex items-center gap-1" title={call.startTime}>
-                      <span className="material-icons text-[12px] text-neutral-400">schedule</span>
+                    <p className="text-10 text-neutral-500 flex items-center gap-1" title={call.startTime}>
+                      <span className="material-icons text-12 text-neutral-400">schedule</span>
                       Started {formatStartedAt(call.startTime)}
                     </p>
 
                     <div className="grid grid-cols-2 gap-2">
                       <div className="px-2 py-1.5 bg-primary-50/60 rounded-lg border border-primary-100 min-w-0">
-                        <p className="text-[9px] font-bold text-primary-600 uppercase tracking-wide">Inmate</p>
+                        <p className="text-9 font-bold text-primary-600 uppercase tracking-wide">Inmate</p>
                         <p className="text-xs font-semibold text-neutral-900 truncate leading-tight">{inmateLabel(call)}</p>
-                        <p className="text-[10px] text-neutral-500 font-mono truncate" title={`${call.inmateNumber || call.inmateId} • ${call.kioskId}`}>{call.inmateNumber || call.inmateId} • {call.kioskId}</p>
+                        <p className="text-10 text-neutral-500 font-mono truncate" title={`${call.inmateNumber || call.inmateId} • ${call.kioskId}`}>{call.inmateNumber || call.inmateId} • {call.kioskId}</p>
                       </div>
                       <div className="px-2 py-1.5 bg-info/5 rounded-lg border border-info/20 min-w-0">
-                        <p className="text-[9px] font-bold text-info uppercase tracking-wide">Family</p>
+                        <p className="text-9 font-bold text-info uppercase tracking-wide">Family</p>
                         <p className="text-xs font-semibold text-neutral-900 truncate leading-tight">{contactLabel(call)}</p>
-                        <p className="text-[10px] text-neutral-500 font-mono truncate" title={call.contactId}>{call.contactId}</p>
+                        <p className="text-10 text-neutral-500 font-mono truncate" title={call.contactId}>{call.contactId}</p>
                       </div>
                     </div>
 
                     {/* Location + call-type/quality badges share one row now —
                         captured when this call's device was verified. */}
                     <div className="flex items-center justify-between gap-2">
-                      <LocationLink location={call.family?.location} className="min-w-0 truncate text-[11px] text-neutral-600" />
+                      <LocationLink location={call.family?.location} className="min-w-0 truncate text-11 text-neutral-600" />
                       <div className="flex items-center gap-1.5 shrink-0">
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wide ${call.type==='video'?'bg-primary-600 text-white border-primary-600':'bg-info text-white border-info'}`}>
-                          <span className="material-icons text-[12px]">{call.type==='video'?'videocam':'mic'}</span>
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-10 font-bold border uppercase tracking-wide ${call.type==='video'?'bg-primary-600 text-white border-primary-600':'bg-info text-white border-info'}`}>
+                          <span className="material-icons text-12">{call.type==='video'?'videocam':'mic'}</span>
                           {call.type==='video'?'Video':'Audio'}
                         </span>
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wide ${getQualityBadge(call.connectionQuality)}`}>
-                          <span className="material-icons text-[12px]">signal_cellular_alt</span>
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-10 font-bold border uppercase tracking-wide ${getQualityBadge(call.connectionQuality)}`}>
+                          <span className="material-icons text-12">signal_cellular_alt</span>
                           {call.connectionQuality || '—'}
                         </span>
                       </div>

@@ -1,3 +1,12 @@
 /* Hide scrollbar globally for sidebar */
 .hide-scrollbar::-webkit-scrollbar { display: none; }
 .hide-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+
+/* Faint blueprint grid backdrop for auth screens */
+.auth-grid {
+  background-color: #ffffff;
+  background-image:
+    linear-gradient(to right, rgb(15 23 42 / 0.075) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(15 23 42 / 0.075) 1px, transparent 1px);
+  background-size: 52px 52px;
+}

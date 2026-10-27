@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1600" width="1200" height="1600">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1e1b4b"/>
+      <stop offset="0.45" stop-color="#3730a3"/>
+      <stop offset="0.8" stop-color="#4f46e5"/>
+      <stop offset="1" stop-color="#6366f1"/>
+    </linearGradient>
+    <radialGradient id="glowV" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#818cf8" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#818cf8" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowC" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#22d3ee" stop-opacity="0.26"/>
+      <stop offset="1" stop-color="#22d3ee" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0f0a2a" stop-opacity="0.55"/>
+      <stop offset="0.3" stop-color="#0f0a2a" stop-opacity="0"/>
+      <stop offset="0.72" stop-color="#0f0a2a" stop-opacity="0"/>
+      <stop offset="1" stop-color="#0f0a2a" stop-opacity="0.6"/>
+    </linearGradient>
+    <pattern id="dots" width="46" height="46" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1.6" fill="#ffffff" fill-opacity="0.10"/>
+    </pattern>
+  </defs>
+
+  <rect width="1200" height="1600" fill="url(#bg)"/>
+  <rect width="1200" height="1600" fill="url(#dots)"/>
+  <ellipse cx="220" cy="280" rx="540" ry="470" fill="url(#glowV)"/>
+  <ellipse cx="1010" cy="1340" rx="560" ry="480" fill="url(#glowC)"/>
+  <ellipse cx="1020" cy="220" rx="430" ry="360" fill="url(#glowV)" opacity="0.45"/>
+
+  <!-- Concentric monitoring rings -->
+  <g fill="none" stroke="#ffffff">
+    <circle cx="600" cy="800" r="440" stroke-opacity="0.09" stroke-width="1.5"/>
+    <circle cx="600" cy="800" r="340" stroke-opacity="0.13" stroke-width="1.5"/>
+    <circle cx="600" cy="800" r="240" stroke-opacity="0.18" stroke-width="1.5"/>
+    <circle cx="600" cy="800" r="390" stroke-opacity="0.20" stroke-width="2" stroke-dasharray="2 15" stroke-linecap="round"/>
+  </g>
+
+  <!-- Live waveform -->
+  <g fill="#ffffff">
+    <rect x="304" y="762" width="12" height="76" rx="6" fill-opacity="0.35"/>
+    <rect x="336" y="734" width="12" height="132" rx="6" fill-opacity="0.45"/>
+    <rect x="368" y="706" width="12" height="188" rx="6" fill-opacity="0.55"/>
+    <rect x="400" y="744" width="12" height="112" rx="6" fill-opacity="0.5"/>
+    <rect x="432" y="686" width="12" height="228" rx="6" fill-opacity="0.65"/>
+    <rect x="464" y="720" width="12" height="160" rx="6" fill-opacity="0.6"/>
+    <rect x="496" y="662" width="12" height="276" rx="6" fill-opacity="0.75"/>
+    <rect x="528" y="712" width="12" height="176" rx="6" fill-opacity="0.65"/>
+    <rect x="560" y="646" width="12" height="308" rx="6" fill-opacity="0.8"/>
+    <rect x="592" y="700" width="12" height="200" rx="6" fill-opacity="0.7"/>
+    <rect x="624" y="700" width="12" height="200" rx="6" fill-opacity="0.7"/>
+    <rect x="656" y="646" width="12" height="308" rx="6" fill-opacity="0.8"/>
+    <rect x="688" y="712" width="12" height="176" rx="6" fill-opacity="0.65"/>
+    <rect x="720" y="662" width="12" height="276" rx="6" fill-opacity="0.75"/>
+    <rect x="752" y="720" width="12" height="160" rx="6" fill-opacity="0.6"/>
+    <rect x="784" y="686" width="12" height="228" rx="6" fill-opacity="0.65"/>
+    <rect x="816" y="744" width="12" height="112" rx="6" fill-opacity="0.5"/>
+    <rect x="848" y="706" width="12" height="188" rx="6" fill-opacity="0.55"/>
+    <rect x="880" y="734" width="12" height="132" rx="6" fill-opacity="0.45"/>
+    <rect x="912" y="762" width="12" height="76" rx="6" fill-opacity="0.35"/>
+  </g>
+
+  <!-- Center glass disc with call glyph -->
+  <circle cx="600" cy="800" r="112" fill="#ffffff" fill-opacity="0.13" stroke="#ffffff" stroke-opacity="0.4" stroke-width="1.5"/>
+  <circle cx="600" cy="800" r="86" fill="none" stroke="#ffffff" stroke-opacity="0.18" stroke-width="1"/>
+  <g transform="translate(545,745) scale(4.6)" fill="#ffffff" fill-opacity="0.95">
+    <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/>
+  </g>
+
+  <!-- Pulse dot -->
+  <circle cx="600" cy="800" r="126" fill="none" stroke="#ffffff" stroke-opacity="0.35" stroke-width="2"/>
+  <circle cx="600" cy="674" r="7" fill="#ffffff" fill-opacity="0.9"/>
+
+  <rect width="1200" height="1600" fill="url(#fade)"/>
+</svg>

@@ -46,13 +46,13 @@ export function Sidebar() {
   return (
     <aside className="fixed left-0 top-0 h-screen w-16 z-50 bg-neutral-900 text-white transition-all duration-300 ease-in-out hover:w-64 group/sidebar overflow-hidden flex flex-col shadow-xl">
       {/* Logo */}
-      <div className="px-2 py-5 border-b border-neutral-800 flex items-center gap-3 flex-shrink-0 h-[72px]">
-        <div className="w-8 h-8 flex items-center justify-center flex-shrink-0 ml-2">
-          <img src="/ic_icon.webp" alt="Warden Panel" className="w-8 h-8 object-contain" />
+      <div className="px-2 border-b border-neutral-800 flex items-center gap-2.5 flex-shrink-0 h-[72px]">
+        <div className="w-7 h-7 flex items-center justify-center flex-shrink-0 ml-2">
+          <img src="/ic_icon.webp" alt="Warden Panel" className="w-7 h-7 object-contain" />
         </div>
         <div className="opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300 overflow-hidden whitespace-nowrap">
-          <h1 className="text-lg font-bold text-white">{prisonName}</h1>
-          <p className="text-[12px] text-white">{user?.prisonId || '—'}</p>
+          <h1 className="text-12 font-semibold text-white truncate">{prisonName}</h1>
+          <p className="text-10 text-neutral-400">{user?.prisonId || '—'}</p>
         </div>
       </div>
 
@@ -65,7 +65,7 @@ export function Sidebar() {
                 to={item.to}
                 end
                 className={({ isActive }) =>
-                  `flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[13px] font-medium transition-colors ${
+                  `flex items-center gap-2 px-2 py-1.5 rounded-lg text-12 font-medium transition-colors ${
                     isActive
                       ? 'bg-primary-600 text-white'
                       : 'text-neutral-300 hover:bg-neutral-800 hover:text-white'
@@ -73,7 +73,7 @@ export function Sidebar() {
                 }
                 title={item.label}
               >
-                <span className="material-icons text-lg flex-shrink-0 ml-0.5">{item.icon}</span>
+                <span className="material-icons text-base flex-shrink-0">{item.icon}</span>
                 <span className="opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300 whitespace-nowrap">{item.label}</span>
               </NavLink>
             </li>
@@ -83,21 +83,21 @@ export function Sidebar() {
 
       {/* Admin Info + Logout */}
       <div className="border-t border-neutral-800 px-2 py-2 flex-shrink-0">
-        <div className="flex items-center gap-2.5 px-2.5 py-1.5">
-          <div className="w-7 h-7 bg-primary-600 rounded-full flex items-center justify-center text-white font-medium text-[11px] flex-shrink-0">
+        <div className="flex items-center gap-2 px-2 py-1.5">
+          <div className="w-6 h-6 bg-primary-600 rounded-full flex items-center justify-center text-white font-medium text-10 flex-shrink-0">
             {initials}
           </div>
           <div className="opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300 overflow-hidden whitespace-nowrap min-w-0">
-            <p className="text-[13px] font-medium text-white truncate">{displayName}</p>
-            {displayEmail && <p className="text-[11px] text-neutral-400 truncate">{displayEmail}</p>}
+            <p className="text-12 font-medium text-white truncate">{displayName}</p>
+            {displayEmail && <p className="text-10 text-neutral-400 truncate">{displayEmail}</p>}
           </div>
         </div>
         <button
           onClick={handleLogout}
           title="Sign out"
-          className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[13px] font-medium text-neutral-400 hover:bg-error-600 hover:text-white transition-colors"
+          className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-12 font-medium text-neutral-400 hover:bg-error-600 hover:text-white transition-colors"
         >
-          <span className="material-icons text-lg flex-shrink-0 ml-0.5">logout</span>
+          <span className="material-icons text-base flex-shrink-0">logout</span>
           <span className="opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300 whitespace-nowrap">Sign Out</span>
         </button>
       </div>

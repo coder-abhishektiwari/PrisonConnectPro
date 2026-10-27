@@ -212,7 +212,7 @@ export function KioskReportPanel({ kiosk, onClose, onStatusChanged }: KioskRepor
                             <td className="py-2 px-3 text-xs text-neutral-800">{c.familyMemberName || '—'}</td>
                             <td className="py-2 px-3 text-xs capitalize text-neutral-700">{c.type}</td>
                             <td className="py-2 px-3">
-                              <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold capitalize ${
+                              <span className={`px-2 py-0.5 rounded-full text-11 font-bold capitalize ${
                                 c.status === 'completed' ? 'bg-success/10 text-success' :
                                 c.status === 'failed' ? 'bg-error/10 text-error' :
                                 c.status === 'active' ? 'bg-info/10 text-info' : 'bg-neutral-100 text-neutral-600'

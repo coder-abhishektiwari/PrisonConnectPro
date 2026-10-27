@@ -428,7 +428,7 @@ export function InmateDetailPage() {
       if (opts?.radio) {
         return (
           <div key={key} className="py-3 border-b border-neutral-100 last:border-0">
-            <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">{label}</p>
+            <p className="text-11 font-semibold text-neutral-500 uppercase tracking-wider mb-2">{label}</p>
             <div className="flex gap-3">
               {opts.radio.map(r => (
                 <label key={r} className="flex items-center gap-2 cursor-pointer">
@@ -443,7 +443,7 @@ export function InmateDetailPage() {
       if (opts?.select) {
         return (
           <div key={key} className="py-3 border-b border-neutral-100 last:border-0">
-            <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">{label}</p>
+            <p className="text-11 font-semibold text-neutral-500 uppercase tracking-wider mb-2">{label}</p>
             <select
               value={String(val)}
               onChange={e => setEditData({ ...editData, [key]: e.target.value } as Partial<Inmate>)}
@@ -458,7 +458,7 @@ export function InmateDetailPage() {
       if (opts?.textarea) {
         return (
           <div key={key} className="py-3 border-b border-neutral-100 last:border-0">
-            <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">{label}</p>
+            <p className="text-11 font-semibold text-neutral-500 uppercase tracking-wider mb-2">{label}</p>
             <textarea
               value={String(val)}
               onChange={e => setEditData({ ...editData, [key]: e.target.value } as Partial<Inmate>)}
@@ -471,7 +471,7 @@ export function InmateDetailPage() {
       }
       return (
         <div key={key} className="py-3 border-b border-neutral-100 last:border-0">
-          <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">{label}</p>
+          <p className="text-11 font-semibold text-neutral-500 uppercase tracking-wider mb-2">{label}</p>
           <input
             type={opts?.type || 'text'}
             value={String(val)}
@@ -494,7 +494,7 @@ export function InmateDetailPage() {
       <div key={key} className="py-3 border-b border-neutral-100 last:border-0 flex items-center gap-3">
         <span className="material-icons text-neutral-400 text-lg">{icon}</span>
         <div>
-          <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">{label}</p>
+          <p className="text-11 font-semibold text-neutral-500 uppercase tracking-wider">{label}</p>
           <p className="text-sm text-neutral-900">{fieldsPending ? <SkeletonText /> : val || '—'}</p>
         </div>
       </div>
@@ -507,7 +507,7 @@ export function InmateDetailPage() {
     if (editingInmate) {
       return (
         <div key={key} className="py-3 border-b border-neutral-100 last:border-0">
-          <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">{label}</p>
+          <p className="text-11 font-semibold text-neutral-500 uppercase tracking-wider mb-2">{label}</p>
           <SearchableSelect
             value={String(val)}
             options={options}
@@ -528,7 +528,7 @@ export function InmateDetailPage() {
       <div key={key} className="py-3 border-b border-neutral-100 last:border-0 flex items-center gap-3">
         <span className="material-icons text-neutral-400 text-lg">{icon}</span>
         <div>
-          <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">{label}</p>
+          <p className="text-11 font-semibold text-neutral-500 uppercase tracking-wider">{label}</p>
           <p className="text-sm text-neutral-900">{fieldsPending ? <SkeletonText /> : val || '—'}</p>
         </div>
       </div>
@@ -540,7 +540,7 @@ export function InmateDetailPage() {
     if (editingContact) {
       return (
         <div key={key} className="py-3 border-b border-neutral-100 last:border-0">
-          <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">{label}</p>
+          <p className="text-11 font-semibold text-neutral-500 uppercase tracking-wider mb-2">{label}</p>
           <input
             type="text"
             value={String(val)}
@@ -556,7 +556,7 @@ export function InmateDetailPage() {
       <div key={key} className="py-3 border-b border-neutral-100 last:border-0 flex items-center gap-3">
         <span className="material-icons text-neutral-400 text-lg">{icon}</span>
         <div>
-          <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">{label}</p>
+          <p className="text-11 font-semibold text-neutral-500 uppercase tracking-wider">{label}</p>
           <p className="text-sm text-neutral-900">{display || '—'}</p>
         </div>
       </div>
@@ -589,14 +589,14 @@ export function InmateDetailPage() {
     return (
       <div className="pt-4 border-t border-neutral-100 mt-1">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider flex items-center gap-1.5">
+          <p className="text-11 font-semibold text-neutral-500 uppercase tracking-wider flex items-center gap-1.5">
             <span className="material-icons text-sm">devices</span> Verified Device
           </p>
           {devices.length > 1 && (
             <button
               onClick={() => clearDevices(contact.contactId)}
               disabled={removingDevice !== null}
-              className="text-[11px] text-neutral-500 hover:text-red-600 transition disabled:opacity-50"
+              className="text-11 text-neutral-500 hover:text-red-600 transition disabled:opacity-50"
               title="Remove every registered record for this contact"
             >
               Clear all ({devices.length})
@@ -617,7 +617,7 @@ export function InmateDetailPage() {
                   <div className="min-w-0">
                     <p className="text-sm font-bold text-neutral-900 truncate">{deviceTitle}</p>
                     {(info.os || info.browser) && (
-                      <p className="text-[11px] text-neutral-500 truncate">{[info.os, info.browser].filter(Boolean).join(' · ')}</p>
+                      <p className="text-11 text-neutral-500 truncate">{[info.os, info.browser].filter(Boolean).join(' · ')}</p>
                     )}
                   </div>
                   <button
@@ -629,7 +629,7 @@ export function InmateDetailPage() {
                     <span className="material-icons text-base">{removingDevice === device.fingerprintId ? 'hourglass_top' : 'delete'}</span>
                   </button>
                 </div>
-                <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px]">
+                <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-11">
                   {device.phone && (
                     <span className="truncate"><span className="text-neutral-400">Phone:</span> <span className="font-medium text-neutral-700">{device.phone}</span></span>
                   )}
@@ -656,14 +656,14 @@ export function InmateDetailPage() {
                     <span className="truncate"><span className="text-neutral-400">First:</span> <span className="font-medium text-neutral-700">{fmtDate(device.firstSeenAt)}</span></span>
                   )}
                 </div>
-                <div className="mt-2 flex items-center gap-1.5 text-[11px]">
+                <div className="mt-2 flex items-center gap-1.5 text-11">
                   <span className="text-neutral-400 font-semibold uppercase tracking-wide">Location</span>
                   <LocationLink location={device.location} className="font-medium text-primary-700" />
                 </div>
-                {s.deviceId && <p className="mt-1 text-[10px] font-mono text-neutral-400 truncate">ID: {s.deviceId}</p>}
+                {s.deviceId && <p className="mt-1 text-10 font-mono text-neutral-400 truncate">ID: {s.deviceId}</p>}
               </div>
             </div>
-            <p className="mt-3 text-[11px] text-neutral-400">
+            <p className="mt-3 text-11 text-neutral-400">
               {devices.length > 1
                 ? `${devices.length} records on file — only one device can be active. Removing forces this phone to register again on its next call.`
                 : 'Only one device can be registered per contact. Removing it lets this phone register again on its next call.'}
@@ -717,8 +717,8 @@ export function InmateDetailPage() {
           </div>
           {!isNew && inmate && (
             <div className="flex items-center gap-4 mb-6 pb-6 border-b border-neutral-200">
-              <div className="w-16 h-16 rounded-full bg-[#E9EEF3] border border-[#D1D7DB] flex items-center justify-center shrink-0">
-                <span className="material-icons text-[#8696A0] text-3xl">person</span>
+              <div className="w-16 h-16 rounded-full bg-surface border border-line flex items-center justify-center shrink-0">
+                <span className="material-icons text-muted text-3xl">person</span>
               </div>
               <div>
                 <p className="font-bold text-lg text-neutral-900">{inmate.name}</p>
@@ -757,7 +757,7 @@ export function InmateDetailPage() {
             <div className="mt-4 pt-4 border-t border-neutral-200">
               <h3 className="text-xs font-bold uppercase tracking-wide text-neutral-500 mb-3 flex items-center gap-2">
                 <span className="material-icons text-sm">fingerprint</span> Biometrics
-                <span className="text-[10px] text-neutral-400 normal-case tracking-normal ml-1">(Register from kiosk only)</span>
+                <span className="text-10 text-neutral-400 normal-case tracking-normal ml-1">(Register from kiosk only)</span>
               </h3>
               {biometricError && (
                 <p className="text-xs text-error bg-error/10 border border-error/20 rounded-lg px-3 py-2 mb-3">{biometricError}</p>
@@ -778,17 +778,17 @@ export function InmateDetailPage() {
                           <span className="material-icons text-neutral-500 text-lg">{icon}</span>
                           <div>
                             <p className="text-sm font-medium text-neutral-800">{label}</p>
-                            <p className="text-[11px] text-neutral-400">
+                            <p className="text-11 text-neutral-400">
                               {isRegistered ? 'Registered' : 'Not registered'}
                               {bio?.registeredAt && ` • ${new Date(bio.registeredAt).toLocaleDateString()}`}
                             </p>
                             {type === 'rfid' && isRegistered && bio?.cardNumber && (
-                              <p className="text-[11px] font-mono text-neutral-600 mt-0.5">Card No: {bio.cardNumber}</p>
+                              <p className="text-11 font-mono text-neutral-600 mt-0.5">Card No: {bio.cardNumber}</p>
                             )}
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${isRegistered ? 'bg-green-100 text-green-700' : 'bg-neutral-200 text-neutral-500'}`}>
+                          <span className={`px-2 py-0.5 rounded-full text-10 font-bold ${isRegistered ? 'bg-green-100 text-green-700' : 'bg-neutral-200 text-neutral-500'}`}>
                             {isRegistered ? 'ACTIVE' : 'NONE'}
                           </span>
                           {isRegistered && bio && (
@@ -840,8 +840,8 @@ export function InmateDetailPage() {
                 </div>
               ) : contacts.map(c => (
                 <div key={c.contactId} onClick={() => { setSelectedContact(c); setCreatingContact(false); setEditingContact(false); }} className="flex items-center gap-3 px-5 py-3.5 hover:bg-neutral-50 cursor-pointer transition-colors">
-                  <div className="w-10 h-10 rounded-full bg-[#E9EEF3] border border-[#D1D7DB] flex items-center justify-center shrink-0">
-                    <span className="material-icons text-[#8696A0]">person</span>
+                  <div className="w-10 h-10 rounded-full bg-surface border border-line flex items-center justify-center shrink-0">
+                    <span className="material-icons text-muted">person</span>
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-neutral-900 truncate">{c.name}</p>
@@ -872,8 +872,8 @@ export function InmateDetailPage() {
               </button>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-full bg-[#E9EEF3] border border-[#D1D7DB] flex items-center justify-center">
-                    <span className="material-icons text-[#8696A0] text-xl">person</span>
+                  <div className="w-12 h-12 rounded-full bg-surface border border-line flex items-center justify-center">
+                    <span className="material-icons text-muted text-xl">person</span>
                   </div>
                   <div>
                     <p className="font-bold text-neutral-900">{creatingContact ? 'Add Family Member' : selectedContact.name}</p>

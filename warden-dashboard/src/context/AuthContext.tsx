@@ -24,6 +24,7 @@ import {
   persistAuth,
 } from '@/services/auth/tokenStorage';
 import { clearCache } from '@/services/api/cache';
+import { isDefinitiveAuthRejection } from '@/utils/authErrors';
 
 /**
  * Auth Context Value
@@ -141,12 +142,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         applyAuth(response);
         // Reschedule with the new expiry
         scheduleTokenRefresh(response.expiresIn);
-      } catch {
-        // Refresh failed - force logout
-        clearAuth();
+      } catch (err) {
+        // Only a definitive 4xx rejection kills the session. A network drop or
+        // 5xx (Render cold start) keeps the warden signed in — retry soon.
+        if (isDefinitiveAuthRejection(err)) {
+          clearAuth();
+        } else {
+          scheduleRetryRef.current(60);
+        }
       }
     }, refreshInterval);
   }, [applyAuth, clearAuth]);
+
+  // Self-reference (kept in a ref so exhaustive-deps stays happy) — used to
+  // retry a transiently failed background refresh without logging out.
+  const scheduleRetryRef = useRef(scheduleTokenRefresh);
+  useEffect(() => {
+    scheduleRetryRef.current = scheduleTokenRefresh;
+  }, [scheduleTokenRefresh]);
 
   /**
    * Initial session restore.
@@ -175,9 +188,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             applyAuth(response);
             scheduleTokenRefresh(response.expiresIn);
           }
-        } catch {
+        } catch (err) {
           if (!cancelled) {
-            clearAuth();
+            if (isDefinitiveAuthRejection(err)) {
+              clearAuth();
+            } else {
+              // Transient failure at restore time — keep the stored session
+              // and retry the refresh shortly instead of dropping it.
+              setTokens(storedTokens);
+              setUser(storedUser);
+              scheduleTokenRefresh(60);
+            }
           }
         } finally {
           if (!cancelled) setIsInitializing(false);
@@ -200,9 +221,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(freshUser);
           persistAuth(storedTokens, freshUser);
         }
-      } catch {
-        // Token was invalidated server-side
-        if (!cancelled) {
+      } catch (err) {
+        // Only clear the session when the server definitively rejects it (4xx).
+        // Network failures / 5xx during the background check keep the session.
+        if (!cancelled && isDefinitiveAuthRejection(err)) {
           clearAuth();
         }
       }

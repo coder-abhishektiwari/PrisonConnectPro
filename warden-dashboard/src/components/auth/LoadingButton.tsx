@@ -26,7 +26,7 @@ export function LoadingButton({
 
   const variants = {
     primary:
-      'bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500/20 shadow-[0_1px_2px_rgba(0,0,0,0.08)]',
+      'bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500/20 shadow-btn',
     secondary:
       'bg-neutral-100 text-neutral-900 hover:bg-neutral-200 focus:ring-neutral-500/20',
     outline:

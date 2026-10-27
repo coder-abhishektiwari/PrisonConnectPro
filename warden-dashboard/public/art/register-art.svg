@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1600" width="1200" height="1600">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#312e81"/>
+      <stop offset="0.4" stop-color="#4338ca"/>
+      <stop offset="0.75" stop-color="#6366f1"/>
+      <stop offset="1" stop-color="#7c3aed"/>
+    </linearGradient>
+    <radialGradient id="glowV" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#a78bfa" stop-opacity="0.5"/>
+      <stop offset="1" stop-color="#a78bfa" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowB" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#38bdf8" stop-opacity="0.25"/>
+      <stop offset="1" stop-color="#38bdf8" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0f0a2a" stop-opacity="0.55"/>
+      <stop offset="0.3" stop-color="#0f0a2a" stop-opacity="0"/>
+      <stop offset="0.72" stop-color="#0f0a2a" stop-opacity="0"/>
+      <stop offset="1" stop-color="#0f0a2a" stop-opacity="0.6"/>
+    </linearGradient>
+    <pattern id="dots" width="46" height="46" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1.6" fill="#ffffff" fill-opacity="0.10"/>
+    </pattern>
+  </defs>
+
+  <rect width="1200" height="1600" fill="url(#bg)"/>
+  <rect width="1200" height="1600" fill="url(#dots)"/>
+  <ellipse cx="1000" cy="260" rx="520" ry="450" fill="url(#glowV)"/>
+  <ellipse cx="180" cy="1360" rx="560" ry="470" fill="url(#glowB)"/>
+  <ellipse cx="200" cy="240" rx="420" ry="360" fill="url(#glowV)" opacity="0.4"/>
+
+  <!-- Orbit ring behind the composition -->
+  <g fill="none" stroke="#ffffff">
+    <circle cx="620" cy="840" r="420" stroke-opacity="0.09" stroke-width="1.5"/>
+    <circle cx="620" cy="840" r="330" stroke-opacity="0.14" stroke-width="2" stroke-dasharray="2 15" stroke-linecap="round"/>
+  </g>
+
+  <!-- Ascending path connecting the three blocks -->
+  <path d="M400 1010 C 520 990, 560 920, 640 870 S 780 780, 850 740"
+        fill="none" stroke="#ffffff" stroke-opacity="0.35" stroke-width="3"
+        stroke-dasharray="4 16" stroke-linecap="round"/>
+
+  <!-- Block 1 -->
+  <g>
+    <rect x="300" y="960" width="220" height="140" rx="28" fill="#ffffff" fill-opacity="0.10" stroke="#ffffff" stroke-opacity="0.22" stroke-width="1.5"/>
+    <rect x="332" y="996" width="120" height="14" rx="7" fill="#ffffff" fill-opacity="0.4"/>
+    <rect x="332" y="1024" width="84" height="12" rx="6" fill="#ffffff" fill-opacity="0.25"/>
+  </g>
+
+  <!-- Block 2 -->
+  <g>
+    <rect x="520" y="840" width="220" height="140" rx="28" fill="#ffffff" fill-opacity="0.14" stroke="#ffffff" stroke-opacity="0.28" stroke-width="1.5"/>
+    <rect x="552" y="876" width="140" height="14" rx="7" fill="#ffffff" fill-opacity="0.5"/>
+    <rect x="552" y="904" width="96" height="12" rx="6" fill="#ffffff" fill-opacity="0.3"/>
+  </g>
+
+  <!-- Block 3 (top, complete) -->
+  <g>
+    <rect x="740" y="720" width="220" height="140" rx="28" fill="#ffffff" fill-opacity="0.18" stroke="#ffffff" stroke-opacity="0.35" stroke-width="1.5"/>
+    <rect x="772" y="756" width="150" height="14" rx="7" fill="#ffffff" fill-opacity="0.6"/>
+    <rect x="772" y="784" width="104" height="12" rx="6" fill="#ffffff" fill-opacity="0.4"/>
+  </g>
+
+  <!-- Success badge on the top block -->
+  <g>
+    <circle cx="958" cy="716" r="52" fill="#22c55e"/>
+    <circle cx="958" cy="716" r="64" fill="none" stroke="#ffffff" stroke-opacity="0.35" stroke-width="2"/>
+    <path d="M934 716 l16 16 32 -34" fill="none" stroke="#ffffff" stroke-width="9"
+          stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- Ascending markers -->
+  <g fill="#ffffff">
+    <circle cx="410" cy="905" r="7" fill-opacity="0.35"/>
+    <circle cx="630" cy="785" r="7" fill-opacity="0.5"/>
+    <circle cx="850" cy="665" r="7" fill-opacity="0.7"/>
+  </g>
+
+  <!-- Floating key tile -->
+  <g transform="translate(318,600)">
+    <rect x="-64" y="-64" width="128" height="128" rx="34" fill="#ffffff" fill-opacity="0.12" stroke="#ffffff" stroke-opacity="0.3" stroke-width="1.5"/>
+    <g transform="translate(-34,-34) scale(2.84)" fill="#ffffff" fill-opacity="0.95">
+      <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+    </g>
+  </g>
+
+  <rect width="1200" height="1600" fill="url(#fade)"/>
+</svg>

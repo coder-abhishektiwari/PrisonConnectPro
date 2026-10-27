@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { AuthInput } from '@/components/auth/AuthInput';
 import { LoadingButton } from '@/components/auth/LoadingButton';
-import { validateLogin } from '@/utils/validation';
+import { validateEmail, validateLogin } from '@/utils/validation';
 
 /**
  * Turn a failed login into an honest message. The API answers 401 for bad
@@ -23,11 +23,14 @@ function loginErrorMessage(err: unknown): string {
 }
 
 /**
- * Login Page for Jail Administration staff.
- * Features floating labels, password visibility toggle, inline validation,
+ * Login Page for Jail Administration staff — two steps:
+ * Step 1: email address.
+ * Step 2: password.
+ * Floating labels, password visibility toggle, inline validation,
  * loading spinner, and error handling.
  */
 export function LoginPage() {
+  const [step, setStep] = useState<1 | 2>(1);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -38,14 +41,41 @@ export function LoginPage() {
 
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname ?? '/dashboard';
 
+  const clearFieldError = (field: string) => {
+    if (fieldErrors[field]) {
+      setFieldErrors((prev) => ({ ...prev, [field]: '' }));
+    }
+  };
+
+  const goToStep = (next: 1 | 2) => {
+    setFieldErrors({});
+    setFormError(null);
+    setStep(next);
+  };
+
+  // Step 1 -> Step 2: validate the email first.
+  const handleContinue = (e: FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+
+    const emailError = validateEmail(email);
+    setFieldErrors(emailError ? { email: emailError } : {});
+    if (emailError) return;
+
+    goToStep(2);
+  };
+
+  // Step 2 submit: sign in with email + password.
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
-    // Client-side validation
     const { valid, errors } = validateLogin(email, password);
     setFieldErrors(errors);
-    if (!valid) return;
+    if (!valid) {
+      if (errors.email) goToStep(1);
+      return;
+    }
 
     try {
       await login(email.trim(), password);
@@ -56,92 +86,160 @@ export function LoginPage() {
   };
 
   return (
-    <div className="bg-white rounded-[28px] border border-black/[0.06] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_24px_64px_-24px_rgba(0,0,0,0.14)] p-7 sm:p-8">
-      {/* Mobile Logo (hidden on desktop) */}
-      <div className="lg:hidden flex items-center justify-center gap-3 mb-6">
-        <div className="w-10 h-10 rounded-xl bg-neutral-900 flex items-center justify-center">
-          <img src="/ic_icon.webp" alt="PrisonConnect" className="w-6 h-6 object-contain" />
+    <div className="bg-white rounded-card shadow-card border border-black/[0.07] p-7 sm:p-9">
+      {/* Top row: back (step 2) + step indicator */}
+      <div className="mb-7 flex items-center justify-between">
+        {step === 2 && (
+          <button
+            type="button"
+            onClick={() => goToStep(1)}
+            aria-label="Back"
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-neutral-200 text-neutral-500 transition-colors hover:text-neutral-900 hover-border-neutral-500"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-8-8 8-8" />
+            </svg>
+          </button>
+        )}
+
+        <div className="ml-auto flex items-center gap-2">
+          <span
+            className={`h-1.5 rounded-full transition-all duration-300 ease-in-out ${step === 1
+                ? 'w-7 bg-primary-600'
+                : 'w-4 bg-primary-100'
+              }`}
+          />
+
+          <span
+            className={`h-1.5 rounded-full transition-all duration-300 ease-in-out ${step === 2
+                ? 'w-7 bg-primary-600'
+                : 'w-4 bg-primary-100'
+              }`}
+          />
+
+          <span className="ml-1 text-11 font-medium uppercase tracking-[0.2em] text-neutral-400">
+            Step {step} of 2
+          </span>
         </div>
-        <div className="text-left">
-          <h1 className="text-[15px] font-semibold text-neutral-900 tracking-[-0.01em]">PrisonConnect</h1>
-          <p className="text-[10px] text-neutral-400 uppercase tracking-[0.22em]">Jail Admin Console</p>
-        </div>
+
       </div>
 
       {/* Header */}
       <div className="mb-6">
-        <h2 className="text-[26px] font-semibold text-neutral-900 tracking-[-0.02em]">Welcome back</h2>
-        <p className="text-[14px] text-neutral-500 mt-1">Sign in to the monitoring dashboard</p>
+        <h2 className="text-28 font-semibold text-neutral-900 tracking-[-0.025em]">
+          {step === 1 ? 'Sign in' : 'Welcome back'}
+        </h2>
+        <p className="mt-1.5 text-14 text-neutral-500">
+          {step === 1
+            ? 'Enter your registered email to continue'
+            : 'Enter your password to reach the console'}
+        </p>
       </div>
 
-      {/* Form Error Banner */}
+      {/* Error */}
       {formError && (
         <div
-          className="mb-4 p-3 bg-error-50/70 border border-error-100 text-error-700 rounded-2xl text-[13px] flex items-start gap-2.5"
+          className="mb-4 flex items-start gap-2.5 rounded-xl border border-error-100 bg-error-50 p-3 text-13 text-error-700"
           role="alert"
         >
-          <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          <svg
+            className="mt-0.5 h-5 w-5 shrink-0"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
           </svg>
           <span>{formError}</span>
         </div>
       )}
 
-      {/* Login Form */}
-      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-        <AuthInput
-          label="Email Address"
-          type="email"
-          value={email}
-          onChange={(v) => {
-            setEmail(v);
-            if (fieldErrors.email) setFieldErrors((p) => ({ ...p, email: '' }));
-          }}
-          error={fieldErrors.email}
-          autoComplete="email"
-          autoFocus
-        />
+      {step === 1 ? (
+        <form onSubmit={handleContinue} className="space-y-5" noValidate>
+          <AuthInput
+            label="Email Address"
+            type="email"
+            value={email}
+            onChange={(v) => {
+              setEmail(v);
+              clearFieldError('email');
+            }}
+            error={fieldErrors.email}
+            autoComplete="email"
+            autoFocus
+          />
 
-        <AuthInput
-          label="Password"
-          type="password"
-          value={password}
-          onChange={(v) => {
-            setPassword(v);
-            if (fieldErrors.password) setFieldErrors((p) => ({ ...p, password: '' }));
-          }}
-          error={fieldErrors.password}
-          autoComplete="current-password"
-        />
-
-        <LoadingButton
-          type="submit"
-          size="lg"
-          className="w-full h-12 rounded-full"
-          isLoading={isLoading}
-          loadingText="Signing In..."
+          <LoadingButton
+            type="submit"
+            size="lg"
+            className="h-12 w-full rounded-full"
+            isLoading={isLoading}
+            loadingText="Please wait..."
+          >
+            Continue
+          </LoadingButton>
+        </form>
+      ) : (
+        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+        {/* Email chip with Change action */}
+        <button
+          type="button"
+          onClick={() => goToStep(1)}
+          className="group flex items-center gap-2.5 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-left hover:border-neutral-300 hover:bg-white transition-colors focus:outline-none focus:ring-4 focus:ring-primary-500/15"
         >
-          Sign In
-        </LoadingButton>
-      </form>
+          <span className="w-7 h-7 rounded-lg bg-primary-50 text-primary-600 flex items-center justify-center shrink-0">
+            <span className="material-icons text-[15px]">mail</span>
+          </span>
+          <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-neutral-700">
+            {email}
+          </span>
+          <span className="text-[11px] font-semibold text-primary-600 group-hover:text-primary-700 flex items-center gap-1 shrink-0">
+            <span className="material-icons text-[14px]">edit</span>
+            Change
+          </span>
+        </button>
+
+          <AuthInput
+            label="Password"
+            type="password"
+            value={password}
+            onChange={(v) => {
+              setPassword(v);
+              clearFieldError('password');
+            }}
+            error={fieldErrors.password}
+            autoComplete="current-password"
+            autoFocus
+          />
+
+          <LoadingButton
+            type="submit"
+            size="lg"
+            className="h-12 w-full rounded-full"
+            isLoading={isLoading}
+            loadingText="Signing In..."
+          >
+            Sign In
+          </LoadingButton>
+        </form>
+      )}
 
       {/* Register Link */}
-      <div className="mt-5 text-center">
-        <p className="text-[13px] text-neutral-500">
-          Don't have an account?{' '}
+      <div className="mt-6 text-center">
+        <p className="text-13 text-neutral-500">
+          New to PrisonConnect?{' '}
           <Link
             to="/register"
-            className="font-medium text-primary-600 hover:text-primary-700 transition-colors"
+            className="font-medium text-primary-600 transition-colors hover:text-primary-700"
           >
-            Request access
+            Create Account
           </Link>
-        </p>
-      </div>
-
-      {/* Security Notice */}
-      <div className="mt-4 pt-4 border-t border-neutral-100">
-        <p className="text-[11px] text-neutral-400 text-center leading-relaxed">
-          Authorized personnel only · All activities are monitored
         </p>
       </div>
     </div>

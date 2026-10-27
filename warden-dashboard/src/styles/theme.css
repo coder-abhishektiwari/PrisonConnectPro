@@ -1,8 +1,151 @@
+/* ==========================================================================
+   PrisonConnect — GLOBAL THEME FILE (single source of truth)
+   --------------------------------------------------------------------------
+   Every color, radius, shadow, font and size token the app uses lives here.
+   tailwind.config.js maps utilities (bg-primary-600, rounded-xl, text-sm…)
+   onto these variables — edit the values below (or use the in-app
+   Theme Editor at /theme-editor, which writes overrides on top of these)
+   and the WHOLE app re-themes.
+   ========================================================================== */
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  /* --- Brand + status palettes (RGB triplets so Tailwind can add opacity) -- */
+  --primary-50: 238 242 255;
+  --primary-100: 224 231 255;
+  --primary-200: 199 210 254;
+  --primary-300: 165 180 252;
+  --primary-400: 129 140 248;
+  --primary-500: 99 102 241;
+  --primary-600: 79 70 229;
+  --primary-700: 67 56 202;
+  --primary-800: 55 48 163;
+  --primary-900: 49 46 129;
+  --success-50: 240 253 244;
+  --success-100: 220 252 231;
+  --success-200: 187 247 208;
+  --success-300: 134 239 172;
+  --success-400: 74 222 128;
+  --success-500: 34 197 94;
+  --success-600: 22 163 74;
+  --success-700: 21 128 61;
+  --success-800: 22 101 52;
+  --success-900: 20 83 45;
+  --success-DEFAULT: 22 163 74;
+  --error-50: 254 242 242;
+  --error-100: 254 226 226;
+  --error-200: 254 202 202;
+  --error-300: 252 165 165;
+  --error-400: 248 113 113;
+  --error-500: 239 68 68;
+  --error-600: 220 38 38;
+  --error-700: 185 28 28;
+  --error-800: 153 27 27;
+  --error-900: 127 29 29;
+  --error-DEFAULT: 220 38 38;
+  --warning-50: 255 251 235;
+  --warning-100: 254 243 199;
+  --warning-200: 253 230 138;
+  --warning-300: 252 211 77;
+  --warning-400: 251 191 36;
+  --warning-500: 245 158 11;
+  --warning-600: 217 119 6;
+  --warning-700: 180 83 9;
+  --warning-800: 146 64 14;
+  --warning-900: 120 53 15;
+  --warning-DEFAULT: 217 119 6;
+  --info-50: 240 249 255;
+  --info-100: 224 242 254;
+  --info-200: 186 230 253;
+  --info-300: 125 211 252;
+  --info-400: 56 189 248;
+  --info-500: 14 165 233;
+  --info-600: 2 132 199;
+  --info-700: 3 105 161;
+  --info-800: 7 89 133;
+  --info-900: 12 74 110;
+  --info-DEFAULT: 2 132 199;
+  --neutral-50: 249 250 251;
+  --neutral-100: 243 244 246;
+  --neutral-200: 229 231 235;
+  --neutral-300: 209 213 219;
+  --neutral-400: 156 163 175;
+  --neutral-500: 107 114 128;
+  --neutral-600: 75 85 99;
+  --neutral-700: 55 65 81;
+  --neutral-800: 31 41 55;
+  --neutral-900: 17 24 39;
+  /* --- Semantic surfaces / lines / text (hex -> triplet) ------------ */
+  --muted: 134 150 160;      /* #8696a0  secondary text          */
+  --line: 209 215 219;       /* #d1d7db  borders / dividers      */
+  --surface: 233 238 243;    /* #e9eef3  raised surfaces/tables  */
+  --canvas: 251 251 253;     /* #fbfbfd  page background         */
+  --ink: 6 6 9;              /* #060609  dark branding panel     */
+
+  /* --- Typography ---------------------------------------------------------- */
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --text-scale: 1; /* global type size multiplier (Theme Editor slider)      */
+
+  /* text-N tokens (Tailwind text-[Npx] -> text-N) */
+  --text-9: calc(9px * var(--text-scale, 1));
+  --text-10: calc(10px * var(--text-scale, 1));
+  --text-11: calc(11px * var(--text-scale, 1));
+  --text-12: calc(12px * var(--text-scale, 1));
+  --text-13: calc(13px * var(--text-scale, 1));
+  --text-14: calc(14px * var(--text-scale, 1));
+  --text-15: calc(15px * var(--text-scale, 1));
+  --text-16: calc(16px * var(--text-scale, 1));
+  --text-18: calc(18px * var(--text-scale, 1));
+  --text-26: calc(26px * var(--text-scale, 1));
+  --text-28: calc(28px * var(--text-scale, 1));
+  --text-32: calc(32px * var(--text-scale, 1));
+
+  /* standard scale (xs..9xl) — line-heights kept at Tailwind defaults */
+  --text-xs: calc(0.75rem * var(--text-scale, 1));
+  --text-sm: calc(0.875rem * var(--text-scale, 1));
+  --text-base: calc(1rem * var(--text-scale, 1));
+  --text-lg: calc(1.125rem * var(--text-scale, 1));
+  --text-xl: calc(1.25rem * var(--text-scale, 1));
+  --text-2xl: calc(1.5rem * var(--text-scale, 1));
+  --text-3xl: calc(1.875rem * var(--text-scale, 1));
+  --text-4xl: calc(2.25rem * var(--text-scale, 1));
+  --text-5xl: calc(3rem * var(--text-scale, 1));
+  --text-6xl: calc(3.75rem * var(--text-scale, 1));
+  --text-7xl: calc(4.5rem * var(--text-scale, 1));
+  --text-8xl: calc(6rem * var(--text-scale, 1));
+  --text-9xl: calc(8rem * var(--text-scale, 1));
+
+  /* --- Corner roundness (global multiplier, Theme Editor slider) ----------- */
+  --roundness: 1;
+  --radius-default: calc(0.25rem * var(--roundness, 1));
+  --radius-sm: calc(0.125rem * var(--roundness, 1));
+  --radius-md: calc(0.375rem * var(--roundness, 1));
+  --radius-lg: calc(0.5rem * var(--roundness, 1));
+  --radius-xl: calc(0.75rem * var(--roundness, 1));
+  --radius-2xl: calc(1rem * var(--roundness, 1));
+  --radius-3xl: calc(1.5rem * var(--roundness, 1));
+  --radius-card: calc(28px * var(--roundness, 1)); /* auth cards */
+  --radius-full: 9999px;
+
+  /* --- Shadows ------------------------------------------------------------- */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-default: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 24px 64px -24px rgba(0, 0, 0, 0.14);
+  --shadow-btn: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
 @layer base {
-  html { -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
-  body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.5; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+  body {
+    font-family: var(--font-sans);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 }

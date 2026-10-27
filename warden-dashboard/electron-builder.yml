@@ -16,6 +16,7 @@ npmRebuild: false
 # Windows 10/11 (Electron 45 does not support Windows 7/8 — ship the web URL
 # on those machines instead).
 win:
+  icon: build/icon.ico
   target:
     - target: nsis
       arch:
@@ -32,6 +33,7 @@ nsis:
 # AppImage runs on Ubuntu/Kali/any modern distro without install; deb covers
 # the Debian/Ubuntu family directly.
 linux:
+  icon: build/icon.png
   target:
     - AppImage
     - deb

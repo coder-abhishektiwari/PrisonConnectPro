@@ -145,6 +145,9 @@ router.post('/warden/login', authLimiter, asyncRoute(async (req, res) => {
 router.post('/register', authLimiter, asyncRoute(async (req, res) => {
   const { name, email, password } = req.body;
   const prisonName = String(req.body.prisonName || '').trim() || 'New Prison';
+  const state = String(req.body.state || '').trim() || null;
+  const district = String(req.body.district || '').trim() || null;
+  const address = String(req.body.address || '').trim() || null;
   if (!name || !email || !password) return sendError(res, 'INVALID_REQUEST', 'name, email and password are required', 400);
 
   const wardens = await readDb('wardens.json');
@@ -175,9 +178,9 @@ router.post('/register', authLimiter, asyncRoute(async (req, res) => {
   const newPrison = {
     prisonId,
     name: prisonName,
-    state: null,
-    district: null,
-    address: null,
+    state,
+    district,
+    address,
     status: 'active',
     currentInmateCount: 0,
     wardenIds: [wardenId],

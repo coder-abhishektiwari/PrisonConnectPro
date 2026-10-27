@@ -16,6 +16,9 @@ Desktop.ini
 node_modules/
 dist/
 build/
+# Desktop app icons are generated but small (~400KB) and REQUIRED in CI
+# for the installer/window icon - keep them tracked.
+!warden-dashboard/build/
 .cache/
 *.log
 npm-debug.log*
