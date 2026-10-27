@@ -1,35 +1,36 @@
+import { useState } from 'react';
 import type { LocationPoint } from '@/services/api/wardenApi';
+import { LocationMapModal } from './LocationMapModal';
 
-/** "Area, City, State" with empty parts dropped; falls back to raw coordinates. */
-export function locationLabel(location?: LocationPoint | null): string | null {
-  if (!location || typeof location.lat !== 'number' || typeof location.lng !== 'number') return null;
-  const place = [location.area, location.city, location.state].filter(Boolean).join(', ');
-  return place || `${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`;
-}
-
-export function mapsHref(location: LocationPoint): string {
-  return `https://www.google.com/maps?q=${location.lat},${location.lng}`;
-}
+export { locationLabel, mapsHref } from './LocationMapModal';
+import { locationLabel } from './LocationMapModal';
 
 /**
- * Icon + "Area, City, State" as one link; clicking opens the exact lat/lng in
- * Google Maps (no API key needed for a plain q= link).
+ * Icon + "Area, City, State" as one clickable row; clicking opens the map
+ * right inside the app (works in the desktop shell too, where external
+ * Google Maps tabs are blocked).
  */
 export function LocationLink({ location, className = '' }: { location?: LocationPoint | null; className?: string }) {
+  const [open, setOpen] = useState(false);
   const label = locationLabel(location);
   if (!location || !label) return <span className={`text-neutral-400 ${className}`}>Location not shared</span>;
 
   return (
-    <a
-      href={mapsHref(location)}
-      target="_blank"
-      rel="noopener noreferrer"
-      onClick={(e) => e.stopPropagation()}
-      title={`Open in Google Maps (${location.lat}, ${location.lng})`}
-      className={`inline-flex items-center gap-1 hover:underline ${className}`}
-    >
-      <span className="material-icons text-15 leading-none">location_on</span>
-      <span>{label}</span>
-    </a>
+    <>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen(true);
+        }}
+        title={`Show on map (${location.lat}, ${location.lng})`}
+        className={`inline-flex items-center gap-1 text-left hover:underline ${className}`}
+      >
+        <span className="material-icons text-15 leading-none">location_on</span>
+        <span>{label}</span>
+      </button>
+
+      {open && <LocationMapModal location={location} onClose={() => setOpen(false)} />}
+    </>
   );
 }

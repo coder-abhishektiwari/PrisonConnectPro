@@ -24,7 +24,7 @@ export function WelcomePage() {
           />
         </div>
 
-        <p className="mt-6 text-xs font-semibold uppercase tracking-[0.18em] text-primary-700">
+        <p className="mt-6 text-xs font-semibold uppercase tracking-[0.18em] ">
           Warden & Administration Portal
         </p>
 
@@ -33,8 +33,7 @@ export function WelcomePage() {
         </h1>
 
         <p className="mx-auto mt-4 max-w-md text-sm leading-6 text-neutral-600 sm:text-base sm:leading-7">
-          Your central workspace for secure call monitoring, kiosk
-          operations, inmate records and family account management.
+          Connect inmates with their families through secure kiosk-based phone calls, backed by real-time monitoring and centralized control.
         </p>
 
         {/* Actions */}

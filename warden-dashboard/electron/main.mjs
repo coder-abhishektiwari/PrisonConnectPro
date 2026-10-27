@@ -40,6 +40,9 @@ const ALLOWED_EXTERNAL_HOSTS = new Set([
   'prisonconnect-backend-q71g.onrender.com',
   'warden-dashboard.onrender.com',
   'calls.dsssolutions.in',
+  'www.google.com',
+  'maps.google.com',
+  'google.com',
 ]);
 
 protocol.registerSchemesAsPrivileged([
