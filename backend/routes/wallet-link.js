@@ -20,7 +20,7 @@ const rateLimit = require('express-rate-limit');
 const { sendSuccess, sendError, asyncRoute } = require('../lib/response');
 const { readDb } = require('../lib/db');
 const { findActiveLink } = require('../lib/wallet-links');
-const { getPaymentByOrder, createPaymentRow, committedPaiseByContact, creditFromRazorpay } = require('../lib/wallet-credit');
+const { getPaymentByOrder, committedPaiseByContact, reservePaymentSlot, creditFromRazorpay } = require('../lib/wallet-credit');
 const { createOrder, verifyPaymentSignature, configured, keyId, RazorpayError } = require('../lib/razorpay');
 const { getStatement } = require('../lib/jail-account');
 const { personName } = require('../lib/names');
@@ -184,8 +184,11 @@ router.post('/wallet-link/:token/order', tokenLimiter, orderLimiter, familyOrigi
   }
 
   const amountPaise = amountRupees * 100;
+  const capPaise = DAILY_CAP_RUPEES * 100;
+  // Quick non-atomic pre-check: fast-fails the common case WITHOUT creating a
+  // gateway order. The authoritative enforcement is the atomic reserve below.
   const alreadyCommitted = await committedPaiseByContact(contact.contactId);
-  if (alreadyCommitted + amountPaise > DAILY_CAP_RUPEES * 100) {
+  if (alreadyCommitted + amountPaise > capPaise) {
     return sendError(res, 'DAILY_LIMIT', `Daily deposit limit is ₹${DAILY_CAP_RUPEES}. Please try again tomorrow.`, 400);
   }
 
@@ -207,15 +210,25 @@ router.post('/wallet-link/:token/order', tokenLimiter, orderLimiter, familyOrigi
     throw err;
   }
 
-  const attempt = await createPaymentRow({
+  // Atomic cap check + row insert inside the wallet-payments mutex. Closes
+  // the TOCTOU race where two concurrent order requests both read
+  // committed=0 and both pass the pre-check above. If the cap is hit here
+  // the orphan gateway order is harmless — no payment was made against it.
+  const reservation = await reservePaymentSlot({
     paymentId,
     orderId: order.id,
     linkId: link.linkId,
     contactId: contact.contactId,
     inmateId: link.inmateId,
     amountPaise,
+    dailyCapPaise: capPaise,
   });
-  if (!attempt) return sendError(res, 'ORDER_EXISTS', 'A payment attempt for this order already exists', 409);
+  if (!reservation.ok) {
+    if (reservation.reason === 'daily_limit') {
+      return sendError(res, 'DAILY_LIMIT', `Daily deposit limit is ₹${DAILY_CAP_RUPEES}. Please try again tomorrow.`, 400);
+    }
+    return sendError(res, 'ORDER_EXISTS', 'A payment attempt for this order already exists', 409);
+  }
 
   // Audit: money event. ids + amount + source IP; token deliberately absent.
   console.log(`[wallet-link] order-created orderId=${order.id} contact=${contact.contactId} inmate=${link.inmateId} paise=${amountPaise} ip=${req.ip}`);

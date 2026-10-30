@@ -149,10 +149,16 @@ router.post('/secure-call/verify-otp/:linkToken', asyncRoute(async (req, res) =>
     return sendError(res, 'INVALID_OTP', 'Incorrect one-time password', 401);
   }
 
-  const sessionToken = signAccessToken({
-    sub: call.contactId, role: 'family',
-    callId: call.callId, roomId: call.roomId, kioskId: call.kioskId
-  });
+  // TTL covers the 5-min call itself plus the post-call recharge window: the
+  // family portal uses this same token to top up the inmate's wallet from the
+  // call-ended screen (routes/call-wallet.js). Default 20m, env-overridable.
+  const sessionToken = signAccessToken(
+    {
+      sub: call.contactId, role: 'family',
+      callId: call.callId, roomId: call.roomId, kioskId: call.kioskId
+    },
+    process.env.FAMILY_CALL_TOKEN_TTL || '20m'
+  );
 
   await updateDb('calls.json', (all) => {
     const idx = all.findIndex((c) => c.linkToken === linkToken);

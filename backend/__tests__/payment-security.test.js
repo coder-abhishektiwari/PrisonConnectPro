@@ -548,6 +548,241 @@ describe('call creation balance gate', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Call-session wallet (routes/call-wallet.js): JWT-authenticated post-call
+// recharge. The token is the OTP-verified call session, not an SMS link.
+// ---------------------------------------------------------------------------
+describe('call-wallet: JWT auth and session binding', () => {
+  const { signAccessToken } = require('../lib/auth');
+  const CW_ORDER = 'order_callwallet0001';
+  const CW_PAY = 'pay_callwallet0001';
+
+  const CONTACT = 'CNT-CW';
+  const INMATE = 'INM-CW';
+  const CALL_ID = 'CALL-CW-1';
+  const KIOSK = 'KIOSK-CW';
+
+  const callJwt = (over = {}, secret = process.env.JWT_SECRET) =>
+    require('jsonwebtoken').sign(
+      { sub: CONTACT, role: 'family', callId: CALL_ID, roomId: 'RM-CW', kioskId: KIOSK, ...over },
+      secret,
+      { expiresIn: '5m' },
+    );
+
+  beforeEach(() => {
+    store['inmates.json'] = [{ inmateId: INMATE, firstName: 'Call', lastName: 'Wallet', status: 'active' }];
+    store['contacts.json'] = [{ contactId: CONTACT, inmateId: INMATE, firstName: 'Fam', lastName: 'CW', phone: '+912222222222', approvalStatus: 'approved', status: 'active', active: true }];
+    store['calls.json'] = [{
+      callId: CALL_ID, contactId: CONTACT, inmateId: INMATE, kioskId: KIOSK,
+      roomId: 'RM-CW', status: 'completed', type: 'audio',
+    }];
+    store['wallets.json'] = [];
+    store['transactions.json'] = [];
+    store['wallet-payments.json'] = [];
+  });
+
+  const info = (token) =>
+    request(app).get('/family/call-wallet/info').set(ip()).set('Authorization', `Bearer ${token}`);
+  const order = (token, body = { amount: 100 }, headers = {}) =>
+    request(app).post('/family/call-wallet/order').set(ip()).set(headers).set('Authorization', `Bearer ${token}`).set('Content-Type', 'application/json').send(body);
+  const verify = (token, body, headers = {}) =>
+    request(app).post('/family/call-wallet/verify').set(ip()).set(headers).set('Authorization', `Bearer ${token}`).set('Content-Type', 'application/json').send(body);
+
+  test('CW1 missing Authorization header -> 401', async () => {
+    const res = await request(app).get('/family/call-wallet/info').set(ip());
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('UNAUTHORIZED');
+  });
+
+  test('CW2 garbage token -> 401', async () => {
+    const res = await info('not.a.jwt');
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('UNAUTHORIZED');
+  });
+
+  test('CW3 token signed with wrong secret -> 401', async () => {
+    const res = await info(callJwt({}, 'wrong-secret'));
+    expect(res.status).toBe(401);
+  });
+
+  test('CW4 missing callId claim -> 401', async () => {
+    const token = signAccessToken({ sub: CONTACT, role: 'family', callId: null, roomId: 'RM-CW', kioskId: KIOSK }, '5m');
+    const res = await info(token);
+    expect(res.status).toBe(401);
+  });
+
+  test('CW5 wrong role claim -> 401', async () => {
+    const token = signAccessToken({ sub: CONTACT, role: 'kiosk', callId: CALL_ID, roomId: 'RM-CW', kioskId: KIOSK }, '5m');
+    const res = await info(token);
+    expect(res.status).toBe(401);
+  });
+
+  test('CW6 valid JWT -> info returns inmate name, balance, limits', async () => {
+    // getStatement derives balance from the LEDGER (recharges minus charges),
+    // not the wallet.balance cache — seed a settled recharge transaction.
+    store['wallets.json'] = [{ walletId: 'W-CW', inmateId: INMATE, balance: 5000, currency: 'INR' }];
+    store['transactions.json'] = [{
+      transactionId: 'TXN-CW-SEED', walletId: 'W-CW', inmateId: INMATE,
+      type: 'recharge', amount: 5000, status: 'completed', timestamp: new Date().toISOString(),
+    }];
+    const res = await info(callJwt());
+    expect(res.status).toBe(200);
+    expect(res.body.data.inmateName).toBeTruthy();
+    expect(res.body.data.balance).toBe(5000);
+    expect(res.body.data.limits).toEqual({ minRupees: 10, maxRupees: 2000 });
+    expect(res.headers['cache-control']).toBe('no-store');
+  });
+
+  test('CW7 cross-contact: JWT for contact A, call belongs to contact B -> 404', async () => {
+    store['calls.json'][0].contactId = 'CNT-OTHER';
+    const res = await info(callJwt());
+    expect(res.status).toBe(404);
+  });
+
+  test('CW8 disabled contact -> 403', async () => {
+    store['contacts.json'][0].status = 'blocked';
+    const res = await info(callJwt());
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('CONTACT_DISABLED');
+  });
+
+  test('CW9 expired token -> 401', async () => {
+    const token = require('jsonwebtoken').sign(
+      { sub: CONTACT, role: 'family', callId: CALL_ID, roomId: 'RM-CW', kioskId: KIOSK },
+      process.env.JWT_SECRET,
+      { expiresIn: '-1s' },
+    );
+    const res = await info(token);
+    expect(res.status).toBe(401);
+  });
+
+  test('CW10 order: valid amount -> 200, orderId returned, attempt has linkId null', async () => {
+    const res = await order(callJwt());
+    expect(res.status).toBe(200);
+    expect(res.body.data.orderId).toBeTruthy();
+    expect(res.body.data.amountPaise).toBe(10000);
+    expect(razorpay.createOrder).toHaveBeenCalled();
+    const attempt = store['wallet-payments.json'].find((p) => p.orderId === res.body.data.orderId);
+    expect(attempt.linkId).toBeNull();
+    expect(attempt.contactId).toBe(CONTACT);
+    expect(attempt.inmateId).toBe(INMATE);
+  });
+
+  test.each([[0], [-1], [100.5], [null], [5000], [99999999]])
+    ('CW11 order amount %p -> 400 INVALID_AMOUNT', async (amount) => {
+      const res = await order(callJwt(), { amount });
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('INVALID_AMOUNT');
+      expect(razorpay.createOrder).not.toHaveBeenCalled();
+    });
+
+  test('CW12 order: foreign Origin -> 403', async () => {
+    const res = await order(callJwt(), { amount: 100 }, { Origin: 'https://evil.example' });
+    expect(res.status).toBe(403);
+  });
+
+  test('CW13 order: daily cap shared with wallet-link -> 400', async () => {
+    // Commit 491000 paise via an existing attempt for the same contact.
+    // 491000 + 10000 = 501000 > 500000 (5000 Rs cap).
+    store['wallet-payments.json'] = [{
+      paymentId: 'PAY-CW-CAP', orderId: 'order_existing_cap', linkId: null,
+      contactId: CONTACT, inmateId: INMATE, amountPaise: 491000, status: 'created',
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    }];
+    const res = await order(callJwt(), { amount: 100 }); // 10000 paise -> 501000 > 500000 cap
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('DAILY_LIMIT');
+  });
+
+  test('CW14 verify: valid signature credits net exactly once', async () => {
+    // Seed an attempt created via the call-wallet order path.
+    store['wallet-payments.json'] = [{
+      paymentId: 'PAY-CW-V', orderId: CW_ORDER, linkId: null,
+      contactId: CONTACT, inmateId: INMATE, amountPaise: GROSS, status: 'created',
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    }];
+    razorpay.fetchPayment.mockResolvedValue(capturedEntity({ id: CW_PAY, order_id: CW_ORDER }));
+    const res = await verify(callJwt(), {
+      razorpayOrderId: CW_ORDER, razorpayPaymentId: CW_PAY,
+      razorpaySignature: paySign(CW_ORDER, CW_PAY),
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.data.creditedPaise).toBe(NET);
+    expect(store['wallets.json'][0].balance).toBe(NET);
+    expect(store['wallet-payments.json'][0].linkId).toBeNull(); // stays null, no SMS link
+  });
+
+  test('CW15 verify: replay does not double-credit', async () => {
+    store['wallet-payments.json'] = [{
+      paymentId: 'PAY-CW-R', orderId: CW_ORDER, linkId: null,
+      contactId: CONTACT, inmateId: INMATE, amountPaise: GROSS, status: 'created',
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    }];
+    razorpay.fetchPayment.mockResolvedValue(capturedEntity({ id: CW_PAY, order_id: CW_ORDER }));
+    const body = { razorpayOrderId: CW_ORDER, razorpayPaymentId: CW_PAY, razorpaySignature: paySign(CW_ORDER, CW_PAY) };
+    await verify(callJwt(), body);
+    await verify(callJwt(), body);
+    expect(store['transactions.json']).toHaveLength(1);
+  });
+
+  test('CW16 verify: cross-contact attempt -> 404', async () => {
+    store['wallet-payments.json'] = [{
+      paymentId: 'PAY-CW-X', orderId: CW_ORDER, linkId: null,
+      contactId: 'CNT-OTHER', inmateId: INMATE, amountPaise: GROSS, status: 'created',
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    }];
+    razorpay.fetchPayment.mockResolvedValue(capturedEntity({ id: CW_PAY, order_id: CW_ORDER }));
+    const res = await verify(callJwt(), {
+      razorpayOrderId: CW_ORDER, razorpayPaymentId: CW_PAY,
+      razorpaySignature: paySign(CW_ORDER, CW_PAY),
+    });
+    expect(res.status).toBe(404);
+    expect(store['transactions.json']).toHaveLength(0);
+  });
+
+  test('CW17 verify: invalid signature -> 400, no credit', async () => {
+    store['wallet-payments.json'] = [{
+      paymentId: 'PAY-CW-S', orderId: CW_ORDER, linkId: null,
+      contactId: CONTACT, inmateId: INMATE, amountPaise: GROSS, status: 'created',
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    }];
+    razorpay.fetchPayment.mockResolvedValue(capturedEntity({ id: CW_PAY, order_id: CW_ORDER }));
+    const res = await verify(callJwt(), {
+      razorpayOrderId: CW_ORDER, razorpayPaymentId: CW_PAY,
+      razorpaySignature: 'f'.repeat(64),
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('SIGNATURE_INVALID');
+    expect(store['transactions.json']).toHaveLength(0);
+  });
+
+  test('CW18 verify: missing fields -> 400', async () => {
+    const res = await verify(callJwt(), { razorpayOrderId: CW_ORDER });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('BAD_REQUEST');
+  });
+
+  test('CW19 no secrets leak in any response body', async () => {
+    store['wallet-payments.json'] = [{
+      paymentId: 'PAY-CW-L', orderId: CW_ORDER, linkId: null,
+      contactId: CONTACT, inmateId: INMATE, amountPaise: GROSS, status: 'created',
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    }];
+    razorpay.fetchPayment.mockResolvedValue(capturedEntity({ id: CW_PAY, order_id: CW_ORDER }));
+    const dump = JSON.stringify([
+      (await info(callJwt())).body,
+      (await order(callJwt())).body,
+      (await verify(callJwt(), {
+        razorpayOrderId: CW_ORDER, razorpayPaymentId: CW_PAY,
+        razorpaySignature: paySign(CW_ORDER, CW_PAY),
+      })).body,
+    ]);
+    expect(dump).not.toContain(KEY_SECRET);
+    expect(dump).not.toContain(WH_SECRET);
+    expect(dump).not.toContain(process.env.JWT_SECRET);
+  });
+});
+
 describe('rate limits (default IP; runs last)', () => {
   test('verify: 11th request same IP in a minute -> 429', async () => {
     razorpay.fetchPayment.mockResolvedValue(capturedEntity({ status: 'created' }));

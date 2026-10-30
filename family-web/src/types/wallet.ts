@@ -21,3 +21,6 @@ export interface WalletVerifyResult {
   creditedPaise: number;
   balance: number;
 }
+
+/** Call-session wallet payloads (JWT-authenticated post-call recharge). */
+export type CallWalletInfo = WalletLinkInfo;

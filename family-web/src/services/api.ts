@@ -2,7 +2,7 @@ import axios from 'axios';
 import { env } from '@/config/env';
 import type { ApiResponse, ApiError } from '@/types/api';
 import type { CallSession, CallTimerStatus, DeviceInfo, DeviceVerificationResult, FamilyLocation, SendOtpResult, OtpVerificationResult } from '@/types/call';
-import type { WalletLinkInfo, WalletOrder, WalletVerifyResult } from '@/types/wallet';
+import type { WalletLinkInfo, WalletOrder, WalletVerifyResult, CallWalletInfo } from '@/types/wallet';
 
 export const api = axios.create({
   baseURL: env.apiGatewayUrl,
@@ -55,4 +55,32 @@ export const walletApi = {
 
   verify: (token: string, payload: { razorpayOrderId: string; razorpayPaymentId: string; razorpaySignature: string }) =>
     api.post<ApiResponse<WalletVerifyResult>>(`/family/wallet-link/${encodeURIComponent(token)}/verify`, payload).then((r) => r.data.data),
+};
+
+/**
+ * Call-session wallet: same money path as walletApi but authenticated by the
+ * OTP-verified call JWT (Bearer header) instead of a URL token. Used by the
+ * post-call recharge popup so the family can top up without the SMS link.
+ */
+export const callWalletApi = {
+  getInfo: (sessionToken: string) =>
+    api
+      .get<ApiResponse<CallWalletInfo>>('/family/call-wallet/info', {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+      })
+      .then((r) => r.data.data),
+
+  createOrder: (sessionToken: string, amount: number) =>
+    api
+      .post<ApiResponse<WalletOrder>>('/family/call-wallet/order', { amount }, {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+      })
+      .then((r) => r.data.data),
+
+  verify: (sessionToken: string, payload: { razorpayOrderId: string; razorpayPaymentId: string; razorpaySignature: string }) =>
+    api
+      .post<ApiResponse<WalletVerifyResult>>('/family/call-wallet/verify', payload, {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+      })
+      .then((r) => r.data.data),
 };

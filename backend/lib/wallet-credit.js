@@ -93,9 +93,13 @@ async function createPaymentRow(fields, deps = {}) {
 async function committedPaiseByContact(contactId, deps = {}) {
   const read = deps.readDb || realRead;
   const rows = await read('wallet-payments.json');
-  const now = Date.now();
-  const creditedSince = now - 24 * 60 * 60 * 1000;
-  const inFlightSince = now - IN_FLIGHT_WINDOW_MS;
+  return committedFromRows(rows, contactId, Date.now());
+}
+
+/** Pure sum over pre-loaded rows (shared by the atomic reserve path). */
+function committedFromRows(rows, contactId, nowMs) {
+  const creditedSince = nowMs - 24 * 60 * 60 * 1000;
+  const inFlightSince = nowMs - IN_FLIGHT_WINDOW_MS;
   return rows
     .filter((r) => {
       if (r.contactId !== contactId) return false;
@@ -105,6 +109,53 @@ async function committedPaiseByContact(contactId, deps = {}) {
       return false;
     })
     .reduce((sum, r) => sum + (Number(r.amountPaise) || 0), 0);
+}
+
+/**
+ * Atomically check the daily cap AND insert the payment attempt row inside a
+ * single updateDb mutex. This closes the TOCTOU race where two concurrent
+ * order requests both read committed=0 and both pass a separate cap check.
+ *
+ * Must be called AFTER the Razorpay order has been created (orderId is known);
+ * if the cap is rejected here the orphan gateway order is harmless — no
+ * payment was ever made against it and the sweeper expires it.
+ *
+ * Returns { ok: true, attempt } or { ok: false, reason: 'daily_limit' | 'duplicate_order' }.
+ */
+async function reservePaymentSlot({ paymentId, orderId, linkId, contactId, inmateId, amountPaise, dailyCapPaise }, deps = {}) {
+  const update = deps.updateDb || realUpdate;
+  const now = new Date().toISOString();
+  const out = await update('wallet-payments.json', (all) => {
+    const committed = committedFromRows(all, contactId, Date.now());
+    if (committed + (Number(amountPaise) || 0) > dailyCapPaise) {
+      return { data: all, result: { ok: false, reason: 'daily_limit' } };
+    }
+    if (orderId && all.some((r) => r.orderId && r.orderId === orderId)) {
+      return { data: all, result: { ok: false, reason: 'duplicate_order' } };
+    }
+    const record = {
+      paymentId,
+      orderId: orderId || null,
+      linkId,
+      contactId,
+      inmateId,
+      amountPaise,
+      currency: 'INR',
+      status: 'created',
+      razorpayPaymentId: null,
+      transactionId: null,
+      walletId: null,
+      netCreditedPaise: null,
+      feePaise: null,
+      taxPaise: null,
+      failureReason: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    all.push(record);
+    return { data: all, result: { ok: true, attempt: record } };
+  });
+  return mutatorResult(out) || { ok: false, reason: 'update_failed' };
 }
 
 /** Flip an attempt to failed (payment.failed webhook). Never touches money. */
@@ -322,6 +373,7 @@ module.exports = {
   getPaymentByOrder,
   createPaymentRow,
   committedPaiseByContact,
+  reservePaymentSlot,
   markPaymentFailed,
   markPaymentExpired,
   creditFromRazorpay,

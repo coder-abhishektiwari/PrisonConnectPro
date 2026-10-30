@@ -138,6 +138,7 @@ async function signaling(method, path, body) {
 
 const settingsRouter = createSettingsRouter(broadcastEvent);
 const walletsRouter = require('./routes/wallets');
+const callWalletRouter = require('./routes/call-wallet');
 
 // ==================== MOUNT ROUTES ====================
 app.use('/auth', authRouter);
@@ -146,6 +147,7 @@ app.use('/auth', authRoutesRouter);
 app.use('/calls', createCallsRouter(broadcastEvent, signaling));
 app.use('/family', familyRouter);
 app.use('/family', walletLinkRouter);
+app.use('/family', callWalletRouter);
 app.use('/inmates', inmatesRouter);
 app.use('/contacts', createContactsRouter());
 app.use('/schedule', scheduleRouter);

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, Navigate } from 'react-router-dom';
 import { ErrorState } from '@/components/States';
+import { CallWalletPopup } from '@/components/CallWalletPopup';
 import { useSession } from '@/context/SessionContext';
 import { useToast } from '@/components/Toast';
 import { socketService } from '@/services/socket';
@@ -19,15 +20,6 @@ type CallStatus =
 
 const RECONNECT_MAX_ATTEMPTS = 6;
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-/** Leave this world entirely — the link is dead once the kiosk hangs up. */
-function goToBlank() {
-  try {
-    window.location.replace('about:blank');
-  } catch (_) {
-    /* ignore */
-  }
-}
 
 async function waitForSocket(timeoutMs: number): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
@@ -60,6 +52,18 @@ export function CallPage() {
   // Set when the call is cut by the duration cap (either side), so the user
   // sees WHY instead of being dumped on a blank page / the home route.
   const [timeLimitNotice, setTimeLimitNotice] = useState<number | null>(null);
+  // Set when the call is over for any non-timeout reason (kiosk hung up,
+  // family hung up, reconnect exhausted). Drives the end screen with the
+  // post-call wallet recharge option instead of a blank page.
+  const [callEnded, setCallEnded] = useState(false);
+  const [showWalletPopup, setShowWalletPopup] = useState(false);
+  // Captured once at OTP verification so endCall()'s clear() can never wipe
+  // the token the recharge popup needs. Null when OTP was never completed.
+  const sessionTokenRef = useRef<string | null>(otpResult?.sessionToken ?? null);
+  // Keep the ref in sync if otpResult arrives/changes after first render.
+  useEffect(() => {
+    if (otpResult?.sessionToken) sessionTokenRef.current = otpResult.sessionToken;
+  }, [otpResult]);
   // Live inbound quality — drives the header pill and the poor-network banner.
   const [connectionQuality, setConnectionQuality] =
     useState<QualitySnapshot['quality']>('unknown');
@@ -264,8 +268,8 @@ export function CallPage() {
           console.warn('[Call] Reconnect attempt failed:', err);
         }
       }
-      // Exhausted every attempt without reaching the kiosk — blank out.
-      goToBlank();
+      // Exhausted every attempt without reaching the kiosk — call is over.
+      setCallEnded(true);
     })();
   }, [session, otpResult]);
 
@@ -304,7 +308,7 @@ export function CallPage() {
         socketService.disconnect();
         joinStartedRef.current = false;
         if (dueToTimeLimit) clear();
-        else goToBlank();
+        else setCallEnded(true);
       }, 1500);
     };
 
@@ -619,6 +623,8 @@ export function CallPage() {
       joinStartedRef.current = false;
       clear();
       setStatus('ended');
+      // Show the end screen (with post-call recharge) instead of blanking.
+      setCallEnded(true);
     } catch (error) {
       console.error('[Call] Error while ending call:', error);
     }
@@ -653,13 +659,27 @@ export function CallPage() {
             This call has ended because it reached the maximum duration of{' '}
             {timeLimitNotice} minutes.
           </p>
+          {sessionTokenRef.current && (
+            <button
+              onClick={() => setShowWalletPopup(true)}
+              className="mt-6 px-5 py-2.5 bg-success text-white rounded-lg text-sm font-medium hover:opacity-90 transition"
+            >
+              Add money to wallet
+            </button>
+          )}
           <button
             onClick={() => window.location.replace('/')}
-            className="mt-6 px-5 py-2.5 bg-white text-neutral-900 rounded-lg text-sm font-medium hover:bg-neutral-100 transition"
+            className="mt-3 px-5 py-2.5 bg-white text-neutral-900 rounded-lg text-sm font-medium hover:bg-neutral-100 transition"
           >
             Done
           </button>
         </div>
+        {sessionTokenRef.current && showWalletPopup && (
+          <CallWalletPopup
+            sessionToken={sessionTokenRef.current}
+            onClose={() => setShowWalletPopup(false)}
+          />
+        )}
       </div>
     );
   }
@@ -701,10 +721,32 @@ export function CallPage() {
           ? 'bg-neutral-700 text-neutral-300'
           : 'bg-emerald-600 text-white';
 
-  if (status === 'ended') {
+  if (status === 'ended' || callEnded) {
     return (
       <div className="min-h-screen bg-neutral-900 flex items-center justify-center p-4">
-        <p className="text-lg font-semibold text-white">Call ended</p>
+        <div className="max-w-md w-full text-center">
+          <p className="text-lg font-semibold text-white">Call ended</p>
+          {sessionTokenRef.current && (
+            <button
+              onClick={() => setShowWalletPopup(true)}
+              className="mt-6 px-5 py-2.5 bg-success text-white rounded-lg text-sm font-medium hover:opacity-90 transition"
+            >
+              Add money to wallet
+            </button>
+          )}
+          <button
+            onClick={() => window.location.replace('/')}
+            className="mt-3 px-5 py-2.5 bg-white text-neutral-900 rounded-lg text-sm font-medium hover:bg-neutral-100 transition"
+          >
+            Done
+          </button>
+        </div>
+        {sessionTokenRef.current && showWalletPopup && (
+          <CallWalletPopup
+            sessionToken={sessionTokenRef.current}
+            onClose={() => setShowWalletPopup(false)}
+          />
+        )}
       </div>
     );
   }
@@ -851,11 +893,11 @@ export function CallPage() {
             )}
           </button>
 
-          {/* End Call (dead center) */}
+          {/* End Call (dead center) — endCall() flips to the end screen with
+              the post-call recharge option (no more blank redirect). */}
           <button
             onClick={() => {
-              endCall();
-              goToBlank();
+              void endCall();
             }}
             className="w-16 h-16 rounded-full bg-red-600 text-white flex items-center justify-center hover:bg-red-700 active:scale-95 transition-all shadow-lg"
             title="End call"

@@ -144,7 +144,7 @@ async function finalizeCall(call, requestedEndTimeMs, broadcastEvent, endReason,
     }
 
     const startMs = new Date(current.startTime).getTime();
-    const maxMs = (Number(current.maxDurationMinutes) || 15) * 60000;
+    const maxMs = (Number(current.maxDurationMinutes) || 5) * 60000;
 
     // Billing starts from media connection, NOT from call creation.
     // If media never connected (family left in lobby), charge is 0.
@@ -202,6 +202,11 @@ async function finalizeCall(call, requestedEndTimeMs, broadcastEvent, endReason,
     calls[idx] = {
       ...current,
       status: finalStatus,
+      // Terminal state — kill the SMS link permanently. Nullifying the token
+      // means the family URL /c?L-XXXXX can never resolve again, even if a
+      // future bug forgot to check status. The historical token survives in
+      // current.sms.linkToken for audit.
+      linkToken: null,
       endTime: new Date(endMs).toISOString(),
       durationMinutes: billedMinutes,
       chargeAmount,
@@ -584,7 +589,7 @@ function createCallsRouter(broadcastEvent, signaling) {
       // elapsed can only be an orphan (kiosk killed mid-call, /end never ran).
       // Finalize it — billed up to the cap, wallet charged — then proceed, so
       // one dead record can never block every future call.
-      const maxMs = (Number(alreadyActive.maxDurationMinutes) || 15) * 60000;
+      const maxMs = (Number(alreadyActive.maxDurationMinutes) || 5) * 60000;
       const graceMs = 2 * 60000;
       const startMs = new Date(alreadyActive.startTime || Date.now()).getTime();
       if (Date.now() - startMs > maxMs + graceMs) {
@@ -635,7 +640,7 @@ function createCallsRouter(broadcastEvent, signaling) {
       inmateName: callData.inmateName || callInmateName(null, inmate) || 'An inmate',
       familyMemberName: callData.familyMemberName || callContactName(null, contact),
       roomIdLabel: callData.roomIdLabel || '',
-      maxDurationMinutes: settings.callSettings?.maxCallDurationMinutes ?? 15,
+      maxDurationMinutes: settings.callSettings?.maxCallDurationMinutes ?? 5,
       ratePerMinute,
       scheduledAt: callData.scheduledAt || callData.startTime || new Date().toISOString(),
       linkToken,
@@ -671,7 +676,7 @@ function createCallsRouter(broadcastEvent, signaling) {
     // just expires.)
     await updateDb('rooms.json', (rooms) => {
       if (rooms.some((r) => r.roomId === newCall.roomId)) return { data: rooms, result: null };
-      const minutes = Number(newCall.maxDurationMinutes) || 15;
+      const minutes = Number(newCall.maxDurationMinutes) || 5;
       return {
         data: [...rooms, {
           roomId: newCall.roomId,
@@ -890,7 +895,7 @@ async function sweepStaleCalls(broadcastEvent) {
 
     for (const call of calls) {
       if (call.status !== 'active') continue;
-      const maxMs = (Number(call.maxDurationMinutes) || 15) * 60000;
+      const maxMs = (Number(call.maxDurationMinutes) || 5) * 60000;
       const graceMs = 2 * 60000;
       const startMs = new Date(call.startTime || Date.now()).getTime();
       if (now - startMs > maxMs + graceMs) {
