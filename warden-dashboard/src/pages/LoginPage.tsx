@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { AuthInput } from '@/components/auth/AuthInput';
@@ -38,6 +38,20 @@ export function LoginPage() {
   const { login, isLoading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  // One-shot flash messages carried in via router state (password reset).
+  const [flash, setFlash] = useState<string | null>(
+    (location.state as { resetSuccess?: boolean })?.resetSuccess
+      ? 'Password reset successfully. Sign in with your new password.'
+      : null
+  );
+
+  // Drop the router state once read, so a refresh doesn't replay the flash.
+  useEffect(() => {
+    if (location.state) {
+      navigate(location.pathname, { replace: true, state: null });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname ?? '/dashboard';
 
@@ -94,7 +108,7 @@ export function LoginPage() {
             type="button"
             onClick={() => goToStep(1)}
             aria-label="Back"
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-neutral-200 text-neutral-500 transition-colors hover:text-neutral-900 hover-border-neutral-500"
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-neutral-200 text-neutral-500 transition-colors hover:text-neutral-900 hover:border-neutral-500"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-8-8 8-8" />
@@ -135,6 +149,19 @@ export function LoginPage() {
             : 'Enter your password to reach the console'}
         </p>
       </div>
+
+      {/* Password reset success */}
+      {flash && (
+        <div
+          className="mb-4 flex items-start gap-2.5 rounded-xl border border-success-100 bg-success-50 p-3 text-13 text-success-700"
+          role="status"
+        >
+          <span className="material-icons mt-px text-[18px]" aria-hidden="true">
+            check_circle
+          </span>
+          <span>{flash}</span>
+        </div>
+      )}
 
       {/* Error */}
       {formError && (
@@ -217,6 +244,16 @@ export function LoginPage() {
             autoComplete="current-password"
             autoFocus
           />
+
+          <div className="-mt-1 text-right">
+            <Link
+              to="/forgot-password"
+              state={{ email }}
+              className="text-13 font-medium text-primary-600 transition-colors hover:text-primary-700"
+            >
+              Forgot password?
+            </Link>
+          </div>
 
           <LoadingButton
             type="submit"

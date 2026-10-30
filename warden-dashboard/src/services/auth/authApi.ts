@@ -88,6 +88,32 @@ export const authApi = {
     );
     return response.data.data;
   },
+
+  /**
+   * Request a 6-digit password-reset code by email (warden accounts).
+   */
+  forgotPassword: async (email: string): Promise<{ message: string }> => {
+    const response = await apiClient.post<ApiEnvelope<{ message: string }>>(
+      '/auth/forgot-password',
+      { email }
+    );
+    return response.data.data;
+  },
+
+  /**
+   * Exchange the emailed 6-digit code for a new password.
+   */
+  resetPassword: async (
+    email: string,
+    code: string,
+    newPassword: string
+  ): Promise<{ message: string }> => {
+    const response = await apiClient.post<ApiEnvelope<{ message: string }>>(
+      '/auth/reset-password',
+      { email, code, newPassword }
+    );
+    return response.data.data;
+  },
 };
 
 /**

@@ -1,11 +1,13 @@
 const express = require('express');
+const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
 const { readDb, updateDb } = require('../lib/db');
 const { signAccessToken, verifyToken, hashSecret, verifySecret } = require('../lib/auth');
-const { createSession } = require('../lib/sessions');
+const { createSession, revokeAllForUser } = require('../lib/sessions');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { sendSuccess, sendError, asyncRoute } = require('../lib/response');
 const { inAdminScope } = require('../lib/scoping');
+const { sendMail } = require('../lib/mailer');
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -208,6 +210,113 @@ router.post('/register', authLimiter, asyncRoute(async (req, res) => {
       prisonId: newWarden.prisonId,
     }
   }, 201);
+}));
+
+// ==================== PASSWORD RESET (warden accounts, 6-digit email code) ====================
+// The warden dashboard's recovery flow: request a code by email, then
+// exchange code + new password here. The code lives hashed on the warden
+// document (10-minute TTL, 5 wrong attempts burn it, 30s resend cooldown).
+// Only wardens are supported — this is the dashboard's reset flow.
+
+const RESET_CODE_TTL_MS = 10 * 60 * 1000;
+const RESET_MAX_ATTEMPTS = 5;
+const RESET_RESEND_COOLDOWN_MS = 30 * 1000;
+
+router.post('/forgot-password', authLimiter, asyncRoute(async (req, res) => {
+  const email = String(req.body.email || '').trim().toLowerCase();
+  if (!email) return sendError(res, 'INVALID_REQUEST', 'email is required', 400);
+
+  const wardens = await readDb('wardens.json');
+  const warden = wardens.find((w) => String(w.email || '').toLowerCase() === email);
+
+  // One response either way — never reveal whether the account exists.
+  const genericMessage = 'If an account exists for this email, a 6-digit verification code has been sent.';
+
+  if (warden && warden.status === 'active') {
+    const lastSent = warden.resetSentAt ? Date.parse(warden.resetSentAt) : 0;
+    const inCooldown = lastSent && Date.now() - lastSent < RESET_RESEND_COOLDOWN_MS;
+    if (!inCooldown) {
+      const code = String(crypto.randomInt(100000, 1000000));
+      const codeHash = await hashSecret(code);
+      await updateDb('wardens.json', (all) => {
+        const idx = all.findIndex((w) => w.wardenId === warden.wardenId);
+        if (idx === -1) return { data: all, result: null };
+        all[idx].resetCodeHash = codeHash;
+        all[idx].resetCodeExpiresAt = new Date(Date.now() + RESET_CODE_TTL_MS).toISOString();
+        all[idx].resetAttempts = 0;
+        all[idx].resetSentAt = new Date().toISOString();
+        return { data: all, result: all[idx] };
+      });
+      try {
+        await sendMail({
+          to: warden.email,
+          subject: 'PrisonConnect \u2014 your password reset code',
+          text:
+            `Hi ${warden.name || 'there'},\n\n` +
+            `Your PrisonConnect password reset code is:\n\n    ${code}\n\n` +
+            `It expires in 10 minutes and can be used once. If you did not request this, you can safely ignore this email.\n`,
+        });
+      } catch (err) {
+        console.error('[auth] password-reset mail failed:', err.message);
+        return sendError(res, 'MAIL_FAILED', 'We could not send the reset email right now. Please try again in a moment.', 502);
+      }
+    }
+  }
+
+  return sendSuccess(res, { message: genericMessage });
+}));
+
+router.post('/reset-password', authLimiter, asyncRoute(async (req, res) => {
+  const email = String(req.body.email || '').trim().toLowerCase();
+  const code = String(req.body.code || '').trim();
+  const newPassword = String(req.body.newPassword || '');
+  if (!email || !code || !newPassword) {
+    return sendError(res, 'INVALID_REQUEST', 'email, code and newPassword are required', 400);
+  }
+  if (!/^\d{6}$/.test(code)) return sendError(res, 'INVALID_CODE', 'Enter the 6-digit code from your email', 400);
+  if (newPassword.length < 8) return sendError(res, 'INVALID_PASSWORD', 'Password must be at least 8 characters', 400);
+
+  const wardens = await readDb('wardens.json');
+  const warden = wardens.find((w) => String(w.email || '').toLowerCase() === email);
+  const invalid = () => sendError(res, 'INVALID_CODE', 'This code is incorrect or has expired. Request a new one.', 400);
+  if (!warden || !warden.resetCodeHash) return invalid();
+
+  if (!warden.resetCodeExpiresAt || Date.parse(warden.resetCodeExpiresAt) < Date.now()) {
+    return sendError(res, 'CODE_EXPIRED', 'This code has expired. Request a new one.', 400);
+  }
+  if ((warden.resetAttempts || 0) >= RESET_MAX_ATTEMPTS) {
+    return sendError(res, 'CODE_ATTEMPTS', 'Too many incorrect attempts. Request a new code.', 400);
+  }
+
+  const ok = await verifySecret(code, warden.resetCodeHash);
+  if (!ok) {
+    await updateDb('wardens.json', (all) => {
+      const idx = all.findIndex((w) => w.wardenId === warden.wardenId);
+      if (idx === -1) return { data: all, result: null };
+      all[idx].resetAttempts = (all[idx].resetAttempts || 0) + 1;
+      return { data: all, result: all[idx] };
+    });
+    return invalid();
+  }
+
+  const passwordHash = await hashSecret(newPassword);
+  await updateDb('wardens.json', (all) => {
+    const idx = all.findIndex((w) => w.wardenId === warden.wardenId);
+    if (idx === -1) return { data: all, result: null };
+    all[idx].password = passwordHash;
+    delete all[idx].resetCodeHash;
+    delete all[idx].resetCodeExpiresAt;
+    delete all[idx].resetAttempts;
+    delete all[idx].resetSentAt;
+    all[idx].updatedAt = new Date().toISOString();
+    return { data: all, result: all[idx] };
+  });
+
+  // Old refresh tokens must die with the old password (access tokens lapse
+  // within their ≤15-minute TTL).
+  await revokeAllForUser(warden.wardenId);
+
+  return sendSuccess(res, { message: 'Password reset successfully' });
 }));
 
 // Get current authenticated user profile (warden, admin, kiosk, inmate)
