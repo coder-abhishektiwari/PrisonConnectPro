@@ -1,5 +1,6 @@
 const express = require('express');
 const crypto = require('crypto');
+const rateLimit = require('express-rate-limit');
 const { v4: uuidv4 } = require('uuid');
 const { readDb, updateDb } = require('../lib/db');
 const { requireAuth } = require('../middleware/auth');
@@ -8,12 +9,77 @@ const { sendSms, otpTemplateVars, linkTemplateVars } = require('../lib/sms');
 const { maskedPhone, contactPhone, buildLinkSms, buildCallLink, deviceRegisteredForCall, registerOrVerifyFingerprint, saveDeviceFirstLocation } = require('../lib/familySecurity');
 const { reverseGeocode } = require('../lib/geocode');
 const { callInmateName, callContactName } = require('../lib/names');
-const { signAccessToken } = require('../lib/auth');
+const { signAccessToken, hashSecret, verifySecret } = require('../lib/auth');
 
 const router = express.Router();
 
+// ---- Rate limiting -------------------------------------------------------
+// These routes were wide open while the money routes were locked down: an
+// attacker holding one link token could hammer verify-otp (6-digit code,
+// 900k combinations) or blast send-otp (paid SMS) with no ceiling at all.
+//
+// Keys are sha256(linkToken) so a spoofed X-Forwarded-For can't dodge them and
+// one family's traffic can never burn another family's budget. Carrier NAT
+// shares one public IP across many phones, so the per-IP limits stay generous
+// — the per-token ceiling is the real control.
+const rateMessage = {
+  success: false,
+  error: { code: 'RATE_LIMITED', message: 'Too many requests - please wait a moment and try again' },
+};
+const tokenKey = (req) => crypto.createHash('sha256').update(String(req.params.linkToken || '')).digest('hex').slice(0, 32);
+
+const callTokenLimiter = rateLimit({
+  windowMs: 60 * 60_000, limit: 90,
+  standardHeaders: true, legacyHeaders: false, message: rateMessage,
+  keyGenerator: tokenKey,
+});
+// SMS costs money and is a harassment vector: 6 dispatches/hour per link is
+// far more than a real family ever needs (resend cooldown is on the client).
+const otpSendTokenLimiter = rateLimit({
+  windowMs: 60 * 60_000, limit: 6,
+  standardHeaders: true, legacyHeaders: false, message: rateMessage,
+  keyGenerator: tokenKey,
+});
+const otpVerifyTokenLimiter = rateLimit({
+  windowMs: 60_000, limit: 10,
+  standardHeaders: true, legacyHeaders: false, message: rateMessage,
+  keyGenerator: tokenKey,
+});
+const otpSendIpLimiter = rateLimit({
+  windowMs: 60 * 60_000, limit: 60,
+  standardHeaders: true, legacyHeaders: false, message: rateMessage,
+});
+
+// Wrong guesses before the code itself is burned. The counter already existed
+// on the record — it was incremented and never read, so brute force had no
+// ceiling beyond the 5-minute expiry.
+const MAX_OTP_ATTEMPTS = 5;
+
+/**
+ * Compare without leaking length or content through early-exit timing.
+ * SHA-256 both sides first so the buffers are always the same length, then
+ * one fixed-cost comparison.
+ */
+function constantTimeEqual(a, b) {
+  const ha = crypto.createHash('sha256').update(String(a)).digest();
+  const hb = crypto.createHash('sha256').update(String(b)).digest();
+  return crypto.timingSafeEqual(ha, hb);
+}
+
+/**
+ * OTP verification. New codes are bcrypt-hashed at rest (otpHash) exactly like
+ * the warden password-reset codes; a plaintext `otp` is only accepted from rows
+ * written before this migration, and even then via the constant-time path.
+ */
+async function otpMatches(input, call) {
+  const candidate = String(input ?? '');
+  if (call.otpHash) return verifySecret(candidate, call.otpHash);
+  if (call.otp) return constantTimeEqual(candidate, call.otp);
+  return false;
+}
+
 // 1. POST /secure-call/link
-router.post('/secure-call/link/:linkToken', asyncRoute(async (req, res) => {
+router.post('/secure-call/link/:linkToken', callTokenLimiter, asyncRoute(async (req, res) => {
   const { linkToken } = req.params;
   const [calls, inmates, contacts] = await Promise.all([readDb('calls.json'), readDb('inmates.json'), readDb('contacts.json')]);
   const call = calls.find((c) => c.linkToken === linkToken);
@@ -56,7 +122,7 @@ router.post('/secure-call/link/:linkToken', asyncRoute(async (req, res) => {
 }));
 
 // 2. POST /secure-call/send-otp
-router.post('/secure-call/send-otp/:linkToken', asyncRoute(async (req, res) => {
+router.post('/secure-call/send-otp/:linkToken', callTokenLimiter, otpSendTokenLimiter, otpSendIpLimiter, asyncRoute(async (req, res) => {
   const { linkToken } = req.params;
   const [calls, contacts] = await Promise.all([readDb('calls.json'), readDb('contacts.json')]);
   const call = calls.find((c) => c.linkToken === linkToken);
@@ -78,15 +144,22 @@ router.post('/secure-call/send-otp/:linkToken', asyncRoute(async (req, res) => {
   if (!familyPhone) return sendError(res, 'NO_PHONE', 'Family phone number is not registered', 400);
 
   // Rotate the OTP on every dispatch so a stale code can never be replayed.
+  // Only the bcrypt hash is persisted: a leaked DB dump must not yield a
+  // working code, exactly like the warden password-reset codes.
   const otp = String(crypto.randomInt(100000, 999999));
+  const otpHash = await hashSecret(otp);
   const expiresAt = new Date(Date.now() + (parseInt(process.env.SMS_OTP_EXPIRY_MINUTES || '5', 10) * 60000)).toISOString();
 
   await updateDb('calls.json', (all) => {
     const idx = all.findIndex((c) => c.linkToken === linkToken);
     if (idx === -1) return { data: all, result: null };
-    all[idx].otp = otp;
+    all[idx].otpHash = otpHash;
+    // A fresh code also resets the wrong-guess budget and any legacy plaintext
+    // form, so a locked-out family can always recover by resending.
+    delete all[idx].otp;
     all[idx].otpExpiresAt = expiresAt;
     all[idx].otpDispatchCount = (all[idx].otpDispatchCount || 0) + 1;
+    all[idx].family = { ...(all[idx].family || {}), otpFailedAttempts: 0 };
     return { data: all, result: all[idx] };
   });
 
@@ -112,7 +185,7 @@ router.post('/secure-call/send-otp/:linkToken', asyncRoute(async (req, res) => {
 }));
 
 // 3. POST /secure-call/verify-otp
-router.post('/secure-call/verify-otp/:linkToken', asyncRoute(async (req, res) => {
+router.post('/secure-call/verify-otp/:linkToken', callTokenLimiter, otpVerifyTokenLimiter, asyncRoute(async (req, res) => {
   const { linkToken } = req.params;
   const { otp } = req.body || {};
   const calls = await readDb('calls.json');
@@ -129,23 +202,37 @@ router.post('/secure-call/verify-otp/:linkToken', asyncRoute(async (req, res) =>
     return sendError(res, 'DEVICE_VERIFICATION_REQUIRED', 'Device verification is required before entering the OTP', 403);
   }
 
+  // Wrong-guess budget. The counter below was already being written on every
+  // failure — it was simply never read, so nothing capped a brute-force walk
+  // of the 900k-code space inside the 5-minute expiry window.
+  const failedAttempts = Number(call.family?.otpFailedAttempts) || 0;
+  if (failedAttempts >= MAX_OTP_ATTEMPTS) {
+    await burnOtp(linkToken);
+    return sendError(res, 'OTP_LOCKED', 'Too many incorrect attempts. Tap resend to get a new code.', 429);
+  }
+
   // Reject stale OTPs past their expiry window.
   if (call.otpExpiresAt && Date.now() > new Date(call.otpExpiresAt).getTime()) {
     return sendError(res, 'OTP_EXPIRED', 'This OTP has expired. Tap resend to get a new code.', 401);
   }
 
-  const valid = String(otp) === String(call.otp);
+  // Never `===` on attacker-controlled input: bcrypt for hashed codes, a
+  // length-normalised timingSafeEqual for legacy plaintext rows.
+  const valid = await otpMatches(otp, call);
   if (!valid) {
-    // Track failed attempts so the kiosk can show the step in red.
-    await updateDb('calls.json', (all) => {
+    // Track failed attempts so the kiosk can show the step in red — and burn
+    // the code the moment the budget is spent, so guess number six never runs.
+    const bumped = await updateDb('calls.json', (all) => {
       const idx = all.findIndex((c) => c.linkToken === linkToken);
       if (idx === -1) return { data: all, result: null };
-      all[idx].family = {
-        ...(all[idx].family || {}),
-        otpFailedAttempts: (all[idx].family?.otpFailedAttempts || 0) + 1
-      };
-      return { data: all, result: all[idx] };
+      const attempts = (Number(all[idx].family?.otpFailedAttempts) || 0) + 1;
+      all[idx].family = { ...(all[idx].family || {}), otpFailedAttempts: attempts };
+      return { data: all, result: { attempts } };
     });
+    if (bumped && bumped.attempts >= MAX_OTP_ATTEMPTS) {
+      await burnOtp(linkToken);
+      return sendError(res, 'OTP_LOCKED', 'Too many incorrect attempts. Tap resend to get a new code.', 429);
+    }
     return sendError(res, 'INVALID_OTP', 'Incorrect one-time password', 401);
   }
 
@@ -163,15 +250,42 @@ router.post('/secure-call/verify-otp/:linkToken', asyncRoute(async (req, res) =>
   await updateDb('calls.json', (all) => {
     const idx = all.findIndex((c) => c.linkToken === linkToken);
     if (idx === -1) return { data: all, result: null };
-    all[idx].family = { ...(all[idx].family || {}), otpVerified: true, otpVerifiedAt: new Date().toISOString(), sessionToken };
+    // One-time use: burning the code here stops the same OTP from minting a
+    // fresh sessionToken on every replay until it expired on its own.
+    delete all[idx].otp;
+    delete all[idx].otpHash;
+    delete all[idx].otpExpiresAt;
+    all[idx].family = {
+      ...(all[idx].family || {}),
+      otpVerified: true,
+      otpVerifiedAt: new Date().toISOString(),
+      sessionToken,
+      otpFailedAttempts: 0
+    };
     return { data: all, result: all[idx] };
   });
 
   return sendSuccess(res, { verified: true, sessionToken });
 }));
 
+/**
+ * Burn an OTP so it can never be redeemed. Used by the lockout path and by
+ * the success path (one-time use). The failure counter is deliberately left
+ * alone — it only resets when send-otp issues a genuinely fresh code.
+ */
+async function burnOtp(linkToken) {
+  await updateDb('calls.json', (all) => {
+    const idx = all.findIndex((c) => c.linkToken === linkToken);
+    if (idx === -1) return { data: all, result: null };
+    delete all[idx].otp;
+    delete all[idx].otpHash;
+    delete all[idx].otpExpiresAt;
+    return { data: all, result: all[idx] };
+  });
+}
+
 // 4. POST /secure-call/device
-router.post('/secure-call/device/:linkToken', asyncRoute(async (req, res) => {
+router.post('/secure-call/device/:linkToken', callTokenLimiter, asyncRoute(async (req, res) => {
   const { linkToken } = req.params;
   const body = req.body || {};
   const [calls, contacts] = await Promise.all([readDb('calls.json'), readDb('contacts.json')]);
@@ -253,7 +367,7 @@ function parseLocation(body) {
   return { lat, lng, accuracy };
 }
 
-router.post('/secure-call/location/:linkToken', asyncRoute(async (req, res) => {
+router.post('/secure-call/location/:linkToken', callTokenLimiter, asyncRoute(async (req, res) => {
   const { linkToken } = req.params;
   const calls = await readDb('calls.json');
   const call = calls.find((c) => c.linkToken === linkToken);
@@ -298,7 +412,7 @@ router.post('/secure-call/location/:linkToken', asyncRoute(async (req, res) => {
 // Doubles as the family portal's clock source: it returns the server's time
 // and the billing anchor (`mediaConnectedAt`) so the browser timer counts the
 // exact same seconds the kiosk is billing — no client drift, no second clock.
-router.get('/secure-call/heartbeat/:linkToken', asyncRoute(async (req, res) => {
+router.get('/secure-call/heartbeat/:linkToken', callTokenLimiter, asyncRoute(async (req, res) => {
   const { linkToken } = req.params;
   const [calls, inmates, contacts] = await Promise.all([
     readDb('calls.json'), readDb('inmates.json'), readDb('contacts.json')

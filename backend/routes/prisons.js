@@ -7,13 +7,23 @@ const { jailScopeOf, kioskScopeOf, inScopeOf, scopeList } = require('../lib/scop
 
 const router = express.Router();
 
-router.get('/', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => sendSuccess(res, await scopeList(req, await readDb('prisons.json')))));
+// setupPassword is the facility enrollment secret (bcrypt). It is immutable
+// (see IMMUTABLE_FIELDS) and the UI only ever reads the `passwordSet` boolean
+// from /kiosks/setup-password, so no response needs the hash itself.
+function withoutPrisonSecrets(p) {
+  if (!p) return p;
+  const out = { ...p };
+  delete out.setupPassword;
+  return out;
+}
+
+router.get('/', requireAuth, requireRole('admin', 'warden', 'kiosk_admin', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => sendSuccess(res, (await scopeList(req, await readDb('prisons.json'))).map(withoutPrisonSecrets))));
 
 router.get('/:prisonId', requireAuth, requireRole('admin', 'warden', 'super-admin', 'super_admin'), asyncRoute(async (req, res) => {
   const prisons = await readDb('prisons.json');
   const prison = prisons.find((p) => p.prisonId === req.params.prisonId);
   if (!prison || !(await inScopeOf(req, prison))) return sendError(res, 'NOT_FOUND', 'Prison not found', 404);
-  return sendSuccess(res, prison);
+  return sendSuccess(res, withoutPrisonSecrets(prison));
 }));
 
 router.post('/', requireAuth, requireRole('admin'), asyncRoute(async (req, res) => {
@@ -36,7 +46,7 @@ router.post('/', requireAuth, requireRole('admin'), asyncRoute(async (req, res) 
       const record = { prisonId: `PRISON-${uuidv4().substring(0, 8).toUpperCase()}`, ...prisonData, status: prisonData.status || 'active' };
       return { data: [...prisons, record], result: record };
     });
-    return sendSuccess(res, newPrison, 201);
+    return sendSuccess(res, withoutPrisonSecrets(newPrison), 201);
   } catch (err) {
     if (err.code === 'DUPLICATE') return sendError(res, 'DUPLICATE', err.message, 409);
     throw err;
@@ -66,7 +76,7 @@ router.patch('/:prisonId', requireAuth, requireRole('admin', 'warden'), asyncRou
     return { data: prisons, result: prisons[idx] };
   });
   if (!updated) return sendError(res, 'NOT_FOUND', 'Prison not found', 404);
-  return sendSuccess(res, updated);
+  return sendSuccess(res, withoutPrisonSecrets(updated));
 }));
 
 module.exports = router;

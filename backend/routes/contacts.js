@@ -14,6 +14,18 @@ function normalizeContact(c) {
   // (email, address, city, state, derived name parts) is gone from the API
   // even for rows written before the trim.
   stripContactExtras(out);
+  // The registered-device proof must never leave the API: the `hash` IS the
+  // credential — /family/secure-call/device accepts it verbatim, so anyone
+  // holding it can pass device verification as this family member. The card
+  // only renders id/phone/location/deviceInfo/signals, so those stay.
+  if (Array.isArray(out.deviceFingerprints)) {
+    out.deviceFingerprints = out.deviceFingerprints.map((entry) => {
+      if (!entry || typeof entry !== 'object') return entry;
+      const { hash, ...safe } = entry;
+      void hash;
+      return safe;
+    });
+  }
   // Contacts are created with either mobileNumber (kiosk) or phoneNumber
   // (warden dashboard); expose one consistent value on all three aliases.
   const phone = out.mobileNumber || out.phoneNumber || out.phone;
@@ -200,7 +212,8 @@ function createContactsRouter() {
       return { data: all, result: all[idx] };
     });
     if (!updated) return sendError(res, 'NOT_FOUND', 'Contact not found', 404);
-    return sendSuccess(res, updated);
+    // normalizeContact drops deviceFingerprints[].hash — the device proof.
+    return sendSuccess(res, normalizeContact(updated));
   }));
 
   return router;

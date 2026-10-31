@@ -25,6 +25,38 @@ const ALLOWED_TRANSITIONS = {
   completed: [], failed: [], cancelled: [], rejected: [], missed: []
 };
 
+// ==================== RESPONSE REDACTION ====================
+// Every call row carries the family-auth secrets: linkToken (the bearer of the
+// whole secure-call flow: OTP, device verify, wallet recharge), otp/otpHash
+// and sms.linkUrl (which embeds linkToken). These routes are only requireAuth —
+// no role gate — so any authenticated principal (including a kiosk device
+// token) could otherwise harvest another family's link and take over their
+// payment session. Nobody reads linkToken from an API response: family-web
+// gets it from the URL, the SMS carries it, and the kiosk only needs
+// signalingToken from its own create-call response.
+const CALL_SECRET_KEYS = new Set([
+  'linkToken', 'otp', 'otpHash', 'otpExpiresAt', 'otpDispatchCount',
+]);
+const SMS_SECRET_KEYS = new Set(['linkToken', 'linkUrl']);
+
+// Deliberately narrow (not a blanket key filter) so display fields the
+// dashboards rely on — family.location, doorwayCode, sms.sentTo — survive.
+function publicCall(call, { keepSignalingToken = false } = {}) {
+  if (!call) return call;
+  const out = { ...call };
+  for (const key of CALL_SECRET_KEYS) delete out[key];
+  if (!keepSignalingToken) delete out.signalingToken;
+  if (out.family && typeof out.family === 'object') {
+    out.family = { ...out.family };
+    delete out.family.sessionToken;
+  }
+  if (out.sms && typeof out.sms === 'object') {
+    out.sms = { ...out.sms };
+    for (const key of SMS_SECRET_KEYS) delete out.sms[key];
+  }
+  return out;
+}
+
 /**
  * Complete a call record and charge the inmate's wallet in one shot (the
  * balance is ledger-derived and clamped at zero — never negative). Shared by
@@ -345,7 +377,7 @@ function createCallsRouter(broadcastEvent, signaling) {
     } else {
       calls = calls.filter((c) => inAdminScope(req, c));
     }
-    return sendSuccess(res, await attachPersonNames(calls));
+    return sendSuccess(res, (await attachPersonNames(calls)).map((c) => publicCall(c)));
   }));
 
   router.get('/active', requireAuth, asyncRoute(async (req, res) => {
@@ -371,7 +403,7 @@ function createCallsRouter(broadcastEvent, signaling) {
     const filtered = (typeFilter && typeFilter !== 'all')
       ? active.filter((c) => c.type === typeFilter)
       : active;
-    const withNames = await attachPersonNames(filtered);
+    const withNames = (await attachPersonNames(filtered)).map((c) => publicCall(c));
     const result = await paginate({
       req, data: withNames,
       search: (c, q) =>
@@ -471,7 +503,7 @@ function createCallsRouter(broadcastEvent, signaling) {
     const limit = Math.min(Math.max(parseInt(req.query.limit) || 20, 1), 100);
     const offset = Math.max(parseInt(req.query.offset) || 0, 0);
     const paged = calls.slice(offset, offset + limit).map((c) => ({
-      ...c,
+      ...publicCall(c),
       contactName: contactName(c.contactId, c.inmateId) || c.familyMemberName || null
     }));
 
@@ -503,7 +535,8 @@ function createCallsRouter(broadcastEvent, signaling) {
     return sendSuccess(res, scoped
       .filter((s) => (s.status || 'scheduled') === 'scheduled' && (s.date || '') >= today)
       .sort((a, b) => `${a.date}${a.timeSlot}`.localeCompare(`${b.date}${b.timeSlot}`))
-      .map((s) => ({ ...s, contactName: contactName(s.contactId, s.inmateId) || s.contactName || null })));
+      // A booking row also carries linkToken — same redaction as call rows.
+      .map((s) => ({ ...publicCall(s), contactName: contactName(s.contactId, s.inmateId) || s.contactName || null })));
   }));
 
   router.get('/history/:id', requireAuth, asyncRoute(async (req, res) => {
@@ -528,7 +561,7 @@ function createCallsRouter(broadcastEvent, signaling) {
     const history = scoped
       .filter((c) => c.status === 'completed' && (c.mediaConnectedAt || c.durationMinutes > 0))
       .sort((a, b) => new Date(b.startTime || 0) - new Date(a.startTime || 0))
-      .map((c) => ({ ...c, contactName: contactName(c.contactId, c.inmateId) || c.familyMemberName || null }));
+      .map((c) => ({ ...publicCall(c), contactName: contactName(c.contactId, c.inmateId) || c.familyMemberName || null }));
     return sendSuccess(res, history);
   }));
 
@@ -540,7 +573,7 @@ function createCallsRouter(broadcastEvent, signaling) {
     if (!inAdminScope(req, call)) {
       return sendError(res, 'NOT_FOUND', 'Call not found', 404);
     }
-    return sendSuccess(res, call);
+    return sendSuccess(res, publicCall(call));
   }));
 
   router.post('/', requireAuth, asyncRoute(async (req, res) => {
@@ -603,7 +636,7 @@ function createCallsRouter(broadcastEvent, signaling) {
     // Family secure-call token material. A scheduled call reuses the token
     // already texted at booking time; an instant call mints a fresh one.
     const linkToken = scheduledLinkToken || `L-${Array.from(crypto.randomBytes(6), (b) => '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'[b % 36]).join('')}`;
-    const otp = String(crypto.randomInt(100000, 999999));
+
 
     const [settingsDocs, pricingDocs] = await Promise.all([readDb('settings.json'), readDb('pricing.json')]);
     const settings = settingsDocs?.[0] || {};
@@ -644,7 +677,9 @@ function createCallsRouter(broadcastEvent, signaling) {
       ratePerMinute,
       scheduledAt: callData.scheduledAt || callData.startTime || new Date().toISOString(),
       linkToken,
-      otp,
+      // No OTP exists until the family taps resend — routes/family.js mints it
+      // there and stores only a bcrypt hash. Creating one here would leave a
+      // plaintext code on the row that no SMS ever delivered.
       family: {
         doorwayCode: callData.doorwayCode || '', doorwayId: callData.doorwayId || '',
         deviceVerified: false, otpVerified: false, sessionToken: null
@@ -763,7 +798,9 @@ function createCallsRouter(broadcastEvent, signaling) {
       console.log(`[calls] scheduled call ${newCall.callId} — link already sent at booking, skipping link SMS`);
     }
 
-    return sendSuccess(res, newCall, 201);
+    // signalingToken stays: the kiosk reads it from this response to auth its
+    // signaling socket. linkToken/sms do not — the SMS carries the link.
+    return sendSuccess(res, publicCall(newCall, { keepSignalingToken: true }), 201);
   }));
 
   router.patch('/:callId', requireAuth, asyncRoute(async (req, res) => {
@@ -826,7 +863,7 @@ function createCallsRouter(broadcastEvent, signaling) {
         }
       }
       broadcastEvent('call-updated', updated);
-      return sendSuccess(res, updated);
+      return sendSuccess(res, publicCall(updated));
     } catch (err) {
       if (err.code === 'INVALID_TRANSITION' || err.code === 'INVALID_STATE') return sendError(res, err.code, err.message, 409);
       throw err;
@@ -876,7 +913,7 @@ function createCallsRouter(broadcastEvent, signaling) {
     });
 
     if (!alreadyFinalized) broadcastEvent('call-ended', { callId, status: 'completed' });
-    return sendSuccess(res, updatedCall);
+    return sendSuccess(res, publicCall(updatedCall));
   }));
 
   return router;

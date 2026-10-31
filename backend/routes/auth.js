@@ -2,7 +2,7 @@ const express = require('express');
 const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
 const { readDb, updateDb } = require('../lib/db');
-const { signAccessToken, verifyToken, hashSecret, verifySecret } = require('../lib/auth');
+const { signAccessToken, verifyToken, hashSecret, verifySecret, verifyCredential } = require('../lib/auth');
 const { createSession, revokeAllForUser } = require('../lib/sessions');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { sendSuccess, sendError, asyncRoute } = require('../lib/response');
@@ -32,6 +32,29 @@ const identifyLimiter = rateLimit({
 
 const router = express.Router();
 
+/**
+ * Persist the bcrypt upgrade returned by verifyCredential. Runs AFTER the
+ * credential already verified, and any failure is only logged — a write
+ * hiccup must never turn a valid login into a 401.
+ *
+ * idKeys are candidate unique-id fields (records differ between tables);
+ * secretField is whichever of password/pin actually matched.
+ */
+async function persistRehash(file, idKeys, idValue, secretField, rehash) {
+  if (!rehash || !secretField || idValue == null) return;
+  try {
+    await updateDb(file, (all) => {
+      const idx = all.findIndex((r) => idKeys.some((k) => r[k] === idValue));
+      if (idx === -1) return { data: all, result: null };
+      all[idx] = { ...all[idx], [secretField]: rehash };
+      return { data: all, result: all[idx] };
+    });
+    console.log(`[auth] upgraded plaintext credential to bcrypt for ${file}:${idValue}`);
+  } catch (err) {
+    console.warn(`[auth] credential upgrade failed for ${file}:${idValue}: ${err.message}`);
+  }
+}
+
 // ==================== AUTH (real credential checks + JWT) ====================
 
 router.post('/login', authLimiter, asyncRoute(async (req, res) => {
@@ -43,8 +66,9 @@ router.post('/login', authLimiter, asyncRoute(async (req, res) => {
     const user = users.find((u) => u.kioskId === kioskId || u.username === kioskId);
     if (!user) return sendError(res, 'INVALID_CREDENTIALS', 'Invalid kiosk ID or PIN', 401);
 
-    const valid = await verifySecret(pin, user.password || user.pin);
-    if (!valid) return sendError(res, 'INVALID_CREDENTIALS', 'Invalid kiosk ID or PIN', 401);
+    const check = await verifyCredential(pin, user, ['password', 'pin']);
+    if (!check.ok) return sendError(res, 'INVALID_CREDENTIALS', 'Invalid kiosk ID or PIN', 401);
+    await persistRehash('users.json', ['id', 'userId'], user.id || user.userId, check.field, check.rehash);
 
     const claims = { sub: user.id || user.userId, role: user.role || 'kiosk', kioskId: user.kioskId, prisonId: user.prisonId };
     const session = await createSession(claims, req);
@@ -61,8 +85,9 @@ router.post('/login', authLimiter, asyncRoute(async (req, res) => {
     const [users, admins] = await Promise.all([readDb('users.json'), readDb('admins.json')]);
     const emailUser = users.find((u) => u.email === email) || users.find((u) => u.username === email);
     if (emailUser && (emailUser.role === 'vendor' || emailUser.role === 'kiosk')) {
-      const valid = await verifySecret(password, emailUser.password || emailUser.pin);
-      if (!valid) return sendError(res, 'INVALID_CREDENTIALS', 'Invalid email or password', 401);
+      const check = await verifyCredential(password, emailUser, ['password', 'pin']);
+      if (!check.ok) return sendError(res, 'INVALID_CREDENTIALS', 'Invalid email or password', 401);
+      await persistRehash('users.json', ['userId', 'id'], emailUser.userId || emailUser.id, check.field, check.rehash);
       const claims = { sub: emailUser.userId || emailUser.id, role: emailUser.role || 'vendor', kioskId: emailUser.kioskId, prisonId: emailUser.prisonId };
       const session = await createSession(claims, req);
       return sendSuccess(res, {
@@ -75,8 +100,9 @@ router.post('/login', authLimiter, asyncRoute(async (req, res) => {
     const wanted = email.toLowerCase();
     const admin = admins.find((a) => String(a.email || '').toLowerCase() === wanted);
     if (admin) {
-      const valid = await verifySecret(password, admin.password || admin.pin);
-      if (!valid) return sendError(res, 'INVALID_CREDENTIALS', 'Invalid email or password', 401);
+      const check = await verifyCredential(password, admin, ['password', 'pin']);
+      if (!check.ok) return sendError(res, 'INVALID_CREDENTIALS', 'Invalid email or password', 401);
+      await persistRehash('admins.json', ['adminId'], admin.adminId, check.field, check.rehash);
       const claims = { sub: admin.adminId, role: admin.role || 'admin', kioskId: admin.kioskId, prisonId: admin.prisonId };
       const session = await createSession(claims, req);
       return sendSuccess(res, {
@@ -93,8 +119,9 @@ router.post('/login', authLimiter, asyncRoute(async (req, res) => {
     const superAdmins = await readDb('super-admins.json');
     const superAdmin = superAdmins.find((a) => String(a.email || '').toLowerCase() === wanted);
     if (superAdmin) {
-      const valid = await verifySecret(password, superAdmin.password || superAdmin.pin);
-      if (!valid) return sendError(res, 'INVALID_CREDENTIALS', 'Invalid email or password', 401);
+      const check = await verifyCredential(password, superAdmin, ['password', 'pin']);
+      if (!check.ok) return sendError(res, 'INVALID_CREDENTIALS', 'Invalid email or password', 401);
+      await persistRehash('super-admins.json', ['adminId'], superAdmin.adminId, check.field, check.rehash);
       const claims = { sub: superAdmin.adminId, role: 'super_admin', kioskId: null, prisonId: null };
       const session = await createSession(claims, req);
       return sendSuccess(res, {
@@ -122,8 +149,9 @@ router.post('/warden/login', authLimiter, asyncRoute(async (req, res) => {
 
   if (warden.status !== 'active') return sendError(res, 'ACCOUNT_DISABLED', 'Account is not active', 403);
 
-  const valid = await verifySecret(password, warden.password);
-  if (!valid) return sendError(res, 'INVALID_CREDENTIALS', 'Invalid email or password', 401);
+  const check = await verifyCredential(password, warden, ['password']);
+  if (!check.ok) return sendError(res, 'INVALID_CREDENTIALS', 'Invalid email or password', 401);
+  await persistRehash('wardens.json', ['wardenId'], warden.wardenId, check.field, check.rehash);
 
   const claims = { sub: warden.wardenId, role: 'warden', prisonId: warden.prisonId };
   const session = await createSession(claims, req);
@@ -460,14 +488,40 @@ async function matchesBiometric(presented, stored) {
   return false;
 }
 
+// Re-hash a legacy plaintext biometric right after it matched. Matching is
+// exact-equality (no fuzzy scoring), so replacing the raw value with
+// hash(presented) preserves the exact comparison on every later tap.
+async function persistBiometricRehash(inmateId, field, presented) {
+  try {
+    const hashed = await hashSecret(String(presented));
+    await updateDb('inmates.json', (all) => {
+      const idx = all.findIndex((i) => i.inmateId === inmateId);
+      if (idx === -1) return { data: all, result: null };
+      const bio = { ...(all[idx].biometricData || {}) };
+      if (!bio[field] || /^\$2[aby]\$/.test(String(bio[field]))) return { data: all, result: null };
+      bio[field] = hashed;
+      all[idx] = { ...all[idx], biometricData: bio };
+      return { data: all, result: all[idx] };
+    });
+    console.log(`[auth] upgraded plaintext biometric to bcrypt for ${inmateId}`);
+  } catch (err) {
+    console.warn(`[auth] biometric upgrade failed for ${inmateId}: ${err.message}`);
+  }
+}
+
 router.post('/fingerprint-identify', identifyLimiter, asyncRoute(async (req, res) => {
   const { capture } = req.body;
   if (!capture) return sendError(res, 'INVALID_REQUEST', 'capture is required', 400);
   const presented = Buffer.from(String(capture), 'base64').toString('utf8').trim();
   if (!presented) return sendError(res, 'INVALID_REQUEST', 'capture is empty', 400);
-  return identifyInmate(req, res, async (i) =>
-    i.biometricData?.fingerprintRegistered &&
-    await matchesBiometric(presented, i.biometricData?.fingerprintTemplate), 0.92);
+  return identifyInmate(req, res, async (i) => {
+    const stored = i.biometricData?.fingerprintTemplate;
+    if (!i.biometricData?.fingerprintRegistered || !(await matchesBiometric(presented, stored))) return false;
+    if (stored && !/^\$2[aby]\$/.test(String(stored))) {
+      await persistBiometricRehash(i.inmateId, 'fingerprintTemplate', presented);
+    }
+    return true;
+  }, 0.92);
 }));
 
 router.post('/rfid-identify', identifyLimiter, asyncRoute(async (req, res) => {
@@ -486,7 +540,14 @@ router.post('/rfid-identify', identifyLimiter, asyncRoute(async (req, res) => {
       (!i.assignedKioskId || i.assignedKioskId === kioskId) &&
       (!i.status || i.status === 'active');
     if (!inScope) continue;
-    if (await matchesBiometric(rfidToken, i.biometricData?.rfidToken)) { inmate = i; break; }
+    if (await matchesBiometric(rfidToken, i.biometricData?.rfidToken)) {
+      const stored = i.biometricData?.rfidToken;
+      if (stored && !/^\$2[aby]\$/.test(String(stored))) {
+        await persistBiometricRehash(i.inmateId, 'rfidToken', rfidToken);
+      }
+      inmate = i;
+      break;
+    }
   }
   if (!inmate) return sendError(res, 'NOT_FOUND', 'No inmate identified for this RFID token', 404);
 
@@ -557,8 +618,9 @@ router.post('/verify-pin', authLimiter, asyncRoute(async (req, res) => {
     return sendError(res, 'NOT_FOUND', 'Record not found', 404);
   }
 
-  const valid = await verifySecret(pin, inmate.pin);
-  if (!valid) return sendError(res, 'INVALID_PIN', 'Incorrect PIN', 401);
+  const check = await verifyCredential(pin, inmate, ['pin']);
+  if (!check.ok) return sendError(res, 'INVALID_PIN', 'Incorrect PIN', 401);
+  await persistRehash('inmates.json', ['inmateId'], inmate.inmateId, check.field, check.rehash);
 
   const claims = { sub: inmate.inmateId, role: 'inmate', inmateId: inmate.inmateId, kioskId };
   const session = await createSession(claims, req);
@@ -621,9 +683,9 @@ router.post('/admin/verify-pin', authLimiter, asyncRoute(async (req, res) => {
   const secret = password ?? pin;
   if (!secret) return sendError(res, 'INVALID_REQUEST', 'password is required', 400);
 
-  const storedSecret = admin.password ?? admin.pin;
-  const valid = storedSecret ? await verifySecret(secret, storedSecret) : false;
-  if (!valid) return sendError(res, 'INVALID_PIN', 'Incorrect password', 401);
+  const check = await verifyCredential(secret, admin, ['password', 'pin']);
+  if (!check.ok) return sendError(res, 'INVALID_PIN', 'Incorrect password', 401);
+  await persistRehash('admins.json', ['adminId'], admin.adminId, check.field, check.rehash);
 
   const claims = { sub: admin.adminId, role: admin.role || 'admin', kioskId, prisonId: admin.prisonId || kiosk.prisonId };
   const session = await createSession(claims, req);

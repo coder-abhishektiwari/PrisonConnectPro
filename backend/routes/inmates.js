@@ -7,7 +7,7 @@ const { sendSuccess, sendError, asyncRoute } = require('../lib/response');
 const { jailScopeOf, inJailScope, kioskScopeOf, inAdminScope, adminScopeFilter, inScopeOf, scopeList } = require('../lib/scoping');
 const { paginate } = require('../lib/paginate');
 const { ensureWallet } = require('../lib/wallets');
-const { biometricValidationError } = require('../lib/biometrics');
+const { biometricValidationError, rfidCardNumberFor } = require('../lib/biometrics');
 
 const router = express.Router();
 
@@ -85,6 +85,22 @@ function normalizeInmate(i) {
   delete out.fullName;
   delete out.firstName;
   delete out.lastName;
+  // Never hand credential material or raw biometrics to a client. The PIN and
+  // the biometric templates are bcrypt hashes — offline-crackable for a 4-6
+  // digit PIN — and no UI ever displays them (only rfidCardNumber is a
+  // human-readable display copy, so that one stays).
+  delete out.pin;
+  delete out.password;
+  if (out.biometricData && typeof out.biometricData === 'object') {
+    const { fingerprintTemplate, rfidToken, ...bio } = out.biometricData;
+    void fingerprintTemplate;
+    void rfidToken;
+    out.biometricData = bio;
+  }
+  // The kiosk's prisoner-detail card reads a TOP-level rfidCardNumber, but the
+  // stored copy lives inside biometricData — derive it when absent. Existing
+  // top-level values are never clobbered.
+  if (out.rfidCardNumber == null) out.rfidCardNumber = rfidCardNumberFor(i);
   return out;
 }
 
@@ -249,7 +265,8 @@ async function inmateCreateHandler(req, res) {
     await ensureWallet(newInmate.inmateId, newInmate.walletId).catch((err) =>
       console.error(`[wallet] provision failed for ${newInmate.inmateId}:`, err.message)
     );
-    return sendSuccess(res, newInmate, 201);
+    // normalizeInmate strips the bcrypt PIN — the raw row must never leave.
+    return sendSuccess(res, normalizeInmate(newInmate), 201);
   } catch (err) {
     if (err.code === 'DUPLICATE') return sendError(res, 'DUPLICATE', err.message, 409);
     throw err;
@@ -313,7 +330,8 @@ async function inmateUpdateHandler(req, res) {
       });
     }
   }
-  return sendSuccess(res, updated);
+  // normalizeInmate strips the bcrypt PIN — the raw row must never leave.
+  return sendSuccess(res, normalizeInmate(updated));
 }
 
 async function inmateDeleteHandler(req, res) {
@@ -397,7 +415,7 @@ router.patch('/admin/prisoners/:prisonerId/toggle', requireAuth, requireRole('ad
       });
     }
   }
-  return sendSuccess(res, updated);
+  return sendSuccess(res, normalizeInmate(updated));
 }));
 
 // ==================== INMATE ROUTES (parameterized — LAST) ====================

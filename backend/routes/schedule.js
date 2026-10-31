@@ -126,7 +126,11 @@ router.post('/book', requireAuth, asyncRoute(async (req, res) => {
     });
   });
 
-  return sendSuccess(res, newSchedule, 201);
+  // The family link went out over SMS above — the booking row's linkToken must
+  // not come back over HTTP (the kiosk never reads it).
+  const { linkToken: _bookingLink, ...scheduleResponse } = newSchedule;
+  void _bookingLink;
+  return sendSuccess(res, scheduleResponse, 201);
 }));
 
 router.patch('/cancel/:bookingId', requireAuth, asyncRoute(async (req, res) => {

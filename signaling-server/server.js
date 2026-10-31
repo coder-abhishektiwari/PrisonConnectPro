@@ -2,6 +2,7 @@ require('dotenv').config();
 
 const express = require('express');
 const http = require('http');
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const { Server } = require('socket.io');
 
@@ -12,6 +13,12 @@ if (!JWT_SECRET) {
   throw new Error('JWT_SECRET env var is required for the signaling server - set it before starting');
 }
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
+
+// Shared with the backend (server.js `signaling()` already sends it as
+// X-API-Key). The control API can mute/terminate live calls and enumerate
+// room participants, so it must never be reachable anonymously: any client
+// that can reach this port would otherwise hijack or kill calls at will.
+const MEDIA_API_KEY = process.env.MEDIA_API_KEY || null;
 
 // ---- ICE servers ----
 // STUN is public — safe to hardcode. TURN credentials must NEVER live in
@@ -315,7 +322,40 @@ io.on('connection', (socket) => {
 // ---- HTTP Control API ----
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
-app.post('/api/rooms/:roomId/control', (req, res) => {
+// Constant-time key comparison: never compare with === (early-exit leaks the
+// matching prefix length to a timing oracle).
+function safeKeyEqual(provided, expected) {
+  const a = Buffer.from(String(provided), 'utf8');
+  const b = Buffer.from(String(expected), 'utf8');
+  if (a.length !== b.length) {
+    // Keep the work roughly constant on the mismatch path too.
+    crypto.timingSafeEqual(b, b);
+    return false;
+  }
+  return crypto.timingSafeEqual(a, b);
+}
+
+// Fails CLOSED: no key configured -> control API disabled entirely, rather
+// than falling open and letting anyone terminate calls. The error body uses
+// the SAME { error: { code, message } } shape the backend's signaling()
+// helper expects, so a missing key degrades to a swallowed best-effort
+// warning instead of a 500 on call end.
+function controlError(res, status, code, message) {
+  return res.status(status).json({ success: false, error: { code, message } });
+}
+
+function requireControlKey(req, res, next) {
+  if (!MEDIA_API_KEY) {
+    return controlError(res, 503, 'SIGNALING_ERROR', 'Control API disabled (MEDIA_API_KEY not set)');
+  }
+  const provided = req.get('x-api-key');
+  if (!provided || !safeKeyEqual(provided, MEDIA_API_KEY)) {
+    return controlError(res, 401, 'SIGNALING_ERROR', 'Unauthorized');
+  }
+  return next();
+}
+
+app.post('/api/rooms/:roomId/control', requireControlKey, (req, res) => {
   const { action, target } = req.body || {};
   const roomId = req.params.roomId;
   io.to(roomId).emit('call-control', { action, target });
@@ -326,14 +366,14 @@ app.post('/api/rooms/:roomId/control', (req, res) => {
   return res.json({ success: true, data: { action, target } });
 });
 
-app.post('/api/rooms/:roomId/close', (req, res) => {
+app.post('/api/rooms/:roomId/close', requireControlKey, (req, res) => {
   const roomId = req.params.roomId;
   const { reason } = req.body || {};
   teardownRoom(roomId, reason || 'room closed');
   return res.json({ success: true });
 });
 
-app.get('/api/rooms/:roomId', (req, res) => {
+app.get('/api/rooms/:roomId', requireControlKey, (req, res) => {
   const peers = [...(rooms.get(req.params.roomId)?.keys() || [])];
   return res.json({ success: true, data: { roomId: req.params.roomId, participants: peers } });
 });

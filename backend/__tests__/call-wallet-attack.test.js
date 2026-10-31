@@ -29,7 +29,11 @@ jest.mock('../lib/db', () => {
     readDb: async (f) => clone(store[f] || []),
     updateDb: async (f, mutator) => {
       const out = mutator(clone(store[f] || []));
-      if (out && Array.isArray(out.data)) store[f] = out.data;
+      if (out && typeof out === 'object' && 'data' in out) store[f] = out.data;
+      // lib/db.js returns ONLY the mutator's `result` (the envelope is an
+      // internal shape). Handing tests the envelope would let routes read a
+      // `{data, result}` object that production never returns.
+      if (out && typeof out === 'object' && 'result' in out) return out.result;
       return out;
     },
     transact: async () => { throw new Error('not used'); },

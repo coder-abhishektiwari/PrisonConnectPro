@@ -37,7 +37,30 @@ function normalizeInmate(i) {
   delete out.fullName;
   delete out.firstName;
   delete out.lastName;
+  // Same strip as routes/inmates.js — the PIN is a bcrypt hash of a 4-6 digit
+  // code (offline-crackable) and raw biometric templates never leave the DB.
+  // rfidCardNumber is kept: it is the display copy, not the secret rfidToken.
+  delete out.pin;
+  delete out.password;
+  if (out.biometricData && typeof out.biometricData === 'object') {
+    const { fingerprintTemplate, rfidToken, ...bio } = out.biometricData;
+    void fingerprintTemplate;
+    void rfidToken;
+    out.biometricData = bio;
+  }
   out.rfidCardNumber = rfidCardNumberFor(i);
+  return out;
+}
+
+// Admin rows carry password/pin (bcrypt) — never return them, even to a
+// super-admin token. resetCodeHash is stripped for symmetry with withoutSecrets.
+function withoutAdminSecrets(a) {
+  if (!a) return a;
+  const out = { ...a };
+  delete out.password;
+  delete out.pin;
+  delete out.resetCodeHash;
+  delete out.resetCodeExpiresAt;
   return out;
 }
 
@@ -259,7 +282,7 @@ router.patch('/prisoners/:prisonerId/status', requireRole(...ALL_ROLES), async (
     return { data: inmates, result: inmates[idx] };
   });
   if (!updated) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Prisoner not found' } });
-  return res.json({ success: true, data: updated });
+  return res.json({ success: true, data: normalizeInmate(updated) });
 });
 
 router.delete('/prisoners/:prisonerId', requireRole(...ALL_ROLES), async (req, res) => {
@@ -597,15 +620,14 @@ router.delete('/biometrics/:biometricId', requireRole(...ALL_ROLES), async (req,
 
 router.get('/', requireRole('super-admin', 'super_admin'), async (req, res) => {
   const admins = await readDb('admins.json');
-  return res.json({ success: true, data: admins });
+  return res.json({ success: true, data: admins.map(withoutAdminSecrets) });
 });
 
 router.get('/:adminId', requireRole('super-admin', 'super_admin'), async (req, res) => {
   const admins = await readDb('admins.json');
   const admin = admins.find((a) => a.adminId === req.params.adminId);
   if (!admin) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Admin not found' } });
-  const { password, pin, ...safe } = admin;
-  return res.json({ success: true, data: safe });
+  return res.json({ success: true, data: withoutAdminSecrets(admin) });
 });
 
 router.post('/', requireRole('super-admin', 'super_admin'), async (req, res) => {
@@ -619,7 +641,7 @@ router.post('/', requireRole('super-admin', 'super_admin'), async (req, res) => 
   if (record.pin && !/^\$2[aby]\$/.test(record.pin)) record.pin = await hashSecret(String(record.pin));
   if (record.password && !/^\$2[aby]\$/.test(record.password)) record.password = await hashSecret(String(record.password));
   const updated = await updateDb('admins.json', (all) => ({ data: [...all, record], result: record }));
-  return res.status(201).json({ success: true, data: updated });
+  return res.status(201).json({ success: true, data: withoutAdminSecrets(updated) });
 });
 
 router.patch('/:adminId', requireRole('super-admin', 'super_admin'), async (req, res) => {
@@ -634,7 +656,7 @@ router.patch('/:adminId', requireRole('super-admin', 'super_admin'), async (req,
     return { data: all, result: all[idx] };
   });
   if (!updated) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Admin not found' } });
-  return res.json({ success: true, data: updated });
+  return res.json({ success: true, data: withoutAdminSecrets(updated) });
 });
 
 router.delete('/:adminId', requireRole('super-admin', 'super_admin'), async (req, res) => {

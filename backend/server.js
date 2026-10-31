@@ -45,11 +45,31 @@ const app = express();
 app.set('trust proxy', 1);
 
 const server = http.createServer(app);
-const io = new Server(server, {
-  cors: { origin: process.env.CORS_ORIGIN || '*', methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'] }
-});
 
-app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
+// CORS allowlist, comma-separated: CORS_ORIGIN="https://ops.example,https://family.example".
+// `*` still works (local dev, and these APIs authenticate with Authorization
+// headers rather than cookies, so a wildcard is not a credentialed CSRF hole),
+// but a deployment is asked to pin real origins — logged loudly at boot.
+const CORS_ORIGINS = (process.env.CORS_ORIGIN || '')
+  .split(',').map((s) => s.trim()).filter(Boolean);
+const CORS_ALLOW_ALL = CORS_ORIGINS.length === 0 || CORS_ORIGINS.includes('*');
+const corsOptions = CORS_ALLOW_ALL
+  ? { origin: '*' }
+  : {
+      origin: (origin, cb) => {
+        // Non-browser callers (curl, native apps) send no Origin header.
+        if (!origin) return cb(null, true);
+        cb(null, CORS_ORIGINS.includes(origin));
+      }
+    };
+
+if (CORS_ALLOW_ALL && process.env.NODE_ENV === 'production') {
+  console.warn('[cors] CORS_ORIGIN is "*" (or unset) in production — set a comma-separated origin list to pin the API to your dashboard domains.');
+}
+
+const io = new Server(server, { cors: { ...corsOptions, methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'] } });
+
+app.use(cors(corsOptions));
 // Baseline response hardening. The backend serves JSON only (SPAs are hosted
 // separately and carry their own CSP meta), so the policy here can be strict:
 // nothing to execute, nothing to frame, nothing to sniff.
@@ -71,8 +91,12 @@ app.use('/family/wallet-link', (req, res, next) => {
 });
 // verify keeps the original bytes so the Razorpay webhook can HMAC its raw
 // body (the parsed req.body would fail signature verification).
+// 1mb is generous: the largest payload anywhere is a Razorpay webhook or a
+// biometric capture, and the old 10mb figure only existed for the recordings
+// upload, which db-schema/012_drop_recordings.sql removed. Bigger bodies are a
+// free memory-amplification vector, so keep the ceiling tight.
 app.use(express.json({
-  limit: process.env.JSON_BODY_LIMIT || '10mb',
+  limit: process.env.JSON_BODY_LIMIT || '1mb',
   verify: (req, res, buf) => { if (buf && buf.length) req.rawBody = buf; },
 }));
 
@@ -85,6 +109,11 @@ app.use((err, req, res, next) => {
       timestamp: Date.now()
     });
   }
+  // body-parser raises this above the JSON_BODY_LIMIT; without this branch the
+  // generic handler below would misreport an oversized payload as a 500.
+  if (err && err.type === 'entity.too.large') {
+    return sendError(res, 'PAYLOAD_TOO_LARGE', 'Request body too large', 413);
+  }
   next();
 });
 
@@ -93,6 +122,46 @@ app.use((err, req, res, next) => {
 // every (re)connection so a dropped connection cannot rejoin anonymously —
 // broadcastEvent() is io.emit(), i.e. every event goes to every connected
 // socket, so "connected" must mean "authenticated".
+//
+// Authentication alone is NOT enough: the payload itself travels to every
+// other tenant's dashboard/kiosk. A call record carries linkToken + otp (the
+// two secrets the whole family-auth flow is built on) and family.sessionToken
+// (the post-call wallet JWT), so the payload MUST be stripped before it leaves.
+// Consumers only use these events as "invalidate your cache and refetch"
+// signals (warden-dashboard useWardenSocket.ts), never as the data itself.
+const BROADCAST_SECRET_KEYS = new Set([
+  // call auth material — linkToken and otp are the whole family-auth flow,
+  // otpHash is a bcrypt hash of a 6-digit code (offline-crackable) and
+  // signalingToken is the kiosk's room-scoped signaling credential
+  'linkToken', 'otp', 'otpHash', 'otpExpiresAt', 'signalingToken',
+  'sessionToken', 'family', 'sms',
+  // credential material, in case an event ever carries a user/prison row
+  'password', 'pin', 'resetCodeHash', 'resetCodeExpiresAt', 'setupPassword',
+  'refreshToken', 'accessToken', 'deviceToken',
+  // biometrics / device identifiers
+  'rfidToken', 'fingerprintTemplate', 'deviceFingerprints', 'hash',
+]);
+const BROADCAST_FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+// Deep copy minus the secret keys. Depth-capped so a cyclic/attacker-shaped
+// payload can never hang the event loop.
+function sanitizeForBroadcast(value, depth = 0) {
+  if (value === null || typeof value !== 'object') return value;
+  if (depth > 8) return undefined;
+  if (Array.isArray(value)) return value.map((v) => sanitizeForBroadcast(v, depth + 1));
+  const out = {};
+  for (const key of Object.keys(value)) {
+    if (BROADCAST_SECRET_KEYS.has(key) || BROADCAST_FORBIDDEN_KEYS.has(key)) continue;
+    const sanitized = sanitizeForBroadcast(value[key], depth + 1);
+    if (sanitized !== undefined) out[key] = sanitized;
+  }
+  return out;
+}
+
+function broadcastEvent(event, data) {
+  io.emit(event, sanitizeForBroadcast(data));
+}
+
 io.use((socket, next) => {
   const token = socket.handshake.auth?.token;
   if (!token) return next(new Error('unauthorized'));
@@ -108,10 +177,6 @@ io.on('connection', (socket) => {
   console.log(`[socket] connected ${socket.id} (peer=${socket.data.auth.sub} role=${socket.data.auth.role})`);
   socket.on('disconnect', () => {});
 });
-
-function broadcastEvent(event, data) {
-  io.emit(event, data);
-}
 
 const SIGNALING_URL = process.env.SIGNALING_URL || 'http://127.0.0.1:3002';
 const MEDIA_API_KEY = process.env.MEDIA_API_KEY;
@@ -247,10 +312,15 @@ function chiefWardenOf(jailId, wardens) {
   return sorted[0] || null;
 }
 
+// Every warden-facing response goes through this: the record carries the
+// bcrypt password, the PIN and the password-reset code hash. Any one of them
+// handed to a client is an offline-crackable credential, so all three go.
 function withoutSecrets(warden) {
-  const { password, pin, ...safe } = warden;
+  const { password, pin, resetCodeHash, resetCodeExpiresAt, ...safe } = warden;
   void password;
   void pin;
+  void resetCodeHash;
+  void resetCodeExpiresAt;
   return safe;
 }
 
@@ -536,7 +606,9 @@ app.get('/wardens/:wardenId', requireAuth, requireRole('admin', 'warden', 'super
   const wardens = await readDb('wardens.json');
   const warden = wardens.find((w) => w.wardenId === req.params.wardenId);
   if (!warden || !(await inScopeOf(req, warden))) return sendError(res, 'NOT_FOUND', 'Warden not found', 404);
-  return sendSuccess(res, warden);
+  // Same strip as the list route — this single-GET path used to return the
+  // raw row, i.e. the bcrypt password and reset-code hash.
+  return sendSuccess(res, withoutSecrets(warden));
 }));
 
 // Same rule as POST /wardens: the chief warden of the jail manages its wardens,
@@ -748,7 +820,7 @@ app.use('/admin', requireAuth, adminRouter);
 
 // ==================== HEALTH CHECK ====================
 app.get('/health', asyncRoute(async (req, res) => {
-  const { PROVIDER, senderIdFor, effectiveProvider } = require('./lib/sms');
+  const { PROVIDER, effectiveProvider } = require('./lib/sms');
   const { probeGeo } = require('./lib/geocode');
   res.json({
     status: 'ok',
@@ -760,15 +832,9 @@ app.get('/health', asyncRoute(async (req, res) => {
     sms: {
       provider: PROVIDER || process.env.SMS_PROVIDER || 'log',
       hasApiKey: !!process.env.FAST2SMS_API_KEY,
-      domain: process.env.SMS_OTP_DOMAIN || '(none)',
-      // Which DLT header each kind goes out under, and whether that kind is
-      // actually routed to the gateway (some stay on `log` on purpose).
-      senders: {
-        shared: process.env.FAST2SMS_SENDER_ID || '(none)',
-        otp: senderIdFor('otp') || '(none)',
-        link: senderIdFor('link') || '(none)',
-        scheduled: senderIdFor('scheduled') || '(none)',
-      },
+      // Routing only. The OTP sender domain and DLT sender IDs used to be
+      // echoed here — that is deployment configuration, not health, and /health
+      // is unauthenticated.
       routes: {
         otp: effectiveProvider('otp'),
         link: effectiveProvider('link'),
@@ -813,7 +879,9 @@ if (require.main === module) {
   runMigrations().then(() => startServer());
 }
 
-module.exports = { app, server };
+// sanitizeForBroadcast is exported so the hardening suite can lock in exactly
+// what leaves on the socket.
+module.exports = { app, server, sanitizeForBroadcast };
 
 function startServer() {
   server.listen(PORT, () => {
